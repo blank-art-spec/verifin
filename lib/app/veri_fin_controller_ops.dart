@@ -222,8 +222,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final creditAccountId = account.creditAccountId ?? persistedId;
     return _creditAccounts
         .where(
-          (item) =>
-              item.id == creditAccountId && item.bookId == account.bookId,
+          (item) => item.id == creditAccountId && item.bookId == account.bookId,
         )
         .firstOrNull;
   }
@@ -283,13 +282,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         !CurrencyCatalog.isSupported(creditAccount.currencyCode) ||
         (creditLimit != null && (!creditLimit.isFinite || creditLimit < 0)) ||
         (cycleBudget != null && (!cycleBudget.isFinite || cycleBudget < 0)) ||
-        (statementDay != null &&
-            (statementDay < 1 || statementDay > 28)) ||
+        (statementDay != null && (statementDay < 1 || statementDay > 28)) ||
         (creditAccount.dueRuleType == CreditDueRuleType.fixedDay &&
             dueDay != null &&
             (dueDay < 1 || dueDay > 28)) ||
-        (creditAccount.dueRuleType ==
-                CreditDueRuleType.daysAfterStatement &&
+        (creditAccount.dueRuleType == CreditDueRuleType.daysAfterStatement &&
             (daysAfterStatement == null ||
                 daysAfterStatement <= 0 ||
                 daysAfterStatement > 3650))) {
@@ -324,8 +321,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           ? creditAccount.daysAfterStatement
           : null,
       clearDaysAfterStatement:
-          creditAccount.dueRuleType !=
-              CreditDueRuleType.daysAfterStatement ||
+          creditAccount.dueRuleType != CreditDueRuleType.daysAfterStatement ||
           creditAccount.daysAfterStatement == null,
     );
     final nextCreditAccounts = List<CreditAccount>.of(_creditAccounts)
@@ -3870,8 +3866,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
                 cardLast4: creditAccount.cardLast4,
                 // 旧账户字段没有“额度币种”。只有与主体同币种的子账户保留镜像值；
                 // 外币子账户必须清空，避免把 ¥70,000 错显示成 $70,000。
-                creditLimit:
-                    account.currencyCode == creditAccount.currencyCode
+                creditLimit: account.currencyCode == creditAccount.currencyCode
                     ? creditAccount.creditLimit
                     : null,
                 clearCreditLimit:
@@ -3879,8 +3874,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
                     creditAccount.creditLimit == null,
                 statementDay: creditAccount.statementDay,
                 clearStatementDay: creditAccount.statementDay == null,
-                dueDay:
-                    creditAccount.dueRuleType == CreditDueRuleType.fixedDay
+                dueDay: creditAccount.dueRuleType == CreditDueRuleType.fixedDay
                     ? creditAccount.dueDay
                     : null,
                 clearDueDay:
@@ -3917,7 +3911,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       final parent = _creditAccounts.firstWhere(
         (item) => item.id == normalized.creditAccountId,
       );
-      normalized = _accountsWithCreditMirrors(<Account>[normalized], parent).single;
+      normalized = _accountsWithCreditMirrors(<Account>[
+        normalized,
+      ], parent).single;
     }
     _accounts.add(normalized);
     if (createdCreditAccount == null) {
@@ -3952,10 +3948,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       final parent = _creditAccounts.firstWhere(
         (item) => item.id == normalized.creditAccountId,
       );
-      normalized = _accountsWithCreditMirrors(
-        <Account>[normalized],
-        parent,
-      ).single;
+      normalized = _accountsWithCreditMirrors(<Account>[
+        normalized,
+      ], parent).single;
     }
     final next = <Account>[..._accounts, normalized];
     try {
@@ -4155,10 +4150,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       next = _accountsWithCreditMirrors(next, nextCredit);
       creditProfileChanged = true;
     } else if (creditIndex != -1 && associationChanged) {
-      next = _accountsWithCreditMirrors(
-        next,
-        nextCreditAccounts[creditIndex],
-      );
+      next = _accountsWithCreditMirrors(next, nextCreditAccounts[creditIndex]);
     }
     if (current.creditAccountId != null &&
         current.creditAccountId != normalized.creditAccountId &&
@@ -5167,7 +5159,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 4) {
+    if (version < 1 || version > 5) {
       throw FormatException('不支持的备份版本：$version');
     }
 
@@ -5581,10 +5573,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       if (creditAccount.name.trim().isEmpty) {
         throw FormatException('信用账户主体 ${creditAccount.id} 名称为空');
       }
-      requireCurrency(
-        creditAccount.currencyCode,
-        '信用账户主体 ${creditAccount.id}',
-      );
+      requireCurrency(creditAccount.currencyCode, '信用账户主体 ${creditAccount.id}');
       requireFinite(
         creditAccount.creditLimit,
         '信用账户主体 ${creditAccount.id} 共享额度',

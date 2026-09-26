@@ -848,12 +848,6 @@ mixin _ControllerState on ChangeNotifier {
     );
   }
 
-  void _persistCreditAccounts() {
-    _trackWrite(
-      _repository.saveCreditAccounts(List<CreditAccount>.of(_creditAccounts)),
-    );
-  }
-
   void _persistCategories() {
     _trackWrite(_repository.saveCategories(List<Category>.of(_categories)));
   }

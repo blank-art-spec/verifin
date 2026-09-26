@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 
 import '../app/common_widgets.dart';
 import '../app/currency_catalog.dart';
+import '../app/currency_math.dart';
 import '../app/feedback.dart';
 import '../app/models.dart';
 import '../app/veri_fin_scope.dart';
@@ -310,9 +311,7 @@ class _CreditAccountEditorPageState extends State<CreditAccountEditorPage> {
           clearStatementDay: selected == clearValue,
         );
       } else if (relative) {
-        _draft = _draft.copyWith(
-          daysAfterStatement: selected,
-        );
+        _draft = _draft.copyWith(daysAfterStatement: selected);
       } else {
         _draft = _draft.copyWith(
           dueDay: selected == clearValue ? null : selected,

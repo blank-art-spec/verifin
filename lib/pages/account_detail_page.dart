@@ -531,9 +531,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                                       currentAccount.statementDay) ==
                                   null
                               ? AppLocalizations.of(context).notSet
-                              : AppLocalizations.of(
-                                  context,
-                                ).monthlyDayLabel(
+                              : AppLocalizations.of(context).monthlyDayLabel(
                                   creditAccount?.statementDay ??
                                       currentAccount.statementDay!,
                                 ),
@@ -547,10 +545,9 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                           icon: Icons.event_available_outlined,
                           title: creditAccount == null
                               ? AppLocalizations.of(context).dueDay
-                              : AppLocalizations.of(
-                                  context,
-                                ).creditDueRuleLabel,
-                          trailing: creditAccount?.dueRuleType ==
+                              : AppLocalizations.of(context).creditDueRuleLabel,
+                          trailing:
+                              creditAccount?.dueRuleType ==
                                   CreditDueRuleType.daysAfterStatement
                               ? creditAccount?.daysAfterStatement == null
                                     ? AppLocalizations.of(context).notSet
@@ -1009,10 +1006,11 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       context: context,
       title: AppLocalizations.of(context).creditAccountParentLabel,
       values: candidates.map((item) => item.id).toList(growable: false),
-      selected: account.creditAccountId,
-      labelOf: (value) => candidates
-          .firstWhere((item) => item.id == value)
-          .name,
+      // 旧备份或尚未保存的草稿可能还没有主体 ID；空字符串不会命中任何候选项，
+      // 因而弹窗只是不显示选中标记，不会误把第一个主体当成用户选择。
+      selected: account.creditAccountId ?? '',
+      labelOf: (value) =>
+          candidates.firstWhere((item) => item.id == value).name,
     );
     if (!mounted || selected == null || selected == account.creditAccountId) {
       return;
@@ -1040,15 +1038,13 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
   Future<void> _openCreditAccountEditor(CreditAccount creditAccount) async {
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => CreditAccountEditorPage(
-          creditAccount: creditAccount,
-        ),
+        builder: (_) => CreditAccountEditorPage(creditAccount: creditAccount),
       ),
     );
     if (!mounted) return;
-    final latest = VeriFinScope.of(context).accounts
-        .where((item) => item.id == _draftAccount.id)
-        .firstOrNull;
+    final latest = VeriFinScope.of(
+      context,
+    ).accounts.where((item) => item.id == _draftAccount.id).firstOrNull;
     if (latest == null) return;
 
     // 父主体页可能已经同步了卡尾号、额度和日期镜像。把这些已持久化字段同时并入
@@ -1605,8 +1601,7 @@ class _CreditSummaryCard extends StatelessWidget {
   ) {
     final parts = <String>[
       '${l10n.statementDay} ${l10n.monthlyDayLabel(statementDay)}',
-      if (creditAccount?.dueRuleType ==
-              CreditDueRuleType.daysAfterStatement &&
+      if (creditAccount?.dueRuleType == CreditDueRuleType.daysAfterStatement &&
           creditAccount?.daysAfterStatement != null)
         l10n.creditDaysAfterStatement(creditAccount!.daysAfterStatement!)
       else if ((creditAccount?.dueDay ?? legacyDueDay) != null)

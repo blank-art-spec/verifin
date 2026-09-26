@@ -212,9 +212,7 @@ void main() {
     expect(updated.cardLast4, '');
   });
 
-  testWidgets('设置信用额度：进入父主体编辑页，点击保存后原子落库', (
-    WidgetTester tester,
-  ) async {
+  testWidgets('设置信用额度：进入父主体编辑页，点击保存后原子落库', (WidgetTester tester) async {
     final store = LocalKeyValueStore();
     final controller = await makeController(store);
     // 初始无额度、无账单日 → 无信用信息卡，避免「信用额度」文本歧义。
@@ -239,7 +237,9 @@ void main() {
     await tester.tap(find.text('信用额度'));
     await tester.pumpAndSettle();
     expect(find.text('信用主体设置'), findsOneWidget);
-    await tester.tap(find.text('信用额度'));
+    // 点击整个选择字段，避免浮动标签的中心点位于字段边界，导致
+    // Widget 测试产生未命中警告而真实点击仍能正常执行的假阳性。
+    await tester.tap(find.widgetWithText(SelectField, '信用额度'));
     await tester.pumpAndSettle();
     for (final key in <String>['3', '0', '0', '0']) {
       await tester.tap(find.byKey(Key('number_key_$key')));
