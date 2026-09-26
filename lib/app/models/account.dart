@@ -84,6 +84,7 @@ class Account {
     this.creditLimit,
     this.statementDay,
     this.dueDay,
+    this.creditAccountId,
   });
 
   final String id;
@@ -117,6 +118,10 @@ class Account {
   /// 信用卡还款日（每月 1–28，可选）。设置后展示还款提醒。
   final int? dueDay;
 
+  /// 所属信用主体 id。仅信用类账户使用；为空表示尚未迁移或不参与主体聚合。
+  /// 额度、账期、还款规则和账期预算由对应的 `CreditAccount` 统一负责。
+  final String? creditAccountId;
+
   Account copyWith({
     String? id,
     String? bookId,
@@ -138,6 +143,8 @@ class Account {
     bool clearStatementDay = false,
     int? dueDay,
     bool clearDueDay = false,
+    String? creditAccountId,
+    bool clearCreditAccountId = false,
   }) {
     return Account(
       id: id ?? this.id,
@@ -159,6 +166,9 @@ class Account {
           ? null
           : statementDay ?? this.statementDay,
       dueDay: clearDueDay ? null : dueDay ?? this.dueDay,
+      creditAccountId: clearCreditAccountId
+          ? null
+          : creditAccountId ?? this.creditAccountId,
     );
   }
 
@@ -181,6 +191,7 @@ class Account {
       if (creditLimit != null) 'creditLimit': creditLimit,
       if (statementDay != null) 'statementDay': statementDay,
       if (dueDay != null) 'dueDay': dueDay,
+      if (creditAccountId != null) 'creditAccountId': creditAccountId,
     };
   }
 
@@ -205,6 +216,7 @@ class Account {
       creditLimit: (json['creditLimit'] as num?)?.toDouble(),
       statementDay: (json['statementDay'] as num?)?.toInt(),
       dueDay: (json['dueDay'] as num?)?.toInt(),
+      creditAccountId: json['creditAccountId'] as String?,
     );
   }
 }

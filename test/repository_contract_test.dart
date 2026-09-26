@@ -66,6 +66,7 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       expect(await repo.loadEntries(), isEmpty);
       expect(await repo.loadBooks(), isEmpty);
       expect(await repo.loadAccounts(), isEmpty);
+      expect(await repo.loadCreditAccounts(), isEmpty);
       expect(await repo.loadAccountGroups(), isEmpty);
       expect(await repo.loadCategories(), isEmpty);
       expect(await repo.loadTags(), isEmpty);
@@ -109,6 +110,22 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
           note: '',
           includeInAssets: true,
           hidden: false,
+        ),
+      ];
+      const creditAccounts = <CreditAccount>[
+        CreditAccount(
+          id: 'credit-1',
+          bookId: 'default',
+          name: '招商信用卡 4185',
+          institution: '招商银行',
+          cardLast4: '4185',
+          currencyCode: 'CNY',
+          creditLimit: 50000,
+          statementDay: 25,
+          dueRuleType: CreditDueRuleType.fixedDay,
+          dueDay: 13,
+          daysAfterStatement: null,
+          cycleBudget: 4000,
         ),
       ];
       const groups = <AccountGroup>[
@@ -168,6 +185,7 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       await repo.saveEntries(entries);
       await repo.saveBooks(books);
       await repo.saveAccounts(accounts);
+      await repo.saveCreditAccounts(creditAccounts);
       await repo.saveAccountGroups(groups);
       await repo.saveCategories(categories);
       await repo.saveTags(tags);
@@ -178,6 +196,10 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       expect(_jsonOf(await repo.loadEntries()), _jsonOf(entries));
       expect(_jsonOf(await repo.loadBooks()), _jsonOf(books));
       expect(_jsonOf(await repo.loadAccounts()), _jsonOf(accounts));
+      expect(
+        _jsonOf(await repo.loadCreditAccounts()),
+        _jsonOf(creditAccounts),
+      );
       expect(_jsonOf(await repo.loadAccountGroups()), _jsonOf(groups));
       expect(_jsonOf(await repo.loadCategories()), _jsonOf(categories));
       expect(_jsonOf(await repo.loadTags()), _jsonOf(tags));
@@ -262,6 +284,66 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       expect((await repo.loadExchangeRates()).single.currencyCode, 'EUR');
     });
 
+    test('saveCreditAccountAggregate 同时覆盖信用主体与币种子账户', () async {
+      final repo = await openRepo();
+      const creditAccounts = <CreditAccount>[
+        CreditAccount(
+          id: 'credit-main',
+          bookId: 'default',
+          name: '旅行信用卡',
+          institution: '',
+          cardLast4: '7788',
+          currencyCode: 'CNY',
+          creditLimit: 30000,
+          statementDay: 20,
+          dueRuleType: CreditDueRuleType.daysAfterStatement,
+          dueDay: null,
+          daysAfterStatement: 20,
+          cycleBudget: null,
+        ),
+      ];
+      const accounts = <Account>[
+        Account(
+          id: 'credit-cny',
+          bookId: 'default',
+          name: '人民币账户',
+          type: AccountType.creditCard,
+          groupId: null,
+          initialBalance: 0,
+          iconCode: 'credit',
+          note: '',
+          includeInAssets: true,
+          hidden: false,
+          creditAccountId: 'credit-main',
+        ),
+        Account(
+          id: 'credit-usd',
+          bookId: 'default',
+          name: '美元账户',
+          type: AccountType.creditCard,
+          groupId: null,
+          initialBalance: 0,
+          iconCode: 'credit',
+          note: '',
+          includeInAssets: true,
+          hidden: false,
+          currencyCode: 'USD',
+          creditAccountId: 'credit-main',
+        ),
+      ];
+
+      await repo.saveCreditAccountAggregate(
+        creditAccounts: creditAccounts,
+        accounts: accounts,
+      );
+
+      expect(
+        _jsonOf(await repo.loadCreditAccounts()),
+        _jsonOf(creditAccounts),
+      );
+      expect(_jsonOf(await repo.loadAccounts()), _jsonOf(accounts));
+    });
+
     test('已载入基线后的增删改保存，load 反映最新内容', () async {
       final repo = await openRepo();
       await repo.saveEntries(<LedgerEntry>[
@@ -319,6 +401,22 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
           ),
         ],
         accounts: const <Account>[],
+        creditAccounts: const <CreditAccount>[
+          CreditAccount(
+            id: 'restored-credit',
+            bookId: 'default',
+            name: '恢复信用主体',
+            institution: '',
+            cardLast4: '',
+            currencyCode: 'CNY',
+            creditLimit: null,
+            statementDay: null,
+            dueRuleType: CreditDueRuleType.fixedDay,
+            dueDay: null,
+            daysAfterStatement: null,
+            cycleBudget: null,
+          ),
+        ],
         accountGroups: const <AccountGroup>[],
         categories: const <Category>[
           Category(
@@ -360,6 +458,7 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       ]);
       expect((await repo.loadTags()).single.id, 'new-tag');
       expect((await repo.loadBooks()).single.name, '恢复账本');
+      expect((await repo.loadCreditAccounts()).single.id, 'restored-credit');
       expect(await repo.loadMonthlyBudgets(), {'default:2026-01': 800.0});
       expect((await repo.loadExchangeRates()).single.id, 'new-rate');
 

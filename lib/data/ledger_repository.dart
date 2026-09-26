@@ -26,6 +26,7 @@ class LedgerDataSnapshot {
     this.balanceAnchors = const <BalanceAnchor>[],
     this.billingStatements = const <BillingStatement>[],
     this.statementRepaymentAllocations = const <StatementRepaymentAllocation>[],
+    this.creditAccounts = const <CreditAccount>[],
   });
 
   final List<LedgerBook> books;
@@ -43,6 +44,7 @@ class LedgerDataSnapshot {
   final List<BalanceAnchor> balanceAnchors;
   final List<BillingStatement> billingStatements;
   final List<StatementRepaymentAllocation> statementRepaymentAllocations;
+  final List<CreditAccount> creditAccounts;
 }
 
 /// 账目类数据仓储接口。生产实现为 [SqliteLedgerRepository]；测试可注入内存实现，
@@ -58,6 +60,15 @@ abstract interface class LedgerRepository {
 
   Future<List<Account>> loadAccounts();
   Future<void> saveAccounts(List<Account> accounts);
+
+  Future<List<CreditAccount>> loadCreditAccounts();
+  Future<void> saveCreditAccounts(List<CreditAccount> creditAccounts);
+
+  /// 原子保存信用主体及其币种子账户，防止只留下主体或悬空的关联 id。
+  Future<void> saveCreditAccountAggregate({
+    required List<CreditAccount> creditAccounts,
+    required List<Account> accounts,
+  });
 
   Future<List<AccountGroup>> loadAccountGroups();
   Future<void> saveAccountGroups(List<AccountGroup> groups);
@@ -220,6 +231,58 @@ class SqliteLedgerRepository implements LedgerRepository {
     return _enqueueWrite(
       () => _incrementalReplace('accounts', _indexed(snapshot, _accountToRow)),
     );
+  }
+
+  // ---- 信用主体 ----
+
+  @override
+  Future<List<CreditAccount>> loadCreditAccounts() async {
+    final rows = await _db.query('credit_accounts', orderBy: 'sort_order ASC');
+    final creditAccounts = rows.map(_creditAccountFromRow).toList();
+    _seedSnapshot(
+      'credit_accounts',
+      _indexed(creditAccounts, _creditAccountToRow),
+    );
+    return creditAccounts;
+  }
+
+  @override
+  Future<void> saveCreditAccounts(List<CreditAccount> creditAccounts) {
+    final snapshot = List<CreditAccount>.of(creditAccounts);
+    return _enqueueWrite(
+      () => _incrementalReplace(
+        'credit_accounts',
+        _indexed(snapshot, _creditAccountToRow),
+      ),
+    );
+  }
+
+  @override
+  Future<void> saveCreditAccountAggregate({
+    required List<CreditAccount> creditAccounts,
+    required List<Account> accounts,
+  }) {
+    final creditSnapshot = List<CreditAccount>.of(creditAccounts);
+    final accountSnapshot = List<Account>.of(accounts);
+    return _enqueueWrite(() async {
+      await _db.transaction((txn) async {
+        await _replaceInTxn(
+          txn,
+          'credit_accounts',
+          _indexed(creditSnapshot, _creditAccountToRow),
+        );
+        await _replaceInTxn(
+          txn,
+          'accounts',
+          _indexed(accountSnapshot, _accountToRow),
+        );
+      });
+      _seedSnapshot(
+        'credit_accounts',
+        _indexed(creditSnapshot, _creditAccountToRow),
+      );
+      _seedSnapshot('accounts', _indexed(accountSnapshot, _accountToRow));
+    });
   }
 
   // ---- 账户分组 ----
@@ -586,6 +649,11 @@ class SqliteLedgerRepository implements LedgerRepository {
         );
         await _replaceInTxn(
           txn,
+          'credit_accounts',
+          _indexed(snapshot.creditAccounts, _creditAccountToRow),
+        );
+        await _replaceInTxn(
+          txn,
           'categories',
           _indexed(snapshot.categories, _categoryToRow),
         );
@@ -645,6 +713,10 @@ class SqliteLedgerRepository implements LedgerRepository {
       _seedSnapshot('accounts', _indexed(snapshot.accounts, _accountToRow));
       _seedSnapshot('account_groups', snapshot.accountGroups.map(_groupToRow));
       _seedSnapshot(
+        'credit_accounts',
+        _indexed(snapshot.creditAccounts, _creditAccountToRow),
+      );
+      _seedSnapshot(
         'categories',
         _indexed(snapshot.categories, _categoryToRow),
       );
@@ -683,6 +755,7 @@ class SqliteLedgerRepository implements LedgerRepository {
       'ledger_books',
       'accounts',
       'account_groups',
+      'credit_accounts',
       'categories',
       'exchange_rates',
       'balance_anchors',
@@ -1133,6 +1206,43 @@ class SqliteLedgerRepository implements LedgerRepository {
     createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
   );
 
+  static Map<String, Object?> _creditAccountToRow(
+    CreditAccount creditAccount,
+    int index,
+  ) => <String, Object?>{
+    'id': creditAccount.id,
+    'book_id': creditAccount.bookId,
+    'name': creditAccount.name,
+    'institution': creditAccount.institution,
+    'card_last4': creditAccount.cardLast4,
+    'currency_code': creditAccount.currencyCode,
+    'credit_limit': creditAccount.creditLimit,
+    'statement_day': creditAccount.statementDay,
+    'due_rule_type': creditAccount.dueRuleType.name,
+    'due_day': creditAccount.dueDay,
+    'days_after_statement': creditAccount.daysAfterStatement,
+    'cycle_budget': creditAccount.cycleBudget,
+    'sort_order': index,
+  };
+
+  static CreditAccount _creditAccountFromRow(Map<String, Object?> row) =>
+      CreditAccount(
+        id: row['id'] as String,
+        bookId: row['book_id'] as String,
+        name: row['name'] as String,
+        institution: row['institution'] as String? ?? '',
+        cardLast4: row['card_last4'] as String? ?? '',
+        currencyCode: row['currency_code'] as String? ?? defaultCurrencyCode,
+        creditLimit: (row['credit_limit'] as num?)?.toDouble(),
+        statementDay: (row['statement_day'] as num?)?.toInt(),
+        dueRuleType: CreditDueRuleType.fromStorage(
+          row['due_rule_type'] as String?,
+        ),
+        dueDay: (row['due_day'] as num?)?.toInt(),
+        daysAfterStatement: (row['days_after_statement'] as num?)?.toInt(),
+        cycleBudget: (row['cycle_budget'] as num?)?.toDouble(),
+      );
+
   static Map<String, Object?> _bookToRow(LedgerBook b, int index) =>
       <String, Object?>{
         'id': b.id,
@@ -1176,6 +1286,7 @@ class SqliteLedgerRepository implements LedgerRepository {
         'sort_order': index,
         'statement_day': a.statementDay,
         'due_day': a.dueDay,
+        'credit_account_id': a.creditAccountId,
       };
 
   static Account _accountFromRow(Map<String, Object?> row) => Account(
@@ -1196,6 +1307,7 @@ class SqliteLedgerRepository implements LedgerRepository {
     creditLimit: (row['credit_limit'] as num?)?.toDouble(),
     statementDay: (row['statement_day'] as num?)?.toInt(),
     dueDay: (row['due_day'] as num?)?.toInt(),
+    creditAccountId: row['credit_account_id'] as String?,
   );
 
   static Map<String, Object?> _groupToRow(AccountGroup g) => <String, Object?>{

@@ -88,7 +88,7 @@ void main() {
     id: 'acc-x',
     bookId: 'book-x',
     name: '往返测试卡',
-    type: AccountType.cash,
+    type: AccountType.creditCard,
     groupId: 'grp-1',
     initialBalance: -50.25,
     iconCode: 'bank',
@@ -102,6 +102,22 @@ void main() {
     creditLimit: 8000.5,
     statementDay: 5,
     dueDay: 25,
+    creditAccountId: 'credit-full',
+  );
+
+  const creditAccount = CreditAccount(
+    id: 'credit-full',
+    bookId: 'book-x',
+    name: '测试信用主体 6789',
+    institution: '测试银行',
+    cardLast4: '6789',
+    currencyCode: 'GBP',
+    creditLimit: 70000.5,
+    statementDay: 25,
+    dueRuleType: CreditDueRuleType.daysAfterStatement,
+    dueDay: 13,
+    daysAfterStatement: 20,
+    cycleBudget: 4000.25,
   );
 
   const accountGroup = AccountGroup(
@@ -234,6 +250,13 @@ void main() {
       expect(restored.toJson(), accountGroup.toJson());
     });
 
+    test('CreditAccount', () {
+      final restored = CreditAccount.fromJson(
+        jsonRoundTrip(creditAccount.toJson()),
+      );
+      expect(restored.toJson(), creditAccount.toJson());
+    });
+
     test('AccountGroup 忽略旧备份的图标字段', () {
       final restored = AccountGroup.fromJson(<String, Object?>{
         ...accountGroup.toJson(),
@@ -334,6 +357,7 @@ void main() {
       await repo.saveBooks(<LedgerBook>[book]);
       await repo.saveAccounts(<Account>[accountFull]);
       await repo.saveAccountGroups(<AccountGroup>[accountGroup]);
+      await repo.saveCreditAccounts(<CreditAccount>[creditAccount]);
       await repo.saveCategories(<Category>[categoryChild, categoryRoot]);
       await repo.saveTags(<Tag>[tag]);
       await repo.saveAttachments(<Attachment>[attachment]);
@@ -359,6 +383,10 @@ void main() {
       expect(
         (await repo.loadAccountGroups()).single.toJson(),
         accountGroup.toJson(),
+      );
+      expect(
+        (await repo.loadCreditAccounts()).single.toJson(),
+        creditAccount.toJson(),
       );
       final categories = await repo.loadCategories();
       expect(

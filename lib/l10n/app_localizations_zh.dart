@@ -4959,4 +4959,83 @@ class AppLocalizationsZh extends AppLocalizations {
   ) {
     return '$period 预算 $budget，已花 $spent，剩余 $remaining$daily。$attention';
   }
+
+  @override
+  String get creditAccountEditTitle => '信用主体设置';
+
+  @override
+  String get creditAccountNameLabel => '信用主体名称';
+
+  @override
+  String get creditInstitutionLabel => '银行或机构';
+
+  @override
+  String get creditAccountParentLabel => '所属信用主体';
+
+  @override
+  String get creditAccountCreateNew => '新建信用主体';
+
+  @override
+  String get creditAccountSaved => '信用主体已保存';
+
+  @override
+  String creditChildAccountsSummary(int count, String currencies) {
+    return '$count 个币种子账户 · $currencies';
+  }
+
+  @override
+  String get creditDueRuleLabel => '还款规则';
+
+  @override
+  String get creditDueRuleFixedDay => '次月固定日';
+
+  @override
+  String get creditDueRuleDaysAfter => '账单日后若干天';
+
+  @override
+  String get creditDaysAfterStatementLabel => '账单日后天数';
+
+  @override
+  String creditDaysAfterStatement(int days) {
+    return '账单日后 $days 天';
+  }
+
+  @override
+  String get creditCycleBudgetLabel => '本账期预算';
+
+  @override
+  String get creditCycleSetupHint => '设置账单日后显示账期概览';
+
+  @override
+  String creditCycleRange(String start, String end) {
+    return '当前账期 $start - $end';
+  }
+
+  @override
+  String get creditCycleMissingRate => '部分子账户缺少汇率，合计暂不完整';
+
+  @override
+  String get creditCycleNetSpending => '本账期净消费';
+
+  @override
+  String get creditCycleCurrentDebt => '本账期当前欠款';
+
+  @override
+  String get creditCycleTotalDebt => '当前总欠款';
+
+  @override
+  String get creditNextStatement => '下次出账';
+
+  @override
+  String get creditDueDateLabel => '到期还款';
+
+  @override
+  String creditCycleBudgetProgress(String spent, String budget) {
+    return '预算 $spent / $budget';
+  }
+
+  @override
+  String creditCycleBudgetOver(String amount) {
+    return '已超 $amount';
+  }
 }

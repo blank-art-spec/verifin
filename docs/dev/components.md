@@ -72,6 +72,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `showCardNumberDialog` | Dialog 函数 | `sheets.dart` | 编辑完整卡号+后四位+跟随开关，返回 `({number, last4, follows})?`（内部用 `CardNumberFields`，后四位以 `cardLast4Of` 归一化） |
 | `CreditRepaymentPage` | 页面 Widget | `credit_repayment_page.dart` | 信用卡/信用账户还款页；预填欠款、扣款账户可选/可代还，落一笔转账后按最早到期优先分配到正式账单 |
 | `BillingStatementsPage` / `BillingStatementDetailPage` | 页面 Widget | `billing_statements_page.dart` | 正式信用账单列表、新增与详情；详情展示应还/已还/剩余和对应还款分配 |
+| `CreditAccountEditorPage` | 页面 Widget | `credit_account_editor_page.dart` | 编辑信用主体名称、机构、共享额度、账单日、固定日/账单后天数还款规则与账期预算；账户详情的共享配置统一进入此页，保存时主体与子账户兼容镜像原子落库（外币子账户不复制无币种标识的旧额度字段） |
+| `CreditAccountCycleCard` | 首页卡片 Widget | `home_page.dart` | 按信用主体聚合币种子账户，分开显示本账期净消费、当前账期欠款、已出账待还、总欠款、出账/还款日和账期预算进度 |
 | `AccountSectionCard` | Widget | `common_widgets.dart` | 资产页账户分区卡（可折叠 + 分区合计）；普通资产页折叠状态由 Controller 按账本/视图模式持久化，设置页可在草稿中调整；同时服务类型、文件夹分组和隐藏账户等分区，拖拽只由 `sectionDragIndex != null` 开启，`sectionDragImmediate` 控制即时/延迟拖拽 |
 | `accountBalanceColor` | 纯函数 | `common_widgets.dart` | **账户余额上色**（不计入资产=弱化，负=红，正=青绿） |
 | `accountDisplayName` | 纯函数 | `model_lookup.dart` | 按 id 取账户名，空 id→noneLabel（**展示层用它**，避免误回退首个账户） |
@@ -172,7 +174,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | 统计分析 | `report_analysis.dart` | `reportSummary` `reportMonthlyComparison` `formatChangeRatio` `reportCategoryStats` `reportCategoryStatsByOwn` `reportCategoryChildStats` `reportTagStats` `reportTrend`；`ReportRange` `ReportSummary` `ReportCategoryStat` `ReportTagStat` `ReportTrend` |
 | 首页指标 | `home_metrics.dart` | `computeHomeMetric` `homeMetricLabel` `homeMetricGroups` `formatHomeMetric` `homeMetricColor`；`HomeMetric` `HomeMetricContext` `HomeTrendConfig` |
 | 周期记账 | `recurring.dart` | `advanceRecurring` `dueDatesFor` |
-| 信用类账户 | `credit_card.dart` | `nextDueDate` `daysUntilDue` `nextStatementDate` `currentBillingCycle` `usedCredit` `availableCredit` `billingCycleExpense` `creditStatementOverview` `normalizedStatementStatus`；卡号 `cardLast4Of`（在 `models.dart`） |
+| 信用类账户 | `credit_card.dart` | `nextDueDate` `daysUntilDue` `nextStatementDate` `currentBillingCycle` `creditDueDate` `usedCredit` `availableCredit` `billingCycleExpense` `creditStatementOverview` `buildCreditCycleOverview` `normalizedStatementStatus`；卡号 `cardLast4Of`（在 `models.dart`） |
 | 记账自动识别 | `category_suggest.dart` | `suggestEntry`（推断类型/分类/标签/备注）；`EntrySuggestion`；`lastUsedAccountIdForCategory`（该分类上次用过的账户，记账页在自动识别开启时用它预选账户） |
 | 多币种草稿缩放 | `entry_currency_draft.dart` | `scaleDependentCurrencyAmount`——手工/导入/旧数据或固定周期规则改原币金额时保持既有结算比例，并按目标币种规整 |
 | 账目数据校验 | `ledger_data_validation.dart` | `validateLedgerEntries` `LedgerDataValidationIssue`——交易聚合、账单导入和备份恢复共用的三层金额/退款/引用校验 |

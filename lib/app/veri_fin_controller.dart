@@ -42,6 +42,7 @@ const Set<String> _knownBackupDataKeys = <String>{
   'entries',
   'accounts',
   'accountGroups',
+  'creditAccounts',
   'categories',
   'tags',
   'attachments',

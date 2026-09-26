@@ -216,6 +216,7 @@ void main() {
       expect(await repo.loadBalanceAnchors(), isEmpty);
       expect(await repo.loadBillingStatements(), isEmpty);
       expect(await repo.loadStatementRepaymentAllocations(), isEmpty);
+      expect(await repo.loadCreditAccounts(), isEmpty);
 
       await app.close();
     });
@@ -302,6 +303,51 @@ void main() {
         'legacy-wechat': 'asset:payment_004',
       },
     );
+    await upgraded.close();
+  });
+
+  test('v17 信用账户升级后生成一对一主体并保留共享规则', () async {
+    final path = '${tempDir.path}/v17_credit_account.db';
+    final raw = await databaseFactoryFfi.openDatabase(path);
+    for (final statement in _schemaV1) {
+      await raw.execute(statement);
+    }
+    await _seedV1Data(raw);
+    for (var version = 2; version <= 17; version++) {
+      await AppDatabase.migrations[version]!(raw);
+    }
+    await raw.update(
+      'accounts',
+      <String, Object?>{
+        'name': '招商美元',
+        'type': 'creditCard',
+        'currency_code': 'USD',
+        'card_last4': '4185',
+        'credit_limit': 70000.0,
+        'statement_day': 25,
+        'due_day': 13,
+      },
+      where: 'id = ?',
+      whereArgs: <Object?>['acc-1'],
+    );
+    await raw.execute('PRAGMA user_version = 17');
+    await raw.close();
+
+    final upgraded = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: path,
+    );
+    final repo = SqliteLedgerRepository(upgraded);
+    final account = (await repo.loadAccounts()).single;
+    final creditAccount = (await repo.loadCreditAccounts()).single;
+    expect(account.creditAccountId, creditAccount.id);
+    expect(creditAccount.name, '招商美元');
+    expect(creditAccount.currencyCode, 'USD');
+    expect(creditAccount.cardLast4, '4185');
+    expect(creditAccount.creditLimit, 70000);
+    expect(creditAccount.statementDay, 25);
+    expect(creditAccount.dueRuleType, CreditDueRuleType.fixedDay);
+    expect(creditAccount.dueDay, 13);
     await upgraded.close();
   });
 }

@@ -126,4 +126,239 @@ void main() {
 
     expect(overview.unbilledAmount, 80);
   });
+
+  test('动态还款规则支持次月固定日与账单日后天数', () {
+    const fixed = CreditAccount(
+      id: 'fixed',
+      bookId: 'book',
+      name: '招商信用卡',
+      institution: '招商银行',
+      cardLast4: '4185',
+      currencyCode: 'CNY',
+      creditLimit: 70000,
+      statementDay: 25,
+      dueRuleType: CreditDueRuleType.fixedDay,
+      dueDay: 13,
+      daysAfterStatement: null,
+      cycleBudget: null,
+    );
+    final relative = fixed.copyWith(
+      id: 'relative',
+      dueRuleType: CreditDueRuleType.daysAfterStatement,
+      daysAfterStatement: 20,
+    );
+
+    expect(fixed.hasCompleteCycleRule, isTrue);
+    expect(relative.hasCompleteCycleRule, isTrue);
+    expect(fixed.copyWith(clearDueDay: true).hasCompleteCycleRule, isFalse);
+    expect(creditDueDate(fixed, DateTime(2026, 9, 25)), DateTime(2026, 10, 13));
+    expect(
+      creditDueDate(relative, DateTime(2026, 9, 25)),
+      DateTime(2026, 10, 15),
+    );
+  });
+
+  test('本账期欠款只扣未分配给上期账单的提前还款', () {
+    const creditAccount = CreditAccount(
+      id: 'cmb-4185',
+      bookId: 'book',
+      name: '招商信用卡 4185',
+      institution: '招商银行',
+      cardLast4: '4185',
+      currencyCode: 'CNY',
+      creditLimit: 70000,
+      statementDay: 25,
+      dueRuleType: CreditDueRuleType.fixedDay,
+      dueDay: 13,
+      daysAfterStatement: null,
+      cycleBudget: 4000,
+    );
+    const account = Account(
+      id: 'cmb-cny',
+      bookId: 'book',
+      name: 'CNY 账户',
+      type: AccountType.creditCard,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'credit',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+      creditAccountId: 'cmb-4185',
+    );
+    final statement = BillingStatement(
+      id: 'aug-statement',
+      bookId: 'book',
+      accountId: account.id,
+      statementDate: DateTime(2026, 8, 25),
+      periodStart: DateTime(2026, 7, 26),
+      periodEnd: DateTime(2026, 8, 25, 23, 59, 59),
+      statementAmount: 1000,
+      minimumPayment: 100,
+      dueDate: DateTime(2026, 9, 13),
+      paidAmount: 300,
+      status: BillingStatementStatus.partiallyPaid,
+    );
+    final repayment = LedgerEntry(
+      id: 'repayment',
+      bookId: 'book',
+      type: EntryType.transfer,
+      amount: 500,
+      accountAmount: 500,
+      toAccountAmount: 500,
+      categoryId: 'transfer',
+      accountId: 'debit',
+      toAccountId: account.id,
+      note: '还款',
+      occurredAt: DateTime(2026, 9, 13),
+    );
+    final overview = buildCreditCycleOverview(
+      creditAccount: creditAccount,
+      accounts: const <Account>[account],
+      entries: <LedgerEntry>[
+        LedgerEntry(
+          id: 'expense',
+          bookId: 'book',
+          type: EntryType.expense,
+          amount: 1000,
+          baseAmount: 1000,
+          categoryId: 'dining',
+          accountId: account.id,
+          note: '',
+          occurredAt: DateTime(2026, 9, 1),
+        ),
+        repayment,
+      ],
+      statements: <BillingStatement>[statement],
+      allocations: <StatementRepaymentAllocation>[
+        StatementRepaymentAllocation(
+          id: 'allocation',
+          bookId: 'book',
+          statementId: statement.id,
+          repaymentEntryId: repayment.id,
+          amount: 300,
+          createdAt: DateTime(2026, 9, 13),
+        ),
+      ],
+      baseCurrencyCode: 'CNY',
+      now: DateTime(2026, 9, 14),
+      balanceOf: (_) => -1400,
+      convertToCreditCurrency: (amount, source, date) => amount,
+    );
+
+    expect(overview.netSpending, 1000);
+    expect(overview.earlyRepayment, 200);
+    expect(overview.currentCycleDebt, 800);
+    expect(overview.billedOutstanding, 700);
+    expect(overview.totalDebt, 1400);
+    expect(overview.nextStatementDate, DateTime(2026, 9, 25));
+    expect(overview.dueDate, DateTime(2026, 9, 13));
+  });
+
+  test('外币原始消费按实际清算负债进入主体账期汇总', () {
+    const creditAccount = CreditAccount(
+      id: 'travel-card',
+      bookId: 'book',
+      name: '旅行信用卡',
+      institution: '',
+      cardLast4: '7788',
+      currencyCode: 'CNY',
+      creditLimit: 30000,
+      statementDay: 25,
+      dueRuleType: CreditDueRuleType.fixedDay,
+      dueDay: 13,
+      daysAfterStatement: null,
+      cycleBudget: null,
+    );
+    const cnyAccount = Account(
+      id: 'card-cny',
+      bookId: 'book',
+      name: 'CNY 账户',
+      type: AccountType.creditCard,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'credit',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+      currencyCode: 'CNY',
+      creditAccountId: 'travel-card',
+    );
+    const usdAccount = Account(
+      id: 'card-usd',
+      bookId: 'book',
+      name: 'USD 账户',
+      type: AccountType.creditCard,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'credit',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+      currencyCode: 'USD',
+      creditAccountId: 'travel-card',
+    );
+    final overview = buildCreditCycleOverview(
+      creditAccount: creditAccount,
+      accounts: const <Account>[cnyAccount, usdAccount],
+      entries: <LedgerEntry>[
+        LedgerEntry(
+          id: 'settled-cny',
+          bookId: 'book',
+          type: EntryType.expense,
+          amount: 21.02,
+          currencyCode: 'USD',
+          accountAmount: 142,
+          baseAmount: 142,
+          refundedBaseAmount: 42,
+          categoryId: 'travel',
+          accountId: cnyAccount.id,
+          note: '21.02 USD，人民币实际入账 142',
+          occurredAt: DateTime(2026, 9, 1),
+        ),
+        LedgerEntry(
+          id: 'usd-liability',
+          bookId: 'book',
+          type: EntryType.expense,
+          amount: 10,
+          currencyCode: 'USD',
+          accountAmount: 10,
+          baseAmount: 72,
+          categoryId: 'travel',
+          accountId: usdAccount.id,
+          note: '美元账户负债',
+          occurredAt: DateTime(2026, 9, 2),
+        ),
+        LedgerEntry(
+          id: 'internal-currency-transfer',
+          bookId: 'book',
+          type: EntryType.transfer,
+          amount: 50,
+          currencyCode: 'USD',
+          accountAmount: 50,
+          toAccountAmount: 360,
+          baseAmount: 0,
+          categoryId: 'transfer',
+          accountId: usdAccount.id,
+          toAccountId: cnyAccount.id,
+          note: '同一主体内部币种调拨，不是提前还款',
+          occurredAt: DateTime(2026, 9, 3),
+        ),
+      ],
+      statements: const <BillingStatement>[],
+      allocations: const <StatementRepaymentAllocation>[],
+      baseCurrencyCode: 'CNY',
+      now: DateTime(2026, 9, 10),
+      balanceOf: (account) => account.id == cnyAccount.id ? -100 : -10,
+      convertToCreditCurrency: (amount, source, date) =>
+          source == 'USD' ? amount * 7.2 : amount,
+    );
+
+    // 账期消费按冻结本位币：142 - 42 + 72 = 172；总欠款按子账户实际余额换算。
+    expect(overview.netSpending, 172);
+    expect(overview.earlyRepayment, 0);
+    expect(overview.currentCycleDebt, 172);
+    expect(overview.totalDebt, 172);
+    expect(overview.missingConversion, isFalse);
+  });
 }

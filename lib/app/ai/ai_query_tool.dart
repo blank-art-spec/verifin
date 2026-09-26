@@ -55,6 +55,10 @@ class AiToolContext {
     required this.now,
     required this.l10n,
     this.exchangeRates = const <ExchangeRate>[],
+    this.creditAccounts = const <CreditAccount>[],
+    this.billingStatements = const <BillingStatement>[],
+    this.statementRepaymentAllocations =
+        const <StatementRepaymentAllocation>[],
     this.bookId = '',
     this.budget,
     this.currencyDisplay = MoneyCodeDisplay.code,
@@ -69,6 +73,12 @@ class AiToolContext {
 
   /// 当前账本账户。
   final List<Account> accounts;
+
+  /// 当前账本信用主体及正式账单数据。字段均有空列表默认值，旧调用方和测试可继续
+  /// 使用子账户口径；生产上下文提供后，信用查询会按父主体聚合多币种负债。
+  final List<CreditAccount> creditAccounts;
+  final List<BillingStatement> billingStatements;
+  final List<StatementRepaymentAllocation> statementRepaymentAllocations;
 
   /// 全局分类。
   final List<Category> categories;
@@ -1205,7 +1215,7 @@ class NetWorthTool extends AiQueryTool {
   }
 }
 
-/// 信用卡 / 信用账户：当前欠款、可用额度与本期账单。
+/// 信用卡 / 信用账户：按父主体聚合当前欠款、共享可用额度与本账期净消费。
 class CreditCardBillTool extends AiQueryTool {
   const CreditCardBillTool();
 
@@ -1213,7 +1223,7 @@ class CreditCardBillTool extends AiQueryTool {
   String get name => 'creditCardBill';
 
   @override
-  String get description => '信用类账户的当前欠款、可用额度、本期账单与还款日倒计时。';
+  String get description => '信用主体的当前总欠款、共享可用额度、本账期净消费与动态到期日。';
 
   @override
   AiToolSchema get schema => const AiToolSchema();
@@ -1221,15 +1231,133 @@ class CreditCardBillTool extends AiQueryTool {
   @override
   AiToolResult run(AiToolContext ctx, Map<String, Object?> args) {
     final l10n = ctx.l10n;
-    final cards = ctx.accounts
-        .where((account) => account.type.supportsCredit && !account.hidden)
+    final parentIds = ctx.creditAccounts.map((item) => item.id).toSet();
+    final legacyCards = ctx.accounts
+        .where(
+          (account) =>
+              account.type.supportsCredit &&
+              !account.hidden &&
+              (account.creditAccountId == null ||
+                  !parentIds.contains(account.creditAccountId)),
+        )
         .toList(growable: false);
-    if (cards.isEmpty) {
+    final visibleParents = ctx.creditAccounts
+        .where(
+          (parent) => ctx.accounts.any(
+            (account) =>
+                account.creditAccountId == parent.id && !account.hidden,
+          ),
+        )
+        .toList(growable: false);
+    if (legacyCards.isEmpty && visibleParents.isEmpty) {
       return AiToolResult(summary: l10n.aiNoCreditAccounts);
     }
     final rows = <List<String>>[];
     final parts = <String>[];
-    for (final card in cards) {
+
+    /// 向表格和模型摘要同时追加一个信用账户结果，保证两种呈现使用同一组数值。
+    void addResult({
+      required String name,
+      required String currencyCode,
+      required double? used,
+      required double? available,
+      required double? bill,
+      required DateTime? dueDate,
+      bool missingConversion = false,
+    }) {
+      final usedText = used == null
+          ? '—'
+          : formatCurrencyNumber(used, currencyCode);
+      final availableText = available == null
+          ? '—'
+          : formatCurrencyNumber(available, currencyCode);
+      final billText = bill == null
+          ? '—'
+          : formatCurrencyNumber(bill, currencyCode);
+      rows.add(<String>[
+        name,
+        if (ctx.currencyDisplay != MoneyCodeDisplay.none) currencyCode,
+        usedText,
+        availableText,
+        billText,
+      ]);
+      final days = dueDate == null
+          ? null
+          : calendarDaysBetween(ctx.now, dueDate).clamp(0, 1 << 30).toInt();
+      parts.add(
+        l10n.aiCardDebtLine(
+              name,
+              usedText,
+              ctx.currencyDisplay == MoneyCodeDisplay.none ? '' : currencyCode,
+            ) +
+            (available == null
+                ? ''
+                : l10n.aiCardAvailableLine(availableText)) +
+            (bill == null ? '' : l10n.aiCardBillLine(billText)) +
+            (dueDate == null
+                ? ''
+                : l10n.aiCardDueLine(
+                    dueDate.day,
+                    days == 0 ? l10n.dueToday : l10n.dueInDays(days!),
+                  )) +
+            (missingConversion ? ' ${l10n.creditCycleMissingRate}' : ''),
+      );
+    }
+
+    for (final parent in visibleParents) {
+      final children = ctx.accounts
+          .where((account) => account.creditAccountId == parent.id)
+          .toList(growable: false);
+      final childIds = children.map((item) => item.id).toSet();
+      final overview = buildCreditCycleOverview(
+        creditAccount: parent,
+        accounts: children,
+        entries: ctx.entries,
+        statements: ctx.billingStatements,
+        allocations: ctx.statementRepaymentAllocations,
+        baseCurrencyCode: ctx.baseCurrencyCode,
+        now: ctx.now,
+        balanceOf: ctx.balanceOf,
+        convertToCreditCurrency: (amount, sourceCurrencyCode, date) {
+          final converted = convertCurrencyAmount(
+            amount: amount,
+            sourceCurrencyCode: sourceCurrencyCode,
+            targetCurrencyCode: parent.currencyCode,
+            baseCurrencyCode: ctx.baseCurrencyCode,
+            bookId: ctx.bookId,
+            date: date,
+            rates: ctx.exchangeRates,
+          );
+          return converted is ConvertedCurrencyAmount
+              ? converted.amount
+              : null;
+        },
+      );
+      final hasOutstandingStatement = ctx.billingStatements.any(
+        (statement) =>
+            childIds.contains(statement.accountId) &&
+            statement.outstandingAmount > 0,
+      );
+      addResult(
+        name: parent.name,
+        currencyCode: parent.currencyCode,
+        used: overview.missingConversion ? null : overview.totalDebt,
+        available:
+            overview.missingConversion || parent.creditLimit == null
+            ? null
+            : (parent.creditLimit! - overview.totalDebt)
+                  .clamp(0.0, double.infinity)
+                  .toDouble(),
+        bill: overview.missingConversion ? null : overview.netSpending,
+        dueDate: parent.hasCompleteCycleRule || hasOutstandingStatement
+            ? overview.dueDate
+            : null,
+        missingConversion: overview.missingConversion,
+      );
+    }
+
+    // 没有父主体的旧数据继续沿用单账户口径；正常 v18 数据不会进入此分支。
+    for (final card in legacyCards) {
       final balance = ctx.balanceOf(card);
       final used = usedCredit(balance);
       final available = availableCredit(card.creditLimit, balance);
@@ -1239,40 +1367,15 @@ class CreditCardBillTool extends AiQueryTool {
       final bill = cycle == null
           ? null
           : billingCycleExpense(ctx.entries, card.id, cycle);
-      rows.add(<String>[
-        card.name,
-        if (ctx.currencyDisplay != MoneyCodeDisplay.none) card.currencyCode,
-        formatCurrencyNumber(used, card.currencyCode),
-        available == null
-            ? '—'
-            : formatCurrencyNumber(available, card.currencyCode),
-        bill == null ? '—' : formatCurrencyNumber(bill, card.currencyCode),
-      ]);
-      parts.add(
-        l10n.aiCardDebtLine(
-              card.name,
-              formatCurrencyNumber(used, card.currencyCode),
-              // 单币种账本不留币种代码；这里的空串会自然充当后半句之间的分隔空格。
-              ctx.currencyDisplay == MoneyCodeDisplay.none
-                  ? ''
-                  : card.currencyCode,
-            ) +
-            (available == null
-                ? ''
-                : l10n.aiCardAvailableLine(
-                    formatCurrencyNumber(available, card.currencyCode),
-                  )) +
-            (bill == null
-                ? ''
-                : l10n.aiCardBillLine(
-                    formatCurrencyNumber(bill, card.currencyCode),
-                  )) +
-            (card.dueDay == null
-                ? ''
-                : l10n.aiCardDueLine(
-                    card.dueDay!,
-                    l10n.dueInDays(daysUntilDue(card.dueDay!, ctx.now)),
-                  )),
+      addResult(
+        name: card.name,
+        currencyCode: card.currencyCode,
+        used: used,
+        available: available,
+        bill: bill,
+        dueDate: card.dueDay == null
+            ? null
+            : nextDueDate(card.dueDay!, ctx.now),
       );
     }
     return AiToolResult(
@@ -1286,7 +1389,7 @@ class CreditCardBillTool extends AiQueryTool {
             l10n.aiHeaderCurrency,
           l10n.aiHeaderCurrentDebt,
           l10n.creditAvailableLabel,
-          l10n.currentBillLabel,
+          l10n.creditCycleNetSpending,
         ],
         rows: rows,
       ),

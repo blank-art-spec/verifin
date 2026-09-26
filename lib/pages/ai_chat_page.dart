@@ -199,6 +199,9 @@ class _AiChatPageState extends State<AiChatPage> {
     final context0 = AiToolContext(
       entries: scope.entries,
       accounts: scope.accounts,
+      creditAccounts: scope.creditAccounts,
+      billingStatements: scope.billingStatements,
+      statementRepaymentAllocations: scope.statementRepaymentAllocations,
       categories: scope.categories,
       tags: scope.tags,
       balanceOf: scope.accountBalance,

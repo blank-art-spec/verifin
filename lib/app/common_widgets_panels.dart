@@ -284,7 +284,10 @@ class _AccountRow extends StatelessWidget {
                       ),
                     ),
                     if (account.type.supportsCredit &&
-                        account.creditLimit != null)
+                        account.creditLimit != null &&
+                        // 已关联信用主体时额度是跨币种共享口径，不能用单个子账户
+                        // 余额计算“可用额度”；正确合计由首页主体账期卡展示。
+                        account.creditAccountId == null)
                       Text(
                         '${AppLocalizations.of(context).creditAvailableLabel} '
                         '${formatUserMoney(availableCredit(account.creditLimit, balance) ?? 0, account.currencyCode)}',

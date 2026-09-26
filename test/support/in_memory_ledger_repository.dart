@@ -11,6 +11,7 @@ class InMemoryLedgerRepository implements LedgerRepository {
   List<LedgerBook> _books = <LedgerBook>[];
   List<Account> _accounts = <Account>[];
   List<AccountGroup> _groups = <AccountGroup>[];
+  List<CreditAccount> _creditAccounts = <CreditAccount>[];
   List<Category> _categories = <Category>[];
   List<Tag> _tags = <Tag>[];
   List<Attachment> _attachments = <Attachment>[];
@@ -46,6 +47,24 @@ class InMemoryLedgerRepository implements LedgerRepository {
 
   @override
   Future<void> saveAccounts(List<Account> accounts) async {
+    _accounts = List<Account>.of(accounts);
+  }
+
+  @override
+  Future<List<CreditAccount>> loadCreditAccounts() async =>
+      List<CreditAccount>.of(_creditAccounts);
+
+  @override
+  Future<void> saveCreditAccounts(List<CreditAccount> creditAccounts) async {
+    _creditAccounts = List<CreditAccount>.of(creditAccounts);
+  }
+
+  @override
+  Future<void> saveCreditAccountAggregate({
+    required List<CreditAccount> creditAccounts,
+    required List<Account> accounts,
+  }) async {
+    _creditAccounts = List<CreditAccount>.of(creditAccounts);
     _accounts = List<Account>.of(accounts);
   }
 
@@ -212,6 +231,7 @@ class InMemoryLedgerRepository implements LedgerRepository {
     _books = List<LedgerBook>.of(snapshot.books);
     _accounts = List<Account>.of(snapshot.accounts);
     _groups = List<AccountGroup>.of(snapshot.accountGroups);
+    _creditAccounts = List<CreditAccount>.of(snapshot.creditAccounts);
     _categories = List<Category>.of(snapshot.categories);
     _tags = List<Tag>.of(snapshot.tags);
     _attachments = List<Attachment>.of(snapshot.attachments);
@@ -234,6 +254,7 @@ class InMemoryLedgerRepository implements LedgerRepository {
       _books.isNotEmpty ||
       _accounts.isNotEmpty ||
       _groups.isNotEmpty ||
+      _creditAccounts.isNotEmpty ||
       _categories.isNotEmpty ||
       _exchangeRates.isNotEmpty ||
       _balanceAnchors.isNotEmpty ||
