@@ -12,7 +12,11 @@ import 'import/wechat.dart';
 import 'import/yimu.dart';
 
 export 'import/plan_builder.dart'
-    show ImportConversionIssue, ImportExchangeRateCandidate, ImportPlan;
+    show
+        ImportConversionIssue,
+        ImportExchangeRateCandidate,
+        ImportPlan,
+        ImportReconciliationSummary;
 export 'import/raw_import.dart' show ImportRowError;
 
 /// 支付平台 / 记账软件账单来源。用户在导入前显式选择，避免仅靠表头猜测出错。
@@ -72,6 +76,7 @@ ImportPlan buildPlatformImportPlan({
   List<ExchangeRate> exchangeRates = const <ExchangeRate>[],
   Map<String, double> rateOverrides = const <String, double>{},
   bool seedEnglish = false,
+  List<LedgerEntry> existingEntries = const <LedgerEntry>[],
 }) {
   final parsed = parsePlatformBytes(platform, bytes);
   final resolved = rateOverrides.isEmpty
@@ -99,5 +104,7 @@ ImportPlan buildPlatformImportPlan({
     baseCurrencyCode: baseCurrencyCode,
     exchangeRates: exchangeRates,
     seedEnglish: seedEnglish,
+    sourceId: platform.name,
+    existingEntries: existingEntries,
   );
 }

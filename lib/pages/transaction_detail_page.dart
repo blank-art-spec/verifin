@@ -384,6 +384,51 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                     ],
                   ),
                 ),
+                if (entry.sourceRecords.isNotEmpty ||
+                    entry.reconciliationStatus !=
+                        ReconciliationStatus.unverified) ...<Widget>[
+                  const SizedBox(height: 12),
+                  SectionLabel(
+                    AppLocalizations.of(context).reconciliationSection,
+                  ),
+                  VeriCard(
+                    child: Column(
+                      children: <Widget>[
+                        DetailInfoRow(
+                          label: AppLocalizations.of(
+                            context,
+                          ).reconciliationSection,
+                          value: _reconciliationLabel(
+                            AppLocalizations.of(context),
+                            entry.reconciliationStatus,
+                          ),
+                        ),
+                        DetailInfoRow(
+                          label: AppLocalizations.of(
+                            context,
+                          ).sourceRecordsCount(entry.sourceRecords.length),
+                          value: entry.sourceRecords
+                              .map((record) => record.sourceId)
+                              .toSet()
+                              .join('、'),
+                        ),
+                        if (entry.reconciliationStatus ==
+                                ReconciliationStatus.autoMatched ||
+                            entry.reconciliationStatus ==
+                                ReconciliationStatus.amountConflict)
+                          SettingsRow(
+                            icon: Icons.verified_outlined,
+                            title: AppLocalizations.of(
+                              context,
+                            ).confirmReconciliationAction,
+                            trailing: '',
+                            trailingIcon: Icons.chevron_right,
+                            onTap: _confirmReconciliation,
+                          ),
+                      ],
+                    ),
+                  ),
+                ],
                 // 退款与交易本体共用同一份草稿，只在页头保存时一起落库。
                 if (_type == EntryType.expense) ...<Widget>[
                   const SizedBox(height: 12),
@@ -1070,6 +1115,32 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       setState(() => _noteController.text = note);
     }
   }
+
+  Future<void> _confirmReconciliation() async {
+    final entry = _initialEntry;
+    if (entry == null) return;
+    final saved = await VeriFinScope.of(
+      context,
+    ).confirmEntryReconciliation(entry.id);
+    if (!mounted || !saved) return;
+    final refreshed = VeriFinScope.of(
+      context,
+    ).entries.where((item) => item.id == entry.id).firstOrNull;
+    if (refreshed != null) setState(() => _initialEntry = refreshed);
+  }
+
+  String _reconciliationLabel(
+    AppLocalizations l10n,
+    ReconciliationStatus status,
+  ) => switch (status) {
+    ReconciliationStatus.unverified => l10n.reconciliationUnverified,
+    ReconciliationStatus.autoMatched => l10n.reconciliationAutoMatched,
+    ReconciliationStatus.manuallyConfirmed =>
+      l10n.reconciliationManuallyConfirmed,
+    ReconciliationStatus.amountConflict => l10n.reconciliationAmountConflict,
+    ReconciliationStatus.bankOnly => l10n.reconciliationBankOnly,
+    ReconciliationStatus.localOnly => l10n.reconciliationLocalOnly,
+  };
 
   double get _refundTotal =>
       _refunds.fold<double>(0, (total, refund) => total + refund.amount);

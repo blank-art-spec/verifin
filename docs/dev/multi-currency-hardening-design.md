@@ -20,7 +20,7 @@ Android 小组件之间的接缝问题。
 - 新增 `entry_currency_draft.dart` 保持手工/导入/旧数据和固定周期规则的既有结算比例，
   新增 `ledger_data_validation.dart` 供交易聚合、账单导入和备份恢复共同校验；
 - `saveEntryAggregateDraftResult` 提供稳定成功/校验失败/持久化失败结果，原 bool API 仅作兼容；
-- 未修改 SQLite schema（当时为 v14；当前为 v16）；没有新增网络请求、权限、后台汇率任务或第三方依赖；
+- 未修改 SQLite schema（当时为 v14；当前为 v17）；没有新增网络请求、权限、后台汇率任务或第三方依赖；
 - 根工程 `dart format .`、`flutter analyze` 和全量 `flutter test` 已通过（877 项，随后新增
   CSV 外币退款往返测试单独通过）；UI Lab 的 analyze、23 项测试和 Web build 也已通过；
 - 剩余工作是发布前脚本复验，以及 CI release APK 上的 Android 真机专项。
@@ -38,7 +38,7 @@ Android 小组件之间的接缝问题。
 - 跨币转账保存两端实际金额，且 `baseAmount == 0`、不计入收支；
 - 当前资产先算账户原币余额，再按目标日期汇率折算；缺任一必要汇率时不展示部分总额；
 - 交易、附件、退款和“记住汇率”可在单个 repository 事务中原子保存；
-- SQLite v14（当时版本；当前 v16）、模型 JSON/row 映射、迁移矩阵和仓储契约的主体结构完整。
+- SQLite v14（当时版本；当前 v17）、模型 JSON/row 映射、迁移矩阵和仓储契约的主体结构完整。
 
 因此，本轮不改三层金额字段语义，不批量重算历史交易，不接入在线汇率，也不增加新的
 金额存储单位。
@@ -597,7 +597,7 @@ VoidCallback? onWidgetProjectionInvalidated;
 `AGENTS.md` 的 schema 迁移流程单独设计，不能顺手加列。
 
 > 事后核对（2026-09-09）：本轮确实没有升 schema；之后的 v15（账户分组回归纯文件夹）与
-> v16（账户图标 code 迁移）是另外两项独立改动，当前 schema 为 **v16**。
+> v16（账户图标 code 迁移）是另外两项独立改动；v17 另增账务正确性表，当前 schema 为 **v17**。
 
 ## 13. 测试矩阵
 

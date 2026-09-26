@@ -16,6 +16,8 @@ class ImportPlan {
     this.standaloneAccountIds = const <String>{},
     this.conversionIssues = const <ImportConversionIssue>[],
     this.exchangeRateCandidates = const <ImportExchangeRateCandidate>[],
+    this.reconciliationUpdates = const <LedgerEntry>[],
+    this.reconciliationSummary = const ImportReconciliationSummary(),
   });
 
   final List<LedgerEntry> entries;
@@ -27,6 +29,8 @@ class ImportPlan {
   final List<ImportRowError> errors;
   final List<ImportConversionIssue> conversionIssues;
   final List<ImportExchangeRateCandidate> exchangeRateCandidates;
+  final List<LedgerEntry> reconciliationUpdates;
+  final ImportReconciliationSummary reconciliationSummary;
 
   /// 待新建账户中「即使没有交易引用也要创建」的 id 集合。默认空——普通导入的账户都由
   /// 交易派生、被排除后不应留下空账户；仅 Tally 这类携带账户余额/类型的来源，会把源账本
@@ -39,6 +43,26 @@ class ImportPlan {
   int get errorCount => errors.length + conversionIssues.length;
   bool get isEmpty =>
       entries.isEmpty && errors.isEmpty && conversionIssues.isEmpty;
+}
+
+/// 一次正式来源导入的核准汇总。用于预览直接呈现匹配、缺失与冲突数量。
+class ImportReconciliationSummary {
+  const ImportReconciliationSummary({
+    this.matched = 0,
+    this.bankOnly = 0,
+    this.amountConflicts = 0,
+    this.localOnly = 0,
+    this.duplicates = 0,
+  });
+
+  final int matched;
+  final int bankOnly;
+  final int amountConflicts;
+  final int localOnly;
+  final int duplicates;
+
+  bool get hasResults =>
+      matched + bankOnly + amountConflicts + localOnly + duplicates > 0;
 }
 
 class ImportExchangeRateCandidate {
@@ -83,6 +107,8 @@ ImportPlan buildImportPlanFromRecords({
   List<ExchangeRate> exchangeRates = const <ExchangeRate>[],
   List<Tag> existingTags = const <Tag>[],
   bool seedEnglish = false,
+  String sourceId = '',
+  List<LedgerEntry> existingEntries = const <LedgerEntry>[],
 }) {
   final workingCategories = List<Category>.from(existingCategories);
   final workingTags = List<Tag>.from(existingTags);
@@ -92,11 +118,186 @@ ImportPlan buildImportPlanFromRecords({
   final entries = <LedgerEntry>[];
   final errors = <ImportRowError>[...parsed.errors];
   final conversionIssues = <ImportConversionIssue>[];
+  final reconciliationUpdates = <LedgerEntry>[];
+  final reconciledExistingIds = <String>{};
+  final touchedAccountIds = <String>{};
+  var matchedCount = 0;
+  var bankOnlyCount = 0;
+  var conflictCount = 0;
+  var duplicateCount = 0;
+  final fingerprintOccurrences = <String, int>{};
   var idCounter = 0;
 
   String nextId(String prefix) {
     idCounter++;
     return '${prefix}_${now.microsecondsSinceEpoch}_$idCounter';
+  }
+
+  String normalizedEvidenceText(String value) => value
+      .trim()
+      .toLowerCase()
+      .replaceAll(RegExp(r'[\s\p{P}]', unicode: true), '');
+
+  /// 32 位 FNV-1a 的稳定十六进制摘要。这里不用于安全校验，只需要让同一来源记录
+  /// 在离线、跨进程导入时得到相同主键；避免依赖运行时不稳定的 String.hashCode。
+  String stableHash(String value) {
+    var hash = 0x811c9dc5;
+    for (final byte in value.codeUnits) {
+      hash ^= byte;
+      hash = (hash * 0x01000193) & 0xffffffff;
+    }
+    return hash.toRadixString(16).padLeft(8, '0');
+  }
+
+  String evidenceFingerprint(
+    RawImportRecord record,
+    String currencyCode,
+    String accountName,
+  ) {
+    final posted = record.postedDate == null
+        ? ''
+        : currencyDateKey(record.postedDate!);
+    final merchant = record.merchant.isEmpty ? record.note : record.merchant;
+    final base = stableHash(
+      <String>[
+        sourceId,
+        bookId,
+        normalizedEvidenceText(accountName),
+        currencyDateKey(record.date),
+        posted,
+        record.type.storageValue,
+        normalizeCurrencyAmount(record.amount, currencyCode).toStringAsFixed(8),
+        currencyCode,
+        normalizedEvidenceText(merchant),
+      ].join('|'),
+    );
+    final occurrence = (fingerprintOccurrences[base] ?? 0) + 1;
+    fingerprintOccurrences[base] = occurrence;
+    return '$base-${occurrence.toString().padLeft(3, '0')}';
+  }
+
+  LedgerEntry? reconcileImportedEntry({
+    required LedgerEntry imported,
+    required RawImportRecord record,
+    required String accountName,
+  }) {
+    if (sourceId.isEmpty) return imported;
+    final fingerprint = evidenceFingerprint(
+      record,
+      imported.currencyCode,
+      accountName,
+    );
+    final sourceRecord = EntrySourceRecord(
+      id: 'source_${stableHash('$sourceId|${record.sourceTransactionId}|$fingerprint')}',
+      sourceId: sourceId,
+      sourceTransactionId: record.sourceTransactionId,
+      fingerprint: fingerprint,
+      importedAt: now,
+      transactionDate: record.date,
+      postedDate: record.postedDate,
+      amount: imported.amount,
+      currencyCode: imported.currencyCode,
+      merchant: record.merchant,
+      rawDescription: record.note,
+    );
+
+    bool sameSource(EntrySourceRecord evidence) =>
+        evidence.sourceId == sourceId &&
+        ((record.sourceTransactionId.isNotEmpty &&
+                evidence.sourceTransactionId == record.sourceTransactionId) ||
+            evidence.fingerprint == fingerprint);
+    final exactEvidenceEntry = existingEntries
+        .where((entry) => entry.sourceRecords.any(sameSource))
+        .firstOrNull;
+    if (exactEvidenceEntry != null) {
+      reconciledExistingIds.add(exactEvidenceEntry.id);
+      duplicateCount++;
+      return null;
+    }
+
+    final merchant = normalizedEvidenceText(
+      record.merchant.isEmpty ? record.note : record.merchant,
+    );
+    bool sameContext(LedgerEntry entry, {required bool compareAmount}) {
+      if (entry.bookId != bookId ||
+          entry.type != imported.type ||
+          entry.accountId != imported.accountId ||
+          entry.currencyCode != imported.currencyCode ||
+          currencyDateKey(entry.occurredAt) !=
+              currencyDateKey(imported.occurredAt)) {
+        return false;
+      }
+      if (compareAmount &&
+          (entry.amount - imported.amount).abs() >=
+              currencyAmountTolerance(imported.currencyCode)) {
+        return false;
+      }
+      if (merchant.isEmpty) return compareAmount;
+      final local = normalizedEvidenceText(entry.note);
+      return local == merchant ||
+          local.contains(merchant) ||
+          merchant.contains(local);
+    }
+
+    final exactMatches = existingEntries
+        .where((entry) => sameContext(entry, compareAmount: true))
+        .toList();
+    if (exactMatches.length == 1) {
+      final existing = exactMatches.single;
+      reconciledExistingIds.add(existing.id);
+      matchedCount++;
+      return existing.copyWith(
+        reconciliationStatus: ReconciliationStatus.autoMatched,
+        sourceRecords: <EntrySourceRecord>[
+          ...existing.sourceRecords,
+          sourceRecord,
+        ],
+      );
+    }
+
+    final conflicts = merchant.isEmpty
+        ? const <LedgerEntry>[]
+        : existingEntries
+              .where((entry) => sameContext(entry, compareAmount: false))
+              .toList();
+    if (conflicts.length == 1) {
+      final existing = conflicts.single;
+      reconciledExistingIds.add(existing.id);
+      conflictCount++;
+      return existing.copyWith(
+        reconciliationStatus: ReconciliationStatus.amountConflict,
+        sourceRecords: <EntrySourceRecord>[
+          ...existing.sourceRecords,
+          sourceRecord,
+        ],
+      );
+    }
+
+    bankOnlyCount++;
+    return LedgerEntry(
+      id: 'entry_source_$fingerprint',
+      bookId: imported.bookId,
+      type: imported.type,
+      amount: imported.amount,
+      currencyCode: imported.currencyCode,
+      accountAmount: imported.accountAmount,
+      toAccountAmount: imported.toAccountAmount,
+      baseAmount: imported.baseAmount,
+      conversionSource: imported.conversionSource,
+      categoryId: imported.categoryId,
+      accountId: imported.accountId,
+      toAccountId: imported.toAccountId,
+      note: imported.note,
+      occurredAt: imported.occurredAt,
+      tagIds: imported.tagIds,
+      fee: imported.fee,
+      reimbursable: imported.reimbursable,
+      refundedBaseAmount: imported.refundedBaseAmount,
+      refundOf: imported.refundOf,
+      settledAt: imported.settledAt,
+      reconciliationStatus: ReconciliationStatus.bankOnly,
+      sourceRecords: <EntrySourceRecord>[sourceRecord],
+    );
   }
 
   // 本次导入按「去空格名 + 币种」新建账户候选；同名不同币种不得误合并。
@@ -529,8 +730,19 @@ ImportPlan buildImportPlanFromRecords({
         fee: normalizeCurrencyAmount(record.fee, fromCurrency ?? currencyCode),
         tagIds: tagIds,
       );
-      entries.add(entry);
-      registerCandidateRate(providedRate, candidateRateKey, entry.id);
+      final reconciled = reconcileImportedEntry(
+        imported: entry,
+        record: record,
+        accountName: record.account,
+      );
+      if (reconciled != null) entries.add(reconciled);
+      if (fromId.isNotEmpty) touchedAccountIds.add(fromId);
+      if (toId?.isNotEmpty == true) touchedAccountIds.add(toId!);
+      registerCandidateRate(
+        providedRate,
+        candidateRateKey,
+        reconciled?.id ?? entry.id,
+      );
       continue;
     }
 
@@ -625,12 +837,23 @@ ImportPlan buildImportPlanFromRecords({
       refundedBaseAmount: refundedBase,
       tagIds: tagIds,
     );
-    entries.add(entry);
-    if (refundedOriginal > 0) {
+    final reconciled = reconcileImportedEntry(
+      imported: entry,
+      record: record,
+      accountName: record.account,
+    );
+    if (reconciled != null) entries.add(reconciled);
+    if (accountId.isNotEmpty) touchedAccountIds.add(accountId);
+    if (refundedOriginal > 0 && reconciled != null) {
       final ratio = refundedOriginal / normalizedAmount;
+      final evidenceFingerprint = reconciled.sourceRecords.isEmpty
+          ? stableHash('${reconciled.id}|refund')
+          : reconciled.sourceRecords.last.fingerprint;
       entries.add(
         LedgerEntry(
-          id: nextId('refund'),
+          id: sourceId.isEmpty
+              ? nextId('refund')
+              : 'refund_source_$evidenceFingerprint',
           bookId: bookId,
           type: EntryType.refund,
           amount: refundedOriginal,
@@ -647,12 +870,16 @@ ImportPlan buildImportPlanFromRecords({
           accountId: accountId,
           note: '',
           occurredAt: record.date,
-          refundOf: entry.id,
+          refundOf: reconciled.id,
           settledAt: record.date,
         ),
       );
     }
-    registerCandidateRate(providedRate, candidateRateKey, entry.id);
+    registerCandidateRate(
+      providedRate,
+      candidateRateKey,
+      reconciled?.id ?? entry.id,
+    );
   }
 
   // 携带余额/类型的账户元数据（Tally）：回推初始余额对齐来源、补建无流水账户。
@@ -665,6 +892,30 @@ ImportPlan buildImportPlanFromRecords({
     now: now,
     baseCurrencyCode: baseCurrencyCode,
   );
+
+  var localOnlyCount = 0;
+  if (sourceId.isNotEmpty && parsed.records.isNotEmpty) {
+    final dates = parsed.records.map((record) => dateOnly(record.date)).toList()
+      ..sort();
+    final firstDate = dates.first;
+    final lastDate = dates.last;
+    for (final existing in existingEntries) {
+      final day = dateOnly(existing.occurredAt);
+      if (existing.bookId != bookId ||
+          reconciledExistingIds.contains(existing.id) ||
+          !touchedAccountIds.contains(existing.accountId) ||
+          day.isBefore(firstDate) ||
+          day.isAfter(lastDate) ||
+          existing.type == EntryType.refund ||
+          existing.sourceRecords.any((record) => record.sourceId == sourceId)) {
+        continue;
+      }
+      reconciliationUpdates.add(
+        existing.copyWith(reconciliationStatus: ReconciliationStatus.localOnly),
+      );
+      localOnlyCount++;
+    }
+  }
 
   return ImportPlan(
     entries: entries,
@@ -683,6 +934,14 @@ ImportPlan buildImportPlanFromRecords({
         ),
     ],
     standaloneAccountIds: standalone,
+    reconciliationUpdates: reconciliationUpdates,
+    reconciliationSummary: ImportReconciliationSummary(
+      matched: matchedCount,
+      bankOnly: bankOnlyCount,
+      amountConflicts: conflictCount,
+      localOnly: localOnlyCount,
+      duplicates: duplicateCount,
+    ),
   );
 }
 

@@ -1027,6 +1027,135 @@ class AppLocalizationsZh extends AppLocalizations {
   String get creditRepaySuccess => '已记录还款';
 
   @override
+  String get balanceAnchorTitle => '核准账户余额';
+
+  @override
+  String get balanceAnchorAction => '余额核准锚点';
+
+  @override
+  String get balanceAnchorDate => '核准时间';
+
+  @override
+  String get balanceAnchorHint => '核准时间之前缺失的消费或还款将不再影响当前余额。这不是一笔交易。';
+
+  @override
+  String get balanceAnchorSaved => '余额已核准';
+
+  @override
+  String balanceAnchorLatest(String date, String amount) {
+    return '最近核准：$date · $amount';
+  }
+
+  @override
+  String get billingStatementsTitle => '正式账单';
+
+  @override
+  String get billingStatementsAction => '管理正式账单';
+
+  @override
+  String get billingStatementAdd => '添加账单';
+
+  @override
+  String get statementAmountLabel => '应还金额';
+
+  @override
+  String get minimumPaymentLabel => '最低还款';
+
+  @override
+  String get paidAmountLabel => '已还金额';
+
+  @override
+  String get statementDateLabel => '账单日期';
+
+  @override
+  String get statementPeriodLabel => '账期';
+
+  @override
+  String get dueDateLabel => '到期日';
+
+  @override
+  String get billedOutstandingLabel => '已出账待还';
+
+  @override
+  String get unbilledAmountLabel => '当前未出账';
+
+  @override
+  String get latestStatementLabel => '上期账单';
+
+  @override
+  String get statementPaid => '已结清';
+
+  @override
+  String get statementPartiallyPaid => '部分还款';
+
+  @override
+  String get statementOpen => '待还款';
+
+  @override
+  String get statementOverdue => '已逾期';
+
+  @override
+  String get statementDisputed => '有争议';
+
+  @override
+  String statementRemaining(String amount) {
+    return '剩余 $amount';
+  }
+
+  @override
+  String get repaymentAllocationsTitle => '还款记录';
+
+  @override
+  String get billingStatementsEmpty => '还没有正式账单';
+
+  @override
+  String get reconciliationSummaryTitle => '正式账单核准';
+
+  @override
+  String reconciliationSummaryLine(
+    int matched,
+    int bankOnly,
+    int conflicts,
+    int localOnly,
+  ) {
+    return '$matched 笔匹配 · $bankOnly 笔银行有、本地没有 · $conflicts 笔金额冲突 · $localOnly 笔本地有、银行没有';
+  }
+
+  @override
+  String reconciliationDuplicates(int count) {
+    return '另有 $count 笔已导入来源记录被幂等跳过';
+  }
+
+  @override
+  String get reconciliationSection => '交易核准';
+
+  @override
+  String sourceRecordsCount(int count) {
+    return '$count 条来源证据';
+  }
+
+  @override
+  String get confirmReconciliationAction => '人工确认匹配';
+
+  @override
+  String get reconciliationUnverified => '未核准';
+
+  @override
+  String get reconciliationAutoMatched => '自动匹配';
+
+  @override
+  String get reconciliationManuallyConfirmed => '已人工确认';
+
+  @override
+  String get reconciliationAmountConflict => '金额冲突';
+
+  @override
+  String get reconciliationBankOnly => '银行有、本地没有';
+
+  @override
+  String get reconciliationLocalOnly => '本地有、银行没有';
+
+  @override
   String monthlyDayLabel(int day) {
     return '每月 $day 日';
   }

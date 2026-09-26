@@ -26,6 +26,9 @@ const List<String> csvTemplateColumns = <String>[
   '汇率（1原币=X本位币）',
   '账户币种',
   '转入账户币种',
+  '来源交易ID',
+  '商户',
+  '记账日期',
 ];
 
 /// 表头列名 → 列键的别名。CSV 模板列 + 可选的 子分类/标签/手续费/退款（规范中文列名）。
@@ -50,14 +53,17 @@ const Map<String, List<String>> _headerAliases = <String, List<String>>{
   'rateToBase': <String>['汇率（1原币=x本位币）'],
   'accountCurrency': <String>['账户币种'],
   'toAccountCurrency': <String>['转入账户币种'],
+  'sourceTransactionId': <String>['来源交易id'],
+  'merchant': <String>['商户'],
+  'postedDate': <String>['记账日期'],
 };
 
 /// CSV 模板内容（带表头与示例行），用户下载后填写再导入。
 String transactionCsvTemplate() {
   return '${csvTemplateColumns.join(',')}\n'
-      '2026-01-05,支出,23.50,餐饮,现金,,午饭,CNY,23.50,23.50,,,CNY,\n'
-      '2026-01-05,收入,100,工资,美元账户,,奖金,USD,100,720,,7.2,USD,\n'
-      '2026-01-06,转账,500,,现金,美元账户,换汇,CNY,500,0,70,,CNY,USD\n';
+      '2026-01-05,支出,23.50,餐饮,现金,,午饭,CNY,23.50,23.50,,,CNY,,TX001,示例餐厅,2026-01-06\n'
+      '2026-01-05,收入,100,工资,美元账户,,奖金,USD,100,720,,7.2,USD,,,,\n'
+      '2026-01-06,转账,500,,现金,美元账户,换汇,CNY,500,0,70,,CNY,USD,,,\n';
 }
 
 const List<String> transactionCsvExportColumns = <String>[
@@ -326,6 +332,9 @@ ParsedImport parseCsvTemplateRows(List<List<String>> rows) {
       baseAmount: cell(row, 'baseAmount'),
       toAccountAmount: cell(row, 'toAccountAmount'),
       rateToBase: cell(row, 'rateToBase'),
+      sourceTransactionId: cell(row, 'sourceTransactionId'),
+      merchant: cell(row, 'merchant'),
+      postedDate: cell(row, 'postedDate'),
       tags: splitTagLabels(cell(row, 'tags')),
       sourceLine: line,
       onError: (message) =>

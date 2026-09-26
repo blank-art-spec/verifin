@@ -6,6 +6,90 @@ import '../../l10n/app_localizations.dart';
 import 'currency.dart';
 import 'ledger_book.dart';
 
+/// 一笔真实交易的核准状态。状态描述“本地交易与正式来源证据的关系”，不改变金额。
+enum ReconciliationStatus {
+  unverified,
+  autoMatched,
+  manuallyConfirmed,
+  amountConflict,
+  bankOnly,
+  localOnly;
+
+  static ReconciliationStatus fromStorage(String? value) =>
+      ReconciliationStatus.values.firstWhere(
+        (status) => status.name == value,
+        orElse: () => ReconciliationStatus.unverified,
+      );
+}
+
+/// 外部来源证据。交易表仍只有一笔真实消费；手工记录、支付平台和银行正式账单
+/// 可以各追加一条证据。稳定 [fingerprint] 与可选 [sourceTransactionId] 负责幂等。
+class EntrySourceRecord {
+  const EntrySourceRecord({
+    required this.id,
+    required this.sourceId,
+    required this.fingerprint,
+    required this.importedAt,
+    required this.transactionDate,
+    required this.amount,
+    required this.currencyCode,
+    this.sourceTransactionId = '',
+    this.postedDate,
+    this.merchant = '',
+    this.rawDescription = '',
+    this.statementId,
+  });
+
+  final String id;
+  final String sourceId;
+  final String sourceTransactionId;
+  final String fingerprint;
+  final DateTime importedAt;
+  final DateTime transactionDate;
+  final DateTime? postedDate;
+  final double amount;
+  final String currencyCode;
+  final String merchant;
+  final String rawDescription;
+  final String? statementId;
+
+  Map<String, Object?> toJson() => <String, Object?>{
+    'id': id,
+    'sourceId': sourceId,
+    if (sourceTransactionId.isNotEmpty)
+      'sourceTransactionId': sourceTransactionId,
+    'fingerprint': fingerprint,
+    'importedAt': importedAt.toIso8601String(),
+    'transactionDate': transactionDate.toIso8601String(),
+    if (postedDate != null) 'postedDate': postedDate!.toIso8601String(),
+    'amount': amount,
+    'currencyCode': currencyCode,
+    if (merchant.isNotEmpty) 'merchant': merchant,
+    if (rawDescription.isNotEmpty) 'rawDescription': rawDescription,
+    if (statementId != null) 'statementId': statementId,
+  };
+
+  static EntrySourceRecord fromJson(Map<String, Object?> json) {
+    final now = DateTime.now();
+    return EntrySourceRecord(
+      id: json['id'] as String? ?? '',
+      sourceId: json['sourceId'] as String? ?? '',
+      sourceTransactionId: json['sourceTransactionId'] as String? ?? '',
+      fingerprint: json['fingerprint'] as String? ?? '',
+      importedAt: DateTime.tryParse(json['importedAt'] as String? ?? '') ?? now,
+      transactionDate:
+          DateTime.tryParse(json['transactionDate'] as String? ?? '') ?? now,
+      postedDate: DateTime.tryParse(json['postedDate'] as String? ?? ''),
+      amount: (json['amount'] as num? ?? 0).toDouble(),
+      currencyCode: (json['currencyCode'] as String? ?? defaultCurrencyCode)
+          .toUpperCase(),
+      merchant: json['merchant'] as String? ?? '',
+      rawDescription: json['rawDescription'] as String? ?? '',
+      statementId: json['statementId'] as String?,
+    );
+  }
+}
+
 enum EntryType {
   expense,
   income,
@@ -82,6 +166,8 @@ class LedgerEntry {
     double? refundedAmount,
     this.refundOf,
     this.settledAt,
+    this.reconciliationStatus = ReconciliationStatus.unverified,
+    this.sourceRecords = const <EntrySourceRecord>[],
   }) : accountAmount = accountAmount ?? (accountId == '' ? null : amount),
        toAccountAmount =
            toAccountAmount ??
@@ -142,6 +228,12 @@ class LedgerEntry {
   /// **发起日期**。仅 [EntryType.refund] 有意义。
   final DateTime? settledAt;
 
+  /// 当前交易与正式来源的核准结果；仅作可追溯状态，不直接改变账务金额。
+  final ReconciliationStatus reconciliationStatus;
+
+  /// 同一真实交易的来源证据集合。按 fingerprint/sourceTransactionId 去重。
+  final List<EntrySourceRecord> sourceRecords;
+
   /// 是否为「待到账」退款（已申请、钱还没回来）。
   bool get isPendingRefund => type == EntryType.refund && settledAt == null;
 
@@ -187,6 +279,8 @@ class LedgerEntry {
     bool clearRefundOf = false,
     DateTime? settledAt,
     bool clearSettledAt = false,
+    ReconciliationStatus? reconciliationStatus,
+    List<EntrySourceRecord>? sourceRecords,
   }) {
     return LedgerEntry(
       id: id ?? this.id,
@@ -214,6 +308,8 @@ class LedgerEntry {
           refundedBaseAmount ?? refundedAmount ?? this.refundedBaseAmount,
       refundOf: clearRefundOf ? null : refundOf ?? this.refundOf,
       settledAt: clearSettledAt ? null : settledAt ?? this.settledAt,
+      reconciliationStatus: reconciliationStatus ?? this.reconciliationStatus,
+      sourceRecords: sourceRecords ?? this.sourceRecords,
     );
   }
 
@@ -239,6 +335,12 @@ class LedgerEntry {
       if (refundedBaseAmount != 0) 'refundedBaseAmount': refundedBaseAmount,
       if (refundOf != null) 'refundOf': refundOf,
       if (settledAt != null) 'settledAt': settledAt!.toIso8601String(),
+      if (reconciliationStatus != ReconciliationStatus.unverified)
+        'reconciliationStatus': reconciliationStatus.name,
+      if (sourceRecords.isNotEmpty)
+        'sourceRecords': sourceRecords
+            .map((record) => record.toJson())
+            .toList(),
     };
   }
 
@@ -276,8 +378,22 @@ class LedgerEntry {
           0,
       refundOf: json['refundOf'] as String?,
       settledAt: DateTime.tryParse(json['settledAt'] as String? ?? ''),
+      reconciliationStatus: ReconciliationStatus.fromStorage(
+        json['reconciliationStatus'] as String?,
+      ),
+      sourceRecords: _sourceRecordList(json['sourceRecords']),
     );
   }
+}
+
+List<EntrySourceRecord> _sourceRecordList(Object? value) {
+  if (value is! List) return const <EntrySourceRecord>[];
+  return value
+      .whereType<Map>()
+      .map(
+        (item) => EntrySourceRecord.fromJson(Map<String, Object?>.from(item)),
+      )
+      .toList(growable: false);
 }
 
 List<String> _stringList(Object? value) {

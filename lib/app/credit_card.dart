@@ -75,3 +75,84 @@ double billingCycleExpense(
       )
       .fold<double>(0, (sum, entry) => sum + entry.netAmount);
 }
+
+/// 信用账户页面的三个核心口径：已出账待还、当前未出账和最近一期账单。
+class CreditStatementOverview {
+  const CreditStatementOverview({
+    required this.billedOutstanding,
+    required this.unbilledAmount,
+    required this.latestStatement,
+  });
+
+  final double billedOutstanding;
+  final double unbilledAmount;
+  final BillingStatement? latestStatement;
+}
+
+/// 汇总正式账单口径。
+///
+/// “已出账待还”直接汇总账单剩余，不再从账户总余额猜；“当前未出账”只统计最近一期
+/// 账期结束后的消费与退款，不把还款转账混入消费。没有正式账单时退回当前账单周期估算。
+CreditStatementOverview creditStatementOverview({
+  required Account account,
+  required Iterable<LedgerEntry> entries,
+  required Iterable<BillingStatement> statements,
+  required DateTime now,
+}) {
+  final sorted =
+      statements.where((item) => item.accountId == account.id).toList()
+        ..sort((a, b) => b.statementDate.compareTo(a.statementDate));
+  final latest = sorted.firstOrNull;
+  final billed = sorted.fold<double>(
+    0,
+    (sum, statement) => sum + statement.outstandingAmount,
+  );
+  final cutoff = latest?.periodEnd;
+  double unbilled;
+  if (cutoff == null) {
+    unbilled = account.statementDay == null
+        ? 0
+        : billingCycleExpense(
+            entries,
+            account.id,
+            currentBillingCycle(account.statementDay!, now),
+          );
+  } else {
+    unbilled = 0;
+    for (final entry in entries) {
+      // 退款只有在实际到账后才会改变信用账户口径，因此筛选未出账条目时
+      // 必须使用与余额计算相同的到账日，而不能只看退款原始发生日。
+      final effectDate = accountEffectDate(entry);
+      if (entry.accountId != account.id ||
+          !effectDate.isAfter(cutoff) ||
+          effectDate.isAfter(now)) {
+        continue;
+      }
+      if (entry.type == EntryType.expense) {
+        unbilled += entry.accountAmount ?? entry.amount;
+      } else if (entry.isSettledRefund) {
+        unbilled -= entry.accountAmount ?? entry.amount;
+      }
+    }
+    if (unbilled < 0) unbilled = 0;
+  }
+  return CreditStatementOverview(
+    billedOutstanding: billed,
+    unbilledAmount: unbilled,
+    latestStatement: latest,
+  );
+}
+
+/// 根据应还与已还金额归一账单状态。争议账单保持 disputed，不自动覆盖用户判断。
+BillingStatementStatus normalizedStatementStatus(BillingStatement statement) {
+  if (statement.status == BillingStatementStatus.disputed) {
+    return statement.status;
+  }
+  if (statement.paidAmount >= statement.statementAmount) {
+    return BillingStatementStatus.paid;
+  }
+  if (statement.paidAmount > 0) {
+    return BillingStatementStatus.partiallyPaid;
+  }
+  return BillingStatementStatus.open;
+}

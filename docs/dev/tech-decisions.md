@@ -12,6 +12,9 @@ Veri Fin 关键技术选型与理由。变更相关实现时同步更新本表�
 | 无 context 文案 | 小组件/通知/生物弹窗经 `l10nForPreference(LocalePreference)` 用 `lookupAppLocalizations` 解析，失败回落中文 | 这些场景拿不到 BuildContext；按偏好显式解析保持与应用语言一致 |
 | 种子数据语言 | 首启动/初始化按当时语言偏好播种（`systemIsEnglish` 由 main 传入）；播种后属用户数据不再切换 | 账本/分类名是数据不是 UI；随语言反复改名会破坏用户编辑 |
 | 备份格式 | 未加密备份为 **zip**（`backup.json` + `attachments/<id>` 图片文件），加密备份沿用文本信封 `.json`；导入按 zip 魔数自动识别，旧版纯 JSON/加密备份仍可导入 | 附件以 base64 内嵌 JSON 会让备份随附件急剧膨胀（放大 33% 且每次整份重写），zip 把图片剥离外置；加密走文本信封复用既有加密逻辑；魔数识别保证老备份永远可导入 |
+| 信用余额核准 | `BalanceAnchor` 记录“某时点账户余额已确认”；余额从该值起算，只累加锚点后的交易 | 信用账户的历史还款可能不完整，用伪造校准交易会污染流水和统计；独立锚点能保留历史又封住误差 |
+| 正式信用账单 | `BillingStatement` 独立保存账期、应还/最低/已还、到期日与状态；`StatementRepaymentAllocation` 把还款转账按最早到期优先分配到一期或多期 | 账户总余额无法证明哪期已结清，也无法区分已出账待还与未出账消费 |
+| 正式来源核准与导入幂等 | `LedgerEntry` 保存 `reconciliationStatus` 和多条 `sourceRecords`；来源证据有 `sourceId` / `sourceTransactionId` / 跨进程稳定指纹，先按证据去重，再按账户+交易日+币种+商户+金额唯一匹配 | 同一消费可先后来自手工、支付平台和银行正式账单；权威事实应是一笔交易携带多条证据，不是多笔重复流水 |
 | 偏好类数据 | 保留 KV（SharedPreferences），不迁 SQLite | 小而简单，迁移无收益 |
 | 数字键盘布局 | `NumberPadLayout.standard/phone` 存 KV `verifin.number_pad_layout.v1`，默认标准布局；设置页随主设置草稿保存 | 数字排列属于设备上的输入肌肉记忆，不影响账目口径，换设备后回到默认布局即可；统一金额数字键盘从 Controller 读取，避免各调用点分叉 |
 | SQLite 切换方式 | 开发期直接切换，不做 KV→SQLite 迁移、不留 KV 回退双路径；`LedgerRepository` 抽为接口，`SqliteLedgerRepository` 为生产实现，全新库首启动播种默认数据 | 应用尚无用户，允许不兼容旧数据结构；一次切干净，避免长期维护双路径隐患 |
@@ -64,9 +67,9 @@ Veri Fin 关键技术选型与理由。变更相关实现时同步更新本表�
 
 **导出/导入必须与此表保持一致**（`exportDataJson`/`importDataJson`）。改动任一偏好的归属时同步更新这里、`CLAUDE.md`、`README.md`。
 
-桌面小组件设计属于用户可迁移数据：备份 JSON v3 的 `data.userWidgetDefinitions` 保存用户创建的模板、尺寸、指标、筛选、图表范围、交互及背景元数据；Android `appWidgetId` 仅为本机运行时绑定，不进入备份。v1/v2 备份缺少该字段时导入为空，设备上旧的 `widget_instances.v1` 配置由读取层惰性迁移为 `legacy_<appWidgetId>` 设计与绑定。
+桌面小组件设计属于用户可迁移数据：备份 JSON v4 的 `data.userWidgetDefinitions` 保存用户创建的模板、尺寸、指标、筛选、图表范围、交互及背景元数据；Android `appWidgetId` 仅为本机运行时绑定，不进入备份。v1–v3 备份缺少新账务字段时按空集合兼容，设备上旧的 `widget_instances.v1` 配置由读取层惰性迁移为 `legacy_<appWidgetId>` 设计与绑定。
 
-**进备份**（随 JSON v3 `exportDataJson` 的 `data` 导出、可跨设备还原）：全部账目数据（账本及本位币确认状态、交易三层金额与转换来源、账户币种、账户分组名称/顺序（分组仅为文件夹，无自定义图标）、分类、标签、附件、周期规则及汇率策略、用户维护/明确选择保存的汇率表、月度·分类·按日预算）+ 个人资料 + 活动账本 + 主题、触感、资产封面、资产视图模式/排序、资产折叠历史兼容字段（普通浏览页已不再写入）、首页面板、看板面板 + **默认付款账户 `default_account`（`Map<bookId,accountId>`）、预算周期起始日 `budget_cycle`、FAB 行为 `fab_action`、金额小数风格 `amount_format`、货币单位样式 `money_unit_style`、单币种隐藏开关 `hide_single_currency_unit`、记账自动识别开关 `auto_suggest`、交易列表逐笔结余开关 `entry_running_balance`、首页概览卡配置 `home_metrics`**。v1/缺字段备份按 CNY 原值重解释并标为待确认，旧 `amountForceTwoDecimals` 映射到新显示风格；货币静态目录属于应用代码，不进备份。这些偏好与 theme/haptics 等使用同一套“备份内容覆盖本机状态”的语义。
+**进备份**（随 JSON v4 `exportDataJson` 的 `data` 导出、可跨设备还原）：全部账目数据（账本及本位币确认状态、交易三层金额、转换来源与核准证据、余额锚点、正式账单与还款分配、账户币种、账户分组名称/顺序（分组仅为文件夹，无自定义图标）、分类、标签、附件、周期规则及汇率策略、用户维护/明确选择保存的汇率表、月度·分类·按日预算）+ 个人资料 + 活动账本 + 主题、触感、资产封面、资产视图模式/排序、资产折叠历史兼容字段（普通浏览页已不再写入）、首页面板、看板面板 + **默认付款账户 `default_account`（`Map<bookId,accountId>`）、预算周期起始日 `budget_cycle`、FAB 行为 `fab_action`、金额小数风格 `amount_format`、货币单位样式 `money_unit_style`、单币种隐藏开关 `hide_single_currency_unit`、记账自动识别开关 `auto_suggest`、交易列表逐笔结余开关 `entry_running_balance`、首页概览卡配置 `home_metrics`**。v1/缺字段备份按 CNY 原值重解释并标为待确认，旧 `amountForceTwoDecimals` 映射到新显示风格；货币静态目录属于应用代码，不进备份。这些偏好与 theme/haptics 等使用同一套“备份内容覆盖本机状态”的语义。
 
 **设备本地、不进备份**（换机需重设）：
 - **机密凭证**（进明文备份是安全倒退，坚决不备）：应用锁哈希 `app_lock`、备份加密口令 `backup_passphrase`、WebDAV 账号密码 `webdav`、AI `apiKey`（含在 `ai`）。
@@ -94,5 +97,5 @@ Veri Fin 关键技术选型与理由。变更相关实现时同步更新本表�
 
 - **信用账户 vs 信用卡**：花呗/白条有额度和还款但无实体卡号，故 `supportsCredit` 但不 `supportsCardLast4`。储蓄卡有卡号但无额度，反之。信用卡两者皆有。
 - **完整卡号与后四位**：`cardNumber`（完整，选填）、`cardLast4`（后四位）、`cardLast4Follows`（跟随开关 bool）三者都**持久化**（落库 + 进备份）。编辑页「后四位跟随卡号」开关（受控组件 `CardNumberFields`，经 `follows`/`onFollowsChanged` 由调用方持久化）打开时后四位自动取完整卡号末四位（`cardLast4Of`），关闭可手填。**开关状态忠实存储、不靠反推**——早期实现曾用 `initialCardLast4Follows` 从数据反推，会把「用户显式关掉但后四位恰好=末四位」误判成打开、下次改卡号又自动跟随，违背用户意图，已删除。新账户默认 true；旧备份缺字段默认 false、v11→v12 迁移旧账户默认 0（均为不跟随，保留其手填后四位、不因跟随空卡号冲成空）。列表/首页只显示后四位，详情页展示完整卡号并可复制。切换到不支持卡号的类型时清空 `cardNumber`/`cardLast4`。
-- **额度与本期账单**（纯函数在 `credit_card.dart`）：欠款 = 账户负余额绝对值（`usedCredit`）；可用 = 额度 − 已用（`availableCredit`）。「本期账单」= 当前账单周期（`currentBillingCycle`，上一账单日次日至下一账单日）内本账户支出净额（`billingCycleExpense`），与「当前欠款」是两个互不矛盾的口径（还款是转账不计入本期账单）。**不做**「已出账单未还 vs 未出账单」精确拆分（需跟踪每笔还款销掉哪笔消费的重模型）、分期、年费自动记账。
-- **还款**（`CreditRepaymentPage`）：本质是一笔「扣款账户 → 本账户」的转账（`EntryType.transfer`），使欠款减少、不计入收支统计；扣款账户可空串表示「无账户（代还）」。切换到不支持信用的类型时清空 `creditLimit`/`statementDay`/`dueDay`。**转账都带一个「转账」分类**（默认「转出」`transfer_out`），不留空 `categoryId`——App 内记账（`_save` 归一化到 `categoriesForType(transfer).first`）、还款、导入（`plan_builder`）口径一致：空 `categoryId` 会被交易列表按 `categoryByIdFrom` 回退成「已删除分类」占位、也不计入分类管理的转账分类下（issue #14）。早期一木转账导入曾把 `categoryId` 存空串，由 `_healCategoryData` 第 4 步在载入时补齐。
+- **额度与正式账单**（纯函数在 `credit_card.dart`）：欠款 = 账户负余额绝对值（`usedCredit`）；可用 = 额度 − 已用（`availableCredit`）。有 `BillingStatement` 时，`creditStatementOverview` 直接汇总各期剩余为“已出账待还”，并只统计最新账期结束后的消费/退款为“未出账”；没有正式账单时才退回 `currentBillingCycle` 估算。分期、年费自动记账仍不在本批范围。
+- **还款**（`CreditRepaymentPage`）：本质仍是一笔「扣款账户 → 本账户」的转账（`EntryType.transfer`），使欠款减少、不计入收支统计；保存成功后另用 `StatementRepaymentAllocation` 按最早到期优先分配到未结清账单，超出已出账剩余的部分保持未分配，表示提前/超额还款。扣款账户可空串表示「无账户（代还）」。转账继续必须带转账分类，不留空 `categoryId`。

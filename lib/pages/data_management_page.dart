@@ -1395,6 +1395,13 @@ class _DataManagementPageState extends State<DataManagementPage> {
         // 无可导入内容：有错误行则列出，否则提示空。
         if (plan.errorCount > 0) {
           await _showImportResult(context, plan);
+        } else if (plan.reconciliationSummary.duplicates > 0) {
+          _notify(
+            context,
+            message: AppLocalizations.of(
+              context,
+            ).reconciliationDuplicates(plan.reconciliationSummary.duplicates),
+          );
         } else {
           _notify(
             context,
@@ -1412,7 +1419,9 @@ class _DataManagementPageState extends State<DataManagementPage> {
         ),
       );
       if (result == null ||
-          (result.entries.isEmpty && result.alwaysCreateAccountIds.isEmpty) ||
+          (result.entries.isEmpty &&
+              result.alwaysCreateAccountIds.isEmpty &&
+              result.reconciliationUpdates.isEmpty) ||
           !context.mounted) {
         return;
       }
@@ -1423,6 +1432,7 @@ class _DataManagementPageState extends State<DataManagementPage> {
         candidateTags: result.candidateTags,
         alwaysCreateAccountIds: result.alwaysCreateAccountIds,
         candidateExchangeRates: result.candidateExchangeRates,
+        reconciliationUpdates: result.reconciliationUpdates,
       );
       if (!context.mounted) {
         return;

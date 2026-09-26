@@ -19,6 +19,8 @@ ImportPlan _build({
   List<Tag> existingTags = const <Tag>[],
   String baseCurrencyCode = defaultCurrencyCode,
   List<ExchangeRate> exchangeRates = const <ExchangeRate>[],
+  String sourceId = '',
+  List<LedgerEntry> existingEntries = const <LedgerEntry>[],
 }) {
   return buildImportPlanFromRecords(
     parsed: ParsedImport(records: records, errors: errors, accounts: accounts),
@@ -29,6 +31,8 @@ ImportPlan _build({
     now: _now,
     baseCurrencyCode: baseCurrencyCode,
     exchangeRates: exchangeRates,
+    sourceId: sourceId,
+    existingEntries: existingEntries,
   );
 }
 
@@ -50,6 +54,9 @@ RawImportRecord _record({
   double? toAccountAmount,
   double? baseAmount,
   double? rateToBase,
+  String merchant = '',
+  String sourceTransactionId = '',
+  DateTime? postedDate,
 }) {
   return RawImportRecord(
     date: date ?? DateTime(2026, 7, 1, 9, 30),
@@ -71,6 +78,9 @@ RawImportRecord _record({
     rateToBase: rateToBase,
     rateSource: rateToBase == null ? null : ExchangeRateSource.imported,
     rateDate: rateToBase == null ? null : date ?? DateTime(2026, 7, 1, 9, 30),
+    merchant: merchant,
+    sourceTransactionId: sourceTransactionId,
+    postedDate: postedDate,
   );
 }
 
@@ -1020,6 +1030,103 @@ void main() {
       expect(plan.entries, isEmpty);
       expect(plan.errors.single.line, 9);
       expect(plan.errors.single.message, contains('ZZZ'));
+    });
+  });
+
+  group('正式来源核准与幂等', () {
+    final account = _account('cmb', '招行信用卡');
+    final category = _category('dining', '餐饮');
+
+    LedgerEntry localEntry({double amount = 59.48}) => LedgerEntry(
+      id: 'local_kfc',
+      bookId: _bookId,
+      type: EntryType.expense,
+      amount: amount,
+      categoryId: category.id,
+      accountId: account.id,
+      note: 'KFC',
+      occurredAt: DateTime(2026, 8, 10, 12),
+    );
+
+    RawImportRecord bankRecord({double amount = 59.48}) => _record(
+      date: DateTime(2026, 8, 10, 18),
+      amount: amount,
+      category: category.label,
+      account: account.name,
+      note: 'KFC 正式账单',
+      merchant: 'KFC',
+      sourceTransactionId: 'cmb-20260810-001',
+      postedDate: DateTime(2026, 8, 11),
+    );
+
+    test('正式账单与唯一本地流水匹配时只追加来源证据', () {
+      final plan = _build(
+        records: <RawImportRecord>[bankRecord()],
+        existingAccounts: <Account>[account],
+        existingCategories: <Category>[category],
+        sourceId: 'cmb',
+        existingEntries: <LedgerEntry>[localEntry()],
+      );
+
+      expect(plan.reconciliationSummary.matched, 1);
+      expect(plan.entries.single.id, 'local_kfc');
+      expect(
+        plan.entries.single.reconciliationStatus,
+        ReconciliationStatus.autoMatched,
+      );
+      expect(plan.entries.single.sourceRecords.single.sourceId, 'cmb');
+    });
+
+    test('同一份正式账单连续导入十次不增加交易', () {
+      var existing = <LedgerEntry>[];
+      for (var run = 0; run < 10; run++) {
+        final plan = _build(
+          records: <RawImportRecord>[bankRecord()],
+          existingAccounts: <Account>[account],
+          existingCategories: <Category>[category],
+          sourceId: 'cmb',
+          existingEntries: existing,
+        );
+        if (run == 0) {
+          expect(plan.entries, hasLength(1));
+          existing = plan.entries;
+        } else {
+          expect(plan.entries, isEmpty);
+          expect(plan.reconciliationSummary.duplicates, 1);
+        }
+      }
+      expect(existing, hasLength(1));
+    });
+
+    test('同日同商户但金额不同时标记冲突而不覆盖本地金额', () {
+      final plan = _build(
+        records: <RawImportRecord>[bankRecord(amount: 59.49)],
+        existingAccounts: <Account>[account],
+        existingCategories: <Category>[category],
+        sourceId: 'cmb',
+        existingEntries: <LedgerEntry>[localEntry()],
+      );
+
+      expect(plan.reconciliationSummary.amountConflicts, 1);
+      expect(plan.entries.single.id, 'local_kfc');
+      expect(plan.entries.single.amount, 59.48);
+      expect(
+        plan.entries.single.reconciliationStatus,
+        ReconciliationStatus.amountConflict,
+      );
+    });
+
+    test('源文件内真实存在的同额同商户多笔记录保留为多笔', () {
+      final record = bankRecord();
+      final plan = _build(
+        records: <RawImportRecord>[record, record],
+        existingAccounts: <Account>[account],
+        existingCategories: <Category>[category],
+        sourceId: 'cmb',
+      );
+
+      expect(plan.entries, hasLength(2));
+      expect(plan.entries.map((entry) => entry.id).toSet(), hasLength(2));
     });
   });
 }

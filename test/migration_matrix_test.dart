@@ -169,6 +169,8 @@ void main() {
       expect(lunch.toAccountAmount, isNull);
       expect(lunch.baseAmount, 25.5);
       expect(lunch.conversionSource, ConversionSource.legacy);
+      expect(lunch.reconciliationStatus, ReconciliationStatus.unverified);
+      expect(lunch.sourceRecords, isEmpty);
       final transfer = entries.singleWhere((entry) => entry.id == 'e4');
       expect(transfer.currencyCode, 'CNY');
       expect(transfer.accountAmount, 50);
@@ -211,6 +213,9 @@ void main() {
       expect(await repo.loadAttachments(), isEmpty);
       expect(await repo.loadRecurringRules(), isEmpty);
       expect(await repo.loadExchangeRates(), isEmpty);
+      expect(await repo.loadBalanceAnchors(), isEmpty);
+      expect(await repo.loadBillingStatements(), isEmpty);
+      expect(await repo.loadStatementRepaymentAllocations(), isEmpty);
 
       await app.close();
     });

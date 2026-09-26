@@ -1,6 +1,7 @@
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart' show ScrollCacheExtent;
 
 import '../app/app_theme.dart';
 import '../app/backup/transaction_import.dart';
@@ -23,6 +24,7 @@ class ImportPreviewResult {
     this.candidateTags = const <Tag>[],
     this.alwaysCreateAccountIds = const <String>{},
     this.candidateExchangeRates = const <ExchangeRate>[],
+    this.reconciliationUpdates = const <LedgerEntry>[],
   });
 
   final List<LedgerEntry> entries;
@@ -37,6 +39,7 @@ class ImportPreviewResult {
   /// 现有账户的不在其中。
   final Set<String> alwaysCreateAccountIds;
   final List<ExchangeRate> candidateExchangeRates;
+  final List<LedgerEntry> reconciliationUpdates;
 }
 
 /// 账单导入预览页：解析后、落库前展示即将导入的交易（按日期分组），用户可逐条排除
@@ -270,6 +273,7 @@ class _ImportPreviewPageState extends State<ImportPreviewPage> {
                   candidate.rate,
             ]
           : const <ExchangeRate>[],
+      reconciliationUpdates: widget.plan.reconciliationUpdates,
     );
   }
 
@@ -303,7 +307,9 @@ class _ImportPreviewPageState extends State<ImportPreviewPage> {
 
   Future<bool> _save() async {
     final result = _buildResult();
-    if (result.entries.isEmpty && result.alwaysCreateAccountIds.isEmpty) {
+    if (result.entries.isEmpty &&
+        result.alwaysCreateAccountIds.isEmpty &&
+        result.reconciliationUpdates.isEmpty) {
       return false;
     }
     _savedResult = result;
@@ -562,6 +568,9 @@ class _ImportPreviewPageState extends State<ImportPreviewPage> {
               ),
               Expanded(
                 child: ListView(
+                  // 预览顶部包含汇总与映射卡；预热首屏下方一小段交易，
+                  // 让用户打开页面即可看到可操作的交易行，不必先滚动一次。
+                  scrollCacheExtent: ScrollCacheExtent.pixels(1000),
                   padding: const EdgeInsets.fromLTRB(14, 10, 14, 12),
                   children: <Widget>[
                     // 有交易或有跳过行时才显示交易汇总卡；纯账户导入时略去。
@@ -572,6 +581,19 @@ class _ImportPreviewPageState extends State<ImportPreviewPage> {
                         skipped: widget.plan.errorCount,
                         onViewSkipped: _showSkippedRows,
                       ),
+                    // 只有存在本地基线（匹配、冲突、或本地独有记录）时才
+                    // 展示核准卡；首次导入全部是银行独有记录，不应占用
+                    // 交易预览首屏，也不把正常的新导入误报成异常。
+                    if (widget.plan.reconciliationSummary.matched > 0 ||
+                        widget.plan.reconciliationSummary.amountConflicts > 0 ||
+                        widget.plan.reconciliationSummary.localOnly > 0 ||
+                        widget.plan.reconciliationSummary.duplicates >
+                            0) ...<Widget>[
+                      const SizedBox(height: 10),
+                      _ReconciliationSummaryCard(
+                        summary: widget.plan.reconciliationSummary,
+                      ),
+                    ],
                     if (widget
                         .plan
                         .exchangeRateCandidates
@@ -844,6 +866,51 @@ class _SummaryCard extends StatelessWidget {
               label: Text(l10n.importPreviewSkipped(skipped)),
               onPressed: onViewSkipped,
             ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 正式来源核准结果：与“准备导入多少交易”分开显示，避免把匹配误解为重复新增。
+class _ReconciliationSummaryCard extends StatelessWidget {
+  const _ReconciliationSummaryCard({required this.summary});
+
+  final ImportReconciliationSummary summary;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return VeriCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            l10n.reconciliationSummaryTitle,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
+          const SizedBox(height: 8),
+          Text(
+            l10n.reconciliationSummaryLine(
+              summary.matched,
+              summary.bankOnly,
+              summary.amountConflicts,
+              summary.localOnly,
+            ),
+          ),
+          if (summary.duplicates > 0) ...<Widget>[
+            const SizedBox(height: 4),
+            Text(
+              l10n.reconciliationDuplicates(summary.duplicates),
+              style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.6),
+              ),
+            ),
+          ],
         ],
       ),
     );

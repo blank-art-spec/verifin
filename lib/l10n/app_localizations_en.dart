@@ -1048,6 +1048,136 @@ class AppLocalizationsEn extends AppLocalizations {
   String get creditRepaySuccess => 'Repayment recorded';
 
   @override
+  String get balanceAnchorTitle => 'Confirm account balance';
+
+  @override
+  String get balanceAnchorAction => 'Verified balance anchor';
+
+  @override
+  String get balanceAnchorDate => 'Verified at';
+
+  @override
+  String get balanceAnchorHint =>
+      'Missing purchases or repayments before this time will no longer affect the current balance. This does not create a transaction.';
+
+  @override
+  String get balanceAnchorSaved => 'Balance verified';
+
+  @override
+  String balanceAnchorLatest(String date, String amount) {
+    return 'Last verified: $date · $amount';
+  }
+
+  @override
+  String get billingStatementsTitle => 'Statements';
+
+  @override
+  String get billingStatementsAction => 'Manage statements';
+
+  @override
+  String get billingStatementAdd => 'Add statement';
+
+  @override
+  String get statementAmountLabel => 'Statement amount';
+
+  @override
+  String get minimumPaymentLabel => 'Minimum payment';
+
+  @override
+  String get paidAmountLabel => 'Paid';
+
+  @override
+  String get statementDateLabel => 'Statement date';
+
+  @override
+  String get statementPeriodLabel => 'Period';
+
+  @override
+  String get dueDateLabel => 'Due date';
+
+  @override
+  String get billedOutstandingLabel => 'Billed due';
+
+  @override
+  String get unbilledAmountLabel => 'Current unbilled';
+
+  @override
+  String get latestStatementLabel => 'Previous statement';
+
+  @override
+  String get statementPaid => 'Paid';
+
+  @override
+  String get statementPartiallyPaid => 'Partially paid';
+
+  @override
+  String get statementOpen => 'Open';
+
+  @override
+  String get statementOverdue => 'Overdue';
+
+  @override
+  String get statementDisputed => 'Disputed';
+
+  @override
+  String statementRemaining(String amount) {
+    return '$amount remaining';
+  }
+
+  @override
+  String get repaymentAllocationsTitle => 'Repayments';
+
+  @override
+  String get billingStatementsEmpty => 'No statements yet';
+
+  @override
+  String get reconciliationSummaryTitle => 'Statement reconciliation';
+
+  @override
+  String reconciliationSummaryLine(
+    int matched,
+    int bankOnly,
+    int conflicts,
+    int localOnly,
+  ) {
+    return '$matched matched · $bankOnly bank-only · $conflicts amount conflicts · $localOnly local-only';
+  }
+
+  @override
+  String reconciliationDuplicates(int count) {
+    return '$count previously imported source records were skipped idempotently';
+  }
+
+  @override
+  String get reconciliationSection => 'Reconciliation';
+
+  @override
+  String sourceRecordsCount(int count) {
+    return '$count source records';
+  }
+
+  @override
+  String get confirmReconciliationAction => 'Confirm match manually';
+
+  @override
+  String get reconciliationUnverified => 'Unverified';
+
+  @override
+  String get reconciliationAutoMatched => 'Auto-matched';
+
+  @override
+  String get reconciliationManuallyConfirmed => 'Manually confirmed';
+
+  @override
+  String get reconciliationAmountConflict => 'Amount conflict';
+
+  @override
+  String get reconciliationBankOnly => 'Bank-only';
+
+  @override
+  String get reconciliationLocalOnly => 'Local-only';
+
+  @override
   String monthlyDayLabel(int day) {
     return 'Day $day of each month';
   }

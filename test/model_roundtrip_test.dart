@@ -44,6 +44,23 @@ void main() {
     refundedBaseAmount: 11.5,
     refundOf: 'entry-orig',
     settledAt: DateTime(2026, 7, 13, 9, 0, 0, 456),
+    reconciliationStatus: ReconciliationStatus.amountConflict,
+    sourceRecords: <EntrySourceRecord>[
+      EntrySourceRecord(
+        id: 'source-1',
+        sourceId: 'cmb',
+        sourceTransactionId: 'tx-123',
+        fingerprint: 'abc123-001',
+        importedAt: DateTime(2026, 7, 14, 8, 0, 0, 123),
+        transactionDate: DateTime(2026, 7, 12, 10, 30, 15, 123),
+        postedDate: DateTime(2026, 7, 13),
+        amount: 123.46,
+        currencyCode: 'USD',
+        merchant: '测试商户',
+        rawDescription: '正式账单记录',
+        statementId: 'statement-1',
+      ),
+    ],
   );
 
   /// 可空字段全空、可省略字段全默认：保证 null / 缺省路径同样无损。
@@ -149,6 +166,43 @@ void main() {
     updatedAt: DateTime(2026, 7, 2, 9, 0, 0, 456),
   );
 
+  final balanceAnchor = BalanceAnchor(
+    id: 'anchor-1',
+    bookId: 'book-x',
+    accountId: 'acc-x',
+    effectiveAt: DateTime(2026, 7, 31, 23, 59, 59, 999),
+    balance: -88.12,
+    createdAt: DateTime(2026, 8, 1, 8, 0, 0, 123),
+    note: '银行余额核准',
+  );
+
+  final billingStatement = BillingStatement(
+    id: 'statement-1',
+    bookId: 'book-x',
+    accountId: 'acc-x',
+    statementDate: DateTime(2026, 7, 25),
+    periodStart: DateTime(2026, 6, 26),
+    periodEnd: DateTime(2026, 7, 25, 23, 59, 59, 999),
+    statementAmount: 3703.85,
+    minimumPayment: 370.39,
+    dueDate: DateTime(2026, 8, 13),
+    paidAmount: 3000,
+    status: BillingStatementStatus.partiallyPaid,
+    currencyCode: 'EUR',
+    sourceId: 'cmb',
+    sourceStatementId: '2026-07-25-6789',
+    note: '正式账单',
+  );
+
+  final allocation = StatementRepaymentAllocation(
+    id: 'allocation-1',
+    bookId: 'book-x',
+    statementId: 'statement-1',
+    repaymentEntryId: 'entry-full',
+    amount: 3000,
+    createdAt: DateTime(2026, 8, 13, 10, 0, 0, 123),
+  );
+
   /// 经真实 jsonEncode/jsonDecode 走一圈再 fromJson：既验证映射互逆，也验证
   /// toJson 产物真的可被 JSON 编码（残留 DateTime 等原始对象会在这里炸）。
   Map<String, Object?> jsonRoundTrip(Map<String, Object?> json) {
@@ -218,6 +272,21 @@ void main() {
       expect(restored.toJson(), exchangeRate.toJson());
     });
 
+    test('余额锚点、正式账单与还款分配', () {
+      final restoredAnchor = BalanceAnchor.fromJson(
+        jsonRoundTrip(balanceAnchor.toJson()),
+      );
+      final restoredStatement = BillingStatement.fromJson(
+        jsonRoundTrip(billingStatement.toJson()),
+      );
+      final restoredAllocation = StatementRepaymentAllocation.fromJson(
+        jsonRoundTrip(allocation.toJson()),
+      );
+      expect(restoredAnchor.toJson(), balanceAnchor.toJson());
+      expect(restoredStatement.toJson(), billingStatement.toJson());
+      expect(restoredAllocation.toJson(), allocation.toJson());
+    });
+
     test('UserProfile', () {
       const profile = UserProfile(
         nickname: '测试昵称',
@@ -270,6 +339,11 @@ void main() {
       await repo.saveAttachments(<Attachment>[attachment]);
       await repo.saveRecurringRules(<RecurringRule>[rule]);
       await repo.saveExchangeRates(<ExchangeRate>[exchangeRate]);
+      await repo.saveBalanceAnchors(<BalanceAnchor>[balanceAnchor]);
+      await repo.saveBillingStatements(<BillingStatement>[billingStatement]);
+      await repo.saveStatementRepaymentAllocations(
+        <StatementRepaymentAllocation>[allocation],
+      );
 
       final entries = await repo.loadEntries();
       expect(
@@ -304,6 +378,18 @@ void main() {
       expect(
         (await repo.loadExchangeRates()).single.toJson(),
         exchangeRate.toJson(),
+      );
+      expect(
+        (await repo.loadBalanceAnchors()).single.toJson(),
+        balanceAnchor.toJson(),
+      );
+      expect(
+        (await repo.loadBillingStatements()).single.toJson(),
+        billingStatement.toJson(),
+      );
+      expect(
+        (await repo.loadStatementRepaymentAllocations()).single.toJson(),
+        allocation.toJson(),
       );
     });
   });

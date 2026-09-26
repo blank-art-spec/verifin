@@ -55,6 +55,8 @@ ParsedImport parseWechat(Uint8List bytes) {
         // 此前该列被丢弃，交易落成空分类、显示「已删除分类」（issue #16）。
         category: cellAt(row, cols['交易类型']),
         account: account,
+        merchant: cellAt(row, cols['交易对方']),
+        sourceTransactionId: cellAt(row, cols['交易单号']),
         note: joinNote(<String>[cellAt(row, cols['交易对方']), usefulProduct]),
         sourceLine: line,
       ),
