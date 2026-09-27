@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:verifin/app/models.dart';
 import 'package:verifin/app/reminder/reminder_settings.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/local_storage/local_storage.dart';
@@ -12,9 +13,30 @@ void main() {
 
   group('ReminderSettings', () {
     test('encode/decode round trips', () {
-      const settings = ReminderSettings(enabled: true, hour: 8, minute: 30);
+      const settings = ReminderSettings(
+        enabled: true,
+        cycleBudgetEnabled: true,
+        statementDateEnabled: true,
+        repaymentDueEnabled: true,
+        advanceDays: 5,
+        hour: 8,
+        minute: 30,
+      );
       final decoded = ReminderSettings.decode(settings.encode());
       expect(decoded, settings);
+      expect(decoded.hasAnyEnabled, isTrue);
+    });
+
+    test('旧版配置升级后新增提醒保持关闭', () {
+      final decoded = ReminderSettings.decode(
+        '{"enabled":true,"hour":20,"minute":15}',
+      );
+
+      expect(decoded.enabled, isTrue);
+      expect(decoded.cycleBudgetEnabled, isFalse);
+      expect(decoded.statementDateEnabled, isFalse);
+      expect(decoded.repaymentDueEnabled, isFalse);
+      expect(decoded.advanceDays, 3);
     });
 
     test('decode of null/garbage falls back to disabled', () {
@@ -25,8 +47,9 @@ void main() {
 
     test('decode clamps out-of-range hour/minute', () {
       final decoded = ReminderSettings.decode(
-        '{"enabled":true,"hour":30,"minute":90}',
+        '{"enabled":true,"advanceDays":90,"hour":30,"minute":90}',
       );
+      expect(decoded.advanceDays, 30);
       expect(decoded.hour, 23);
       expect(decoded.minute, 59);
     });
@@ -46,6 +69,90 @@ void main() {
     });
   });
 
+  test('账期预算提醒按账期和档位跨重启去重', () async {
+    final store = LocalKeyValueStore();
+    final controller = await makeController(store);
+    const account = Account(
+      id: 'credit-card',
+      bookId: 'default',
+      name: '招商信用卡',
+      type: AccountType.creditCard,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'credit',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+      creditLimit: 70000,
+      statementDay: 25,
+      dueDay: 13,
+    );
+    expect(await controller.addAccountDraft(account), isTrue);
+    final creditAccount = controller.creditAccounts.single;
+    expect(
+      await controller.saveCreditAccountDraft(
+        creditAccount.copyWith(cycleBudget: 4000),
+      ),
+      isTrue,
+    );
+    controller.addEntry(
+      LedgerEntry(
+        id: 'expense-80',
+        bookId: 'default',
+        type: EntryType.expense,
+        amount: 3200,
+        baseAmount: 3200,
+        categoryId: 'dining',
+        accountId: account.id,
+        note: '',
+        occurredAt: DateTime(2026, 9, 27),
+      ),
+    );
+    await controller.saveReminderSettingsDraft(
+      const ReminderSettings(cycleBudgetEnabled: true),
+    );
+    final pending = controller.pendingBudgetReminderSnapshots(
+      now: DateTime(2026, 9, 27),
+    );
+    expect(pending, hasLength(1));
+    expect(
+      await controller.markBudgetReminderDelivered(pending.single),
+      isTrue,
+    );
+    expect(
+      controller.pendingBudgetReminderSnapshots(now: DateTime(2026, 9, 27)),
+      isEmpty,
+    );
+    await controller.waitForPendingWrites();
+    controller.dispose();
+
+    final restored = await makeController(store);
+    expect(
+      restored.pendingBudgetReminderSnapshots(now: DateTime(2026, 9, 27)),
+      isEmpty,
+      reason: '同一账期的 80% 档位在冷启动后不能重复通知',
+    );
+    restored.addEntry(
+      LedgerEntry(
+        id: 'expense-reached',
+        bookId: 'default',
+        type: EntryType.expense,
+        amount: 800,
+        baseAmount: 800,
+        categoryId: 'dining',
+        accountId: account.id,
+        note: '',
+        occurredAt: DateTime(2026, 9, 28),
+      ),
+    );
+    expect(
+      restored.pendingBudgetReminderSnapshots(now: DateTime(2026, 9, 28)),
+      hasLength(1),
+      reason: '达到预算属于更高档位，应再通知一次',
+    );
+    restored.dispose();
+  });
+
   testWidgets('提醒设置页开关与时间持久化', (WidgetTester tester) async {
     final store = LocalKeyValueStore();
     final controller = await makeController(store);
@@ -63,7 +170,7 @@ void main() {
     expect(find.text('提醒时间'), findsNothing);
 
     // 打开开关后出现时间行，但保存前不写 Controller/KV。
-    await tester.tap(find.byType(Switch));
+    await tester.tap(find.byType(Switch).first);
     await tester.pumpAndSettle();
     expect(find.text('提醒时间'), findsOneWidget);
     expect(controller.reminderSettings.enabled, isFalse);

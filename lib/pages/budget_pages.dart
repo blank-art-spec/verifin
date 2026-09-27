@@ -582,11 +582,17 @@ class MonthSwitcher extends StatelessWidget {
           onPressed: onPrevious,
           icon: const Icon(Icons.chevron_left),
         ),
-        Text(
-          label,
-          style: Theme.of(
-            context,
-          ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+        // 外层可能还要与筛选按钮同排；长账期文案只压缩自身并以省略号收口，
+        // 两侧 40dp 导航按钮保持完整触控区，避免整个 Row 横向溢出。
+        Flexible(
+          child: Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: Theme.of(
+              context,
+            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+          ),
         ),
         IconButton(
           tooltip: AppLocalizations.of(context).calendarNextMonth,

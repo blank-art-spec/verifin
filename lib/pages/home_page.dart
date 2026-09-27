@@ -1295,12 +1295,16 @@ class _IncomeExpenseStatsPageState extends State<IncomeExpenseStatsPage> {
               const SizedBox(height: 8),
               Row(
                 children: <Widget>[
-                  MonthSwitcher(
-                    label: _rangeLabel(l10n, window),
-                    onPrevious: () => _shiftFocus(-1),
-                    onNext: () => _shiftFocus(1),
+                  // 季度等较长范围文案与右侧类型筛选同排时可能只差数像素溢出；
+                  // 让日期切换器优先占剩余宽度，不压缩筛选按钮的可点击区域。
+                  Flexible(
+                    child: MonthSwitcher(
+                      label: _rangeLabel(l10n, window),
+                      onPrevious: () => _shiftFocus(-1),
+                      onNext: () => _shiftFocus(1),
+                    ),
                   ),
-                  const Spacer(),
+                  const SizedBox(width: 8),
                   VeriAnchoredChoice<EntryType>(
                     values: EntryType.userSelectable,
                     selected: _type,

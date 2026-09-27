@@ -1414,8 +1414,98 @@
   "reminderPickTime": "选择提醒时间",
   "reminderTitle": "记账提醒",
   "reminderDaily": "每日提醒",
+  "reminderDailyDescription": "在设定时间提醒记录当天收支",
+  "reminderSectionDaily": "日常记录",
+  "reminderSectionFinancial": "信用账户预警",
+  "reminderCycleBudget": "账期预算预警",
+  "reminderCycleBudgetDescription": "在使用 80%、达到和超出预算时提醒",
+  "reminderStatementDate": "账单日提醒",
+  "reminderStatementDateDescription": "在信用账户即将出账时提醒",
+  "reminderRepaymentDue": "还款日提醒",
+  "reminderRepaymentDueDescription": "正式账单尚未结清且即将到期时提醒",
+  "reminderAdvanceDays": "提前提醒",
+  "reminderOnDate": "当天",
+  "reminderAdvanceDaysValue": "{days} 天前",
+  "@reminderAdvanceDaysValue": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
   "reminderTimeLabel": "提醒时间",
-  "reminderDescSupported": "开启后每天到点会收到一条本地通知，提醒你记录当天收支。部分手机（小米 / 华为 / OPPO / vivo 等）会限制后台，若长时间收不到，请在系统设置里允许通知，并把本应用加入省电 / 自启动白名单。可先用下方「发送测试通知」确认通知能否显示。",
+  "reminderFinancialPreview": "近期信用账户状态",
+  "reminderNoCreditAccounts": "还没有完整配置账单日和还款规则的信用账户。",
+  "reminderStatementToday": "今天出账",
+  "reminderDaysUntilStatement": "{days} 天后出账",
+  "@reminderDaysUntilStatement": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderDueToday": "今天到期",
+  "reminderDaysUntilDue": "{days} 天后还款",
+  "@reminderDaysUntilDue": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderDueOverdue": "已逾期 {days} 天",
+  "@reminderDueOverdue": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderBilledAmount": "本期已出账 {amount}",
+  "@reminderBilledAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderOutstandingAmount": "尚未还清 {amount}",
+  "@reminderOutstandingAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderSettled": "本期已结清",
+  "reminderMissingRate": "缺少汇率，暂时无法计算合计",
+  "reminderBudgetWarning": "账期预算已使用 {percent}%",
+  "@reminderBudgetWarning": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderBudgetUsage": "账期预算已使用 {percent}%",
+  "@reminderBudgetUsage": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderBudgetReached": "账期预算已达到",
+  "reminderBudgetExceeded": "账期预算已超出 {amount}",
+  "@reminderBudgetExceeded": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderDescSupported": "提醒只在本机计算与发送。账期预算在 80%、达到和超出时分别提醒；账单日与还款日按提前天数和设定时刻提醒。部分手机（小米 / 华为 / OPPO / vivo 等）会限制后台，若长时间收不到，请在系统设置里允许通知，并把本应用加入省电 / 自启动白名单。可先用下方「发送测试通知」确认通知能否显示。",
   "reminderDescUnsupported": "当前平台不支持本地通知，此设置仅在 Android / iOS 手机上生效。",
   "reminderDailyAt": "每日 {time}",
   "@reminderDailyAt": {
@@ -2489,6 +2579,8 @@
   "widgetActionProfile": "我的",
   "reminderNotifBody": "别忘了记录今天的收支～",
   "reminderChannelDesc": "每日记账提醒通知",
+  "reminderFinancialChannelTitle": "账单与预算提醒",
+  "reminderFinancialChannelDescription": "信用账户账单日、还款日和账期预算提醒",
   "reminderTestButton": "发送测试通知",
   "reminderTestBody": "这是一条测试通知——能看到它就说明通知功能正常。",
   "reminderTestSent": "已发送测试通知，请下拉通知栏查看。若收不到每日提醒，多为系统后台限制：请在系统设置里为本应用允许通知，并加入省电 / 自启动白名单。",
@@ -3202,6 +3294,14 @@
   "@attentionCenterPendingCount": {
     "placeholders": {
       "count": {"type": "int"}
+    }
+  },
+  "reminderEnabledAt": "已开启 · {time}",
+  "@reminderEnabledAt": {
+    "placeholders": {
+      "time": {
+        "type": "String"
+      }
     }
   },
   "attentionCenterEmptyTitle": "暂无待处理异常",

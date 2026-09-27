@@ -3955,16 +3955,178 @@ abstract class AppLocalizations {
   /// **'每日提醒'**
   String get reminderDaily;
 
+  /// No description provided for @reminderDailyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'在设定时间提醒记录当天收支'**
+  String get reminderDailyDescription;
+
+  /// No description provided for @reminderSectionDaily.
+  ///
+  /// In zh, this message translates to:
+  /// **'日常记录'**
+  String get reminderSectionDaily;
+
+  /// No description provided for @reminderSectionFinancial.
+  ///
+  /// In zh, this message translates to:
+  /// **'信用账户预警'**
+  String get reminderSectionFinancial;
+
+  /// No description provided for @reminderCycleBudget.
+  ///
+  /// In zh, this message translates to:
+  /// **'账期预算预警'**
+  String get reminderCycleBudget;
+
+  /// No description provided for @reminderCycleBudgetDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'在使用 80%、达到和超出预算时提醒'**
+  String get reminderCycleBudgetDescription;
+
+  /// No description provided for @reminderStatementDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'账单日提醒'**
+  String get reminderStatementDate;
+
+  /// No description provided for @reminderStatementDateDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'在信用账户即将出账时提醒'**
+  String get reminderStatementDateDescription;
+
+  /// No description provided for @reminderRepaymentDue.
+  ///
+  /// In zh, this message translates to:
+  /// **'还款日提醒'**
+  String get reminderRepaymentDue;
+
+  /// No description provided for @reminderRepaymentDueDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'正式账单尚未结清且即将到期时提醒'**
+  String get reminderRepaymentDueDescription;
+
+  /// No description provided for @reminderAdvanceDays.
+  ///
+  /// In zh, this message translates to:
+  /// **'提前提醒'**
+  String get reminderAdvanceDays;
+
+  /// No description provided for @reminderOnDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'当天'**
+  String get reminderOnDate;
+
+  /// No description provided for @reminderAdvanceDaysValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{days} 天前'**
+  String reminderAdvanceDaysValue(int days);
+
   /// No description provided for @reminderTimeLabel.
   ///
   /// In zh, this message translates to:
   /// **'提醒时间'**
   String get reminderTimeLabel;
 
+  /// No description provided for @reminderFinancialPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'近期信用账户状态'**
+  String get reminderFinancialPreview;
+
+  /// No description provided for @reminderNoCreditAccounts.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有完整配置账单日和还款规则的信用账户。'**
+  String get reminderNoCreditAccounts;
+
+  /// No description provided for @reminderStatementToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天出账'**
+  String get reminderStatementToday;
+
+  /// No description provided for @reminderDaysUntilStatement.
+  ///
+  /// In zh, this message translates to:
+  /// **'{days} 天后出账'**
+  String reminderDaysUntilStatement(int days);
+
+  /// No description provided for @reminderDueToday.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天到期'**
+  String get reminderDueToday;
+
+  /// No description provided for @reminderDaysUntilDue.
+  ///
+  /// In zh, this message translates to:
+  /// **'{days} 天后还款'**
+  String reminderDaysUntilDue(int days);
+
+  /// No description provided for @reminderDueOverdue.
+  ///
+  /// In zh, this message translates to:
+  /// **'已逾期 {days} 天'**
+  String reminderDueOverdue(int days);
+
+  /// No description provided for @reminderBilledAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'本期已出账 {amount}'**
+  String reminderBilledAmount(String amount);
+
+  /// No description provided for @reminderOutstandingAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未还清 {amount}'**
+  String reminderOutstandingAmount(String amount);
+
+  /// No description provided for @reminderSettled.
+  ///
+  /// In zh, this message translates to:
+  /// **'本期已结清'**
+  String get reminderSettled;
+
+  /// No description provided for @reminderMissingRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少汇率，暂时无法计算合计'**
+  String get reminderMissingRate;
+
+  /// No description provided for @reminderBudgetWarning.
+  ///
+  /// In zh, this message translates to:
+  /// **'账期预算已使用 {percent}%'**
+  String reminderBudgetWarning(int percent);
+
+  /// No description provided for @reminderBudgetUsage.
+  ///
+  /// In zh, this message translates to:
+  /// **'账期预算已使用 {percent}%'**
+  String reminderBudgetUsage(int percent);
+
+  /// No description provided for @reminderBudgetReached.
+  ///
+  /// In zh, this message translates to:
+  /// **'账期预算已达到'**
+  String get reminderBudgetReached;
+
+  /// No description provided for @reminderBudgetExceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'账期预算已超出 {amount}'**
+  String reminderBudgetExceeded(String amount);
+
   /// No description provided for @reminderDescSupported.
   ///
   /// In zh, this message translates to:
-  /// **'开启后每天到点会收到一条本地通知，提醒你记录当天收支。部分手机（小米 / 华为 / OPPO / vivo 等）会限制后台，若长时间收不到，请在系统设置里允许通知，并把本应用加入省电 / 自启动白名单。可先用下方「发送测试通知」确认通知能否显示。'**
+  /// **'提醒只在本机计算与发送。账期预算在 80%、达到和超出时分别提醒；账单日与还款日按提前天数和设定时刻提醒。部分手机（小米 / 华为 / OPPO / vivo 等）会限制后台，若长时间收不到，请在系统设置里允许通知，并把本应用加入省电 / 自启动白名单。可先用下方「发送测试通知」确认通知能否显示。'**
   String get reminderDescSupported;
 
   /// No description provided for @reminderDescUnsupported.
@@ -7603,6 +7765,18 @@ abstract class AppLocalizations {
   /// **'每日记账提醒通知'**
   String get reminderChannelDesc;
 
+  /// No description provided for @reminderFinancialChannelTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'账单与预算提醒'**
+  String get reminderFinancialChannelTitle;
+
+  /// No description provided for @reminderFinancialChannelDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'信用账户账单日、还款日和账期预算提醒'**
+  String get reminderFinancialChannelDescription;
+
   /// No description provided for @reminderTestButton.
   ///
   /// In zh, this message translates to:
@@ -9512,6 +9686,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'待处理 {count}'**
   String attentionCenterPendingCount(int count);
+
+  /// No description provided for @reminderEnabledAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'已开启 · {time}'**
+  String reminderEnabledAt(String time);
 
   /// No description provided for @attentionCenterEmptyTitle.
   ///

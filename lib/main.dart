@@ -183,6 +183,8 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   final NotificationScheduler _notifications = NotificationScheduler();
   final VeriFeedbackController _feedbackController = VeriFeedbackController();
   Timer? _widgetRefreshTimer;
+  bool _notificationSyncing = false;
+  bool _notificationSyncQueued = false;
 
   @override
   void initState() {
@@ -198,10 +200,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     AppSecurityBridge.setSecureFlag(_controller.appLockEnabled);
     // 记账提醒：配置变化时重排本地通知，开屏按当前配置对齐一次。
     _controller.onReminderChanged = _handleReminderChanged;
-    _notifications.apply(
-      _controller.reminderSettings,
-      l10n: l10nForPreference(_controller.localePreference),
-    );
+    unawaited(_syncNotifications());
     BackupCoordinator.maybeBackupOnOpen(_controller);
     // 自动采集原生层只保存原文；Flutter 启动/回前台后先同步开关，再把队列写入
     // CaptureEvent 并解析。引擎存活时收到新事件也走同一 drain，避免两套处理路径。
@@ -228,6 +227,9 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     _widgetRefreshTimer?.cancel();
     _widgetRefreshTimer = Timer(const Duration(milliseconds: 250), () {
       unawaited(pushWidgetData(_controller));
+      // 交易编辑、退款、汇率、账单和信用主体设置都会改变财务提醒投影；复用同一
+      // Controller 失效回调并去抖，避免只监听“新增交易”而漏掉其他变化。
+      unawaited(_syncNotifications());
     });
   }
 
@@ -249,10 +251,42 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   }
 
   void _handleReminderChanged(ReminderSettings settings) {
-    _notifications.apply(
-      settings,
-      l10n: l10nForPreference(_controller.localePreference),
-    );
+    unawaited(_syncNotifications());
+  }
+
+  /// 把每日提醒、账单日期提醒和预算跨档通知同步到系统。
+  ///
+  /// 调度期间若又发生状态变化，只登记一次补跑；这样不会并发执行多个“先取消、再重建”
+  /// 流程而互相删掉排程。预算档位只有在系统通知 API 返回成功后才写入去重状态。
+  Future<void> _syncNotifications() async {
+    if (_notificationSyncing) {
+      _notificationSyncQueued = true;
+      return;
+    }
+    _notificationSyncing = true;
+    try {
+      do {
+        _notificationSyncQueued = false;
+        final l10n = l10nForPreference(_controller.localePreference);
+        final snapshots = _controller.creditReminderSnapshots();
+        await _notifications.apply(
+          _controller.reminderSettings,
+          l10n: l10n,
+          financialReminders: snapshots,
+        );
+        for (final reminder in _controller.pendingBudgetReminderSnapshots()) {
+          final shown = await _notifications.showBudgetAlert(
+            reminder,
+            l10n: l10n,
+          );
+          if (shown) {
+            await _controller.markBudgetReminderDelivered(reminder);
+          }
+        }
+      } while (_notificationSyncQueued);
+    } finally {
+      _notificationSyncing = false;
+    }
   }
 
   /// 拉取原生持久队列并交给 Controller。只有确认 SQLite 已保存后才向原生回执删除；
@@ -282,10 +316,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
       // 一旦某次因 Doze / force-stop / 重启 / 时区变化断掉，就再不会自愈。只在
       // 冷启动重排会漏掉「常驻后台、只热恢复」的用户；apply 幂等（先 cancel 再排），
       // 每次回前台对齐一次能把断掉的链重新排上。
-      _notifications.apply(
-        _controller.reminderSettings,
-        l10n: l10nForPreference(_controller.localePreference),
-      );
+      unawaited(_syncNotifications());
       unawaited(
         AppAutoCaptureBridge.syncConfig(_controller.autoCaptureSettings),
       );

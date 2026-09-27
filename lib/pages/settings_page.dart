@@ -404,8 +404,8 @@ class _SettingsPageState extends State<SettingsPage> {
                       SettingsRow(
                         icon: Icons.notifications_active_outlined,
                         title: AppLocalizations.of(context).reminderTitle,
-                        trailing: controller.reminderSettings.enabled
-                            ? AppLocalizations.of(context).reminderDailyAt(
+                        trailing: controller.reminderSettings.hasAnyEnabled
+                            ? AppLocalizations.of(context).reminderEnabledAt(
                                 controller.reminderSettings.timeLabel,
                               )
                             : AppLocalizations.of(context).notEnabled,

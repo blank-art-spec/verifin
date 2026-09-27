@@ -1,4 +1,5 @@
 import 'reminder_settings.dart';
+import 'financial_reminder.dart';
 import '../../l10n/app_localizations.dart';
 
 /// 非移动平台（测试宿主）的通知占位实现：一律不可用、不做任何调度。
@@ -18,7 +19,15 @@ class NotificationScheduler {
   Future<void> apply(
     ReminderSettings settings, {
     AppLocalizations? l10n,
+    List<CreditReminderSnapshot> financialReminders =
+        const <CreditReminderSnapshot>[],
   }) async {}
+
+  /// 非移动平台无法显示预算跨档通知，因此返回 false，Controller 不写去重状态。
+  Future<bool> showBudgetAlert(
+    CreditReminderSnapshot reminder, {
+    AppLocalizations? l10n,
+  }) async => false;
 
   /// 取消已安排的记账提醒。占位无操作。
   Future<void> cancel() async {}

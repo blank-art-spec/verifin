@@ -5,6 +5,8 @@ import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
+import '../currency_math.dart';
+import 'financial_reminder.dart';
 import 'reminder_settings.dart';
 import '../../l10n/app_localizations.dart';
 
@@ -20,6 +22,9 @@ class NotificationScheduler {
   static const String _channelId = 'verifin_daily_reminder';
   static const String _channelName = '记账提醒';
   static const String _channelDescription = '每日记账提醒通知';
+  static const String _financialChannelId = 'verifin_financial_reminder';
+  static const String _financialChannelName = '账单与预算提醒';
+  static const String _financialChannelDescription = '信用账户账单日、还款日和账期预算提醒';
 
   final FlutterLocalNotificationsPlugin _plugin =
       FlutterLocalNotificationsPlugin();
@@ -111,36 +116,41 @@ class NotificationScheduler {
   Future<void> apply(
     ReminderSettings settings, {
     AppLocalizations? l10n,
+    List<CreditReminderSnapshot> financialReminders =
+        const <CreditReminderSnapshot>[],
   }) async {
     if (!supported) {
       return;
     }
     await init();
     await cancel();
-    if (!settings.enabled) {
-      return;
-    }
-    final scheduled = _nextInstanceOf(settings.hour, settings.minute);
-    final details = _details(l10n);
-    // 优先精确闹钟（Doze 下也能准时触发、更可靠）；精确权限缺失会抛异常，则回退
-    // inexact，至少仍有机会触发，不至于像以前那样彻底不响。
-    final ok = await _schedule(
-      scheduled,
-      details,
-      l10n,
-      AndroidScheduleMode.exactAllowWhileIdle,
-    );
-    if (!ok) {
-      await _schedule(
+    if (settings.enabled) {
+      final scheduled = _nextInstanceOf(settings.hour, settings.minute);
+      final details = _details(l10n);
+      // 优先精确闹钟（Doze 下也能准时触发、更可靠）；精确权限缺失会抛异常，则回退
+      // inexact，至少仍有机会触发，不至于像以前那样彻底不响。
+      final ok = await _scheduleDaily(
         scheduled,
         details,
         l10n,
-        AndroidScheduleMode.inexactAllowWhileIdle,
+        AndroidScheduleMode.exactAllowWhileIdle,
       );
+      if (!ok) {
+        await _scheduleDaily(
+          scheduled,
+          details,
+          l10n,
+          AndroidScheduleMode.inexactAllowWhileIdle,
+        );
+      }
+    }
+    if (settings.statementDateEnabled || settings.repaymentDueEnabled) {
+      await _scheduleFinancialDates(settings, financialReminders, l10n: l10n);
     }
   }
 
-  Future<bool> _schedule(
+  /// 安排每日重复提醒；返回 false 表示当前调度模式不可用，可由调用方降级重试。
+  Future<bool> _scheduleDaily(
     tz.TZDateTime when,
     NotificationDetails details,
     AppLocalizations? l10n,
@@ -162,6 +172,161 @@ class NotificationScheduler {
     }
   }
 
+  /// 按当前信用账户投影安排账单日和还款日的一次性通知。
+  ///
+  /// 每次同步前 [cancel] 会清掉旧排程，因此账户规则、正式账单或提前天数变化后不会
+  /// 留下过时通知。只安排未来时刻：用户在触发日的设定时间之后才打开开关时，页面
+  /// 仍会展示状态，但不会用“补发”制造每次回前台都重复的通知。
+  Future<void> _scheduleFinancialDates(
+    ReminderSettings settings,
+    Iterable<CreditReminderSnapshot> reminders, {
+    AppLocalizations? l10n,
+  }) async {
+    for (final reminder in reminders) {
+      if (settings.statementDateEnabled) {
+        final date = DateTime(
+          reminder.overview.nextStatementDate.year,
+          reminder.overview.nextStatementDate.month,
+          reminder.overview.nextStatementDate.day - settings.advanceDays,
+        );
+        final when = _localDateTime(date, settings.hour, settings.minute);
+        if (when.isAfter(tz.TZDateTime.now(tz.local))) {
+          await _scheduleOneTime(
+            id: _stableFinancialId('statement:${reminder.creditAccount.id}'),
+            when: when,
+            title: reminder.creditAccount.name,
+            body: settings.advanceDays == 0
+                ? l10n?.reminderStatementToday ?? '今天出账'
+                : l10n?.reminderDaysUntilStatement(settings.advanceDays) ??
+                      '${settings.advanceDays} 天后出账',
+            l10n: l10n,
+          );
+        }
+      }
+      if (settings.repaymentDueEnabled &&
+          reminder.hasFormalStatement &&
+          reminder.hasOutstandingStatement) {
+        final date = DateTime(
+          reminder.dueDate.year,
+          reminder.dueDate.month,
+          reminder.dueDate.day - settings.advanceDays,
+        );
+        final when = _localDateTime(date, settings.hour, settings.minute);
+        if (when.isAfter(tz.TZDateTime.now(tz.local))) {
+          final dueText = settings.advanceDays == 0
+              ? l10n?.reminderDueToday ?? '今天到期'
+              : l10n?.reminderDaysUntilDue(settings.advanceDays) ??
+                    '${settings.advanceDays} 天后还款';
+          final amount = formatUserMoney(
+            reminder.overview.billedOutstanding,
+            reminder.creditAccount.currencyCode,
+          );
+          final outstanding =
+              l10n?.reminderOutstandingAmount(amount) ?? '尚未还清 $amount';
+          await _scheduleOneTime(
+            id: _stableFinancialId('due:${reminder.creditAccount.id}'),
+            when: when,
+            title: reminder.creditAccount.name,
+            body: '$dueText · $outstanding',
+            l10n: l10n,
+          );
+        }
+      }
+    }
+  }
+
+  /// 安排一条一次性财务提醒；精确闹钟不可用时自动降级为非精确调度。
+  Future<bool> _scheduleOneTime({
+    required int id,
+    required tz.TZDateTime when,
+    required String title,
+    required String body,
+    AppLocalizations? l10n,
+  }) async {
+    Future<bool> schedule(AndroidScheduleMode mode) async {
+      try {
+        await _plugin.zonedSchedule(
+          id: id,
+          title: title,
+          body: body,
+          scheduledDate: when,
+          notificationDetails: _financialDetails(l10n),
+          androidScheduleMode: mode,
+        );
+        return true;
+      } catch (_) {
+        return false;
+      }
+    }
+
+    if (await schedule(AndroidScheduleMode.exactAllowWhileIdle)) {
+      return true;
+    }
+    return schedule(AndroidScheduleMode.inexactAllowWhileIdle);
+  }
+
+  /// 立即显示账期预算跨档提醒；返回 true 后 Controller 才可写入跨重启去重状态。
+  Future<bool> showBudgetAlert(
+    CreditReminderSnapshot reminder, {
+    AppLocalizations? l10n,
+  }) async {
+    if (!supported || reminder.budgetAlertLevel == CycleBudgetAlertLevel.none) {
+      return false;
+    }
+    await init();
+    final budget = reminder.creditAccount.cycleBudget;
+    final ratio = reminder.budgetUsageRatio;
+    if (budget == null || ratio == null) {
+      return false;
+    }
+    if (Platform.isAndroid) {
+      final android = _plugin
+          .resolvePlatformSpecificImplementation<
+            AndroidFlutterLocalNotificationsPlugin
+          >();
+      try {
+        if (await android?.areNotificationsEnabled() == false) {
+          // 权限关闭时 `show` 可能仍正常返回但系统不会展示；此时不能提前写入去重状态，
+          // 否则用户稍后授权也永远收不到本账期提醒。
+          return false;
+        }
+      } catch (_) {
+        // 某些旧系统不支持查询；继续尝试 show，由其实际异常决定是否标记送达。
+      }
+    }
+    final body = switch (reminder.budgetAlertLevel) {
+      CycleBudgetAlertLevel.warning =>
+        l10n?.reminderBudgetWarning((ratio * 100).floor().clamp(0, 999)) ??
+            '账期预算已使用 ${(ratio * 100).floor()}%',
+      CycleBudgetAlertLevel.reached => l10n?.reminderBudgetReached ?? '账期预算已达到',
+      CycleBudgetAlertLevel.exceeded =>
+        l10n?.reminderBudgetExceeded(
+              formatUserMoney(
+                (reminder.overview.netSpending - budget).clamp(
+                  0.0,
+                  double.infinity,
+                ),
+                reminder.creditAccount.currencyCode,
+              ),
+            ) ??
+            '账期预算已超出',
+      CycleBudgetAlertLevel.none => '',
+    };
+    try {
+      await _plugin.show(
+        id: _stableFinancialId(
+          'budget:${reminder.creditAccount.id}:${reminder.overview.cycle.end.toIso8601String()}:${reminder.budgetAlertLevel.name}',
+        ),
+        title: reminder.creditAccount.name,
+        body: body,
+        notificationDetails: _financialDetails(l10n),
+      );
+      return true;
+    } catch (_) {
+      return false;
+    }
+  }
+
   NotificationDetails _details(AppLocalizations? l10n) => NotificationDetails(
     android: AndroidNotificationDetails(
       _channelId,
@@ -172,6 +337,21 @@ class NotificationScheduler {
     ),
     iOS: const DarwinNotificationDetails(),
   );
+
+  /// 信用账户财务提醒使用独立 Android 通知渠道，方便用户在系统设置中单独控制。
+  NotificationDetails _financialDetails(AppLocalizations? l10n) =>
+      NotificationDetails(
+        android: AndroidNotificationDetails(
+          _financialChannelId,
+          l10n?.reminderFinancialChannelTitle ?? _financialChannelName,
+          channelDescription:
+              l10n?.reminderFinancialChannelDescription ??
+              _financialChannelDescription,
+          importance: Importance.high,
+          priority: Priority.high,
+        ),
+        iOS: const DarwinNotificationDetails(),
+      );
 
   /// 立即发一条测试通知：用于让用户当场确认「通知到底能不能显示」，把权限/渠道
   /// 问题与「定时不触发」问题区分开。
@@ -197,7 +377,9 @@ class NotificationScheduler {
       return;
     }
     try {
-      await _plugin.cancel(id: _reminderId);
+      // 当前插件实例只负责提醒；清空全部待触发项可同时移除已删除账户或旧规则留下的
+      // 一次性通知，再由 [apply] 按最新投影完整重建。
+      await _plugin.cancelAllPendingNotifications();
     } catch (_) {
       // 忽略取消失败。
     }
@@ -228,5 +410,30 @@ class NotificationScheduler {
       hour,
       minute,
     );
+  }
+
+  /// 把普通日历日期与用户设定时刻组合成本地时区时间，避免按 UTC 错位。
+  tz.TZDateTime _localDateTime(DateTime date, int hour, int minute) {
+    return tz.TZDateTime(
+      tz.local,
+      date.year,
+      date.month,
+      date.day,
+      hour,
+      minute,
+    );
+  }
+
+  /// 把通知业务键映射到 Android 允许的稳定正整数 id。
+  ///
+  /// 使用固定 FNV-1a 变体而非运行时 [String.hashCode]，保证进程重启后相同账户仍覆盖
+  /// 同一条排程；保留 1–9999 给现有固定通知 id。
+  int _stableFinancialId(String value) {
+    var hash = 0x811c9dc5;
+    for (final unit in value.codeUnits) {
+      hash ^= unit;
+      hash = (hash * 0x01000193) & 0x7fffffff;
+    }
+    return 10000 + (hash % 2000000000);
   }
 }

@@ -33,6 +33,7 @@ import 'logging/app_logger.dart';
 import 'models.dart';
 import 'recurring.dart';
 import 'reminder/reminder_settings.dart';
+import 'reminder/financial_reminder.dart';
 
 part 'veri_fin_controller_state.dart';
 part 'veri_fin_controller_ops.dart';
@@ -85,6 +86,7 @@ const String _backupSettingsKey = 'verifin.backup_settings.v1';
 const String _backupPassphraseKey = 'verifin.backup_passphrase.v1';
 const String _webdavKey = 'verifin.webdav.v1';
 const String _reminderKey = 'verifin.reminder.v1';
+const String _reminderDeliveryKey = 'verifin.reminder_delivery.v1';
 const String _fabActionKey = 'verifin.fab_action.v1';
 const String _numberPadLayoutKey = 'verifin.number_pad_layout.v1';
 const String _defaultAccountKey = 'verifin.default_account.v1';

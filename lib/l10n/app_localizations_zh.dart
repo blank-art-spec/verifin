@@ -2147,11 +2147,110 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reminderDaily => '每日提醒';
 
   @override
+  String get reminderDailyDescription => '在设定时间提醒记录当天收支';
+
+  @override
+  String get reminderSectionDaily => '日常记录';
+
+  @override
+  String get reminderSectionFinancial => '信用账户预警';
+
+  @override
+  String get reminderCycleBudget => '账期预算预警';
+
+  @override
+  String get reminderCycleBudgetDescription => '在使用 80%、达到和超出预算时提醒';
+
+  @override
+  String get reminderStatementDate => '账单日提醒';
+
+  @override
+  String get reminderStatementDateDescription => '在信用账户即将出账时提醒';
+
+  @override
+  String get reminderRepaymentDue => '还款日提醒';
+
+  @override
+  String get reminderRepaymentDueDescription => '正式账单尚未结清且即将到期时提醒';
+
+  @override
+  String get reminderAdvanceDays => '提前提醒';
+
+  @override
+  String get reminderOnDate => '当天';
+
+  @override
+  String reminderAdvanceDaysValue(int days) {
+    return '$days 天前';
+  }
+
+  @override
   String get reminderTimeLabel => '提醒时间';
 
   @override
+  String get reminderFinancialPreview => '近期信用账户状态';
+
+  @override
+  String get reminderNoCreditAccounts => '还没有完整配置账单日和还款规则的信用账户。';
+
+  @override
+  String get reminderStatementToday => '今天出账';
+
+  @override
+  String reminderDaysUntilStatement(int days) {
+    return '$days 天后出账';
+  }
+
+  @override
+  String get reminderDueToday => '今天到期';
+
+  @override
+  String reminderDaysUntilDue(int days) {
+    return '$days 天后还款';
+  }
+
+  @override
+  String reminderDueOverdue(int days) {
+    return '已逾期 $days 天';
+  }
+
+  @override
+  String reminderBilledAmount(String amount) {
+    return '本期已出账 $amount';
+  }
+
+  @override
+  String reminderOutstandingAmount(String amount) {
+    return '尚未还清 $amount';
+  }
+
+  @override
+  String get reminderSettled => '本期已结清';
+
+  @override
+  String get reminderMissingRate => '缺少汇率，暂时无法计算合计';
+
+  @override
+  String reminderBudgetWarning(int percent) {
+    return '账期预算已使用 $percent%';
+  }
+
+  @override
+  String reminderBudgetUsage(int percent) {
+    return '账期预算已使用 $percent%';
+  }
+
+  @override
+  String get reminderBudgetReached => '账期预算已达到';
+
+  @override
+  String reminderBudgetExceeded(String amount) {
+    return '账期预算已超出 $amount';
+  }
+
+  @override
   String get reminderDescSupported =>
-      '开启后每天到点会收到一条本地通知，提醒你记录当天收支。部分手机（小米 / 华为 / OPPO / vivo 等）会限制后台，若长时间收不到，请在系统设置里允许通知，并把本应用加入省电 / 自启动白名单。可先用下方「发送测试通知」确认通知能否显示。';
+      '提醒只在本机计算与发送。账期预算在 80%、达到和超出时分别提醒；账单日与还款日按提前天数和设定时刻提醒。部分手机（小米 / 华为 / OPPO / vivo 等）会限制后台，若长时间收不到，请在系统设置里允许通知，并把本应用加入省电 / 自启动白名单。可先用下方「发送测试通知」确认通知能否显示。';
 
   @override
   String get reminderDescUnsupported =>
@@ -4123,6 +4222,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reminderChannelDesc => '每日记账提醒通知';
 
   @override
+  String get reminderFinancialChannelTitle => '账单与预算提醒';
+
+  @override
+  String get reminderFinancialChannelDescription => '信用账户账单日、还款日和账期预算提醒';
+
+  @override
   String get reminderTestButton => '发送测试通知';
 
   @override
@@ -5269,6 +5374,11 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String attentionCenterPendingCount(int count) {
     return '待处理 $count';
+  }
+
+  @override
+  String reminderEnabledAt(String time) {
+    return '已开启 · $time';
   }
 
   @override

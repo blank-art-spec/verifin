@@ -1307,6 +1307,126 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     },
   );
 
+  /// 生成当前账本全部信用主体的提醒投影，供提醒设置页和系统通知共用。
+  ///
+  /// 未完整配置账单日/还款规则的主体无法可靠推导日期，因此不进入结果；这比用默认
+  /// 日期制造“看似精确”的提醒更安全。结果按最近到期日、再按账户名排序，优先展示
+  /// 需要马上处理的信用账户。
+  List<CreditReminderSnapshot> creditReminderSnapshots({DateTime? now}) {
+    final reference = now ?? DateTime.now();
+    final snapshots =
+        creditAccounts
+            .where((item) => item.hasCompleteCycleRule)
+            .map((creditAccount) {
+              final overview = creditCycleOverview(
+                creditAccount,
+                now: reference,
+              );
+              return buildCreditReminderSnapshot(
+                creditAccount: creditAccount,
+                overview: overview,
+                childAccounts: _accounts.where(
+                  (item) =>
+                      item.bookId == creditAccount.bookId &&
+                      item.creditAccountId == creditAccount.id,
+                ),
+                statements: _billingStatements.where(
+                  (item) => item.bookId == creditAccount.bookId,
+                ),
+                now: reference,
+                convertToCreditCurrency: (amount, sourceCurrencyCode, date) {
+                  final result = convertAmount(
+                    amount: amount,
+                    sourceCurrencyCode: sourceCurrencyCode,
+                    targetCurrencyCode: creditAccount.currencyCode,
+                    date: date,
+                  );
+                  return result is ConvertedCurrencyAmount
+                      ? result.amount
+                      : null;
+                },
+              );
+            })
+            .toList(growable: false)
+          ..sort((a, b) {
+            final byDue = a.daysUntilDue.compareTo(b.daysUntilDue);
+            return byDue != 0
+                ? byDue
+                : a.creditAccount.name.compareTo(b.creditAccount.name);
+          });
+    return List<CreditReminderSnapshot>.unmodifiable(snapshots);
+  }
+
+  /// 返回本账期尚未成功通知过的预算档位。
+  ///
+  /// 同一账期只会从 80% → 达到 → 超出逐级通知；若用户退款后再次跨过已经通知的
+  /// 档位，不会重复打扰。关闭预算提醒时直接返回空列表，但保留已送达记录，重新开启
+  /// 后也不会补发旧档位。
+  List<CreditReminderSnapshot> pendingBudgetReminderSnapshots({DateTime? now}) {
+    if (!_reminderSettings.cycleBudgetEnabled) {
+      return const <CreditReminderSnapshot>[];
+    }
+    return creditReminderSnapshots(now: now)
+        .where((snapshot) {
+          final level = snapshot.budgetAlertLevel;
+          if (level == CycleBudgetAlertLevel.none) {
+            return false;
+          }
+          final delivered =
+              _deliveredBudgetAlertLevels[_budgetReminderDeliveryId(
+                snapshot,
+              )] ??
+              CycleBudgetAlertLevel.none.index;
+          return level.index > delivered;
+        })
+        .toList(growable: false);
+  }
+
+  /// 在系统确认通知已显示后持久化去重档位。
+  ///
+  /// [snapshot] 必须来自当前实时投影；方法只写设备本地元数据，不触发全局重建，避免
+  /// “标记已通知 → notifyListeners → 再次调度”的循环。写入失败时记录日志并保留旧
+  /// 状态，下次刷新可安全重试。
+  Future<bool> markBudgetReminderDelivered(
+    CreditReminderSnapshot snapshot,
+  ) async {
+    final level = snapshot.budgetAlertLevel;
+    if (level == CycleBudgetAlertLevel.none) {
+      return true;
+    }
+    final key = _budgetReminderDeliveryId(snapshot);
+    final previous = _deliveredBudgetAlertLevels[key] ?? 0;
+    if (previous >= level.index) {
+      return true;
+    }
+    final next = Map<String, int>.of(_deliveredBudgetAlertLevels)
+      ..[key] = level.index;
+    // 去重元数据只需覆盖最近若干账期；限制规模可避免长期使用后 KV 无限增长。
+    while (next.length > 128) {
+      next.remove(next.keys.first);
+    }
+    try {
+      await _store.writeAndFlush(_reminderDeliveryKey, jsonEncode(next));
+    } catch (error) {
+      _logger?.error('保存预算提醒去重状态失败', source: 'ReminderDelivery', error: error);
+      return false;
+    }
+    _deliveredBudgetAlertLevels
+      ..clear()
+      ..addAll(next);
+    return true;
+  }
+
+  /// 生成跨重启稳定的账期预算通知去重键。
+  String _budgetReminderDeliveryId(CreditReminderSnapshot snapshot) {
+    final cycleEnd = dateOnly(snapshot.overview.cycle.end);
+    final month = cycleEnd.month.toString().padLeft(2, '0');
+    final day = cycleEnd.day.toString().padLeft(2, '0');
+    return '${snapshot.creditAccount.bookId}:'
+        '${snapshot.creditAccount.id}:'
+        '${cycleEnd.year}-$month-$day';
+  }
+
   /// 保存信用主体草稿，并把额度/日期同步到子账户的兼容镜像字段。
   /// 主体和子账户在同一事务落库，保存失败时内存保持原状。
   Future<bool> saveCreditAccountDraft(CreditAccount creditAccount) async {

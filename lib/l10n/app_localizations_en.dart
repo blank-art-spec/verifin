@@ -2191,11 +2191,116 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reminderDaily => 'Daily reminder';
 
   @override
+  String get reminderDailyDescription =>
+      'Remind me to record today\'s spending at the chosen time';
+
+  @override
+  String get reminderSectionDaily => 'Daily tracking';
+
+  @override
+  String get reminderSectionFinancial => 'Credit account alerts';
+
+  @override
+  String get reminderCycleBudget => 'Cycle budget alerts';
+
+  @override
+  String get reminderCycleBudgetDescription =>
+      'Alert at 80%, reached, and over budget';
+
+  @override
+  String get reminderStatementDate => 'Statement date reminders';
+
+  @override
+  String get reminderStatementDateDescription =>
+      'Remind me before a credit account statement is issued';
+
+  @override
+  String get reminderRepaymentDue => 'Payment due reminders';
+
+  @override
+  String get reminderRepaymentDueDescription =>
+      'Alert when an unpaid statement is approaching its due date';
+
+  @override
+  String get reminderAdvanceDays => 'Advance notice';
+
+  @override
+  String get reminderOnDate => 'On the day';
+
+  @override
+  String reminderAdvanceDaysValue(int days) {
+    return '$days days before';
+  }
+
+  @override
   String get reminderTimeLabel => 'Reminder time';
 
   @override
+  String get reminderFinancialPreview => 'Upcoming credit account status';
+
+  @override
+  String get reminderNoCreditAccounts =>
+      'No credit account has both statement and payment rules configured yet.';
+
+  @override
+  String get reminderStatementToday => 'Statement is issued today';
+
+  @override
+  String reminderDaysUntilStatement(int days) {
+    return 'Statement in $days days';
+  }
+
+  @override
+  String get reminderDueToday => 'Payment is due today';
+
+  @override
+  String reminderDaysUntilDue(int days) {
+    return 'Payment due in $days days';
+  }
+
+  @override
+  String reminderDueOverdue(int days) {
+    return 'Overdue by $days days';
+  }
+
+  @override
+  String reminderBilledAmount(String amount) {
+    return 'Current statement $amount';
+  }
+
+  @override
+  String reminderOutstandingAmount(String amount) {
+    return 'Outstanding $amount';
+  }
+
+  @override
+  String get reminderSettled => 'Current statement settled';
+
+  @override
+  String get reminderMissingRate =>
+      'A missing exchange rate prevents the total from being calculated';
+
+  @override
+  String reminderBudgetWarning(int percent) {
+    return '$percent% of cycle budget used';
+  }
+
+  @override
+  String reminderBudgetUsage(int percent) {
+    return '$percent% of cycle budget used';
+  }
+
+  @override
+  String get reminderBudgetReached => 'Cycle budget reached';
+
+  @override
+  String reminderBudgetExceeded(String amount) {
+    return 'Cycle budget exceeded by $amount';
+  }
+
+  @override
   String get reminderDescSupported =>
-      'When enabled, a local notification arrives daily at the set time to remind you to record the day\'s spending. Some phones (Xiaomi / Huawei / OPPO / vivo, etc.) restrict background apps; if it never arrives, allow notifications in system settings and add this app to the battery / autostart allowlists. Use \"Send a test notification\" below to check that notifications can appear.';
+      'Reminders are calculated and delivered only on this device. Cycle budget alerts fire at 80%, reached, and over budget; statement and payment reminders use the selected lead time and clock time. Some phones (Xiaomi / Huawei / OPPO / vivo, etc.) restrict background apps; if reminders never arrive, allow notifications in system settings and add this app to battery / autostart allowlists. Use \"Send a test notification\" below to verify delivery.';
 
   @override
   String get reminderDescUnsupported =>
@@ -4228,6 +4333,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reminderChannelDesc => 'Daily bookkeeping reminder notifications';
 
   @override
+  String get reminderFinancialChannelTitle => 'Bills and budget alerts';
+
+  @override
+  String get reminderFinancialChannelDescription =>
+      'Credit statement dates, payment due dates, and cycle budget alerts';
+
+  @override
   String get reminderTestButton => 'Send a test notification';
 
   @override
@@ -5422,6 +5534,11 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String attentionCenterPendingCount(int count) {
     return '$count pending';
+  }
+
+  @override
+  String reminderEnabledAt(String time) {
+    return 'Enabled · $time';
   }
 
   @override

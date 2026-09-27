@@ -139,6 +139,12 @@ mixin _ControllerState on ChangeNotifier {
   String _backupPassphrase = '';
   WebdavConfig _webdavConfig = const WebdavConfig();
   ReminderSettings _reminderSettings = ReminderSettings.disabled;
+
+  /// 已成功显示的账期预算通知档位。
+  ///
+  /// 键包含账本、信用主体和账期结束日，值为 [CycleBudgetAlertLevel.index]。这是纯设备
+  /// 本地的通知去重元数据，不属于账务事实，也不进入备份。
+  final Map<String, int> _deliveredBudgetAlertLevels = <String, int>{};
   FabActionMode _fabActionMode = FabActionMode.manual;
   HomeTrendConfig _homeTrendConfig = HomeTrendConfig.defaults;
   bool _amountForceTwoDecimals = false;
@@ -233,6 +239,7 @@ mixin _ControllerState on ChangeNotifier {
     _backupPassphrase = _store.read(_backupPassphraseKey) ?? '';
     _webdavConfig = WebdavConfig.decode(_store.read(_webdavKey));
     _reminderSettings = ReminderSettings.decode(_store.read(_reminderKey));
+    _loadReminderDeliveryState();
     _fabActionMode = FabActionMode.fromStorage(_store.read(_fabActionKey));
     _numberPadLayout = NumberPadLayout.fromStorage(
       _store.read(_numberPadLayoutKey),
@@ -264,6 +271,30 @@ mixin _ControllerState on ChangeNotifier {
     }
     _aiChatHistory = _decodeChatHistory(_store.read(_aiChatHistoryKey));
     _homeTrendConfig = HomeTrendConfig.decode(_store.read(_homeTrendKey));
+  }
+
+  /// 从 KV 恢复预算通知去重状态；损坏内容直接清除，不影响账务数据和提醒设置。
+  void _loadReminderDeliveryState() {
+    final raw = _store.read(_reminderDeliveryKey);
+    if (raw == null || raw.isEmpty) {
+      return;
+    }
+    try {
+      final decoded = jsonDecode(raw);
+      if (decoded is! Map) {
+        throw const FormatException('预算提醒去重状态不是对象');
+      }
+      for (final entry in decoded.entries) {
+        final value = entry.value;
+        if (entry.key is String && value is num) {
+          _deliveredBudgetAlertLevels[entry.key as String] = value.toInt();
+        }
+      }
+    } catch (error) {
+      _deliveredBudgetAlertLevels.clear();
+      _store.delete(_reminderDeliveryKey);
+      _logger?.warning('预算提醒去重状态损坏，已重置', source: 'ReminderDelivery');
+    }
   }
 
   /// 当前活动账本是否实际涉及多个币种。账户、历史交易、周期规则或已维护汇率中

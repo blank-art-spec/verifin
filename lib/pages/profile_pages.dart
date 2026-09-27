@@ -242,7 +242,7 @@ class ProfilePage extends StatelessWidget {
                 icon: Icons.notifications_active_outlined,
                 color: veriSemantic(context, veriWarning),
                 label: AppLocalizations.of(context).reminderTitle,
-                subtitle: controller.reminderSettings.enabled
+                subtitle: controller.reminderSettings.hasAnyEnabled
                     ? controller.reminderSettings.timeLabel
                     : AppLocalizations.of(context).notEnabled,
                 onTap: () => Navigator.of(context).push<void>(

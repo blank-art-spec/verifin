@@ -765,10 +765,101 @@
   "reminderPickTime": "Choose reminder time",
   "reminderTitle": "Daily reminder",
   "reminderDaily": "Daily reminder",
+  "reminderDailyDescription": "Remind me to record today's spending at the chosen time",
+  "reminderSectionDaily": "Daily tracking",
+  "reminderSectionFinancial": "Credit account alerts",
+  "reminderCycleBudget": "Cycle budget alerts",
+  "reminderCycleBudgetDescription": "Alert at 80%, reached, and over budget",
+  "reminderStatementDate": "Statement date reminders",
+  "reminderStatementDateDescription": "Remind me before a credit account statement is issued",
+  "reminderRepaymentDue": "Payment due reminders",
+  "reminderRepaymentDueDescription": "Alert when an unpaid statement is approaching its due date",
+  "reminderAdvanceDays": "Advance notice",
+  "reminderOnDate": "On the day",
+  "reminderAdvanceDaysValue": "{days} days before",
+  "@reminderAdvanceDaysValue": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
   "reminderTimeLabel": "Reminder time",
-  "reminderDescSupported": "When enabled, a local notification arrives daily at the set time to remind you to record the day's spending. Some phones (Xiaomi / Huawei / OPPO / vivo, etc.) restrict background apps; if it never arrives, allow notifications in system settings and add this app to the battery / autostart allowlists. Use \"Send a test notification\" below to check that notifications can appear.",
+  "reminderFinancialPreview": "Upcoming credit account status",
+  "reminderNoCreditAccounts": "No credit account has both statement and payment rules configured yet.",
+  "reminderStatementToday": "Statement is issued today",
+  "reminderDaysUntilStatement": "Statement in {days} days",
+  "@reminderDaysUntilStatement": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderDueToday": "Payment is due today",
+  "reminderDaysUntilDue": "Payment due in {days} days",
+  "@reminderDaysUntilDue": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderDueOverdue": "Overdue by {days} days",
+  "@reminderDueOverdue": {
+    "placeholders": {
+      "days": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderBilledAmount": "Current statement {amount}",
+  "@reminderBilledAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderOutstandingAmount": "Outstanding {amount}",
+  "@reminderOutstandingAmount": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderSettled": "Current statement settled",
+  "reminderMissingRate": "A missing exchange rate prevents the total from being calculated",
+  "reminderBudgetWarning": "{percent}% of cycle budget used",
+  "@reminderBudgetWarning": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderBudgetUsage": "{percent}% of cycle budget used",
+  "@reminderBudgetUsage": {
+    "placeholders": {
+      "percent": {
+        "type": "int"
+      }
+    }
+  },
+  "reminderBudgetReached": "Cycle budget reached",
+  "reminderBudgetExceeded": "Cycle budget exceeded by {amount}",
+  "@reminderBudgetExceeded": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reminderDescSupported": "Reminders are calculated and delivered only on this device. Cycle budget alerts fire at 80%, reached, and over budget; statement and payment reminders use the selected lead time and clock time. Some phones (Xiaomi / Huawei / OPPO / vivo, etc.) restrict background apps; if reminders never arrive, allow notifications in system settings and add this app to battery / autostart allowlists. Use \"Send a test notification\" below to verify delivery.",
   "reminderDescUnsupported": "Local notifications aren't supported on this platform; this setting only works on Android / iOS phones.",
   "reminderDailyAt": "Daily {time}",
+  "reminderEnabledAt": "Enabled · {time}",
   "recurringTitle": "Recurring",
   "recurringSubtitle": "Due entries are recorded automatically when the app opens",
   "recurringAddTooltip": "New rule",
@@ -1531,6 +1622,8 @@
   "widgetActionProfile": "Me",
   "reminderNotifBody": "Don't forget to record today's spending!",
   "reminderChannelDesc": "Daily bookkeeping reminder notifications",
+  "reminderFinancialChannelTitle": "Bills and budget alerts",
+  "reminderFinancialChannelDescription": "Credit statement dates, payment due dates, and cycle budget alerts",
   "reminderTestButton": "Send a test notification",
   "reminderTestBody": "This is a test notification — if you can see it, notifications work.",
   "reminderTestSent": "Test notification sent — check your notification shade. If daily reminders never arrive, it's usually background restrictions: allow notifications for this app and add it to battery / autostart allowlists in system settings.",
