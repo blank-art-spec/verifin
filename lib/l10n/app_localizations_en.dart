@@ -5408,4 +5408,124 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get autoCaptureKindUnknown => 'Unknown';
+
+  @override
+  String get attentionCenterTitle => 'Issue center';
+
+  @override
+  String get attentionCenterSubtitle =>
+      'Review and resolve financial data that needs attention';
+
+  @override
+  String get attentionCenterShort => 'Data issues';
+
+  @override
+  String attentionCenterPendingCount(int count) {
+    return '$count pending';
+  }
+
+  @override
+  String get attentionCenterEmptyTitle => 'Nothing needs attention';
+
+  @override
+  String get attentionCenterEmptyDescription =>
+      'No definite issues were found in transactions, exchange rates, statements, or automatic capture data.';
+
+  @override
+  String get attentionIssueAmountConflict => 'Amount conflicts';
+
+  @override
+  String get attentionIssueDuplicateTransaction => 'Possible duplicates';
+
+  @override
+  String get attentionIssueUnmatchedRefund => 'Unmatched refunds';
+
+  @override
+  String get attentionIssueUnallocatedRepayment => 'Unlinked repayments';
+
+  @override
+  String get attentionIssueMissingExchangeRate => 'Missing exchange rates';
+
+  @override
+  String get attentionIssueBankOnlyTransaction => 'Official source only';
+
+  @override
+  String get attentionIssueLocalOnlyTransaction => 'Local record only';
+
+  @override
+  String get attentionIssueLowConfidenceCapture => 'Low-confidence capture';
+
+  @override
+  String get attentionIssueCaptureReview => 'Capture review';
+
+  @override
+  String get attentionIssueCaptureFailure => 'Capture failures';
+
+  @override
+  String get attentionIssueAmountConflictDetail =>
+      'The official source amount differs from the local record';
+
+  @override
+  String get attentionIssueDuplicateDetail =>
+      'This closely resembles an existing transaction and needs merge review';
+
+  @override
+  String get attentionIssueRefundDetail =>
+      'The refund has no reliable original expense match';
+
+  @override
+  String get attentionIssueRepaymentDetail =>
+      'Some repayment amount is not assigned to an official statement';
+
+  @override
+  String attentionIssueMissingRateDetail(int count) {
+    return 'Affects $count accounts or due recurring rules';
+  }
+
+  @override
+  String get attentionIssueBankOnlyDetail =>
+      'The official source has a record that is missing locally';
+
+  @override
+  String get attentionIssueLocalOnlyDetail =>
+      'The local transaction has no matching official-source record';
+
+  @override
+  String get attentionIssueLowConfidenceDetail =>
+      'Key details have low confidence, so this will not be posted automatically';
+
+  @override
+  String get attentionIssueCaptureReviewDetail =>
+      'The automatic capture result needs manual review';
+
+  @override
+  String get attentionIssueCaptureFailureDetail =>
+      'The original event was kept and can be retried from automatic capture';
+
+  @override
+  String get attentionCapturedEventFallback => 'Automatic capture record';
+
+  @override
+  String attentionMissingRateTitle(String code) {
+    return '$code exchange rate';
+  }
+
+  @override
+  String get attentionAllocateRepaymentTitle =>
+      'Link repayment to official statements?';
+
+  @override
+  String get attentionAllocateRepaymentMessage =>
+      'This repayment will be assigned by due date, earliest first. Any amount beyond billed outstanding balances will remain unassigned.';
+
+  @override
+  String get attentionAllocateRepaymentAction => 'Link automatically';
+
+  @override
+  String get attentionAllocateRepaymentSuccess =>
+      'Linked to outstanding statements';
+
+  @override
+  String get attentionAllocateRepaymentNoChange =>
+      'There are no outstanding statements to assign';
 }

@@ -2058,5 +2058,53 @@
   "autoCaptureKindCreditRepayment": "Credit card payment",
   "autoCaptureKindCreditLineRepayment": "Credit-line payment",
   "autoCaptureKindCashback": "Cashback/reward",
-  "autoCaptureKindUnknown": "Unknown"
+  "autoCaptureKindUnknown": "Unknown",
+  "attentionCenterTitle": "Issue center",
+  "attentionCenterSubtitle": "Review and resolve financial data that needs attention",
+  "attentionCenterShort": "Data issues",
+  "attentionCenterPendingCount": "{count} pending",
+  "@attentionCenterPendingCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "attentionCenterEmptyTitle": "Nothing needs attention",
+  "attentionCenterEmptyDescription": "No definite issues were found in transactions, exchange rates, statements, or automatic capture data.",
+  "attentionIssueAmountConflict": "Amount conflicts",
+  "attentionIssueDuplicateTransaction": "Possible duplicates",
+  "attentionIssueUnmatchedRefund": "Unmatched refunds",
+  "attentionIssueUnallocatedRepayment": "Unlinked repayments",
+  "attentionIssueMissingExchangeRate": "Missing exchange rates",
+  "attentionIssueBankOnlyTransaction": "Official source only",
+  "attentionIssueLocalOnlyTransaction": "Local record only",
+  "attentionIssueLowConfidenceCapture": "Low-confidence capture",
+  "attentionIssueCaptureReview": "Capture review",
+  "attentionIssueCaptureFailure": "Capture failures",
+  "attentionIssueAmountConflictDetail": "The official source amount differs from the local record",
+  "attentionIssueDuplicateDetail": "This closely resembles an existing transaction and needs merge review",
+  "attentionIssueRefundDetail": "The refund has no reliable original expense match",
+  "attentionIssueRepaymentDetail": "Some repayment amount is not assigned to an official statement",
+  "attentionIssueMissingRateDetail": "Affects {count} accounts or due recurring rules",
+  "@attentionIssueMissingRateDetail": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "attentionIssueBankOnlyDetail": "The official source has a record that is missing locally",
+  "attentionIssueLocalOnlyDetail": "The local transaction has no matching official-source record",
+  "attentionIssueLowConfidenceDetail": "Key details have low confidence, so this will not be posted automatically",
+  "attentionIssueCaptureReviewDetail": "The automatic capture result needs manual review",
+  "attentionIssueCaptureFailureDetail": "The original event was kept and can be retried from automatic capture",
+  "attentionCapturedEventFallback": "Automatic capture record",
+  "attentionMissingRateTitle": "{code} exchange rate",
+  "@attentionMissingRateTitle": {
+    "placeholders": {
+      "code": {"type": "String"}
+    }
+  },
+  "attentionAllocateRepaymentTitle": "Link repayment to official statements?",
+  "attentionAllocateRepaymentMessage": "This repayment will be assigned by due date, earliest first. Any amount beyond billed outstanding balances will remain unassigned.",
+  "attentionAllocateRepaymentAction": "Link automatically",
+  "attentionAllocateRepaymentSuccess": "Linked to outstanding statements",
+  "attentionAllocateRepaymentNoChange": "There are no outstanding statements to assign"
 }

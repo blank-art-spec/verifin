@@ -11,6 +11,7 @@ import '../app/root_navigation.dart';
 import '../app/series_math.dart';
 import '../app/veri_fin_scope.dart';
 import 'ai_chat_page.dart';
+import 'attention_center_page.dart';
 import 'auto_capture_page.dart';
 import 'budget_pages.dart';
 import 'category_management_page.dart';
@@ -56,6 +57,7 @@ class ProfilePage extends StatelessWidget {
     final accountValuation = controller.accountBalancesInBase(
       accounts: valuedAccounts,
     );
+    final attentionSnapshot = controller.attentionCenterSnapshot();
 
     return VeriPage(
       child: ListView(
@@ -327,6 +329,23 @@ class ProfilePage extends StatelessWidget {
                 onTap: () => Navigator.of(context).push<void>(
                   MaterialPageRoute<void>(
                     builder: (context) => const AutoCapturePage(),
+                  ),
+                ),
+              ),
+              _FeatureTileData(
+                icon: Icons.rule_folder_outlined,
+                color: attentionSnapshot.total == 0
+                    ? veriSemantic(context, veriIncome)
+                    : veriSemantic(context, veriWarning),
+                label: AppLocalizations.of(context).attentionCenterTitle,
+                subtitle: attentionSnapshot.total == 0
+                    ? AppLocalizations.of(context).attentionCenterShort
+                    : AppLocalizations.of(
+                        context,
+                      ).attentionCenterPendingCount(attentionSnapshot.total),
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (context) => const AttentionCenterPage(),
                   ),
                 ),
               ),

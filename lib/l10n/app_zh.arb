@@ -3194,5 +3194,53 @@
   "autoCaptureKindCreditRepayment": "信用卡还款",
   "autoCaptureKindCreditLineRepayment": "花呗/白条还款",
   "autoCaptureKindCashback": "红包/返现",
-  "autoCaptureKindUnknown": "未知"
+  "autoCaptureKindUnknown": "未知",
+  "attentionCenterTitle": "异常处理中心",
+  "attentionCenterSubtitle": "集中查看并处理需要核对的账务数据",
+  "attentionCenterShort": "异常治理",
+  "attentionCenterPendingCount": "待处理 {count}",
+  "@attentionCenterPendingCount": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "attentionCenterEmptyTitle": "暂无待处理异常",
+  "attentionCenterEmptyDescription": "交易、汇率、正式账单和自动识别数据目前没有发现明确问题。",
+  "attentionIssueAmountConflict": "金额冲突",
+  "attentionIssueDuplicateTransaction": "疑似重复",
+  "attentionIssueUnmatchedRefund": "待匹配退款",
+  "attentionIssueUnallocatedRepayment": "还款未关联账单",
+  "attentionIssueMissingExchangeRate": "缺失汇率",
+  "attentionIssueBankOnlyTransaction": "正式来源仅有",
+  "attentionIssueLocalOnlyTransaction": "本地流水仅有",
+  "attentionIssueLowConfidenceCapture": "低置信度识别",
+  "attentionIssueCaptureReview": "自动识别待确认",
+  "attentionIssueCaptureFailure": "自动识别失败",
+  "attentionIssueAmountConflictDetail": "正式来源金额与本地记录不一致",
+  "attentionIssueDuplicateDetail": "与已有交易高度相似，需要确认是否合并",
+  "attentionIssueRefundDetail": "退款尚未找到可靠的原支出关系",
+  "attentionIssueRepaymentDetail": "仍有还款金额未归属到正式账单",
+  "attentionIssueMissingRateDetail": "影响 {count} 个账户或到期周期规则",
+  "@attentionIssueMissingRateDetail": {
+    "placeholders": {
+      "count": {"type": "int"}
+    }
+  },
+  "attentionIssueBankOnlyDetail": "正式来源有记录，本地流水缺失",
+  "attentionIssueLocalOnlyDetail": "本地有流水，正式来源未找到对应记录",
+  "attentionIssueLowConfidenceDetail": "关键信息置信度较低，不会自动入账",
+  "attentionIssueCaptureReviewDetail": "自动识别结果需要人工核对",
+  "attentionIssueCaptureFailureDetail": "事件原文已保留，可在自动识别页重试",
+  "attentionCapturedEventFallback": "自动识别记录",
+  "attentionMissingRateTitle": "{code} 汇率",
+  "@attentionMissingRateTitle": {
+    "placeholders": {
+      "code": {"type": "String"}
+    }
+  },
+  "attentionAllocateRepaymentTitle": "关联还款到正式账单？",
+  "attentionAllocateRepaymentMessage": "将按到期日由早到晚自动分配这笔还款，超出已出账待还的部分仍保持未分配。",
+  "attentionAllocateRepaymentAction": "自动关联",
+  "attentionAllocateRepaymentSuccess": "已关联到未结清账单",
+  "attentionAllocateRepaymentNoChange": "没有可分配的未结清账单"
 }

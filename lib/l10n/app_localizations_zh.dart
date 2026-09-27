@@ -5256,4 +5256,110 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get autoCaptureKindUnknown => '未知';
+
+  @override
+  String get attentionCenterTitle => '异常处理中心';
+
+  @override
+  String get attentionCenterSubtitle => '集中查看并处理需要核对的账务数据';
+
+  @override
+  String get attentionCenterShort => '异常治理';
+
+  @override
+  String attentionCenterPendingCount(int count) {
+    return '待处理 $count';
+  }
+
+  @override
+  String get attentionCenterEmptyTitle => '暂无待处理异常';
+
+  @override
+  String get attentionCenterEmptyDescription => '交易、汇率、正式账单和自动识别数据目前没有发现明确问题。';
+
+  @override
+  String get attentionIssueAmountConflict => '金额冲突';
+
+  @override
+  String get attentionIssueDuplicateTransaction => '疑似重复';
+
+  @override
+  String get attentionIssueUnmatchedRefund => '待匹配退款';
+
+  @override
+  String get attentionIssueUnallocatedRepayment => '还款未关联账单';
+
+  @override
+  String get attentionIssueMissingExchangeRate => '缺失汇率';
+
+  @override
+  String get attentionIssueBankOnlyTransaction => '正式来源仅有';
+
+  @override
+  String get attentionIssueLocalOnlyTransaction => '本地流水仅有';
+
+  @override
+  String get attentionIssueLowConfidenceCapture => '低置信度识别';
+
+  @override
+  String get attentionIssueCaptureReview => '自动识别待确认';
+
+  @override
+  String get attentionIssueCaptureFailure => '自动识别失败';
+
+  @override
+  String get attentionIssueAmountConflictDetail => '正式来源金额与本地记录不一致';
+
+  @override
+  String get attentionIssueDuplicateDetail => '与已有交易高度相似，需要确认是否合并';
+
+  @override
+  String get attentionIssueRefundDetail => '退款尚未找到可靠的原支出关系';
+
+  @override
+  String get attentionIssueRepaymentDetail => '仍有还款金额未归属到正式账单';
+
+  @override
+  String attentionIssueMissingRateDetail(int count) {
+    return '影响 $count 个账户或到期周期规则';
+  }
+
+  @override
+  String get attentionIssueBankOnlyDetail => '正式来源有记录，本地流水缺失';
+
+  @override
+  String get attentionIssueLocalOnlyDetail => '本地有流水，正式来源未找到对应记录';
+
+  @override
+  String get attentionIssueLowConfidenceDetail => '关键信息置信度较低，不会自动入账';
+
+  @override
+  String get attentionIssueCaptureReviewDetail => '自动识别结果需要人工核对';
+
+  @override
+  String get attentionIssueCaptureFailureDetail => '事件原文已保留，可在自动识别页重试';
+
+  @override
+  String get attentionCapturedEventFallback => '自动识别记录';
+
+  @override
+  String attentionMissingRateTitle(String code) {
+    return '$code 汇率';
+  }
+
+  @override
+  String get attentionAllocateRepaymentTitle => '关联还款到正式账单？';
+
+  @override
+  String get attentionAllocateRepaymentMessage =>
+      '将按到期日由早到晚自动分配这笔还款，超出已出账待还的部分仍保持未分配。';
+
+  @override
+  String get attentionAllocateRepaymentAction => '自动关联';
+
+  @override
+  String get attentionAllocateRepaymentSuccess => '已关联到未结清账单';
+
+  @override
+  String get attentionAllocateRepaymentNoChange => '没有可分配的未结清账单';
 }

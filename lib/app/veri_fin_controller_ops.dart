@@ -64,6 +64,24 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     );
   }
 
+  /// 构建当前账本的异常处理中心快照。
+  ///
+  /// [now] 允许测试固定时间；生产环境默认使用当前本地时间。快照只从
+  /// 权威账务数据投影，不写库、不修改任何异常状态。
+  AttentionCenterSnapshot attentionCenterSnapshot({DateTime? now}) {
+    final asOf = now ?? DateTime.now();
+    return buildAttentionCenterSnapshot(
+      accounts: accounts,
+      entries: entries,
+      captureEvents: captureEvents,
+      billingStatements: billingStatements,
+      repaymentAllocations: statementRepaymentAllocations,
+      recurringMissingRates: dueRecurringMissingRates(asOf),
+      accountValuation: accountBalancesInBase(date: asOf),
+      now: asOf,
+    );
+  }
+
   /// 显式保存设备级自动采集配置。
   ///
   /// 只有 KV 真正刷盘成功后才替换内存快照；原生权限与服务配置由 UI/平台桥在成功后同步。

@@ -9488,6 +9488,204 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'未知'**
   String get autoCaptureKindUnknown;
+
+  /// No description provided for @attentionCenterTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'异常处理中心'**
+  String get attentionCenterTitle;
+
+  /// No description provided for @attentionCenterSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'集中查看并处理需要核对的账务数据'**
+  String get attentionCenterSubtitle;
+
+  /// No description provided for @attentionCenterShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'异常治理'**
+  String get attentionCenterShort;
+
+  /// No description provided for @attentionCenterPendingCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'待处理 {count}'**
+  String attentionCenterPendingCount(int count);
+
+  /// No description provided for @attentionCenterEmptyTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无待处理异常'**
+  String get attentionCenterEmptyTitle;
+
+  /// No description provided for @attentionCenterEmptyDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易、汇率、正式账单和自动识别数据目前没有发现明确问题。'**
+  String get attentionCenterEmptyDescription;
+
+  /// No description provided for @attentionIssueAmountConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额冲突'**
+  String get attentionIssueAmountConflict;
+
+  /// No description provided for @attentionIssueDuplicateTransaction.
+  ///
+  /// In zh, this message translates to:
+  /// **'疑似重复'**
+  String get attentionIssueDuplicateTransaction;
+
+  /// No description provided for @attentionIssueUnmatchedRefund.
+  ///
+  /// In zh, this message translates to:
+  /// **'待匹配退款'**
+  String get attentionIssueUnmatchedRefund;
+
+  /// No description provided for @attentionIssueUnallocatedRepayment.
+  ///
+  /// In zh, this message translates to:
+  /// **'还款未关联账单'**
+  String get attentionIssueUnallocatedRepayment;
+
+  /// No description provided for @attentionIssueMissingExchangeRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺失汇率'**
+  String get attentionIssueMissingExchangeRate;
+
+  /// No description provided for @attentionIssueBankOnlyTransaction.
+  ///
+  /// In zh, this message translates to:
+  /// **'正式来源仅有'**
+  String get attentionIssueBankOnlyTransaction;
+
+  /// No description provided for @attentionIssueLocalOnlyTransaction.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地流水仅有'**
+  String get attentionIssueLocalOnlyTransaction;
+
+  /// No description provided for @attentionIssueLowConfidenceCapture.
+  ///
+  /// In zh, this message translates to:
+  /// **'低置信度识别'**
+  String get attentionIssueLowConfidenceCapture;
+
+  /// No description provided for @attentionIssueCaptureReview.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动识别待确认'**
+  String get attentionIssueCaptureReview;
+
+  /// No description provided for @attentionIssueCaptureFailure.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动识别失败'**
+  String get attentionIssueCaptureFailure;
+
+  /// No description provided for @attentionIssueAmountConflictDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'正式来源金额与本地记录不一致'**
+  String get attentionIssueAmountConflictDetail;
+
+  /// No description provided for @attentionIssueDuplicateDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'与已有交易高度相似，需要确认是否合并'**
+  String get attentionIssueDuplicateDetail;
+
+  /// No description provided for @attentionIssueRefundDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'退款尚未找到可靠的原支出关系'**
+  String get attentionIssueRefundDetail;
+
+  /// No description provided for @attentionIssueRepaymentDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍有还款金额未归属到正式账单'**
+  String get attentionIssueRepaymentDetail;
+
+  /// No description provided for @attentionIssueMissingRateDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'影响 {count} 个账户或到期周期规则'**
+  String attentionIssueMissingRateDetail(int count);
+
+  /// No description provided for @attentionIssueBankOnlyDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'正式来源有记录，本地流水缺失'**
+  String get attentionIssueBankOnlyDetail;
+
+  /// No description provided for @attentionIssueLocalOnlyDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地有流水，正式来源未找到对应记录'**
+  String get attentionIssueLocalOnlyDetail;
+
+  /// No description provided for @attentionIssueLowConfidenceDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'关键信息置信度较低，不会自动入账'**
+  String get attentionIssueLowConfidenceDetail;
+
+  /// No description provided for @attentionIssueCaptureReviewDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动识别结果需要人工核对'**
+  String get attentionIssueCaptureReviewDetail;
+
+  /// No description provided for @attentionIssueCaptureFailureDetail.
+  ///
+  /// In zh, this message translates to:
+  /// **'事件原文已保留，可在自动识别页重试'**
+  String get attentionIssueCaptureFailureDetail;
+
+  /// No description provided for @attentionCapturedEventFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动识别记录'**
+  String get attentionCapturedEventFallback;
+
+  /// No description provided for @attentionMissingRateTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'{code} 汇率'**
+  String attentionMissingRateTitle(String code);
+
+  /// No description provided for @attentionAllocateRepaymentTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'关联还款到正式账单？'**
+  String get attentionAllocateRepaymentTitle;
+
+  /// No description provided for @attentionAllocateRepaymentMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'将按到期日由早到晚自动分配这笔还款，超出已出账待还的部分仍保持未分配。'**
+  String get attentionAllocateRepaymentMessage;
+
+  /// No description provided for @attentionAllocateRepaymentAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动关联'**
+  String get attentionAllocateRepaymentAction;
+
+  /// No description provided for @attentionAllocateRepaymentSuccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'已关联到未结清账单'**
+  String get attentionAllocateRepaymentSuccess;
+
+  /// No description provided for @attentionAllocateRepaymentNoChange.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有可分配的未结清账单'**
+  String get attentionAllocateRepaymentNoChange;
 }
 
 class _AppLocalizationsDelegate

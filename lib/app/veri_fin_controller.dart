@@ -8,6 +8,7 @@ import '../local_storage/local_storage.dart';
 import 'ai/ai_capabilities.dart';
 import 'ai/ai_entry_parser.dart';
 import 'ai/ai_settings.dart';
+import 'attention_center.dart';
 import 'auto_capture/capture_parser.dart';
 import 'app_lock.dart';
 import 'backup/backup_settings.dart';
