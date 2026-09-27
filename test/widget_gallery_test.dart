@@ -95,6 +95,10 @@ void main() {
       200,
       scrollable: find.byType(Scrollable).first,
     );
+    // 数据与工具宫格追加功能后，scrollUntilVisible 可能只把目标送到
+    // 底部导航后方；再向上滚一段，确保测试真正点到宫格卡片。
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, -120));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('桌面小组件'));
     await tester.pumpAndSettle();
 

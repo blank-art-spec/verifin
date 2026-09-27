@@ -3,6 +3,10 @@ part of 'veri_fin_controller.dart';
 /// 控制器的「状态与持久化」层：集中所有内存字段、KV/SQLite 载入与落库、
 /// 以及少量被载入流程调用的基础方法。领域操作在 [_ControllerOps]。
 mixin _ControllerState on ChangeNotifier {
+  /// Controller 已进入 dispose 的标记。备份恢复等异步自愈任务结束时需先检查，
+  /// 避免测试或应用退出后再调用 notifyListeners。
+  bool _controllerDisposed = false;
+
   // 依赖由具体类 VeriFinController 注入（构造参数）。
   LocalKeyValueStore get _store;
   LedgerRepository get _repository;
@@ -38,6 +42,8 @@ mixin _ControllerState on ChangeNotifier {
   UserProfile get _seedProfile => defaultUserProfileFor(english: _seedEnglish);
 
   final List<LedgerEntry> _entries = <LedgerEntry>[];
+  final List<CaptureEvent> _captureEvents = <CaptureEvent>[];
+  final List<AutoCaptureRule> _autoCaptureRules = <AutoCaptureRule>[];
   final List<LedgerBook> _ledgerBooks = <LedgerBook>[];
   final List<Account> _accounts = <Account>[];
   final List<AccountGroup> _accountGroups = <AccountGroup>[];
@@ -58,6 +64,8 @@ mixin _ControllerState on ChangeNotifier {
   // **新增派生视图字段必须同步在 [_invalidateDerivedViews] 置空**，
   // 漏加不会报错、只会返回过期缓存。
   List<LedgerEntry>? _entriesView;
+  List<CaptureEvent>? _captureEventsView;
+  List<AutoCaptureRule>? _autoCaptureRulesView;
   List<Account>? _accountsView;
   List<AccountGroup>? _accountGroupsView;
   List<CreditAccount>? _creditAccountsView;
@@ -68,6 +76,8 @@ mixin _ControllerState on ChangeNotifier {
 
   void _invalidateDerivedViews() {
     _entriesView = null;
+    _captureEventsView = null;
+    _autoCaptureRulesView = null;
     _accountsView = null;
     _accountGroupsView = null;
     _creditAccountsView = null;
@@ -139,6 +149,7 @@ mixin _ControllerState on ChangeNotifier {
   bool _showRunningBalance = false;
   NumberPadLayout _numberPadLayout = NumberPadLayout.standard;
   AiSettings _aiSettings = const AiSettings();
+  AutoCaptureSettings _autoCaptureSettings = AutoCaptureSettings.disabled;
   AiCapabilityProfile? _aiCapabilityProfile;
 
   /// AI 对话查询的聊天记录：每条 `{role, content, displays?}`——助手消息可带序列化的
@@ -241,6 +252,9 @@ mixin _ControllerState on ChangeNotifier {
     // 默认关闭：只有显式开过才为 true。
     _showRunningBalance = _store.read(_runningBalanceKey) == 'true';
     _aiSettings = AiSettings.decode(_store.read(_aiSettingsKey));
+    _autoCaptureSettings = AutoCaptureSettings.decode(
+      _store.read(_autoCaptureSettingsKey),
+    );
     _aiCapabilityProfile = AiCapabilityProfile.decode(
       _store.read(_aiCapabilitiesKey),
     );
@@ -339,6 +353,12 @@ mixin _ControllerState on ChangeNotifier {
     _entries
       ..clear()
       ..addAll(entries);
+    _captureEvents
+      ..clear()
+      ..addAll(await _repository.loadCaptureEvents());
+    _autoCaptureRules
+      ..clear()
+      ..addAll(await _repository.loadAutoCaptureRules());
     _tags
       ..clear()
       ..addAll(await _repository.loadTags());
@@ -764,6 +784,23 @@ mixin _ControllerState on ChangeNotifier {
 
   void _persistEntries() {
     _trackWrite(_repository.saveEntries(List<LedgerEntry>.of(_entries)));
+  }
+
+  /// 异步持久化原始采集事件。需要与正式交易原子提交时不得调用此方法，改用
+  /// `saveCaptureProcessing`。
+  void _persistCaptureEvents() {
+    _trackWrite(
+      _repository.saveCaptureEvents(List<CaptureEvent>.of(_captureEvents)),
+    );
+  }
+
+  /// 异步持久化用户自动识别规则。
+  void _persistAutoCaptureRules() {
+    _trackWrite(
+      _repository.saveAutoCaptureRules(
+        List<AutoCaptureRule>.of(_autoCaptureRules),
+      ),
+    );
   }
 
   // 记录最近一次 SQLite 写入，供测试等待其落库。写入按连接串行，等待最新即可。

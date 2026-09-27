@@ -29,6 +29,7 @@ class EntryDetailPage extends StatefulWidget {
     required this.initialAmount,
     this.initialAccountId,
     this.initialDraft,
+    this.initialSourceRecords = const <EntrySourceRecord>[],
   }) : draftEntry = null,
        draftExtraAccounts = null,
        draftExtraCategories = null,
@@ -50,13 +51,18 @@ class EntryDetailPage extends StatefulWidget {
        draftExtraTags = extraTags,
        initialAmount = entry.amount,
        initialAccountId = null,
-       initialDraft = null;
+       initialDraft = null,
+       initialSourceRecords = const <EntrySourceRecord>[];
 
   final double initialAmount;
   final String? initialAccountId;
 
   /// AI 解析出的草稿：非空时预填表单并显示复核提示，供用户确认/修改后落账。
   final AiEntryDraft? initialDraft;
+
+  /// 新建交易随草稿带入的外部来源证据。自动采集确认页使用它把原始事件与正式交易
+  /// 一次落库；普通手工/AI 记账保持空列表。
+  final List<EntrySourceRecord> initialSourceRecords;
 
   /// 草稿编辑模式下要编辑的交易；非空即进入「返回草稿不落库」模式。
   final LedgerEntry? draftEntry;
@@ -1758,6 +1764,10 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
           : 0,
       reimbursable: _type == EntryType.expense && _reimbursable,
       refundedBaseAmount: original?.refundedBaseAmount ?? 0,
+      reconciliationStatus: widget.initialSourceRecords.isEmpty
+          ? original?.reconciliationStatus ?? ReconciliationStatus.unverified
+          : ReconciliationStatus.unverified,
+      sourceRecords: original?.sourceRecords ?? widget.initialSourceRecords,
     );
   }
 
@@ -1877,6 +1887,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       return false;
     }
     _saved = true;
+    _savedResult = draft;
     return true;
   }
 }

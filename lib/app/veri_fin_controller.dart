@@ -6,7 +6,9 @@ import 'package:flutter/foundation.dart' hide Category;
 import '../data/ledger_repository.dart';
 import '../local_storage/local_storage.dart';
 import 'ai/ai_capabilities.dart';
+import 'ai/ai_entry_parser.dart';
 import 'ai/ai_settings.dart';
+import 'auto_capture/capture_parser.dart';
 import 'app_lock.dart';
 import 'backup/backup_settings.dart';
 import 'backup/payment_import.dart';
@@ -91,6 +93,7 @@ const String _moneyUnitStyleKey = 'verifin.money_unit_style.v1';
 const String _hideSingleCurrencyUnitKey =
     'verifin.hide_single_currency_unit.v1';
 const String _autoSuggestKey = 'verifin.auto_suggest.v1';
+const String _autoCaptureSettingsKey = 'verifin.auto_capture.v2';
 const String _runningBalanceKey = 'verifin.entry_running_balance.v1';
 const String _aiSettingsKey = 'verifin.ai.v1';
 const String _aiCapabilitiesKey = 'verifin.ai_capabilities.v1';
@@ -175,6 +178,7 @@ class VeriFinController extends ChangeNotifier
 
   @override
   void dispose() {
+    _controllerDisposed = true;
     themePreferenceListenable.dispose();
     localePreferenceListenable.dispose();
     aiCapabilityListenable.dispose();

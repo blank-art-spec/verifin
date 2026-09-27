@@ -1,9 +1,11 @@
 /// Android MethodChannel 桥（channel：`verifin/app`）。
 ///
-/// 出站能力（Flutter → 原生）按域拆分为四个 Bridge 类，各在自己的 part 文件里、
+/// 出站能力（Flutter → 原生）按域拆分为多个 Bridge 类，各在自己的 part 文件里、
 /// 互不相干，新增原生能力放进对应域（或新开一个 part），不要再堆回一个类：
 /// - [AppCaptureBridge]（platform_bridge_capture.dart）：快速记账磁贴入口、
 ///   分享/外部采集内容消费；
+/// - [AppAutoCaptureBridge]（platform_bridge_auto_capture.dart）：支付通知与可选短信
+///   采集配置、持久队列读取与安全确认；
 /// - [AppUpdateBridge]（platform_bridge_update.dart）：GitHub Release 更新
 ///   检查与下载；
 /// - [AppWidgetBridge]（platform_bridge_widget.dart）：桌面小组件数据推送与
@@ -19,7 +21,11 @@ library;
 import 'package:flutter/foundation.dart';
 import 'package:flutter/services.dart';
 
+import 'auto_capture/capture_parser.dart';
+import 'models.dart';
+
 part 'platform_bridge_capture.dart';
+part 'platform_bridge_auto_capture.dart';
 part 'platform_bridge_storage.dart';
 part 'platform_bridge_update.dart';
 part 'platform_bridge_widget.dart';
@@ -36,6 +42,10 @@ void _ensureInboundDispatcher() {
     }
     if (call.method == 'openSharedCapture') {
       await _sharedCaptureHandler?.call();
+      return;
+    }
+    if (call.method == 'autoCaptureAvailable') {
+      await _autoCaptureAvailableHandler?.call();
       return;
     }
     if (call.method == 'updateDownloadProgress') {

@@ -26,4 +26,32 @@ void main() {
     expect(manifest, contains('android:name=".NetWorthWidgetProvider"'));
     expect(manifest, contains('android:name=".TrendWidgetProvider"'));
   });
+
+  test('GitHub 渠道声明通知监听和仅接收新短信所需能力', () {
+    final manifest = File(
+      'android/app/src/main/AndroidManifest.xml',
+    ).readAsStringSync();
+
+    expect(manifest, contains('android.permission.RECEIVE_SMS'));
+    expect(manifest, isNot(contains('android.permission.READ_SMS')));
+    expect(
+      manifest,
+      contains('android:name=".PaymentNotificationListenerService"'),
+    );
+    expect(manifest, contains('android:name=".SmsCaptureReceiver"'));
+    expect(
+      manifest,
+      contains('android.permission.BIND_NOTIFICATION_LISTENER_SERVICE'),
+    );
+  });
+
+  test('Play 渠道显式移除短信权限和接收器', () {
+    final manifest = File(
+      'android/app/src/play/AndroidManifest.xml',
+    ).readAsStringSync();
+
+    expect(manifest, contains('android:name="android.permission.RECEIVE_SMS"'));
+    expect(manifest, contains('tools:node="remove"'));
+    expect(manifest, contains('android:name=".SmsCaptureReceiver"'));
+  });
 }

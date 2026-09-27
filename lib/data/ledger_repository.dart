@@ -55,6 +55,34 @@ abstract interface class LedgerRepository {
   Future<List<LedgerEntry>> loadEntries();
   Future<void> saveEntries(List<LedgerEntry> entries);
 
+  /// 读取设备本地的原始采集事件。事件不进入账本备份，但必须跨进程重启保留。
+  Future<List<CaptureEvent>> loadCaptureEvents();
+
+  /// 以传入列表整体替换采集事件表。
+  Future<void> saveCaptureEvents(List<CaptureEvent> events);
+
+  /// 读取当前设备上的自动识别规则。
+  Future<List<AutoCaptureRule>> loadAutoCaptureRules();
+
+  /// 以传入列表整体替换自动识别规则表。
+  Future<void> saveAutoCaptureRules(List<AutoCaptureRule> rules);
+
+  /// 原子保存原始事件与规则。
+  ///
+  /// 删除账户、分类或标签时，两张表的候选/动作引用必须一起清理，避免只成功一半。
+  Future<void> saveAutoCaptureMetadata({
+    required List<CaptureEvent> captureEvents,
+    required List<AutoCaptureRule> rules,
+  });
+
+  /// 原子保存正式交易与原始事件状态。
+  ///
+  /// 自动入账/合并证据时必须使用此入口，避免“交易已写入但事件仍待确认”造成重复入账。
+  Future<void> saveCaptureProcessing({
+    required List<LedgerEntry> entries,
+    required List<CaptureEvent> captureEvents,
+  });
+
   Future<List<LedgerBook>> loadBooks();
   Future<void> saveBooks(List<LedgerBook> books);
 
@@ -195,6 +223,109 @@ class SqliteLedgerRepository implements LedgerRepository {
     return _enqueueWrite(
       () => _incrementalReplace('entries', snapshot.map(_entryToRow)),
     );
+  }
+
+  // ---- 自动采集原始事件与规则 ----
+
+  @override
+  Future<List<CaptureEvent>> loadCaptureEvents() async {
+    final rows = await _db.query(
+      'capture_events',
+      orderBy: 'received_at DESC, id DESC',
+    );
+    final events = rows.map(_captureEventFromRow).toList();
+    _seedSnapshot('capture_events', events.map(_captureEventToRow));
+    return events;
+  }
+
+  @override
+  Future<void> saveCaptureEvents(List<CaptureEvent> events) {
+    final snapshot = List<CaptureEvent>.of(events);
+    return _enqueueWrite(
+      () => _incrementalReplace(
+        'capture_events',
+        snapshot.map(_captureEventToRow),
+      ),
+    );
+  }
+
+  @override
+  Future<List<AutoCaptureRule>> loadAutoCaptureRules() async {
+    final rows = await _db.query(
+      'auto_capture_rules',
+      orderBy: 'priority DESC, id ASC',
+    );
+    final rules = rows.map(_autoCaptureRuleFromRow).toList();
+    _seedSnapshot('auto_capture_rules', rules.map(_autoCaptureRuleToRow));
+    return rules;
+  }
+
+  @override
+  Future<void> saveAutoCaptureRules(List<AutoCaptureRule> rules) {
+    final snapshot = List<AutoCaptureRule>.of(rules);
+    return _enqueueWrite(
+      () => _incrementalReplace(
+        'auto_capture_rules',
+        snapshot.map(_autoCaptureRuleToRow),
+      ),
+    );
+  }
+
+  @override
+  Future<void> saveAutoCaptureMetadata({
+    required List<CaptureEvent> captureEvents,
+    required List<AutoCaptureRule> rules,
+  }) {
+    final eventSnapshot = List<CaptureEvent>.of(captureEvents);
+    final ruleSnapshot = List<AutoCaptureRule>.of(rules);
+    return _enqueueWrite(() async {
+      final eventRows = eventSnapshot
+          .map(_captureEventToRow)
+          .toList(growable: false);
+      final ruleRows = ruleSnapshot
+          .map(_autoCaptureRuleToRow)
+          .toList(growable: false);
+      final eventDiff = _diffRows(
+        _rowSnapshots['capture_events'],
+        _byId(eventRows),
+      );
+      final ruleDiff = _diffRows(
+        _rowSnapshots['auto_capture_rules'],
+        _byId(ruleRows),
+      );
+      await _db.transaction((txn) async {
+        await _applyRowDiffInTxn(txn, 'capture_events', eventDiff);
+        await _applyRowDiffInTxn(txn, 'auto_capture_rules', ruleDiff);
+      });
+      _seedSnapshot('capture_events', eventRows);
+      _seedSnapshot('auto_capture_rules', ruleRows);
+    });
+  }
+
+  @override
+  Future<void> saveCaptureProcessing({
+    required List<LedgerEntry> entries,
+    required List<CaptureEvent> captureEvents,
+  }) {
+    final entrySnapshot = List<LedgerEntry>.of(entries);
+    final eventSnapshot = List<CaptureEvent>.of(captureEvents);
+    return _enqueueWrite(() async {
+      final entryRows = entrySnapshot.map(_entryToRow).toList(growable: false);
+      final eventRows = eventSnapshot
+          .map(_captureEventToRow)
+          .toList(growable: false);
+      final entryDiff = _diffRows(_rowSnapshots['entries'], _byId(entryRows));
+      final eventDiff = _diffRows(
+        _rowSnapshots['capture_events'],
+        _byId(eventRows),
+      );
+      await _db.transaction((txn) async {
+        await _applyRowDiffInTxn(txn, 'entries', entryDiff);
+        await _applyRowDiffInTxn(txn, 'capture_events', eventDiff);
+      });
+      _seedSnapshot('entries', entryRows);
+      _seedSnapshot('capture_events', eventRows);
+    });
   }
 
   // ---- 账本 ----
@@ -958,6 +1089,126 @@ class SqliteLedgerRepository implements LedgerRepository {
         : jsonEncode(e.sourceRecords.map((record) => record.toJson()).toList()),
   };
 
+  static Map<String, Object?> _captureEventToRow(CaptureEvent event) =>
+      <String, Object?>{
+        'id': event.id,
+        'book_id': event.bookId,
+        'source_kind': event.sourceKind.name,
+        'source_id': event.sourceId,
+        'source_label': event.sourceLabel,
+        'source_event_id': event.sourceEventId,
+        'raw_text': event.rawText,
+        'received_at': event.receivedAt.millisecondsSinceEpoch,
+        'fingerprint': event.fingerprint,
+        'parsed_amount': event.parsedAmount,
+        'currency_code': event.currencyCode,
+        'merchant': event.merchant,
+        'card_last4': event.cardLast4,
+        'transaction_kind': event.kind.name,
+        'account_candidate_id': event.accountCandidateId,
+        'to_account_candidate_id': event.toAccountCandidateId,
+        'category_candidate_id': event.categoryCandidateId,
+        'tag_candidate_ids': event.tagCandidateIds.isEmpty
+            ? null
+            : jsonEncode(event.tagCandidateIds),
+        'confidence': event.confidence.name,
+        'confidence_score': event.confidenceScore,
+        'status': event.status.name,
+        'linked_entry_id': event.linkedEntryId,
+        'duplicate_entry_id': event.duplicateEntryId,
+        'applied_rule_ids': event.appliedRuleIds.isEmpty
+            ? null
+            : jsonEncode(event.appliedRuleIds),
+        'ai_assisted': event.aiAssisted ? 1 : 0,
+        'failure_reason': event.failureReason,
+        'processed_at': event.processedAt?.millisecondsSinceEpoch,
+      };
+
+  static CaptureEvent _captureEventFromRow(
+    Map<String, Object?> row,
+  ) => CaptureEvent(
+    id: row['id'] as String,
+    bookId: row['book_id'] as String,
+    sourceKind: CaptureSourceKind.fromStorage(row['source_kind'] as String?),
+    sourceId: row['source_id'] as String? ?? '',
+    sourceLabel: row['source_label'] as String? ?? '',
+    sourceEventId: row['source_event_id'] as String? ?? '',
+    rawText: row['raw_text'] as String? ?? '',
+    receivedAt: DateTime.fromMillisecondsSinceEpoch(row['received_at'] as int),
+    fingerprint: row['fingerprint'] as String? ?? '',
+    parsedAmount: (row['parsed_amount'] as num?)?.toDouble(),
+    currencyCode: row['currency_code'] as String? ?? defaultCurrencyCode,
+    merchant: row['merchant'] as String? ?? '',
+    cardLast4: row['card_last4'] as String? ?? '',
+    kind: CaptureTransactionKind.fromStorage(
+      row['transaction_kind'] as String?,
+    ),
+    accountCandidateId: row['account_candidate_id'] as String?,
+    toAccountCandidateId: row['to_account_candidate_id'] as String?,
+    categoryCandidateId: row['category_candidate_id'] as String?,
+    tagCandidateIds: _decodeStringList(row['tag_candidate_ids']),
+    confidence: CaptureConfidence.fromStorage(row['confidence'] as String?),
+    confidenceScore: (row['confidence_score'] as num?)?.toDouble() ?? 0,
+    status: CaptureStatus.fromStorage(row['status'] as String?),
+    linkedEntryId: row['linked_entry_id'] as String?,
+    duplicateEntryId: row['duplicate_entry_id'] as String?,
+    appliedRuleIds: _decodeStringList(row['applied_rule_ids']),
+    aiAssisted: (row['ai_assisted'] as int? ?? 0) == 1,
+    failureReason: row['failure_reason'] as String? ?? '',
+    processedAt: row['processed_at'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(row['processed_at'] as int),
+  );
+
+  static Map<String, Object?> _autoCaptureRuleToRow(
+    AutoCaptureRule rule,
+  ) => <String, Object?>{
+    'id': rule.id,
+    'book_id': rule.bookId,
+    'name': rule.name,
+    'priority': rule.priority,
+    'enabled': rule.enabled ? 1 : 0,
+    'source_kind': rule.sourceKind?.name,
+    'source_id': rule.sourceId,
+    'text_contains': rule.textContains,
+    'card_last4': rule.cardLast4,
+    'exact_amount': rule.exactAmount,
+    'match_kind': rule.matchKind?.name,
+    'set_kind': rule.setKind?.name,
+    'set_account_id': rule.setAccountId,
+    'set_to_account_id': rule.setToAccountId,
+    'set_category_id': rule.setCategoryId,
+    'set_tag_ids': rule.setTagIds.isEmpty ? null : jsonEncode(rule.setTagIds),
+    'set_merchant': rule.setMerchant,
+  };
+
+  static AutoCaptureRule _autoCaptureRuleFromRow(Map<String, Object?> row) =>
+      AutoCaptureRule(
+        id: row['id'] as String,
+        bookId: row['book_id'] as String,
+        name: row['name'] as String? ?? '',
+        priority: (row['priority'] as num?)?.toInt() ?? 0,
+        enabled: ((row['enabled'] as int?) ?? 1) != 0,
+        sourceKind: row['source_kind'] == null
+            ? null
+            : CaptureSourceKind.fromStorage(row['source_kind'] as String?),
+        sourceId: row['source_id'] as String? ?? '',
+        textContains: row['text_contains'] as String? ?? '',
+        cardLast4: row['card_last4'] as String? ?? '',
+        exactAmount: (row['exact_amount'] as num?)?.toDouble(),
+        matchKind: row['match_kind'] == null
+            ? null
+            : CaptureTransactionKind.fromStorage(row['match_kind'] as String?),
+        setKind: row['set_kind'] == null
+            ? null
+            : CaptureTransactionKind.fromStorage(row['set_kind'] as String?),
+        setAccountId: row['set_account_id'] as String?,
+        setToAccountId: row['set_to_account_id'] as String?,
+        setCategoryId: row['set_category_id'] as String?,
+        setTagIds: _decodeStringList(row['set_tag_ids']),
+        setMerchant: row['set_merchant'] as String? ?? '',
+      );
+
   static LedgerEntry _entryFromRow(Map<String, Object?> row) => LedgerEntry(
     id: row['id'] as String,
     bookId: row['book_id'] as String,
@@ -1009,6 +1260,19 @@ class SqliteLedgerRepository implements LedgerRepository {
       }
     }
     return const <String>[];
+  }
+
+  /// 解码 capture 表中的 JSON 字符串数组；损坏值按空列表降级，不阻断账本启动。
+  static List<String> _decodeStringList(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const <String>[];
+    try {
+      final decoded = jsonDecode(raw);
+      return decoded is List
+          ? decoded.map((item) => item.toString()).toList(growable: false)
+          : const <String>[];
+    } on Object {
+      return const <String>[];
+    }
   }
 
   static Map<String, Object?> _tagToRow(Tag t, int index) => <String, Object?>{

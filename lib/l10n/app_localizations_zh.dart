@@ -5004,7 +5004,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get creditCycleBudgetLabel => '本账期预算';
 
   @override
-  String get creditCycleSetupHint => '设置账单日后显示账期概览';
+  String get creditCycleSetupHint => '设置账单日与还款规则后显示账期概览';
 
   @override
   String creditCycleRange(String start, String end) {
@@ -5012,7 +5012,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get creditCycleMissingRate => '部分子账户缺少汇率，合计暂不完整';
+  String get creditCycleMissingRate => '部分子账户缺少汇率，合计暂不展示';
 
   @override
   String get creditCycleNetSpending => '本账期净消费';
@@ -5038,4 +5038,222 @@ class AppLocalizationsZh extends AppLocalizations {
   String creditCycleBudgetOver(String amount) {
     return '已超 $amount';
   }
+
+  @override
+  String get commonRefresh => '刷新';
+
+  @override
+  String get commonAdd => '新增';
+
+  @override
+  String get autoCaptureTitle => '自动记账与智能识别';
+
+  @override
+  String get autoCaptureShort => '自动识别';
+
+  @override
+  String get autoCaptureSubtitle => '原始事件先保存，确认后再成为正式交易';
+
+  @override
+  String autoCapturePendingSummary(int count) {
+    return '$count 笔待处理';
+  }
+
+  @override
+  String get autoCaptureTodayRecognized => '今日识别';
+
+  @override
+  String get autoCapturePostedCount => '自动入账';
+
+  @override
+  String get autoCapturePendingCount => '待确认';
+
+  @override
+  String get autoCaptureDuplicateCount => '疑似重复';
+
+  @override
+  String get autoCaptureUnrecognizedCount => '未识别';
+
+  @override
+  String get autoCaptureSourcesTitle => '采集与安全边界';
+
+  @override
+  String get autoCaptureNotificationTitle => '支付通知监听';
+
+  @override
+  String get autoCaptureNotificationDesc => '监听已选支付来源；通知先保存为原始事件';
+
+  @override
+  String get autoCaptureNotificationPermissionNeeded => '需要在系统“通知使用权”中授权';
+
+  @override
+  String get autoCaptureSmsTitle => '消费短信补充';
+
+  @override
+  String get autoCaptureSmsDesc => '可选，仅接收开启后的新短信，不读取历史短信';
+
+  @override
+  String get autoCaptureSmsUnavailable =>
+      'Google Play 渠道不包含短信权限，请使用通知监听或 GitHub 版本';
+
+  @override
+  String get autoCaptureSmsPermissionDenied => '未获得短信权限，短信补充保持关闭';
+
+  @override
+  String get autoCaptureListenAllTitle => '覆盖银行等全部来源';
+
+  @override
+  String get autoCaptureListenAllDesc =>
+      '开启后可覆盖银行 App；读取所有通知后仍先做金融关键词过滤，隐私范围更大';
+
+  @override
+  String get autoCaptureAiAssistTitle => 'AI 补充识别';
+
+  @override
+  String get autoCaptureAiAssistDesc => '本地规则不足时发送原文到你配置的 AI；结果始终待确认，不会自动入账';
+
+  @override
+  String get autoCaptureAiAssistNotConfigured => '请先在 AI 设置中配置请求地址、密钥和模型';
+
+  @override
+  String get autoCaptureAiAssistedLabel => 'AI 已补充';
+
+  @override
+  String get autoCaptureAutoPostTitle => '高置信度自动入账';
+
+  @override
+  String get autoCaptureAutoPostDesc => '金额、账户、类型和分类都明确时才自动创建交易';
+
+  @override
+  String get autoCaptureRulesTitle => '自动识别规则';
+
+  @override
+  String get autoCaptureRulesSubtitle => '本地规则优先于历史学习与后续 AI 补充';
+
+  @override
+  String get autoCaptureRulesEmpty => '还没有规则。点右上角新增一条可解释的确定性规则。';
+
+  @override
+  String get autoCaptureQueueTitle => '待处理与最近自动入账';
+
+  @override
+  String get autoCaptureQueueEmpty => '暂时没有待处理事件';
+
+  @override
+  String get autoCaptureReview => '复核记账';
+
+  @override
+  String get autoCaptureMerge => '合并已有交易';
+
+  @override
+  String get autoCaptureUndo => '撤销自动入账';
+
+  @override
+  String get autoCaptureRetry => '重新解析';
+
+  @override
+  String get autoCaptureIgnore => '忽略';
+
+  @override
+  String get autoCaptureMisidentified => '标记误识别';
+
+  @override
+  String get autoCaptureNeedsMoreInfo => '金额或类型信息不足，请先添加规则后重新解析';
+
+  @override
+  String get autoCaptureConfirmRefundTitle => '确认创建退款？';
+
+  @override
+  String get autoCaptureConfirmRefundMessage =>
+      '将把这条事件关联到唯一匹配的原支出并创建已到账退款。请确认金额、账户和商户均正确。';
+
+  @override
+  String get autoCaptureRuleCreateTitle => '新增自动识别规则';
+
+  @override
+  String get autoCaptureRuleEditTitle => '编辑自动识别规则';
+
+  @override
+  String get autoCaptureRuleName => '规则名称';
+
+  @override
+  String get autoCaptureRuleConditions => '匹配条件（同时满足）';
+
+  @override
+  String get autoCaptureRuleActions => '命中后执行';
+
+  @override
+  String get autoCaptureRuleSourceKind => '来源通道';
+
+  @override
+  String get autoCaptureRuleSourceId => '来源包名或短信号码（可选）';
+
+  @override
+  String get autoCaptureRuleKeyword => '原文包含关键词';
+
+  @override
+  String get autoCaptureRuleCardLast4 => '卡号后四位';
+
+  @override
+  String get autoCaptureRuleAmount => '精确金额';
+
+  @override
+  String get autoCaptureRuleMatchKind => '已识别类型';
+
+  @override
+  String get autoCaptureRuleSetKind => '设置交易类型';
+
+  @override
+  String get autoCaptureRuleAccount => '设置账户';
+
+  @override
+  String get autoCaptureRuleToAccount => '设置转入账户';
+
+  @override
+  String get autoCaptureRuleCategory => '设置分类';
+
+  @override
+  String get autoCaptureRuleTags => '设置项目/场景标签';
+
+  @override
+  String get autoCaptureRuleMerchant => '规范商户名称';
+
+  @override
+  String get autoCaptureRuleAny => '不限制';
+
+  @override
+  String get autoCaptureRuleNoChange => '不修改';
+
+  @override
+  String get autoCaptureRuleInvalid => '请至少填写一个匹配条件和一个执行动作';
+
+  @override
+  String get autoCaptureRuleDeleteTitle => '删除自动识别规则？';
+
+  @override
+  String get autoCaptureRuleDeleteMessage => '删除后不会改写已经处理的事件，但后续事件不再应用这条规则。';
+
+  @override
+  String get autoCaptureSourceNotification => '通知';
+
+  @override
+  String get autoCaptureSourceSms => '短信';
+
+  @override
+  String get autoCaptureSourceShared => '分享文本';
+
+  @override
+  String get autoCaptureSourceManual => '手动导入';
+
+  @override
+  String get autoCaptureKindCreditRepayment => '信用卡还款';
+
+  @override
+  String get autoCaptureKindCreditLineRepayment => '花呗/白条还款';
+
+  @override
+  String get autoCaptureKindCashback => '红包/返现';
+
+  @override
+  String get autoCaptureKindUnknown => '未知';
 }

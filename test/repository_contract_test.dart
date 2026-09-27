@@ -64,6 +64,8 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       final repo = await openRepo();
       expect(await repo.hasAnyData(), isFalse);
       expect(await repo.loadEntries(), isEmpty);
+      expect(await repo.loadCaptureEvents(), isEmpty);
+      expect(await repo.loadAutoCaptureRules(), isEmpty);
       expect(await repo.loadBooks(), isEmpty);
       expect(await repo.loadAccounts(), isEmpty);
       expect(await repo.loadCreditAccounts(), isEmpty);
@@ -181,8 +183,39 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
           updatedAt: DateTime(2026, 2, 1, 8),
         ),
       ];
+      final captureEvents = <CaptureEvent>[
+        CaptureEvent(
+          id: 'capture-1',
+          bookId: 'default',
+          sourceKind: CaptureSourceKind.notification,
+          sourceId: 'com.example.bank',
+          sourceEventId: 'notice-1',
+          rawText: '消费10元',
+          receivedAt: DateTime(2026, 2, 1, 9),
+          fingerprint: 'capture-fingerprint-1',
+          parsedAmount: 10,
+          merchant: '测试商户',
+          kind: CaptureTransactionKind.expense,
+          confidence: CaptureConfidence.medium,
+          confidenceScore: 0.7,
+          status: CaptureStatus.pendingReview,
+        ),
+      ];
+      const autoCaptureRules = <AutoCaptureRule>[
+        AutoCaptureRule(
+          id: 'capture-rule-1',
+          bookId: 'default',
+          name: '测试规则',
+          priority: 10,
+          textContains: '测试商户',
+          setKind: CaptureTransactionKind.expense,
+          setAccountId: 'acc-1',
+        ),
+      ];
 
       await repo.saveEntries(entries);
+      await repo.saveCaptureEvents(captureEvents);
+      await repo.saveAutoCaptureRules(autoCaptureRules);
       await repo.saveBooks(books);
       await repo.saveAccounts(accounts);
       await repo.saveCreditAccounts(creditAccounts);
@@ -194,12 +227,14 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       await repo.saveExchangeRates(rates);
 
       expect(_jsonOf(await repo.loadEntries()), _jsonOf(entries));
+      expect(_jsonOf(await repo.loadCaptureEvents()), _jsonOf(captureEvents));
+      expect(
+        _jsonOf(await repo.loadAutoCaptureRules()),
+        _jsonOf(autoCaptureRules),
+      );
       expect(_jsonOf(await repo.loadBooks()), _jsonOf(books));
       expect(_jsonOf(await repo.loadAccounts()), _jsonOf(accounts));
-      expect(
-        _jsonOf(await repo.loadCreditAccounts()),
-        _jsonOf(creditAccounts),
-      );
+      expect(_jsonOf(await repo.loadCreditAccounts()), _jsonOf(creditAccounts));
       expect(_jsonOf(await repo.loadAccountGroups()), _jsonOf(groups));
       expect(_jsonOf(await repo.loadCategories()), _jsonOf(categories));
       expect(_jsonOf(await repo.loadTags()), _jsonOf(tags));
@@ -284,6 +319,62 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       expect((await repo.loadExchangeRates()).single.currencyCode, 'EUR');
     });
 
+    test('自动采集联合保存保持交易、事件与规则一致', () async {
+      final repo = await openRepo();
+      final event = CaptureEvent(
+        id: 'capture-atomic',
+        bookId: 'default',
+        sourceKind: CaptureSourceKind.sms,
+        sourceId: '95555',
+        sourceEventId: 'sms-atomic',
+        rawText: '消费10元',
+        receivedAt: DateTime(2026, 3, 1, 9),
+        fingerprint: 'capture-atomic-fingerprint',
+      );
+      const rule = AutoCaptureRule(
+        id: 'capture-rule-atomic',
+        bookId: 'default',
+        name: '联合保存',
+        priority: 1,
+        textContains: '消费',
+        setMerchant: '测试商户',
+      );
+
+      await repo.saveAutoCaptureMetadata(
+        captureEvents: <CaptureEvent>[event],
+        rules: const <AutoCaptureRule>[rule],
+      );
+      final confirmed = event.copyWith(
+        parsedAmount: 10,
+        merchant: '测试商户',
+        kind: CaptureTransactionKind.expense,
+        confidence: CaptureConfidence.high,
+        confidenceScore: 1,
+        status: CaptureStatus.autoPosted,
+        linkedEntryId: 'capture-entry',
+        processedAt: DateTime(2026, 3, 1, 9, 1),
+      );
+      final entry = _entry(
+        'capture-entry',
+        DateTime(2026, 3, 1, 9),
+        note: '测试商户',
+      );
+      await repo.saveCaptureProcessing(
+        entries: <LedgerEntry>[entry],
+        captureEvents: <CaptureEvent>[confirmed],
+      );
+
+      expect(_jsonOf(await repo.loadEntries()), _jsonOf(<LedgerEntry>[entry]));
+      expect(
+        _jsonOf(await repo.loadCaptureEvents()),
+        _jsonOf(<CaptureEvent>[confirmed]),
+      );
+      expect(
+        _jsonOf(await repo.loadAutoCaptureRules()),
+        _jsonOf(const <AutoCaptureRule>[rule]),
+      );
+    });
+
     test('saveCreditAccountAggregate 同时覆盖信用主体与币种子账户', () async {
       final repo = await openRepo();
       const creditAccounts = <CreditAccount>[
@@ -337,10 +428,7 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
         accounts: accounts,
       );
 
-      expect(
-        _jsonOf(await repo.loadCreditAccounts()),
-        _jsonOf(creditAccounts),
-      );
+      expect(_jsonOf(await repo.loadCreditAccounts()), _jsonOf(creditAccounts));
       expect(_jsonOf(await repo.loadAccounts()), _jsonOf(accounts));
     });
 

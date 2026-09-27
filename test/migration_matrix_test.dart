@@ -217,6 +217,8 @@ void main() {
       expect(await repo.loadBillingStatements(), isEmpty);
       expect(await repo.loadStatementRepaymentAllocations(), isEmpty);
       expect(await repo.loadCreditAccounts(), isEmpty);
+      expect(await repo.loadCaptureEvents(), isEmpty);
+      expect(await repo.loadAutoCaptureRules(), isEmpty);
 
       await app.close();
     });
