@@ -11,6 +11,7 @@ import '../app/root_navigation.dart';
 import '../app/series_math.dart';
 import '../app/veri_fin_scope.dart';
 import 'ai_chat_page.dart';
+import 'auto_capture_page.dart';
 import 'budget_pages.dart';
 import 'category_management_page.dart';
 import 'currency_rates_page.dart';
@@ -311,6 +312,21 @@ class ProfilePage extends StatelessWidget {
                 onTap: () => Navigator.of(context).push<void>(
                   MaterialPageRoute<void>(
                     builder: (context) => const AiChatPage(),
+                  ),
+                ),
+              ),
+              _FeatureTileData(
+                icon: Icons.auto_mode_outlined,
+                color: veriSemantic(context, veriWarning),
+                label: AppLocalizations.of(context).autoCaptureTitle,
+                subtitle: controller.autoCaptureStats().pendingReview == 0
+                    ? AppLocalizations.of(context).autoCaptureShort
+                    : AppLocalizations.of(context).autoCapturePendingSummary(
+                        controller.autoCaptureStats().pendingReview,
+                      ),
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (context) => const AutoCapturePage(),
                   ),
                 ),
               ),

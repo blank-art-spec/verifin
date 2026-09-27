@@ -219,6 +219,55 @@ void main() {
     createdAt: DateTime(2026, 8, 13, 10, 0, 0, 123),
   );
 
+  final captureEvent = CaptureEvent(
+    id: 'capture-1',
+    bookId: 'book-x',
+    sourceKind: CaptureSourceKind.notification,
+    sourceId: 'com.example.bank',
+    sourceLabel: '示例银行',
+    sourceEventId: 'notification-42',
+    rawText: '尾号4185消费59.49元，商户麦当劳',
+    receivedAt: DateTime(2026, 8, 13, 12, 30, 0, 123),
+    fingerprint: 'capture-fingerprint-1',
+    parsedAmount: 59.49,
+    currencyCode: 'CNY',
+    merchant: '麦当劳',
+    cardLast4: '4185',
+    kind: CaptureTransactionKind.expense,
+    accountCandidateId: 'acc-x',
+    toAccountCandidateId: 'acc-y',
+    categoryCandidateId: 'cat-x',
+    tagCandidateIds: const <String>['t1', 't2'],
+    confidence: CaptureConfidence.high,
+    confidenceScore: 0.96,
+    status: CaptureStatus.autoPosted,
+    linkedEntryId: 'entry-full',
+    duplicateEntryId: 'entry-min',
+    appliedRuleIds: const <String>['capture-rule-1'],
+    failureReason: '非默认测试值',
+    processedAt: DateTime(2026, 8, 13, 12, 30, 1, 456),
+  );
+
+  const captureRule = AutoCaptureRule(
+    id: 'capture-rule-1',
+    bookId: 'book-x',
+    name: '麦当劳早餐',
+    priority: 88,
+    enabled: false,
+    sourceKind: CaptureSourceKind.notification,
+    sourceId: 'com.example.bank',
+    textContains: '麦当劳',
+    cardLast4: '4185',
+    exactAmount: 59.49,
+    matchKind: CaptureTransactionKind.expense,
+    setKind: CaptureTransactionKind.expense,
+    setAccountId: 'acc-x',
+    setToAccountId: 'acc-y',
+    setCategoryId: 'cat-x',
+    setTagIds: <String>['t1', 't2'],
+    setMerchant: '麦当劳',
+  );
+
   /// 经真实 jsonEncode/jsonDecode 走一圈再 fromJson：既验证映射互逆，也验证
   /// toJson 产物真的可被 JSON 编码（残留 DateTime 等原始对象会在这里炸）。
   Map<String, Object?> jsonRoundTrip(Map<String, Object?> json) {
@@ -310,6 +359,17 @@ void main() {
       expect(restoredAllocation.toJson(), allocation.toJson());
     });
 
+    test('自动采集事件与规则', () {
+      final restoredEvent = CaptureEvent.fromJson(
+        jsonRoundTrip(captureEvent.toJson()),
+      );
+      final restoredRule = AutoCaptureRule.fromJson(
+        jsonRoundTrip(captureRule.toJson()),
+      );
+      expect(restoredEvent.toJson(), captureEvent.toJson());
+      expect(restoredRule.toJson(), captureRule.toJson());
+    });
+
     test('UserProfile', () {
       const profile = UserProfile(
         nickname: '测试昵称',
@@ -368,6 +428,8 @@ void main() {
       await repo.saveStatementRepaymentAllocations(
         <StatementRepaymentAllocation>[allocation],
       );
+      await repo.saveCaptureEvents(<CaptureEvent>[captureEvent]);
+      await repo.saveAutoCaptureRules(<AutoCaptureRule>[captureRule]);
 
       final entries = await repo.loadEntries();
       expect(
@@ -418,6 +480,14 @@ void main() {
       expect(
         (await repo.loadStatementRepaymentAllocations()).single.toJson(),
         allocation.toJson(),
+      );
+      expect(
+        (await repo.loadCaptureEvents()).single.toJson(),
+        captureEvent.toJson(),
+      );
+      expect(
+        (await repo.loadAutoCaptureRules()).single.toJson(),
+        captureRule.toJson(),
       );
     });
   });

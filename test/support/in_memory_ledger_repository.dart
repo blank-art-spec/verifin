@@ -8,6 +8,8 @@ import 'package:verifin/data/ledger_repository.dart';
 /// 从同一存储重新载入。
 class InMemoryLedgerRepository implements LedgerRepository {
   List<LedgerEntry> _entries = <LedgerEntry>[];
+  List<CaptureEvent> _captureEvents = <CaptureEvent>[];
+  List<AutoCaptureRule> _autoCaptureRules = <AutoCaptureRule>[];
   List<LedgerBook> _books = <LedgerBook>[];
   List<Account> _accounts = <Account>[];
   List<AccountGroup> _groups = <AccountGroup>[];
@@ -32,6 +34,42 @@ class InMemoryLedgerRepository implements LedgerRepository {
   @override
   Future<void> saveEntries(List<LedgerEntry> entries) async {
     _entries = List<LedgerEntry>.of(entries);
+  }
+
+  @override
+  Future<List<CaptureEvent>> loadCaptureEvents() async =>
+      List<CaptureEvent>.of(_captureEvents);
+
+  @override
+  Future<void> saveCaptureEvents(List<CaptureEvent> events) async {
+    _captureEvents = List<CaptureEvent>.of(events);
+  }
+
+  @override
+  Future<List<AutoCaptureRule>> loadAutoCaptureRules() async =>
+      List<AutoCaptureRule>.of(_autoCaptureRules);
+
+  @override
+  Future<void> saveAutoCaptureRules(List<AutoCaptureRule> rules) async {
+    _autoCaptureRules = List<AutoCaptureRule>.of(rules);
+  }
+
+  @override
+  Future<void> saveAutoCaptureMetadata({
+    required List<CaptureEvent> captureEvents,
+    required List<AutoCaptureRule> rules,
+  }) async {
+    _captureEvents = List<CaptureEvent>.of(captureEvents);
+    _autoCaptureRules = List<AutoCaptureRule>.of(rules);
+  }
+
+  @override
+  Future<void> saveCaptureProcessing({
+    required List<LedgerEntry> entries,
+    required List<CaptureEvent> captureEvents,
+  }) async {
+    _entries = List<LedgerEntry>.of(entries);
+    _captureEvents = List<CaptureEvent>.of(captureEvents);
   }
 
   @override

@@ -3,6 +3,977 @@ part of 'veri_fin_controller.dart';
 /// 控制器的「领域操作」层：交易/账户/分组/账本/分类/标签/预算/偏好/备份/
 /// 导入导出等所有对外方法。字段与持久化在 [_ControllerState]。
 mixin _ControllerOps on ChangeNotifier, _ControllerState {
+  /// 设备级自动采集配置落盘后的原生同步钩子。
+  ///
+  /// 根组件用它把开关同步给 NotificationListenerService/短信接收器；
+  /// 测试与非 Android 宿主可保持 null。
+  ValueChanged<AutoCaptureSettings>? onAutoCaptureSettingsChanged;
+
+  /// 当前账本的原始采集事件，按收到时间倒序返回不可变视图。
+  List<CaptureEvent> get captureEvents =>
+      _captureEventsView ??= List<CaptureEvent>.unmodifiable(
+        _captureEvents.where((event) => event.bookId == _activeBookId).toList()
+          ..sort((a, b) => b.receivedAt.compareTo(a.receivedAt)),
+      );
+
+  /// 当前账本的自动识别规则，优先级高的排在前面。
+  List<AutoCaptureRule> get autoCaptureRules =>
+      _autoCaptureRulesView ??= List<AutoCaptureRule>.unmodifiable(
+        _autoCaptureRules.where((rule) => rule.bookId == _activeBookId).toList()
+          ..sort((a, b) => b.priority.compareTo(a.priority)),
+      );
+
+  /// 设备级自动采集配置；默认所有监听关闭。
+  AutoCaptureSettings get autoCaptureSettings => _autoCaptureSettings;
+
+  /// 当前账本的自动化状态统计。
+  ///
+  /// [now] 可由测试注入；“今日”按本地日历日比较，不用绝对 24 小时，避免跨时区/DST 错位。
+  AutoCaptureStats autoCaptureStats({DateTime? now}) {
+    final today = now ?? DateTime.now();
+    final events = captureEvents;
+    bool isToday(DateTime value) =>
+        value.year == today.year &&
+        value.month == today.month &&
+        value.day == today.day;
+    final todayEvents = events.where((event) => isToday(event.receivedAt));
+    return AutoCaptureStats(
+      todayRecognized: todayEvents
+          .where(
+            (event) =>
+                event.kind != CaptureTransactionKind.unknown &&
+                event.parsedAmount != null,
+          )
+          .length,
+      autoPosted: todayEvents
+          .where((event) => event.status == CaptureStatus.autoPosted)
+          .length,
+      pendingReview: events
+          .where((event) => event.status.needsAttention)
+          .length,
+      duplicateSuspected: events
+          .where((event) => event.status == CaptureStatus.duplicateSuspected)
+          .length,
+      unrecognized: todayEvents
+          .where(
+            (event) =>
+                event.kind == CaptureTransactionKind.unknown ||
+                event.confidence == CaptureConfidence.low,
+          )
+          .length,
+    );
+  }
+
+  /// 显式保存设备级自动采集配置。
+  ///
+  /// 只有 KV 真正刷盘成功后才替换内存快照；原生权限与服务配置由 UI/平台桥在成功后同步。
+  Future<bool> saveAutoCaptureSettingsDraft(
+    AutoCaptureSettings settings,
+  ) async {
+    try {
+      await _store.writeAndFlush(_autoCaptureSettingsKey, settings.encode());
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _autoCaptureSettings = settings;
+    onAutoCaptureSettingsChanged?.call(settings);
+    notifyListeners();
+    return true;
+  }
+
+  /// 新增或更新一条自动识别规则。
+  ///
+  /// 规则必须属于当前账本，且至少包含一个匹配条件和一个动作；否则返回 false。
+  Future<bool> saveAutoCaptureRule(AutoCaptureRule rule) async {
+    final hasCondition =
+        rule.sourceKind != null ||
+        rule.sourceId.trim().isNotEmpty ||
+        rule.textContains.trim().isNotEmpty ||
+        rule.cardLast4.trim().isNotEmpty ||
+        rule.exactAmount != null ||
+        rule.matchKind != null;
+    final hasAction =
+        rule.setKind != null ||
+        rule.setAccountId != null ||
+        rule.setToAccountId != null ||
+        rule.setCategoryId != null ||
+        rule.setTagIds.isNotEmpty ||
+        rule.setMerchant.trim().isNotEmpty;
+    final currentAccountIds = _accounts
+        .where((account) => account.bookId == _activeBookId)
+        .map((account) => account.id)
+        .toSet();
+    final currentCategoryIds = _categories
+        .map((category) => category.id)
+        .toSet();
+    final currentTagIds = _tags.map((tag) => tag.id).toSet();
+    final ruleCategoryType = rule.setKind == CaptureTransactionKind.refund
+        ? EntryType.expense
+        : rule.setKind?.entryType;
+    final categoryTypeMatches =
+        rule.setCategoryId == null ||
+        ruleCategoryType == null ||
+        _categories.any(
+          (category) =>
+              category.id == rule.setCategoryId &&
+              category.type == ruleCategoryType,
+        );
+    final referencesExist =
+        (rule.setAccountId == null ||
+            currentAccountIds.contains(rule.setAccountId)) &&
+        (rule.setToAccountId == null ||
+            currentAccountIds.contains(rule.setToAccountId)) &&
+        (rule.setCategoryId == null ||
+            currentCategoryIds.contains(rule.setCategoryId)) &&
+        currentTagIds.containsAll(rule.setTagIds);
+    if (rule.bookId != _activeBookId ||
+        rule.name.trim().isEmpty ||
+        !hasCondition ||
+        !hasAction ||
+        !referencesExist ||
+        !categoryTypeMatches ||
+        (rule.setAccountId != null &&
+            rule.setAccountId == rule.setToAccountId) ||
+        rule.exactAmount != null &&
+            (!rule.exactAmount!.isFinite || rule.exactAmount! <= 0)) {
+      return false;
+    }
+    final next = List<AutoCaptureRule>.of(_autoCaptureRules);
+    final index = next.indexWhere((item) => item.id == rule.id);
+    final normalized = rule.copyWith(
+      name: rule.name.trim(),
+      sourceId: rule.sourceId.trim(),
+      textContains: rule.textContains.trim(),
+      cardLast4: rule.cardLast4.replaceAll(RegExp(r'\D'), ''),
+      setMerchant: rule.setMerchant.trim(),
+    );
+    if (index == -1) {
+      next.add(normalized);
+    } else {
+      next[index] = normalized;
+    }
+    try {
+      await _repository.saveAutoCaptureRules(next);
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _autoCaptureRules
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return true;
+  }
+
+  /// 删除一条当前账本规则。规则删除不改写已处理事件，历史仍保留 appliedRuleIds 便于追溯。
+  Future<bool> deleteAutoCaptureRule(String ruleId) async {
+    final next = List<AutoCaptureRule>.of(_autoCaptureRules);
+    final removed = next.where(
+      (rule) => rule.id == ruleId && rule.bookId == _activeBookId,
+    );
+    if (removed.isEmpty) return false;
+    next.removeWhere((rule) => rule.id == ruleId);
+    try {
+      await _repository.saveAutoCaptureRules(next);
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _autoCaptureRules
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return true;
+  }
+
+  /// 清理自动采集数据中已失效的实体引用。
+  ///
+  /// [removedEntryIds] 用于正式交易删除；[removedAccountIds]、
+  /// [removedCategoryIds]、[removedTagIds] 用于对应实体删除；分类合并则通过
+  /// [categoryRemap] 把候选和规则动作迁移到目标分类；[removedBookIds]
+  /// 则整体移除已不存在账本的设备本地事件与规则。事件与规则在同一事务落库，
+  /// 保存失败时不替换内存快照，由持久化错误入口提示用户。
+  Future<bool> _sanitizeAutoCaptureReferences({
+    Set<String> removedBookIds = const <String>{},
+    Set<String> removedEntryIds = const <String>{},
+    Set<String> removedAccountIds = const <String>{},
+    Set<String> removedCategoryIds = const <String>{},
+    Set<String> removedTagIds = const <String>{},
+    Map<String, String> categoryRemap = const <String, String>{},
+  }) async {
+    var eventChanged = false;
+    final nextEvents = <CaptureEvent>[];
+    for (final event in _captureEvents) {
+      if (removedBookIds.contains(event.bookId)) {
+        eventChanged = true;
+        continue;
+      }
+      var next = event;
+      var candidateInvalidated = false;
+      if (event.accountCandidateId != null &&
+          removedAccountIds.contains(event.accountCandidateId)) {
+        next = next.copyWith(clearAccountCandidateId: true);
+        candidateInvalidated = true;
+      }
+      if (event.toAccountCandidateId != null &&
+          removedAccountIds.contains(event.toAccountCandidateId)) {
+        next = next.copyWith(clearToAccountCandidateId: true);
+        candidateInvalidated = true;
+      }
+      final categoryId = event.categoryCandidateId;
+      if (categoryId != null && categoryRemap.containsKey(categoryId)) {
+        next = next.copyWith(categoryCandidateId: categoryRemap[categoryId]);
+      } else if (categoryId != null &&
+          removedCategoryIds.contains(categoryId)) {
+        next = next.copyWith(clearCategoryCandidateId: true);
+        candidateInvalidated = true;
+      }
+      final nextTagIds = event.tagCandidateIds
+          .where((id) => !removedTagIds.contains(id))
+          .toList(growable: false);
+      if (nextTagIds.length != event.tagCandidateIds.length) {
+        next = next.copyWith(tagCandidateIds: nextTagIds);
+        candidateInvalidated = true;
+      }
+      final linkedRemoved =
+          event.linkedEntryId != null &&
+          removedEntryIds.contains(event.linkedEntryId);
+      final duplicateRemoved =
+          event.duplicateEntryId != null &&
+          removedEntryIds.contains(event.duplicateEntryId);
+      if (linkedRemoved || duplicateRemoved) {
+        next = next.copyWith(
+          status: CaptureStatus.pendingReview,
+          clearLinkedEntryId: linkedRemoved,
+          clearDuplicateEntryId: duplicateRemoved,
+        );
+      } else if (candidateInvalidated && event.status.needsAttention) {
+        next = next.copyWith(status: CaptureStatus.pendingReview);
+      }
+      if (!identical(next, event)) eventChanged = true;
+      nextEvents.add(next);
+    }
+
+    var ruleChanged = false;
+    final nextRules = <AutoCaptureRule>[];
+    for (final rule in _autoCaptureRules) {
+      if (removedBookIds.contains(rule.bookId)) {
+        ruleChanged = true;
+        continue;
+      }
+      var next = rule;
+      if (rule.setAccountId != null &&
+          removedAccountIds.contains(rule.setAccountId)) {
+        next = next.copyWith(clearSetAccountId: true);
+      }
+      if (rule.setToAccountId != null &&
+          removedAccountIds.contains(rule.setToAccountId)) {
+        next = next.copyWith(clearSetToAccountId: true);
+      }
+      final categoryId = rule.setCategoryId;
+      if (categoryId != null && categoryRemap.containsKey(categoryId)) {
+        next = next.copyWith(setCategoryId: categoryRemap[categoryId]);
+      } else if (categoryId != null &&
+          removedCategoryIds.contains(categoryId)) {
+        next = next.copyWith(clearSetCategoryId: true);
+      }
+      final nextTagIds = rule.setTagIds
+          .where((id) => !removedTagIds.contains(id))
+          .toList(growable: false);
+      if (nextTagIds.length != rule.setTagIds.length) {
+        next = next.copyWith(setTagIds: nextTagIds);
+      }
+      final hasAction =
+          next.setKind != null ||
+          next.setAccountId != null ||
+          next.setToAccountId != null ||
+          next.setCategoryId != null ||
+          next.setTagIds.isNotEmpty ||
+          next.setMerchant.trim().isNotEmpty;
+      if (!hasAction && next.enabled) next = next.copyWith(enabled: false);
+      if (!identical(next, rule)) ruleChanged = true;
+      nextRules.add(next);
+    }
+    if (!eventChanged && !ruleChanged) return true;
+    try {
+      await _repository.saveAutoCaptureMetadata(
+        captureEvents: nextEvents,
+        rules: nextRules,
+      );
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _captureEvents
+      ..clear()
+      ..addAll(nextEvents);
+    _autoCaptureRules
+      ..clear()
+      ..addAll(nextRules);
+    return true;
+  }
+
+  /// 按当前账目快照清理所有悬空自动采集引用。
+  ///
+  /// 备份恢复会整体替换账目表，但原始事件与规则按隐私约定保持设备本地；因此恢复后
+  /// 必须重新核对它们的账户、分类、标签与交易关联。
+  Future<bool> _healAutoCaptureReferences() {
+    final bookIds = _ledgerBooks.map((book) => book.id).toSet();
+    final entryIds = _entries.map((entry) => entry.id).toSet();
+    final accountIds = _accounts.map((account) => account.id).toSet();
+    final categoryIds = _categories.map((category) => category.id).toSet();
+    final tagIds = _tags.map((tag) => tag.id).toSet();
+    final referencedEntryIds = <String>{
+      for (final event in _captureEvents)
+        if (event.linkedEntryId != null) event.linkedEntryId!,
+      for (final event in _captureEvents)
+        if (event.duplicateEntryId != null) event.duplicateEntryId!,
+    };
+    final referencedAccountIds = <String>{
+      for (final event in _captureEvents)
+        if (event.accountCandidateId != null) event.accountCandidateId!,
+      for (final event in _captureEvents)
+        if (event.toAccountCandidateId != null) event.toAccountCandidateId!,
+      for (final rule in _autoCaptureRules)
+        if (rule.setAccountId != null) rule.setAccountId!,
+      for (final rule in _autoCaptureRules)
+        if (rule.setToAccountId != null) rule.setToAccountId!,
+    };
+    final referencedCategoryIds = <String>{
+      for (final event in _captureEvents)
+        if (event.categoryCandidateId != null) event.categoryCandidateId!,
+      for (final rule in _autoCaptureRules)
+        if (rule.setCategoryId != null) rule.setCategoryId!,
+    };
+    final referencedTagIds = <String>{
+      for (final event in _captureEvents) ...event.tagCandidateIds,
+      for (final rule in _autoCaptureRules) ...rule.setTagIds,
+    };
+    final referencedBookIds = <String>{
+      for (final event in _captureEvents) event.bookId,
+      for (final rule in _autoCaptureRules) rule.bookId,
+    };
+    return _sanitizeAutoCaptureReferences(
+      removedBookIds: referencedBookIds.difference(bookIds),
+      removedEntryIds: referencedEntryIds.difference(entryIds),
+      removedAccountIds: referencedAccountIds.difference(accountIds),
+      removedCategoryIds: referencedCategoryIds.difference(categoryIds),
+      removedTagIds: referencedTagIds.difference(tagIds),
+    );
+  }
+
+  /// 将原生通知/短信队列写入 SQLite 原始事件表。
+  ///
+  /// [inputs] 中空文本会跳过；相同 sourceEventId 或稳定 fingerprint 只保留一条。
+  /// 方法先完成原文落库，再调用解析流程，保证解析崩溃/网络失败也不会丢原始证据。
+  Future<int> ingestCaptureInputs(List<RawCaptureInput> inputs) async {
+    final next = List<CaptureEvent>.of(_captureEvents);
+    var added = 0;
+    for (final input in inputs) {
+      if (input.rawText.trim().isEmpty) continue;
+      final candidate = captureEventFromInput(
+        id: _generateId('capture'),
+        bookId: _activeBookId,
+        input: input,
+      );
+      final duplicate = next.any(
+        (event) =>
+            event.fingerprint == candidate.fingerprint ||
+            candidate.sourceEventId.isNotEmpty &&
+                event.sourceId == candidate.sourceId &&
+                event.sourceEventId == candidate.sourceEventId,
+      );
+      if (duplicate) continue;
+      next.add(candidate);
+      added++;
+    }
+    if (added == 0) return 0;
+    next.sort((a, b) => b.receivedAt.compareTo(a.receivedAt));
+    try {
+      await _repository.saveCaptureEvents(next);
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return 0;
+    }
+    _captureEvents
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    await processPendingCaptureEvents();
+    return added;
+  }
+
+  /// 判断原生输入是否已经可靠存在于 SQLite 对应的内存快照。
+  ///
+  /// 原生队列只有在本方法返回 true 后才可确认删除；稳定指纹与来源事件号两种幂等键
+  /// 任一命中即可，避免 Flutter 在落库前崩溃导致原文丢失。
+  bool captureInputIsStored(RawCaptureInput input) {
+    final trimmed = input.rawText.trim();
+    final bounded = trimmed.length <= 8000
+        ? trimmed
+        : trimmed.substring(0, 8000);
+    final fingerprint = captureFingerprint(
+      sourceId: input.sourceId,
+      text: bounded,
+      receivedAt: input.receivedAt,
+      sourceEventId: input.sourceEventId,
+    );
+    return _captureEvents.any(
+      (event) =>
+          event.fingerprint == fingerprint ||
+          input.sourceEventId.isNotEmpty &&
+              event.sourceId == input.sourceId.trim() &&
+              event.sourceEventId == input.sourceEventId.trim(),
+    );
+  }
+
+  /// 解析所有尚未处理的原始事件，并执行去重、合并与高置信度自动入账。
+  ///
+  /// 正式交易与事件状态在一个 SQLite 事务提交；任何一步失败都保持旧内存快照并返回 0。
+  Future<int> processPendingCaptureEvents() async {
+    var nextEntries = List<LedgerEntry>.of(_entries);
+    final nextEvents = List<CaptureEvent>.of(_captureEvents);
+    var processed = 0;
+    var createdEntries = 0;
+    for (var i = 0; i < nextEvents.length; i++) {
+      final original = nextEvents[i];
+      if (original.status != CaptureStatus.raw ||
+          original.processedAt != null) {
+        continue;
+      }
+      final book = _ledgerBooks
+          .where((item) => item.id == original.bookId)
+          .firstOrNull;
+      if (book == null) {
+        nextEvents[i] = original.copyWith(
+          status: CaptureStatus.failed,
+          failureReason: '账本不存在',
+          processedAt: DateTime.now(),
+        );
+        processed++;
+        continue;
+      }
+      try {
+        var parsed = parseCaptureEvent(
+          original,
+          CaptureParseContext(
+            book: book,
+            accounts: _accounts
+                .where((account) => account.bookId == book.id)
+                .toList(),
+            creditAccounts: _creditAccounts
+                .where((credit) => credit.bookId == book.id)
+                .toList(),
+            categories: _categories,
+            tags: _tags,
+            entries: nextEntries
+                .where((entry) => entry.bookId == book.id)
+                .toList(),
+            rules: _autoCaptureRules,
+          ),
+        );
+
+        final duplicate = findCaptureDuplicate(parsed, nextEntries);
+        if (duplicate?.safeToMerge == true) {
+          final entryIndex = nextEntries.indexWhere(
+            (entry) => entry.id == duplicate!.entryId,
+          );
+          if (entryIndex != -1) {
+            final record = sourceRecordForCapture(parsed);
+            final current = nextEntries[entryIndex];
+            if (!current.sourceRecords.any(
+              (source) => source.fingerprint == record.fingerprint,
+            )) {
+              nextEntries[entryIndex] = current.copyWith(
+                sourceRecords: <EntrySourceRecord>[
+                  ...current.sourceRecords,
+                  record,
+                ],
+              );
+            }
+            parsed = parsed.copyWith(
+              status: CaptureStatus.merged,
+              linkedEntryId: current.id,
+              duplicateEntryId: current.id,
+            );
+          }
+        } else if (duplicate != null && duplicate.score >= 0.65) {
+          parsed = parsed.copyWith(
+            status: CaptureStatus.duplicateSuspected,
+            duplicateEntryId: duplicate.entryId,
+          );
+        } else if (_autoCaptureSettings.autoPostHighConfidence &&
+            parsed.confidence == CaptureConfidence.high) {
+          final entry = _buildAutomaticCaptureEntry(parsed, nextEntries, book);
+          if (entry != null) {
+            nextEntries.add(entry);
+            nextEntries = _entriesWithSyncedRefundCache(nextEntries)
+              ..sort(_compareEntriesLatestFirst);
+            parsed = parsed.copyWith(
+              status: CaptureStatus.autoPosted,
+              linkedEntryId: entry.id,
+            );
+            createdEntries++;
+          }
+        }
+        if (parsed.status == CaptureStatus.pendingReview &&
+            parsed.confidence == CaptureConfidence.low) {
+          // 低置信度只保留原始事件，不混入待确认数字；processedAt 防止每次回前台重跑。
+          parsed = parsed.copyWith(status: CaptureStatus.raw);
+        }
+        nextEvents[i] = parsed;
+        processed++;
+      } on Object catch (error, stackTrace) {
+        _logger?.error(
+          '自动采集事件解析失败',
+          source: 'auto_capture',
+          error: '$error\n$stackTrace',
+        );
+        nextEvents[i] = original.copyWith(
+          status: CaptureStatus.failed,
+          failureReason: '解析失败，可稍后重试',
+          processedAt: DateTime.now(),
+        );
+        processed++;
+      }
+    }
+    if (processed == 0) return 0;
+    try {
+      await _repository.saveCaptureProcessing(
+        entries: nextEntries,
+        captureEvents: nextEvents,
+      );
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return 0;
+    }
+    _entries
+      ..clear()
+      ..addAll(nextEntries);
+    _captureEvents
+      ..clear()
+      ..addAll(nextEvents);
+    notifyListeners();
+    if (createdEntries > 0) onEntryAdded?.call();
+    return processed;
+  }
+
+  /// 把待确认事件转换为标准记账页草稿。退款仍需关联原支出，因此返回 null，改走合并入口。
+  AiEntryDraft? captureEntryDraft(String eventId) {
+    final event = _captureEvents
+        .where((item) => item.id == eventId && item.bookId == _activeBookId)
+        .firstOrNull;
+    final amount = event?.parsedAmount;
+    final type = event?.kind.entryType;
+    if (event == null ||
+        amount == null ||
+        type == null ||
+        type == EntryType.refund ||
+        type == EntryType.transfer &&
+            (event.accountCandidateId == null ||
+                event.toAccountCandidateId == null)) {
+      return null;
+    }
+    return AiEntryDraft(
+      type: type,
+      amount: amount,
+      currencyCode: event.currencyCode,
+      categoryId: event.categoryCandidateId ?? '',
+      accountId: event.accountCandidateId ?? '',
+      toAccountId: event.toAccountCandidateId,
+      note: event.merchant,
+      occurredAt: event.receivedAt,
+      warnings: <AiDraftWarning>[
+        if (event.categoryCandidateId == null) AiDraftWarning.categoryUnmatched,
+        if (event.accountCandidateId == null) AiDraftWarning.accountUnmatched,
+      ],
+    );
+  }
+
+  /// 返回待确认事件应附带到新交易的来源证据。
+  EntrySourceRecord? captureSourceRecord(String eventId) {
+    final event = _captureEvents
+        .where((item) => item.id == eventId && item.bookId == _activeBookId)
+        .firstOrNull;
+    return event == null ? null : sourceRecordForCapture(event);
+  }
+
+  /// 用户明确确认一条已解析事件，并按当前候选直接生成正式交易。
+  ///
+  /// 主要用于标准记账页不能表达的关联退款；仍复用 [_buildAutomaticCaptureEntry] 的
+  /// 唯一原支出、账户、汇率与类型校验。交易与事件状态在同一事务提交，失败返回 null。
+  Future<LedgerEntry?> confirmParsedCaptureEvent(String eventId) async {
+    final eventIndex = _captureEvents.indexWhere(
+      (event) =>
+          event.id == eventId &&
+          event.bookId == _activeBookId &&
+          event.status != CaptureStatus.autoPosted &&
+          event.status != CaptureStatus.confirmed &&
+          event.status != CaptureStatus.merged,
+    );
+    if (eventIndex == -1) return null;
+    final event = _captureEvents[eventIndex];
+    final book = _ledgerBooks
+        .where((item) => item.id == event.bookId)
+        .firstOrNull;
+    if (book == null) return null;
+    final entry = _buildAutomaticCaptureEntry(event, _entries, book);
+    if (entry == null) return null;
+    final nextEntries = _entriesWithSyncedRefundCache(<LedgerEntry>[
+      ..._entries,
+      entry,
+    ])..sort(_compareEntriesLatestFirst);
+    final nextEvents = List<CaptureEvent>.of(_captureEvents);
+    nextEvents[eventIndex] = event.copyWith(
+      status: CaptureStatus.confirmed,
+      linkedEntryId: entry.id,
+    );
+    try {
+      await _repository.saveCaptureProcessing(
+        entries: nextEntries,
+        captureEvents: nextEvents,
+      );
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return null;
+    }
+    _entries
+      ..clear()
+      ..addAll(nextEntries);
+    _captureEvents
+      ..clear()
+      ..addAll(nextEvents);
+    notifyListeners();
+    onEntryAdded?.call();
+    return entry;
+  }
+
+  /// 用户完成标准记账页后，把事件标为已确认并记录新交易关联。
+  Future<bool> markCaptureEventConfirmed({
+    required String eventId,
+    required String entryId,
+  }) => _updateCaptureStatus(
+    eventId: eventId,
+    status: CaptureStatus.confirmed,
+    linkedEntryId: entryId,
+  );
+
+  /// 用户忽略事件；原文保留用于审计与避免同一条再次进入队列。
+  Future<bool> ignoreCaptureEvent(String eventId) =>
+      _updateCaptureStatus(eventId: eventId, status: CaptureStatus.ignored);
+
+  /// 用户标记误识别；状态与原文保留，后续可据此改规则。
+  Future<bool> markCaptureEventMisidentified(String eventId) =>
+      _updateCaptureStatus(
+        eventId: eventId,
+        status: CaptureStatus.misidentified,
+      );
+
+  /// 重新解析事件。规则调整后可调用；会清除旧候选和失败信息，但保留原文与幂等指纹。
+  Future<bool> retryCaptureEvent(String eventId) async {
+    final index = _captureEvents.indexWhere(
+      (event) => event.id == eventId && event.bookId == _activeBookId,
+    );
+    if (index == -1) return false;
+    final next = List<CaptureEvent>.of(_captureEvents);
+    next[index] = next[index].copyWith(
+      status: CaptureStatus.raw,
+      clearParsedAmount: true,
+      kind: CaptureTransactionKind.unknown,
+      clearAccountCandidateId: true,
+      clearToAccountCandidateId: true,
+      clearCategoryCandidateId: true,
+      tagCandidateIds: const <String>[],
+      confidence: CaptureConfidence.low,
+      confidenceScore: 0,
+      clearLinkedEntryId: true,
+      clearDuplicateEntryId: true,
+      appliedRuleIds: const <String>[],
+      failureReason: '',
+      clearProcessedAt: true,
+    );
+    try {
+      await _repository.saveCaptureEvents(next);
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _captureEvents
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return (await processPendingCaptureEvents()) > 0;
+  }
+
+  /// 用户明确把事件合并到已有交易：追加来源证据并原子更新事件状态。
+  Future<bool> mergeCaptureEventIntoEntry({
+    required String eventId,
+    required String entryId,
+  }) async {
+    final eventIndex = _captureEvents.indexWhere(
+      (event) => event.id == eventId && event.bookId == _activeBookId,
+    );
+    final entryIndex = _entries.indexWhere(
+      (entry) => entry.id == entryId && entry.bookId == _activeBookId,
+    );
+    if (eventIndex == -1 || entryIndex == -1) return false;
+    final nextEntries = List<LedgerEntry>.of(_entries);
+    final nextEvents = List<CaptureEvent>.of(_captureEvents);
+    final record = sourceRecordForCapture(nextEvents[eventIndex]);
+    final current = nextEntries[entryIndex];
+    if (!current.sourceRecords.any(
+      (source) => source.fingerprint == record.fingerprint,
+    )) {
+      nextEntries[entryIndex] = current.copyWith(
+        sourceRecords: <EntrySourceRecord>[...current.sourceRecords, record],
+      );
+    }
+    nextEvents[eventIndex] = nextEvents[eventIndex].copyWith(
+      status: CaptureStatus.merged,
+      linkedEntryId: entryId,
+      duplicateEntryId: entryId,
+    );
+    try {
+      await _repository.saveCaptureProcessing(
+        entries: nextEntries,
+        captureEvents: nextEvents,
+      );
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _entries
+      ..clear()
+      ..addAll(nextEntries);
+    _captureEvents
+      ..clear()
+      ..addAll(nextEvents);
+    notifyListeners();
+    return true;
+  }
+
+  /// 撤销一笔由自动采集直接生成的交易，并把事件退回待确认。
+  Future<bool> undoAutoCapturedEntry(String eventId) async {
+    final eventIndex = _captureEvents.indexWhere(
+      (event) =>
+          event.id == eventId &&
+          event.bookId == _activeBookId &&
+          event.status == CaptureStatus.autoPosted,
+    );
+    if (eventIndex == -1) return false;
+    final entryId = _captureEvents[eventIndex].linkedEntryId;
+    if (entryId == null) return false;
+    var nextEntries = _entries
+        .where((entry) => entry.id != entryId && entry.refundOf != entryId)
+        .toList();
+    nextEntries = _entriesWithSyncedRefundCache(nextEntries)
+      ..sort(_compareEntriesLatestFirst);
+    final nextEvents = List<CaptureEvent>.of(_captureEvents);
+    nextEvents[eventIndex] = nextEvents[eventIndex].copyWith(
+      status: CaptureStatus.pendingReview,
+      clearLinkedEntryId: true,
+    );
+    try {
+      await _repository.saveCaptureProcessing(
+        entries: nextEntries,
+        captureEvents: nextEvents,
+      );
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _entries
+      ..clear()
+      ..addAll(nextEntries);
+    _captureEvents
+      ..clear()
+      ..addAll(nextEvents);
+    notifyListeners();
+    return true;
+  }
+
+  /// 仅更新事件状态/关联，不改正式交易。
+  Future<bool> _updateCaptureStatus({
+    required String eventId,
+    required CaptureStatus status,
+    String? linkedEntryId,
+  }) async {
+    final index = _captureEvents.indexWhere(
+      (event) => event.id == eventId && event.bookId == _activeBookId,
+    );
+    if (index == -1) return false;
+    final next = List<CaptureEvent>.of(_captureEvents);
+    next[index] = next[index].copyWith(
+      status: status,
+      linkedEntryId: linkedEntryId,
+      clearLinkedEntryId:
+          linkedEntryId == null &&
+          (status == CaptureStatus.ignored ||
+              status == CaptureStatus.misidentified),
+    );
+    try {
+      await _repository.saveCaptureEvents(next);
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _captureEvents
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return true;
+  }
+
+  /// 构造允许自动落库的交易；任一关键金额/账户/汇率缺失即返回 null。
+  LedgerEntry? _buildAutomaticCaptureEntry(
+    CaptureEvent event,
+    List<LedgerEntry> entries,
+    LedgerBook book,
+  ) {
+    final amount = event.parsedAmount;
+    final type = event.kind.entryType;
+    final account = _accounts
+        .where(
+          (item) =>
+              item.id == event.accountCandidateId && item.bookId == book.id,
+        )
+        .firstOrNull;
+    if (amount == null || amount <= 0 || type == null || account == null) {
+      return null;
+    }
+    double? convert(String targetCode) {
+      final result = convertCurrencyAmount(
+        amount: amount,
+        sourceCurrencyCode: event.currencyCode,
+        targetCurrencyCode: targetCode,
+        baseCurrencyCode: book.baseCurrencyCode,
+        bookId: book.id,
+        date: event.receivedAt,
+        rates: _exchangeRates,
+      );
+      return result is ConvertedCurrencyAmount ? result.amount : null;
+    }
+
+    final accountAmount = convert(account.currencyCode);
+    if (accountAmount == null) return null;
+    final source = sourceRecordForCapture(event);
+
+    if (type == EntryType.refund) {
+      final candidates = entries
+          .where(
+            (entry) =>
+                entry.bookId == book.id &&
+                entry.type == EntryType.expense &&
+                entry.currencyCode == event.currencyCode &&
+                entry.accountId == account.id &&
+                (entry.amount - amount).abs() <
+                    currencyAmountTolerance(event.currencyCode) &&
+                !entry.occurredAt.isAfter(event.receivedAt) &&
+                calendarDaysBetween(entry.occurredAt, event.receivedAt) <= 90,
+          )
+          .toList();
+      if (candidates.length != 1) return null;
+      final original = candidates.single;
+      final baseAmount = original.amount == 0
+          ? null
+          : normalizeCurrencyAmount(
+              original.baseAmount * amount / original.amount,
+              book.baseCurrencyCode,
+            );
+      if (baseAmount == null || baseAmount <= 0) return null;
+      return LedgerEntry(
+        id: _generateId('entry'),
+        bookId: book.id,
+        type: EntryType.refund,
+        amount: normalizeCurrencyAmount(amount, event.currencyCode),
+        currencyCode: event.currencyCode,
+        accountAmount: normalizeCurrencyAmount(
+          accountAmount,
+          account.currencyCode,
+        ),
+        baseAmount: baseAmount,
+        conversionSource: event.currencyCode == book.baseCurrencyCode
+            ? ConversionSource.identity
+            : ConversionSource.rateTable,
+        categoryId: original.categoryId,
+        accountId: account.id,
+        note: event.merchant,
+        occurredAt: event.receivedAt,
+        refundOf: original.id,
+        settledAt: event.receivedAt,
+        sourceRecords: <EntrySourceRecord>[source],
+      );
+    }
+
+    if (type == EntryType.transfer) {
+      final target = _accounts
+          .where(
+            (item) =>
+                item.id == event.toAccountCandidateId &&
+                item.bookId == book.id &&
+                item.id != account.id,
+          )
+          .firstOrNull;
+      if (target == null) return null;
+      final targetAmount = convert(target.currencyCode);
+      final transferCategory = _categories
+          .where((category) => category.type == EntryType.transfer)
+          .firstOrNull;
+      if (targetAmount == null || transferCategory == null) return null;
+      return LedgerEntry(
+        id: _generateId('entry'),
+        bookId: book.id,
+        type: EntryType.transfer,
+        amount: normalizeCurrencyAmount(amount, event.currencyCode),
+        currencyCode: event.currencyCode,
+        accountAmount: normalizeCurrencyAmount(
+          accountAmount,
+          account.currencyCode,
+        ),
+        toAccountAmount: normalizeCurrencyAmount(
+          targetAmount,
+          target.currencyCode,
+        ),
+        baseAmount: 0,
+        conversionSource: event.currencyCode == book.baseCurrencyCode
+            ? ConversionSource.identity
+            : ConversionSource.rateTable,
+        categoryId: transferCategory.id,
+        accountId: account.id,
+        toAccountId: target.id,
+        note: event.merchant,
+        occurredAt: event.receivedAt,
+        sourceRecords: <EntrySourceRecord>[source],
+      );
+    }
+
+    final categoryId = event.categoryCandidateId;
+    final baseAmount = convert(book.baseCurrencyCode);
+    if (categoryId == null || baseAmount == null) return null;
+    return LedgerEntry(
+      id: _generateId('entry'),
+      bookId: book.id,
+      type: type,
+      amount: normalizeCurrencyAmount(amount, event.currencyCode),
+      currencyCode: event.currencyCode,
+      accountAmount: normalizeCurrencyAmount(
+        accountAmount,
+        account.currencyCode,
+      ),
+      baseAmount: normalizeCurrencyAmount(baseAmount, book.baseCurrencyCode),
+      conversionSource: event.currencyCode == book.baseCurrencyCode
+          ? ConversionSource.identity
+          : ConversionSource.rateTable,
+      categoryId: categoryId,
+      accountId: account.id,
+      note: event.merchant,
+      occurredAt: event.receivedAt,
+      tagIds: event.tagCandidateIds,
+      sourceRecords: <EntrySourceRecord>[source],
+    );
+  }
+
   /// 读取桌面小组件实例配置（设备偏好，不属于账本备份）。
   List<WidgetInstanceConfig> get widgetInstanceConfigs =>
       WidgetConfigStore.load(_store);
@@ -3534,6 +4505,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           allocation.bookId == bookId ||
           removedStatementIds.contains(allocation.statementId),
     );
+    _captureEvents.removeWhere((event) => event.bookId == bookId);
+    _autoCaptureRules.removeWhere((rule) => rule.bookId == bookId);
     _collapsedAssetSections.removeWhere((key) => key.startsWith('$bookId:'));
     _assetAccountOrders.removeWhere((key, _) => key.startsWith('$bookId:'));
     _assetSectionOrders.removeWhere((key, _) => key.startsWith('$bookId:'));
@@ -3551,6 +4524,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     // 内存里剥离该账本的附件，落库交给下方整体写入（附件已含在快照里）。
     _removeAttachmentsForEntries(removedEntryIds);
     _persistAllLedgerData();
+    // 原始事件和规则不在账本整体写入事务内，删账本时单独原子保存两张表。
+    _trackWrite(
+      _repository.saveAutoCaptureMetadata(
+        captureEvents: List<CaptureEvent>.of(_captureEvents),
+        rules: List<AutoCaptureRule>.of(_autoCaptureRules),
+      ),
+    );
     // 以下为 KV 偏好类，不在账目事务内。
     _persistAssetSectionCollapsed();
     _persistAssetAccountOrders();
@@ -3656,6 +4636,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _statementRepaymentAllocations
       ..clear()
       ..addAll(nextAllocations);
+    // 正式交易被删除后保留原始事件审计证据，但清掉悬空关联并退回待确认。
+    await _sanitizeAutoCaptureReferences(removedEntryIds: removeIds);
     notifyListeners();
     return true;
   }
@@ -4328,6 +5310,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       ..clear()
       ..addAll(nextDefaults);
     await _persistAccountDeletionPreferences();
+    await _sanitizeAutoCaptureReferences(
+      removedEntryIds: removeIds,
+      removedAccountIds: <String>{accountId},
+    );
     notifyListeners();
     return affected;
   }
@@ -4640,6 +5626,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _categoryBudgets
       ..clear()
       ..addAll(nextCategoryBudgets);
+    await _sanitizeAutoCaptureReferences(
+      removedCategoryIds: <String>{categoryId},
+    );
     notifyListeners();
     return true;
   }
@@ -4732,6 +5721,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _categoryBudgets
       ..clear()
       ..addAll(nextCategoryBudgets);
+    await _sanitizeAutoCaptureReferences(
+      removedCategoryIds: <String>{sourceId},
+      categoryRemap: <String, String>{sourceId: targetId},
+    );
     notifyListeners();
     return changed;
   }
@@ -4835,6 +5828,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _entries
       ..clear()
       ..addAll(nextEntries);
+    await _sanitizeAutoCaptureReferences(removedTagIds: <String>{tagId});
     notifyListeners();
     return true;
   }
@@ -5026,6 +6020,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       _assetSectionOrderKey,
       _homePanelsKey,
       _reportPanelsKey,
+      _autoCaptureSettingsKey,
       WidgetConfigStore.definitionsKey,
       WidgetConfigStore.placementsKey,
       WidgetConfigStore.storageKey,
@@ -5033,6 +6028,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       _store.delete(key);
     }
     _entries.clear();
+    _captureEvents.clear();
+    _autoCaptureRules.clear();
     _accounts
       ..clear()
       ..addAll(defaultAccounts);
@@ -5061,6 +6058,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _activeBookId = defaultLedgerBookId;
     _assetCoverUrl = '';
     _hapticsEnabled = true;
+    _autoCaptureSettings = AutoCaptureSettings.disabled;
+    onAutoCaptureSettingsChanged?.call(_autoCaptureSettings);
     _assetAccountViewMode = AssetAccountViewMode.type;
     _collapsedAssetSections.clear();
     _assetAccountOrders.clear();
@@ -5076,6 +6075,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     }
     // 把重置后的默认状态写回 SQLite（单事务原子替换全部表）。
     _persistAllLedgerData();
+    _persistCaptureEvents();
+    _persistAutoCaptureRules();
     themePreferenceListenable.value = _themePreference;
     notifyListeners();
   }
@@ -5515,6 +6516,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       _store.write(_assetCoverKey, _assetCoverUrl);
     }
     themePreferenceListenable.value = _themePreference;
+    // 原始事件与规则按隐私约定不进备份，恢复新账本后要清理它们对旧账本实体的悬空引用。
+    unawaited(
+      _healAutoCaptureReferences().then((_) {
+        if (!_controllerDisposed) notifyListeners();
+      }),
+    );
     notifyListeners();
   }
 

@@ -19,6 +19,7 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 | 导入、备份 | `lib/app/backup/import/`、`lib/app/backup/`；只在预览确认后落库，字节格式仅由 BackupService 编解码 |
 | AI | `lib/app/ai/`；[只读查询工具](ai-tools.md)、[主动采集](auto-capture-plan.md) |
 | Android 系统能力 | `platform_bridge*.dart`、`android/`；单一 MethodChannel 分发，真实权限与冷启动验收 |
+| 自动采集 | `models/auto_capture.dart`、`auto_capture/capture_parser.dart`、`platform_bridge_auto_capture.dart`、原生 `AutoCaptureBridge` / `PaymentNotificationListenerService` / `SmsCaptureReceiver`；原始事件先落 SQLite，再解析、去重和置信度分流 |
 | 国际化 | `lib/l10n/*.arb` 与 gen-l10n 输出；[国际化验收](i18n-verification.md) |
 | 本地调试、发版 | [Android 开发](android-development.md)、`scripts/publish.*` |
 

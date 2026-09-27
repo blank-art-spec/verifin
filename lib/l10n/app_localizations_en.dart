@@ -5140,7 +5140,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String get creditCycleBudgetLabel => 'Billing-cycle budget';
 
   @override
-  String get creditCycleSetupHint => 'Set a statement day to see cycle details';
+  String get creditCycleSetupHint =>
+      'Set the statement day and payment rule to see cycle details';
 
   @override
   String creditCycleRange(String start, String end) {
@@ -5149,7 +5150,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get creditCycleMissingRate =>
-      'Some currency accounts are missing rates; totals are incomplete';
+      'Some currency accounts are missing rates; totals are hidden';
 
   @override
   String get creditCycleNetSpending => 'Cycle net spending';
@@ -5175,4 +5176,222 @@ class AppLocalizationsEn extends AppLocalizations {
   String creditCycleBudgetOver(String amount) {
     return 'Over by $amount';
   }
+
+  @override
+  String get commonRefresh => 'Refresh';
+
+  @override
+  String get commonAdd => 'Add';
+
+  @override
+  String get autoCaptureTitle => 'Automatic capture';
+
+  @override
+  String get autoCaptureShort => 'Smart capture';
+
+  @override
+  String get autoCaptureSubtitle =>
+      'Raw events are saved before they can become ledger entries';
+
+  @override
+  String autoCapturePendingSummary(int count) {
+    return '$count pending';
+  }
+
+  @override
+  String get autoCaptureTodayRecognized => 'Today';
+
+  @override
+  String get autoCapturePostedCount => 'Auto-posted';
+
+  @override
+  String get autoCapturePendingCount => 'Review';
+
+  @override
+  String get autoCaptureDuplicateCount => 'Duplicates';
+
+  @override
+  String get autoCaptureUnrecognizedCount => 'Unrecognized';
+
+  @override
+  String get autoCaptureSourcesTitle => 'Sources and safeguards';
+
+  @override
+  String get autoCaptureNotificationTitle => 'Payment notifications';
+
+  @override
+  String get autoCaptureNotificationDesc =>
+      'Listen to selected payment sources and save raw events first';
+
+  @override
+  String get autoCaptureNotificationPermissionNeeded =>
+      'Notification access is required in system settings';
+
+  @override
+  String get autoCaptureSmsTitle => 'Transaction SMS supplement';
+
+  @override
+  String get autoCaptureSmsDesc =>
+      'Optional; receives only new messages after activation and never reads history';
+
+  @override
+  String get autoCaptureSmsUnavailable =>
+      'The Google Play build does not include SMS permission; use notification capture or the GitHub build';
+
+  @override
+  String get autoCaptureSmsPermissionDenied =>
+      'SMS permission was not granted; SMS capture remains off';
+
+  @override
+  String get autoCaptureListenAllTitle => 'Include banks and all sources';
+
+  @override
+  String get autoCaptureListenAllDesc =>
+      'Reads all notifications, then applies a financial-keyword filter; wider privacy scope';
+
+  @override
+  String get autoCaptureAutoPostTitle => 'Auto-post high confidence';
+
+  @override
+  String get autoCaptureAutoPostDesc =>
+      'Creates an entry only when amount, account, type, and category are clear';
+
+  @override
+  String get autoCaptureRulesTitle => 'Capture rules';
+
+  @override
+  String get autoCaptureRulesSubtitle =>
+      'Local rules take priority over history and later AI assistance';
+
+  @override
+  String get autoCaptureRulesEmpty =>
+      'No rules yet. Add an explainable deterministic rule from the top right.';
+
+  @override
+  String get autoCaptureQueueTitle => 'Pending and recent auto-posts';
+
+  @override
+  String get autoCaptureQueueEmpty => 'Nothing needs attention';
+
+  @override
+  String get autoCaptureReview => 'Review entry';
+
+  @override
+  String get autoCaptureMerge => 'Merge into entry';
+
+  @override
+  String get autoCaptureUndo => 'Undo auto-post';
+
+  @override
+  String get autoCaptureRetry => 'Parse again';
+
+  @override
+  String get autoCaptureIgnore => 'Ignore';
+
+  @override
+  String get autoCaptureMisidentified => 'Mark incorrect';
+
+  @override
+  String get autoCaptureNeedsMoreInfo =>
+      'Amount or type is missing. Add a rule and parse again.';
+
+  @override
+  String get autoCaptureConfirmRefundTitle => 'Create this refund?';
+
+  @override
+  String get autoCaptureConfirmRefundMessage =>
+      'This event will be linked to the one matching expense and saved as a settled refund. Confirm the amount, account, and merchant are correct.';
+
+  @override
+  String get autoCaptureRuleCreateTitle => 'New capture rule';
+
+  @override
+  String get autoCaptureRuleEditTitle => 'Edit capture rule';
+
+  @override
+  String get autoCaptureRuleName => 'Rule name';
+
+  @override
+  String get autoCaptureRuleConditions => 'Match conditions (all required)';
+
+  @override
+  String get autoCaptureRuleActions => 'Actions when matched';
+
+  @override
+  String get autoCaptureRuleSourceKind => 'Source channel';
+
+  @override
+  String get autoCaptureRuleSourceId =>
+      'Source package or SMS sender (optional)';
+
+  @override
+  String get autoCaptureRuleKeyword => 'Text contains';
+
+  @override
+  String get autoCaptureRuleCardLast4 => 'Card last four';
+
+  @override
+  String get autoCaptureRuleAmount => 'Exact amount';
+
+  @override
+  String get autoCaptureRuleMatchKind => 'Detected type';
+
+  @override
+  String get autoCaptureRuleSetKind => 'Set transaction type';
+
+  @override
+  String get autoCaptureRuleAccount => 'Set account';
+
+  @override
+  String get autoCaptureRuleToAccount => 'Set destination account';
+
+  @override
+  String get autoCaptureRuleCategory => 'Set category';
+
+  @override
+  String get autoCaptureRuleTags => 'Set project/scene tags';
+
+  @override
+  String get autoCaptureRuleMerchant => 'Normalize merchant';
+
+  @override
+  String get autoCaptureRuleAny => 'Any';
+
+  @override
+  String get autoCaptureRuleNoChange => 'No change';
+
+  @override
+  String get autoCaptureRuleInvalid =>
+      'Add at least one match condition and one action';
+
+  @override
+  String get autoCaptureRuleDeleteTitle => 'Delete capture rule?';
+
+  @override
+  String get autoCaptureRuleDeleteMessage =>
+      'Processed events stay unchanged, but future events will no longer use this rule.';
+
+  @override
+  String get autoCaptureSourceNotification => 'Notification';
+
+  @override
+  String get autoCaptureSourceSms => 'SMS';
+
+  @override
+  String get autoCaptureSourceShared => 'Shared text';
+
+  @override
+  String get autoCaptureSourceManual => 'Manual import';
+
+  @override
+  String get autoCaptureKindCreditRepayment => 'Credit card payment';
+
+  @override
+  String get autoCaptureKindCreditLineRepayment => 'Credit-line payment';
+
+  @override
+  String get autoCaptureKindCashback => 'Cashback/reward';
+
+  @override
+  String get autoCaptureKindUnknown => 'Unknown';
 }

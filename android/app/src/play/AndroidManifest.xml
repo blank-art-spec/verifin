@@ -12,4 +12,14 @@
     <uses-permission
         android:name="android.permission.USE_EXACT_ALARM"
         tools:node="remove" />
+    <!-- Google Play 对短信权限仅开放默认短信/核心短信类应用；自动记账不是该类别，
+         Play 渠道移除 RECEIVE_SMS 与接收器。GitHub 自分发渠道保留用户可选能力。 -->
+    <uses-permission
+        android:name="android.permission.RECEIVE_SMS"
+        tools:node="remove" />
+    <application>
+        <receiver
+            android:name=".SmsCaptureReceiver"
+            tools:node="remove" />
+    </application>
 </manifest>

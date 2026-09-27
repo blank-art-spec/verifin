@@ -203,12 +203,25 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
       l10n: l10nForPreference(_controller.localePreference),
     );
     BackupCoordinator.maybeBackupOnOpen(_controller);
+    // 自动采集原生层只保存原文；Flutter 启动/回前台后先同步开关，再把队列写入
+    // CaptureEvent 并解析。引擎存活时收到新事件也走同一 drain，避免两套处理路径。
+    _controller.onAutoCaptureSettingsChanged =
+        _handleAutoCaptureSettingsChanged;
+    setAutoCaptureAvailableHandler(_drainAutoCaptureQueue);
+    unawaited(AppAutoCaptureBridge.syncConfig(_controller.autoCaptureSettings));
+    unawaited(_drainAutoCaptureQueue());
     // 打开应用时刷新桌面小组件「今日支出」。
     pushWidgetData(_controller);
   }
 
   void _handleEntryAdded() {
     BackupCoordinator.maybeBackupAfterEntry(_controller);
+  }
+
+  /// 用户修改开关或清空全部数据时，立即把最新配置同步给 Android；
+  /// 这样重置后不会继续在后台采集通知或短信。
+  void _handleAutoCaptureSettingsChanged(AutoCaptureSettings settings) {
+    unawaited(AppAutoCaptureBridge.syncConfig(settings));
   }
 
   void _scheduleWidgetRefresh() {
@@ -242,6 +255,17 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     );
   }
 
+  /// 拉取原生持久队列并交给 Controller。只有确认 SQLite 已保存后才向原生回执删除；
+  /// 若进程在落库前退出，下一次启动仍会读到同一原文，并由稳定指纹幂等去重。
+  Future<void> _drainAutoCaptureQueue() async {
+    await AppAutoCaptureBridge.drainQueue(
+      ingest: (inputs) async {
+        await _controller.ingestCaptureInputs(inputs);
+      },
+      isStored: _controller.captureInputIsStored,
+    );
+  }
+
   Future<void> _postDueRecurringAndRefresh() async {
     await _controller.applyDueRecurring(DateTime.now());
     await BackupCoordinator.maybeBackupOnOpen(_controller);
@@ -262,6 +286,10 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
         _controller.reminderSettings,
         l10n: l10nForPreference(_controller.localePreference),
       );
+      unawaited(
+        AppAutoCaptureBridge.syncConfig(_controller.autoCaptureSettings),
+      );
+      unawaited(_drainAutoCaptureQueue());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
       // 切后台时把挂起写入刷盘（KV 偏好 + SQLite 账目），缩小「刚改完设置 /
@@ -287,6 +315,11 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     if (_controller.onReminderChanged == _handleReminderChanged) {
       _controller.onReminderChanged = null;
     }
+    if (_controller.onAutoCaptureSettingsChanged ==
+        _handleAutoCaptureSettingsChanged) {
+      _controller.onAutoCaptureSettingsChanged = null;
+    }
+    setAutoCaptureAvailableHandler(null);
     _feedbackController.dispose();
     _controller.dispose();
     super.dispose();

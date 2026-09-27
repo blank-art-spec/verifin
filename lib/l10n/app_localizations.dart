@@ -9006,7 +9006,7 @@ abstract class AppLocalizations {
   /// No description provided for @creditCycleSetupHint.
   ///
   /// In zh, this message translates to:
-  /// **'设置账单日后显示账期概览'**
+  /// **'设置账单日与还款规则后显示账期概览'**
   String get creditCycleSetupHint;
 
   /// No description provided for @creditCycleRange.
@@ -9018,7 +9018,7 @@ abstract class AppLocalizations {
   /// No description provided for @creditCycleMissingRate.
   ///
   /// In zh, this message translates to:
-  /// **'部分子账户缺少汇率，合计暂不完整'**
+  /// **'部分子账户缺少汇率，合计暂不展示'**
   String get creditCycleMissingRate;
 
   /// No description provided for @creditCycleNetSpending.
@@ -9062,6 +9062,408 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已超 {amount}'**
   String creditCycleBudgetOver(String amount);
+
+  /// No description provided for @commonRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新'**
+  String get commonRefresh;
+
+  /// No description provided for @commonAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增'**
+  String get commonAdd;
+
+  /// No description provided for @autoCaptureTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动记账与智能识别'**
+  String get autoCaptureTitle;
+
+  /// No description provided for @autoCaptureShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动识别'**
+  String get autoCaptureShort;
+
+  /// No description provided for @autoCaptureSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'原始事件先保存，确认后再成为正式交易'**
+  String get autoCaptureSubtitle;
+
+  /// No description provided for @autoCapturePendingSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 笔待处理'**
+  String autoCapturePendingSummary(int count);
+
+  /// No description provided for @autoCaptureTodayRecognized.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日识别'**
+  String get autoCaptureTodayRecognized;
+
+  /// No description provided for @autoCapturePostedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动入账'**
+  String get autoCapturePostedCount;
+
+  /// No description provided for @autoCapturePendingCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'待确认'**
+  String get autoCapturePendingCount;
+
+  /// No description provided for @autoCaptureDuplicateCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'疑似重复'**
+  String get autoCaptureDuplicateCount;
+
+  /// No description provided for @autoCaptureUnrecognizedCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'未识别'**
+  String get autoCaptureUnrecognizedCount;
+
+  /// No description provided for @autoCaptureSourcesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集与安全边界'**
+  String get autoCaptureSourcesTitle;
+
+  /// No description provided for @autoCaptureNotificationTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'支付通知监听'**
+  String get autoCaptureNotificationTitle;
+
+  /// No description provided for @autoCaptureNotificationDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'监听已选支付来源；通知先保存为原始事件'**
+  String get autoCaptureNotificationDesc;
+
+  /// No description provided for @autoCaptureNotificationPermissionNeeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要在系统“通知使用权”中授权'**
+  String get autoCaptureNotificationPermissionNeeded;
+
+  /// No description provided for @autoCaptureSmsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'消费短信补充'**
+  String get autoCaptureSmsTitle;
+
+  /// No description provided for @autoCaptureSmsDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'可选，仅接收开启后的新短信，不读取历史短信'**
+  String get autoCaptureSmsDesc;
+
+  /// No description provided for @autoCaptureSmsUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'Google Play 渠道不包含短信权限，请使用通知监听或 GitHub 版本'**
+  String get autoCaptureSmsUnavailable;
+
+  /// No description provided for @autoCaptureSmsPermissionDenied.
+  ///
+  /// In zh, this message translates to:
+  /// **'未获得短信权限，短信补充保持关闭'**
+  String get autoCaptureSmsPermissionDenied;
+
+  /// No description provided for @autoCaptureListenAllTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'覆盖银行等全部来源'**
+  String get autoCaptureListenAllTitle;
+
+  /// No description provided for @autoCaptureListenAllDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'读取所有通知后仍先做金融关键词过滤；隐私范围更大'**
+  String get autoCaptureListenAllDesc;
+
+  /// No description provided for @autoCaptureAutoPostTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'高置信度自动入账'**
+  String get autoCaptureAutoPostTitle;
+
+  /// No description provided for @autoCaptureAutoPostDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额、账户、类型和分类都明确时才自动创建交易'**
+  String get autoCaptureAutoPostDesc;
+
+  /// No description provided for @autoCaptureRulesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动识别规则'**
+  String get autoCaptureRulesTitle;
+
+  /// No description provided for @autoCaptureRulesSubtitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地规则优先于历史学习与后续 AI 补充'**
+  String get autoCaptureRulesSubtitle;
+
+  /// No description provided for @autoCaptureRulesEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有规则。点右上角新增一条可解释的确定性规则。'**
+  String get autoCaptureRulesEmpty;
+
+  /// No description provided for @autoCaptureQueueTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'待处理与最近自动入账'**
+  String get autoCaptureQueueTitle;
+
+  /// No description provided for @autoCaptureQueueEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂时没有待处理事件'**
+  String get autoCaptureQueueEmpty;
+
+  /// No description provided for @autoCaptureReview.
+  ///
+  /// In zh, this message translates to:
+  /// **'复核记账'**
+  String get autoCaptureReview;
+
+  /// No description provided for @autoCaptureMerge.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并已有交易'**
+  String get autoCaptureMerge;
+
+  /// No description provided for @autoCaptureUndo.
+  ///
+  /// In zh, this message translates to:
+  /// **'撤销自动入账'**
+  String get autoCaptureUndo;
+
+  /// No description provided for @autoCaptureRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重新解析'**
+  String get autoCaptureRetry;
+
+  /// No description provided for @autoCaptureIgnore.
+  ///
+  /// In zh, this message translates to:
+  /// **'忽略'**
+  String get autoCaptureIgnore;
+
+  /// No description provided for @autoCaptureMisidentified.
+  ///
+  /// In zh, this message translates to:
+  /// **'标记误识别'**
+  String get autoCaptureMisidentified;
+
+  /// No description provided for @autoCaptureNeedsMoreInfo.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额或类型信息不足，请先添加规则后重新解析'**
+  String get autoCaptureNeedsMoreInfo;
+
+  /// No description provided for @autoCaptureConfirmRefundTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认创建退款？'**
+  String get autoCaptureConfirmRefundTitle;
+
+  /// No description provided for @autoCaptureConfirmRefundMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'将把这条事件关联到唯一匹配的原支出并创建已到账退款。请确认金额、账户和商户均正确。'**
+  String get autoCaptureConfirmRefundMessage;
+
+  /// No description provided for @autoCaptureRuleCreateTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增自动识别规则'**
+  String get autoCaptureRuleCreateTitle;
+
+  /// No description provided for @autoCaptureRuleEditTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑自动识别规则'**
+  String get autoCaptureRuleEditTitle;
+
+  /// No description provided for @autoCaptureRuleName.
+  ///
+  /// In zh, this message translates to:
+  /// **'规则名称'**
+  String get autoCaptureRuleName;
+
+  /// No description provided for @autoCaptureRuleConditions.
+  ///
+  /// In zh, this message translates to:
+  /// **'匹配条件（同时满足）'**
+  String get autoCaptureRuleConditions;
+
+  /// No description provided for @autoCaptureRuleActions.
+  ///
+  /// In zh, this message translates to:
+  /// **'命中后执行'**
+  String get autoCaptureRuleActions;
+
+  /// No description provided for @autoCaptureRuleSourceKind.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源通道'**
+  String get autoCaptureRuleSourceKind;
+
+  /// No description provided for @autoCaptureRuleSourceId.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源包名或短信号码（可选）'**
+  String get autoCaptureRuleSourceId;
+
+  /// No description provided for @autoCaptureRuleKeyword.
+  ///
+  /// In zh, this message translates to:
+  /// **'原文包含关键词'**
+  String get autoCaptureRuleKeyword;
+
+  /// No description provided for @autoCaptureRuleCardLast4.
+  ///
+  /// In zh, this message translates to:
+  /// **'卡号后四位'**
+  String get autoCaptureRuleCardLast4;
+
+  /// No description provided for @autoCaptureRuleAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'精确金额'**
+  String get autoCaptureRuleAmount;
+
+  /// No description provided for @autoCaptureRuleMatchKind.
+  ///
+  /// In zh, this message translates to:
+  /// **'已识别类型'**
+  String get autoCaptureRuleMatchKind;
+
+  /// No description provided for @autoCaptureRuleSetKind.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置交易类型'**
+  String get autoCaptureRuleSetKind;
+
+  /// No description provided for @autoCaptureRuleAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置账户'**
+  String get autoCaptureRuleAccount;
+
+  /// No description provided for @autoCaptureRuleToAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置转入账户'**
+  String get autoCaptureRuleToAccount;
+
+  /// No description provided for @autoCaptureRuleCategory.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置分类'**
+  String get autoCaptureRuleCategory;
+
+  /// No description provided for @autoCaptureRuleTags.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置项目/场景标签'**
+  String get autoCaptureRuleTags;
+
+  /// No description provided for @autoCaptureRuleMerchant.
+  ///
+  /// In zh, this message translates to:
+  /// **'规范商户名称'**
+  String get autoCaptureRuleMerchant;
+
+  /// No description provided for @autoCaptureRuleAny.
+  ///
+  /// In zh, this message translates to:
+  /// **'不限制'**
+  String get autoCaptureRuleAny;
+
+  /// No description provided for @autoCaptureRuleNoChange.
+  ///
+  /// In zh, this message translates to:
+  /// **'不修改'**
+  String get autoCaptureRuleNoChange;
+
+  /// No description provided for @autoCaptureRuleInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请至少填写一个匹配条件和一个执行动作'**
+  String get autoCaptureRuleInvalid;
+
+  /// No description provided for @autoCaptureRuleDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除自动识别规则？'**
+  String get autoCaptureRuleDeleteTitle;
+
+  /// No description provided for @autoCaptureRuleDeleteMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除后不会改写已经处理的事件，但后续事件不再应用这条规则。'**
+  String get autoCaptureRuleDeleteMessage;
+
+  /// No description provided for @autoCaptureSourceNotification.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知'**
+  String get autoCaptureSourceNotification;
+
+  /// No description provided for @autoCaptureSourceSms.
+  ///
+  /// In zh, this message translates to:
+  /// **'短信'**
+  String get autoCaptureSourceSms;
+
+  /// No description provided for @autoCaptureSourceShared.
+  ///
+  /// In zh, this message translates to:
+  /// **'分享文本'**
+  String get autoCaptureSourceShared;
+
+  /// No description provided for @autoCaptureSourceManual.
+  ///
+  /// In zh, this message translates to:
+  /// **'手动导入'**
+  String get autoCaptureSourceManual;
+
+  /// No description provided for @autoCaptureKindCreditRepayment.
+  ///
+  /// In zh, this message translates to:
+  /// **'信用卡还款'**
+  String get autoCaptureKindCreditRepayment;
+
+  /// No description provided for @autoCaptureKindCreditLineRepayment.
+  ///
+  /// In zh, this message translates to:
+  /// **'花呗/白条还款'**
+  String get autoCaptureKindCreditLineRepayment;
+
+  /// No description provided for @autoCaptureKindCashback.
+  ///
+  /// In zh, this message translates to:
+  /// **'红包/返现'**
+  String get autoCaptureKindCashback;
+
+  /// No description provided for @autoCaptureKindUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知'**
+  String get autoCaptureKindUnknown;
 }
 
 class _AppLocalizationsDelegate

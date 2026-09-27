@@ -17,6 +17,7 @@ import android.provider.Settings
 import android.util.Base64
 import android.view.WindowManager
 import androidx.core.app.ActivityCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import androidx.core.content.FileProvider
 import androidx.documentfile.provider.DocumentFile
@@ -42,6 +43,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingCaptureImageUri: Uri? = null
     private var pendingCaptureText: String? = null
     private var pendingDownloadsWrite: PendingDownloadsWrite? = null
+    private var pendingSmsPermissionResult: MethodChannel.Result? = null
     private var pendingDirectoryPick: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
@@ -72,6 +74,39 @@ class MainActivity : FlutterFragmentActivity() {
                     pendingCaptureText = null
                     result.success(text)
                 }
+                "setAutoCaptureConfig" -> {
+                    val packages = call.argument<List<String>>("packages") ?: emptyList()
+                    AutoCaptureBridge.writeConfig(
+                        context = this,
+                        notificationEnabled = call.argument<Boolean>("notificationEnabled") ?: false,
+                        smsEnabled = (call.argument<Boolean>("smsEnabled") ?: false) &&
+                            BuildConfig.FLAVOR != "play",
+                        listenAll = call.argument<Boolean>("listenAll") ?: false,
+                        packages = packages,
+                    )
+                    result.success(true)
+                }
+                "readAutoCaptureQueue" -> result.success(AutoCaptureBridge.read(this))
+                "ackAutoCaptureQueue" -> {
+                    AutoCaptureBridge.acknowledge(
+                        this,
+                        call.argument<List<String>>("queueIds") ?: emptyList(),
+                    )
+                    result.success(true)
+                }
+                "isNotificationListenerEnabled" -> result.success(
+                    NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName),
+                )
+                "openNotificationListenerSettings" -> {
+                    startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
+                    result.success(true)
+                }
+                "isSmsPermissionGranted" -> result.success(
+                    ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) ==
+                        PackageManager.PERMISSION_GRANTED,
+                )
+                "isSmsCaptureSupported" -> result.success(BuildConfig.FLAVOR != "play")
+                "requestSmsPermission" -> requestSmsPermission(result)
                 "updateWidgetData" -> {
                     updateWidgetData(call)
                     result.success(true)
@@ -161,6 +196,9 @@ class MainActivity : FlutterFragmentActivity() {
                 )
                 else -> result.notImplemented()
             }
+        }
+        AutoCaptureBridge.onQueueAvailable = {
+            runOnUiThread { channel?.invokeMethod("autoCaptureAvailable", null) }
         }
     }
 
@@ -1235,6 +1273,15 @@ class MainActivity : FlutterFragmentActivity() {
         grantResults: IntArray,
     ) {
         super.onRequestPermissionsResult(requestCode, permissions, grantResults)
+        if (requestCode == REQUEST_RECEIVE_SMS) {
+            val pending = pendingSmsPermissionResult
+            pendingSmsPermissionResult = null
+            pending?.success(
+                grantResults.isNotEmpty() &&
+                    grantResults[0] == PackageManager.PERMISSION_GRANTED,
+            )
+            return
+        }
         if (requestCode != REQUEST_WRITE_DOWNLOADS) {
             return
         }
@@ -1245,6 +1292,37 @@ class MainActivity : FlutterFragmentActivity() {
         } else {
             pending.result.error("EXPORT_FAILED", "需要存储权限才能导出到下载目录。", null)
         }
+    }
+
+    /**
+     * 请求接收未来新短信的运行时权限。
+     *
+     * @param result MethodChannel 回调；同一时刻只允许一个授权请求，避免结果串线。
+     */
+    private fun requestSmsPermission(result: MethodChannel.Result) {
+        if (ContextCompat.checkSelfPermission(this, Manifest.permission.RECEIVE_SMS) ==
+            PackageManager.PERMISSION_GRANTED
+        ) {
+            result.success(true)
+            return
+        }
+        if (pendingSmsPermissionResult != null) {
+            result.error("SMS_PERMISSION_BUSY", "短信权限请求正在进行。", null)
+            return
+        }
+        pendingSmsPermissionResult = result
+        ActivityCompat.requestPermissions(
+            this,
+            arrayOf(Manifest.permission.RECEIVE_SMS),
+            REQUEST_RECEIVE_SMS,
+        )
+    }
+
+    override fun onDestroy() {
+        AutoCaptureBridge.onQueueAvailable = null
+        pendingSmsPermissionResult?.success(false)
+        pendingSmsPermissionResult = null
+        super.onDestroy()
     }
 
     private fun writeTextToDownloads(
@@ -1594,6 +1672,7 @@ class MainActivity : FlutterFragmentActivity() {
         private const val CHANNEL_NAME = "verifin/app"
         private const val REQUEST_WRITE_DOWNLOADS = 4301
         private const val REQUEST_PICK_BACKUP_DIR = 4302
+        private const val REQUEST_RECEIVE_SMS = 4303
         private const val RELEASE_API_URL =
             "https://api.github.com/repos/LumiDesk/verifin/releases/latest"
         // 预发布检查用列表端点：/releases/latest 天然排除预发布，需拉列表自行筛选。

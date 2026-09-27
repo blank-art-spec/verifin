@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 18;
+  static const int schemaVersion = 19;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -71,6 +71,7 @@ class AppDatabase {
         16: _migrateToV16,
         17: _migrateToV17,
         18: _migrateToV18,
+        19: _migrateToV19,
       };
 
   /// 只读暴露迁移注册表，供迁移矩阵测试把库推进到任意中间版本。生产代码勿用。
@@ -395,6 +396,19 @@ class AppDatabase {
     ''');
   }
 
+  /// v18 → v19：第三批“自动记账与智能识别”中间层。
+  ///
+  /// 原始通知/短信先进入 capture_events，只有解析、去重与置信度判断完成后才可能关联
+  /// entries；用户规则独立保存在 auto_capture_rules。两表不进账本备份，避免把敏感
+  /// 原文带离设备，但会随“初始化全部数据”显式清空。
+  static Future<void> _migrateToV19(Database db) async {
+    await db.execute(_captureEventsTable);
+    await db.execute(_captureEventsBookStatusIndex);
+    await db.execute(_captureEventsFingerprintIndex);
+    await db.execute(_autoCaptureRulesTable);
+    await db.execute(_autoCaptureRulesBookIndex);
+  }
+
   static Future<bool> _tableExists(Database db, String name) async {
     final rows = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
@@ -638,6 +652,71 @@ class AppDatabase {
   static const String _accountGroupsBookIndex =
       'CREATE INDEX idx_account_groups_book ON account_groups (book_id)';
 
+  static const String _captureEventsTable = '''
+    CREATE TABLE IF NOT EXISTS capture_events (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      source_kind TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      source_label TEXT NOT NULL,
+      source_event_id TEXT NOT NULL,
+      raw_text TEXT NOT NULL,
+      received_at INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL,
+      parsed_amount REAL,
+      currency_code TEXT NOT NULL,
+      merchant TEXT NOT NULL,
+      card_last4 TEXT NOT NULL,
+      transaction_kind TEXT NOT NULL,
+      account_candidate_id TEXT,
+      to_account_candidate_id TEXT,
+      category_candidate_id TEXT,
+      tag_candidate_ids TEXT,
+      confidence TEXT NOT NULL,
+      confidence_score REAL NOT NULL,
+      status TEXT NOT NULL,
+      linked_entry_id TEXT,
+      duplicate_entry_id TEXT,
+      applied_rule_ids TEXT,
+      failure_reason TEXT NOT NULL,
+      processed_at INTEGER
+    )
+  ''';
+
+  static const String _captureEventsBookStatusIndex =
+      'CREATE INDEX IF NOT EXISTS idx_capture_events_book_status_date '
+      'ON capture_events (book_id, status, received_at DESC)';
+
+  static const String _captureEventsFingerprintIndex =
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_capture_events_fingerprint '
+      'ON capture_events (fingerprint)';
+
+  static const String _autoCaptureRulesTable = '''
+    CREATE TABLE IF NOT EXISTS auto_capture_rules (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      enabled INTEGER NOT NULL,
+      source_kind TEXT,
+      source_id TEXT NOT NULL,
+      text_contains TEXT NOT NULL,
+      card_last4 TEXT NOT NULL,
+      exact_amount REAL,
+      match_kind TEXT,
+      set_kind TEXT,
+      set_account_id TEXT,
+      set_to_account_id TEXT,
+      set_category_id TEXT,
+      set_tag_ids TEXT,
+      set_merchant TEXT NOT NULL
+    )
+  ''';
+
+  static const String _autoCaptureRulesBookIndex =
+      'CREATE INDEX IF NOT EXISTS idx_auto_capture_rules_book_priority '
+      'ON auto_capture_rules (book_id, priority DESC)';
+
   /// 当前完整建表语句（供全新数据库 onCreate 用）。字段命名用 snake_case；
   /// 布尔存 0/1；时间存毫秒时间戳。已含历次迁移引入的列/表（parent_id、tags 等）。
   static const List<String> _schemaCurrent = <String>[
@@ -759,5 +838,10 @@ class AppDatabase {
     _statementRepaymentEntryIndex,
     _creditAccountsTable,
     _creditAccountsBookIndex,
+    _captureEventsTable,
+    _captureEventsBookStatusIndex,
+    _captureEventsFingerprintIndex,
+    _autoCaptureRulesTable,
+    _autoCaptureRulesBookIndex,
   ];
 }

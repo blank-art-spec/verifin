@@ -15,6 +15,7 @@ import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
 import 'ai_settings_page.dart';
 import 'app_lock_page.dart';
+import 'auto_capture_page.dart';
 import 'legal_pages.dart';
 import 'reminder_settings_page.dart';
 import 'sheets.dart';
@@ -374,6 +375,27 @@ class _SettingsPageState extends State<SettingsPage> {
                           Navigator.of(context).push<void>(
                             MaterialPageRoute<void>(
                               builder: (context) => const AiSettingsPage(),
+                            ),
+                          );
+                        },
+                      ),
+                      const Divider(height: 1),
+                      SettingsRow(
+                        icon: Icons.auto_mode_outlined,
+                        title: AppLocalizations.of(context).autoCaptureTitle,
+                        trailing:
+                            controller.autoCaptureStats().pendingReview == 0
+                            ? AppLocalizations.of(context).autoCaptureShort
+                            : AppLocalizations.of(
+                                context,
+                              ).autoCapturePendingSummary(
+                                controller.autoCaptureStats().pendingReview,
+                              ),
+                        trailingIcon: Icons.chevron_right,
+                        onTap: () {
+                          Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (context) => const AutoCapturePage(),
                             ),
                           );
                         },
