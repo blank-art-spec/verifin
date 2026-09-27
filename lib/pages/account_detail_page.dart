@@ -2,8 +2,8 @@
 // 信用卡还款日横幅与迷你分段切换控件。
 import 'dart:async';
 
-import 'package:flutter/material.dart';
 import 'package:flutter/foundation.dart' show mapEquals;
+import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 
 import '../app/account_icon_assets.dart';
@@ -20,8 +20,9 @@ import '../app/models.dart';
 import '../app/series_math.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
-import 'credit_repayment_page.dart';
 import 'billing_statements_page.dart';
+import 'credit_account_editor_page.dart';
+import 'credit_repayment_page.dart';
 import 'entry_detail_page.dart';
 import 'sheets.dart';
 import 'transactions_pages.dart';
@@ -75,7 +76,23 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       (item) => item.id == widget.account.id,
       orElse: () => widget.account,
     );
-    final currentAccount = _draftAccount;
+    // 创建账户后调用方可能仍持有“尚未回填信用主体 id”的旧快照；渲染时用
+    // Controller 的持久化关联补齐本地视图，避免主体选择器误显示为未选择。
+    final currentAccount =
+        _draftAccount.type.supportsCredit &&
+            _draftAccount.creditAccountId == null &&
+            persistedAccount.creditAccountId != null
+        ? _draftAccount.copyWith(
+            creditAccountId: persistedAccount.creditAccountId,
+          )
+        : _draftAccount;
+    final creditAccount = controller.creditAccountForAccount(currentAccount);
+    final creditCycleOverview = creditAccount == null
+        ? null
+        : controller.creditCycleOverview(creditAccount);
+    final creditDueDate = creditAccount?.hasCompleteCycleRule == true
+        ? creditCycleOverview!.dueDate
+        : null;
     final balance = controller.accountBalance(currentAccount);
     final entries = controller.entries
         .where((entry) => entryTouchesAccount(entry, currentAccount.id))
@@ -123,8 +140,8 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 ),
                 const SizedBox(height: 10),
                 if (currentAccount.type.supportsCredit &&
-                    currentAccount.dueDay != null) ...<Widget>[
-                  _CreditCardDueBanner(dueDay: currentAccount.dueDay!),
+                    creditDueDate != null) ...<Widget>[
+                  _CreditCardDueBanner(dueDate: creditDueDate),
                   const SizedBox(height: 10),
                 ],
                 VeriCard(
@@ -159,7 +176,9 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 ),
                 const SizedBox(height: 10),
                 if (currentAccount.type.supportsCredit &&
-                    (currentAccount.creditLimit != null ||
+                    (creditAccount?.creditLimit != null ||
+                        currentAccount.creditLimit != null ||
+                        creditAccount?.statementDay != null ||
                         currentAccount.statementDay != null ||
                         controller
                             .billingStatementsForAccount(currentAccount.id)
@@ -168,6 +187,8 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                     account: currentAccount,
                     balance: balance,
                     overview: controller.creditOverview(currentAccount),
+                    creditAccount: creditAccount,
+                    creditCycleOverview: creditCycleOverview,
                   ),
                   const SizedBox(height: 10),
                 ],
@@ -424,6 +445,32 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                   VeriCard(
                     child: Column(
                       children: <Widget>[
+                        if (creditAccount != null) ...<Widget>[
+                          SettingsRow(
+                            icon: Icons.account_balance_outlined,
+                            title: AppLocalizations.of(
+                              context,
+                            ).creditAccountParentLabel,
+                            trailing: creditAccount.name,
+                            trailingIcon: Icons.chevron_right,
+                            onTap: () => _pickCreditAccountParent(
+                              currentAccount,
+                              controller.creditAccounts,
+                            ),
+                          ),
+                          const Divider(height: 1),
+                          SettingsRow(
+                            icon: Icons.tune_outlined,
+                            title: AppLocalizations.of(
+                              context,
+                            ).creditAccountEditTitle,
+                            trailing: creditAccount.currencyCode,
+                            trailingIcon: Icons.chevron_right,
+                            onTap: () =>
+                                _openCreditAccountEditor(creditAccount),
+                          ),
+                          const Divider(height: 1),
+                        ],
                         SettingsRow(
                           icon: Icons.credit_card,
                           title: AppLocalizations.of(context).cardLabel,
@@ -459,38 +506,68 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                         SettingsRow(
                           icon: Icons.speed_outlined,
                           title: AppLocalizations.of(context).creditLimitLabel,
-                          trailing: currentAccount.creditLimit == null
+                          trailing:
+                              (creditAccount?.creditLimit ??
+                                      currentAccount.creditLimit) ==
+                                  null
                               ? AppLocalizations.of(context).notSet
                               : formatUserMoney(
-                                  currentAccount.creditLimit!,
-                                  currentAccount.currencyCode,
+                                  creditAccount?.creditLimit ??
+                                      currentAccount.creditLimit!,
+                                  creditAccount?.currencyCode ??
+                                      currentAccount.currencyCode,
                                 ),
                           trailingIcon: Icons.chevron_right,
-                          onTap: () => _editCreditLimit(currentAccount),
+                          onTap: () => creditAccount == null
+                              ? _editCreditLimit(currentAccount)
+                              : _openCreditAccountEditor(creditAccount),
                         ),
                         const Divider(height: 1),
                         SettingsRow(
                           icon: Icons.event_note_outlined,
                           title: AppLocalizations.of(context).statementDay,
-                          trailing: currentAccount.statementDay == null
+                          trailing:
+                              (creditAccount?.statementDay ??
+                                      currentAccount.statementDay) ==
+                                  null
                               ? AppLocalizations.of(context).notSet
-                              : AppLocalizations.of(
-                                  context,
-                                ).monthlyDayLabel(currentAccount.statementDay!),
+                              : AppLocalizations.of(context).monthlyDayLabel(
+                                  creditAccount?.statementDay ??
+                                      currentAccount.statementDay!,
+                                ),
                           trailingIcon: Icons.chevron_right,
-                          onTap: () => _pickBillingDay(currentAccount, false),
+                          onTap: () => creditAccount == null
+                              ? _pickBillingDay(currentAccount, false)
+                              : _openCreditAccountEditor(creditAccount),
                         ),
                         const Divider(height: 1),
                         SettingsRow(
                           icon: Icons.event_available_outlined,
-                          title: AppLocalizations.of(context).dueDay,
-                          trailing: currentAccount.dueDay == null
+                          title: creditAccount == null
+                              ? AppLocalizations.of(context).dueDay
+                              : AppLocalizations.of(context).creditDueRuleLabel,
+                          trailing:
+                              creditAccount?.dueRuleType ==
+                                  CreditDueRuleType.daysAfterStatement
+                              ? creditAccount?.daysAfterStatement == null
+                                    ? AppLocalizations.of(context).notSet
+                                    : AppLocalizations.of(
+                                        context,
+                                      ).creditDaysAfterStatement(
+                                        creditAccount!.daysAfterStatement!,
+                                      )
+                              : (creditAccount?.dueDay ??
+                                        currentAccount.dueDay) ==
+                                    null
                               ? AppLocalizations.of(context).notSet
-                              : AppLocalizations.of(
-                                  context,
-                                ).monthlyDayLabel(currentAccount.dueDay!),
+                              : AppLocalizations.of(context).monthlyDayLabel(
+                                  creditAccount?.dueDay ??
+                                      currentAccount.dueDay!,
+                                ),
                           trailingIcon: Icons.chevron_right,
-                          onTap: () => _pickBillingDay(currentAccount, true),
+                          onTap: () => creditAccount == null
+                              ? _pickBillingDay(currentAccount, true)
+                              : _openCreditAccountEditor(creditAccount),
                         ),
                         const Divider(height: 1),
                         SettingsRow(
@@ -915,6 +992,80 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     });
   }
 
+  /// 把当前币种账户改挂到另一个信用主体。选择只更新页面草稿；用户点击右上角保存后，
+  /// Controller 才会原子写入账户与主体，并在旧主体没有其他子账户时清理它。
+  Future<void> _pickCreditAccountParent(
+    Account account,
+    List<CreditAccount> creditAccounts,
+  ) async {
+    final candidates = creditAccounts
+        .where((item) => item.bookId == account.bookId)
+        .toList(growable: false);
+    if (candidates.isEmpty) return;
+    final selected = await showOptionSheet<String>(
+      context: context,
+      title: AppLocalizations.of(context).creditAccountParentLabel,
+      values: candidates.map((item) => item.id).toList(growable: false),
+      // 旧备份或尚未保存的草稿可能还没有主体 ID；空字符串不会命中任何候选项，
+      // 因而弹窗只是不显示选中标记，不会误把第一个主体当成用户选择。
+      selected: account.creditAccountId ?? '',
+      labelOf: (value) =>
+          candidates.firstWhere((item) => item.id == value).name,
+    );
+    if (!mounted || selected == null || selected == account.creditAccountId) {
+      return;
+    }
+    final parent = candidates.firstWhere((item) => item.id == selected);
+    setState(() {
+      _draftAccount = account.copyWith(
+        creditAccountId: parent.id,
+        creditLimit: parent.creditLimit,
+        clearCreditLimit: parent.creditLimit == null,
+        statementDay: parent.statementDay,
+        clearStatementDay: parent.statementDay == null,
+        dueDay: parent.dueRuleType == CreditDueRuleType.fixedDay
+            ? parent.dueDay
+            : null,
+        clearDueDay:
+            parent.dueRuleType != CreditDueRuleType.fixedDay ||
+            parent.dueDay == null,
+      );
+    });
+  }
+
+  /// 打开父主体编辑页。共享额度、卡尾号、账单规则与账期预算只在该页维护，
+  /// 子账户详情不再各自保存一套容易互相覆盖的配置。
+  Future<void> _openCreditAccountEditor(CreditAccount creditAccount) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => CreditAccountEditorPage(creditAccount: creditAccount),
+      ),
+    );
+    if (!mounted) return;
+    final latest = VeriFinScope.of(
+      context,
+    ).accounts.where((item) => item.id == _draftAccount.id).firstOrNull;
+    if (latest == null) return;
+
+    // 父主体页可能已经同步了卡尾号、额度和日期镜像。把这些已持久化字段同时并入
+    // 初始值与当前草稿：既避免随后保存备注时用旧镜像反向覆盖主体，也不会把这次
+    // 父页保存误判为本页未保存修改。名称、备注、分组等本页草稿保持不变。
+    Account mergeSharedFields(Account base) => base.copyWith(
+      creditAccountId: latest.creditAccountId,
+      cardLast4: latest.cardLast4,
+      creditLimit: latest.creditLimit,
+      clearCreditLimit: latest.creditLimit == null,
+      statementDay: latest.statementDay,
+      clearStatementDay: latest.statementDay == null,
+      dueDay: latest.dueDay,
+      clearDueDay: latest.dueDay == null,
+    );
+    setState(() {
+      _initialAccount = mergeSharedFields(_initialAccount);
+      _draftAccount = mergeSharedFields(_draftAccount);
+    });
+  }
+
   Future<void> _pickAccountIcon(Account account) async {
     final selected = await showAccountIconSheet(
       context: context,
@@ -1018,6 +1169,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       clearCreditLimit: !account.type.supportsCredit,
       clearStatementDay: !account.type.supportsCredit,
       clearDueDay: !account.type.supportsCredit,
+      clearCreditAccountId: !account.type.supportsCredit,
     );
     if (!await controller.saveAccountDraft(normalized)) {
       return false;
@@ -1226,17 +1378,18 @@ class AccountReportPage extends StatelessWidget {
   }
 }
 
-/// 信用卡还款提醒条：展示下一个还款日与剩余天数。
+/// 信用卡还款提醒条：展示动态规则推导出的到期日与剩余日历天数。
 class _CreditCardDueBanner extends StatelessWidget {
-  const _CreditCardDueBanner({required this.dueDay});
+  const _CreditCardDueBanner({required this.dueDate});
 
-  final int dueDay;
+  final DateTime dueDate;
 
+  /// 到期日由信用主体或正式账单计算完成，本组件只负责日期与紧迫程度展示。
   @override
   Widget build(BuildContext context) {
     final now = DateTime.now();
-    final due = nextDueDate(dueDay, now);
-    final days = daysUntilDue(dueDay, now);
+    final due = dateOnly(dueDate);
+    final days = calendarDaysBetween(now, due).clamp(0, 1 << 30).toInt();
     final urgent = days <= 3;
     final color = urgent ? veriSemantic(context, veriExpense) : veriRoyal;
     final l10n = AppLocalizations.of(context);
@@ -1262,15 +1415,6 @@ class _CreditCardDueBanner extends StatelessWidget {
                     fontWeight: FontWeight.w800,
                   ),
                 ),
-                const SizedBox(height: 2),
-                Text(
-                  l10n.monthlyRepayLine(dueDay),
-                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                    color: Theme.of(
-                      context,
-                    ).colorScheme.onSurface.withValues(alpha: 0.5),
-                  ),
-                ),
               ],
             ),
           ),
@@ -1287,19 +1431,27 @@ class _CreditSummaryCard extends StatelessWidget {
     required this.account,
     required this.balance,
     required this.overview,
+    required this.creditAccount,
+    required this.creditCycleOverview,
   });
 
   final Account account;
   final double balance;
   final CreditStatementOverview overview;
+  final CreditAccount? creditAccount;
+  final CreditCycleOverview? creditCycleOverview;
 
+  /// 共享额度和已用额度以父主体币种展示；正式账单仍属于当前币种子账户，继续使用
+  /// 子账户币种。这样不会把 7 万人民币共享额度误显示成美元子账户的 7 万美元。
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final theme = Theme.of(context);
-    final limit = account.creditLimit;
-    final statementDay = account.statementDay;
-    final used = usedCredit(balance);
+    final limit = creditAccount?.creditLimit ?? account.creditLimit;
+    final limitCurrency = creditAccount?.currencyCode ?? account.currencyCode;
+    final statementDay = creditAccount?.statementDay ?? account.statementDay;
+    final used = creditCycleOverview?.totalDebt ?? usedCredit(balance);
+    final missingConversion = creditCycleOverview?.missingConversion ?? false;
 
     return VeriCard(
       child: Column(
@@ -1317,7 +1469,7 @@ class _CreditSummaryCard extends StatelessWidget {
                   ),
                 ),
                 Text(
-                  formatUserMoney(limit, account.currencyCode),
+                  formatUserMoney(limit, limitCurrency),
                   style: theme.textTheme.titleMedium?.copyWith(
                     color: theme.colorScheme.onSurface.withValues(alpha: 0.6),
                   ),
@@ -1328,7 +1480,9 @@ class _CreditSummaryCard extends StatelessWidget {
             ClipRRect(
               borderRadius: BorderRadius.circular(veriRadiusSm),
               child: LinearProgressIndicator(
-                value: limit > 0 ? (used / limit).clamp(0.0, 1.0) : 0.0,
+                value: !missingConversion && limit > 0
+                    ? (used / limit).clamp(0.0, 1.0).toDouble()
+                    : 0.0,
                 minHeight: 8,
                 backgroundColor: theme.colorScheme.surfaceContainerHighest,
                 color: veriSemantic(context, veriBlue),
@@ -1340,21 +1494,37 @@ class _CreditSummaryCard extends StatelessWidget {
                 Expanded(
                   child: _CreditStat(
                     label: l10n.creditUsedLabel,
-                    value: formatUserMoney(used, account.currencyCode),
+                    value: missingConversion
+                        ? l10n.notSet
+                        : formatUserMoney(used, limitCurrency),
                   ),
                 ),
                 Expanded(
                   child: _CreditStat(
                     label: l10n.creditAvailableLabel,
-                    value: formatUserMoney(
-                      availableCredit(limit, balance) ?? 0,
-                      account.currencyCode,
-                    ),
+                    value: missingConversion
+                        ? l10n.notSet
+                        : formatUserMoney(
+                            (limit - used)
+                                .clamp(0.0, double.infinity)
+                                .toDouble(),
+                            limitCurrency,
+                          ),
                     highlight: true,
                   ),
                 ),
               ],
             ),
+            if (missingConversion) ...<Widget>[
+              const SizedBox(height: 8),
+              Text(
+                l10n.creditCycleMissingRate,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: veriSemantic(context, veriWarning),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+            ],
           ],
           if (limit != null && statementDay != null)
             const Padding(
@@ -1396,7 +1566,12 @@ class _CreditSummaryCard extends StatelessWidget {
                           ),
                     hint: statementDay == null
                         ? null
-                        : _billingHint(l10n, statementDay, account.dueDay),
+                        : _billingHint(
+                            l10n,
+                            statementDay,
+                            creditAccount,
+                            account.dueDay,
+                          ),
                   ),
                 ),
               ],
@@ -1417,10 +1592,20 @@ class _CreditSummaryCard extends StatelessWidget {
     BillingStatementStatus.open => l10n.statementOpen,
   };
 
-  String _billingHint(AppLocalizations l10n, int statementDay, int? dueDay) {
+  /// 账单提示按父主体规则展示；旧数据没有主体时回退子账户固定还款日。
+  String _billingHint(
+    AppLocalizations l10n,
+    int statementDay,
+    CreditAccount? creditAccount,
+    int? legacyDueDay,
+  ) {
     final parts = <String>[
       '${l10n.statementDay} ${l10n.monthlyDayLabel(statementDay)}',
-      if (dueDay != null) '${l10n.dueDay} ${l10n.monthlyDayLabel(dueDay)}',
+      if (creditAccount?.dueRuleType == CreditDueRuleType.daysAfterStatement &&
+          creditAccount?.daysAfterStatement != null)
+        l10n.creditDaysAfterStatement(creditAccount!.daysAfterStatement!)
+      else if ((creditAccount?.dueDay ?? legacyDueDay) != null)
+        '${l10n.dueDay} ${l10n.monthlyDayLabel(creditAccount?.dueDay ?? legacyDueDay!)}',
     ];
     return parts.join(' · ');
   }

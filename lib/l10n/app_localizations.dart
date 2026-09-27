@@ -8924,6 +8924,144 @@ abstract class AppLocalizations {
     String daily,
     String attention,
   );
+
+  /// No description provided for @creditAccountEditTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'信用主体设置'**
+  String get creditAccountEditTitle;
+
+  /// No description provided for @creditAccountNameLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'信用主体名称'**
+  String get creditAccountNameLabel;
+
+  /// No description provided for @creditInstitutionLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'银行或机构'**
+  String get creditInstitutionLabel;
+
+  /// No description provided for @creditAccountParentLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'所属信用主体'**
+  String get creditAccountParentLabel;
+
+  /// No description provided for @creditAccountCreateNew.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建信用主体'**
+  String get creditAccountCreateNew;
+
+  /// No description provided for @creditAccountSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'信用主体已保存'**
+  String get creditAccountSaved;
+
+  /// No description provided for @creditChildAccountsSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 个币种子账户 · {currencies}'**
+  String creditChildAccountsSummary(int count, String currencies);
+
+  /// No description provided for @creditDueRuleLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'还款规则'**
+  String get creditDueRuleLabel;
+
+  /// No description provided for @creditDueRuleFixedDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'次月固定日'**
+  String get creditDueRuleFixedDay;
+
+  /// No description provided for @creditDueRuleDaysAfter.
+  ///
+  /// In zh, this message translates to:
+  /// **'账单日后若干天'**
+  String get creditDueRuleDaysAfter;
+
+  /// No description provided for @creditDaysAfterStatementLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'账单日后天数'**
+  String get creditDaysAfterStatementLabel;
+
+  /// No description provided for @creditDaysAfterStatement.
+  ///
+  /// In zh, this message translates to:
+  /// **'账单日后 {days} 天'**
+  String creditDaysAfterStatement(int days);
+
+  /// No description provided for @creditCycleBudgetLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'本账期预算'**
+  String get creditCycleBudgetLabel;
+
+  /// No description provided for @creditCycleSetupHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置账单日后显示账期概览'**
+  String get creditCycleSetupHint;
+
+  /// No description provided for @creditCycleRange.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账期 {start} - {end}'**
+  String creditCycleRange(String start, String end);
+
+  /// No description provided for @creditCycleMissingRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分子账户缺少汇率，合计暂不完整'**
+  String get creditCycleMissingRate;
+
+  /// No description provided for @creditCycleNetSpending.
+  ///
+  /// In zh, this message translates to:
+  /// **'本账期净消费'**
+  String get creditCycleNetSpending;
+
+  /// No description provided for @creditCycleCurrentDebt.
+  ///
+  /// In zh, this message translates to:
+  /// **'本账期当前欠款'**
+  String get creditCycleCurrentDebt;
+
+  /// No description provided for @creditCycleTotalDebt.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前总欠款'**
+  String get creditCycleTotalDebt;
+
+  /// No description provided for @creditNextStatement.
+  ///
+  /// In zh, this message translates to:
+  /// **'下次出账'**
+  String get creditNextStatement;
+
+  /// No description provided for @creditDueDateLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'到期还款'**
+  String get creditDueDateLabel;
+
+  /// No description provided for @creditCycleBudgetProgress.
+  ///
+  /// In zh, this message translates to:
+  /// **'预算 {spent} / {budget}'**
+  String creditCycleBudgetProgress(String spent, String budget);
+
+  /// No description provided for @creditCycleBudgetOver.
+  ///
+  /// In zh, this message translates to:
+  /// **'已超 {amount}'**
+  String creditCycleBudgetOver(String amount);
 }
 
 class _AppLocalizationsDelegate

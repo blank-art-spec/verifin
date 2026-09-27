@@ -212,7 +212,7 @@ void main() {
     expect(updated.cardLast4, '');
   });
 
-  testWidgets('设置信用额度：先更新草稿，点击保存后落库', (WidgetTester tester) async {
+  testWidgets('设置信用额度：进入父主体编辑页，点击保存后原子落库', (WidgetTester tester) async {
     final store = LocalKeyValueStore();
     final controller = await makeController(store);
     // 初始无额度、无账单日 → 无信用信息卡，避免「信用额度」文本歧义。
@@ -236,26 +236,29 @@ void main() {
 
     await tester.tap(find.text('信用额度'));
     await tester.pumpAndSettle();
+    expect(find.text('信用主体设置'), findsOneWidget);
+    // 点击整个选择字段，避免浮动标签的中心点位于字段边界，导致
+    // Widget 测试产生未命中警告而真实点击仍能正常执行的假阳性。
+    await tester.tap(find.widgetWithText(SelectField, '信用额度'));
+    await tester.pumpAndSettle();
     for (final key in <String>['3', '0', '0', '0']) {
       await tester.tap(find.byKey(Key('number_key_$key')));
     }
     await tester.tap(find.byKey(const Key('number_pad_ok')));
     await tester.pumpAndSettle();
 
-    // 草稿预览立即显示，但 Controller 尚未改变。
-    expect(
-      controller.accounts.firstWhere((a) => a.id == 'cc3').creditLimit,
-      isNull,
-    );
-    expect(find.text('可用额度'), findsOneWidget);
-    expect(find.textContaining('2000'), findsWidgets);
+    // 父主体编辑页仍是草稿；点击页头保存前 Controller 不改变。
+    expect(controller.creditAccounts.single.creditLimit, isNull);
 
     await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
+    expect(controller.creditAccounts.single.creditLimit, 3000);
     expect(
       controller.accounts.firstWhere((a) => a.id == 'cc3').creditLimit,
       3000,
     );
+    expect(find.text('可用额度'), findsOneWidget);
+    expect(find.textContaining('2000'), findsWidgets);
   });
 
   testWidgets('编辑后删除账户会直接退出，不再触发未保存提示', (tester) async {

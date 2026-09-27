@@ -3073,5 +3073,52 @@
       "daily": {"type": "String"},
       "attention": {"type": "String"}
     }
+  },
+  "creditAccountEditTitle": "信用主体设置",
+  "creditAccountNameLabel": "信用主体名称",
+  "creditInstitutionLabel": "银行或机构",
+  "creditAccountParentLabel": "所属信用主体",
+  "creditAccountCreateNew": "新建信用主体",
+  "creditAccountSaved": "信用主体已保存",
+  "creditChildAccountsSummary": "{count} 个币种子账户 · {currencies}",
+  "@creditChildAccountsSummary": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "currencies": {"type": "String"}
+    }
+  },
+  "creditDueRuleLabel": "还款规则",
+  "creditDueRuleFixedDay": "次月固定日",
+  "creditDueRuleDaysAfter": "账单日后若干天",
+  "creditDaysAfterStatementLabel": "账单日后天数",
+  "creditDaysAfterStatement": "账单日后 {days} 天",
+  "@creditDaysAfterStatement": {
+    "placeholders": {"days": {"type": "int"}}
+  },
+  "creditCycleBudgetLabel": "本账期预算",
+  "creditCycleSetupHint": "设置账单日与还款规则后显示账期概览",
+  "creditCycleRange": "当前账期 {start} - {end}",
+  "@creditCycleRange": {
+    "placeholders": {
+      "start": {"type": "String"},
+      "end": {"type": "String"}
+    }
+  },
+  "creditCycleMissingRate": "部分子账户缺少汇率，合计暂不展示",
+  "creditCycleNetSpending": "本账期净消费",
+  "creditCycleCurrentDebt": "本账期当前欠款",
+  "creditCycleTotalDebt": "当前总欠款",
+  "creditNextStatement": "下次出账",
+  "creditDueDateLabel": "到期还款",
+  "creditCycleBudgetProgress": "预算 {spent} / {budget}",
+  "@creditCycleBudgetProgress": {
+    "placeholders": {
+      "spent": {"type": "String"},
+      "budget": {"type": "String"}
+    }
+  },
+  "creditCycleBudgetOver": "已超 {amount}",
+  "@creditCycleBudgetOver": {
+    "placeholders": {"amount": {"type": "String"}}
   }
 }

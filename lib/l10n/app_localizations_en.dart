@@ -5095,4 +5095,84 @@ class AppLocalizationsEn extends AppLocalizations {
   ) {
     return '$period budget $budget, spent $spent, remaining $remaining$daily. $attention';
   }
+
+  @override
+  String get creditAccountEditTitle => 'Credit account settings';
+
+  @override
+  String get creditAccountNameLabel => 'Credit account name';
+
+  @override
+  String get creditInstitutionLabel => 'Bank or provider';
+
+  @override
+  String get creditAccountParentLabel => 'Credit account';
+
+  @override
+  String get creditAccountCreateNew => 'Create a new credit account';
+
+  @override
+  String get creditAccountSaved => 'Credit account saved';
+
+  @override
+  String creditChildAccountsSummary(int count, String currencies) {
+    return '$count currency accounts · $currencies';
+  }
+
+  @override
+  String get creditDueRuleLabel => 'Payment due rule';
+
+  @override
+  String get creditDueRuleFixedDay => 'Fixed day next month';
+
+  @override
+  String get creditDueRuleDaysAfter => 'Days after statement';
+
+  @override
+  String get creditDaysAfterStatementLabel => 'Days after statement';
+
+  @override
+  String creditDaysAfterStatement(int days) {
+    return '$days days after statement';
+  }
+
+  @override
+  String get creditCycleBudgetLabel => 'Billing-cycle budget';
+
+  @override
+  String get creditCycleSetupHint => 'Set a statement day to see cycle details';
+
+  @override
+  String creditCycleRange(String start, String end) {
+    return 'Current cycle $start - $end';
+  }
+
+  @override
+  String get creditCycleMissingRate =>
+      'Some currency accounts are missing rates; totals are incomplete';
+
+  @override
+  String get creditCycleNetSpending => 'Cycle net spending';
+
+  @override
+  String get creditCycleCurrentDebt => 'Current cycle debt';
+
+  @override
+  String get creditCycleTotalDebt => 'Total current debt';
+
+  @override
+  String get creditNextStatement => 'Next statement';
+
+  @override
+  String get creditDueDateLabel => 'Payment due';
+
+  @override
+  String creditCycleBudgetProgress(String spent, String budget) {
+    return 'Budget $spent / $budget';
+  }
+
+  @override
+  String creditCycleBudgetOver(String amount) {
+    return 'Over by $amount';
+  }
 }

@@ -473,11 +473,83 @@ void main() {
       const <String, Object?>{},
     );
     final display = result.display! as AiTableDisplay;
-    expect(display.headers, <String>['账户', '币种', '当前欠款', '可用额度', '本期账单']);
+    expect(display.headers, <String>[
+      '账户',
+      '币种',
+      '当前欠款',
+      '可用额度',
+      '本账期净消费',
+    ]);
     expect(
       display.rows.map((row) => row[1]),
       containsAll(<String>['CNY', 'USD']),
     );
+  });
+
+  test('creditCardBill 按信用主体聚合多币种子账户与共享额度', () {
+    const parent = CreditAccount(
+      id: 'cmb',
+      bookId: 'b',
+      name: '招商信用卡 4185',
+      institution: '招商银行',
+      cardLast4: '4185',
+      currencyCode: 'CNY',
+      creditLimit: 10000,
+      statementDay: 5,
+      dueRuleType: CreditDueRuleType.daysAfterStatement,
+      dueDay: null,
+      daysAfterStatement: 20,
+      cycleBudget: null,
+    );
+    final cny = _account(
+      id: 'cny-card',
+      name: '人民币账户',
+      currencyCode: 'CNY',
+    ).copyWith(
+      type: AccountType.creditCard,
+      creditAccountId: parent.id,
+    );
+    final usd = _account(
+      id: 'usd-card',
+      name: '美元账户',
+      currencyCode: 'USD',
+    ).copyWith(
+      type: AccountType.creditCard,
+      creditAccountId: parent.id,
+    );
+    final ctx = AiToolContext(
+      entries: const <LedgerEntry>[],
+      accounts: <Account>[cny, usd],
+      creditAccounts: const <CreditAccount>[parent],
+      categories: const <Category>[],
+      tags: const <Tag>[],
+      balanceOf: (account) => account.id == usd.id ? -100 : -1000,
+      baseCurrencyCode: 'CNY',
+      bookId: 'b',
+      exchangeRates: <ExchangeRate>[
+        ExchangeRate(
+          id: 'usd-rate',
+          bookId: 'b',
+          baseCurrencyCode: 'CNY',
+          currencyCode: 'USD',
+          effectiveDate: DateTime(2026, 6, 1),
+          rateToBase: 7.2,
+          source: ExchangeRateSource.manual,
+          createdAt: DateTime(2026, 6, 1),
+          updatedAt: DateTime(2026, 6, 1),
+        ),
+      ],
+      now: DateTime(2026, 6, 20),
+      l10n: lookupAppLocalizations(const Locale('zh')),
+    );
+
+    final result = _tool('creditCardBill').run(ctx, const <String, Object?>{});
+    final display = result.display! as AiTableDisplay;
+    expect(display.rows, hasLength(1));
+    expect(display.rows.single.first, parent.name);
+    expect(display.rows.single[1], 'CNY');
+    expect(display.rows.single[2], '1720');
+    expect(display.rows.single[3], '8280');
   });
 
   test('budgetStatus 汇总预算执行并列出需要关注的分类', () {

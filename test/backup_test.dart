@@ -238,7 +238,7 @@ void main() {
 
       final backup = source.exportDataJson();
       final root = jsonDecode(backup) as Map<String, dynamic>;
-      expect(root['version'], 4);
+      expect(root['version'], 5);
       final data = root['data'] as Map<String, dynamic>;
       expect(data['exchangeRates'], hasLength(1));
       expect(data['currencyFractionStyle'], isNotNull);
@@ -392,6 +392,54 @@ void main() {
     target.dispose();
   });
 
+  test('v4 信用账户备份导入时自动补一对一信用主体', () async {
+    final source = await makeController();
+    expect(
+      await source.addAccountDraft(
+        Account(
+          id: 'legacy-card',
+          bookId: source.activeBook.id,
+          name: '旧版招商卡',
+          type: AccountType.creditCard,
+          groupId: null,
+          initialBalance: -300,
+          iconCode: 'credit',
+          note: '',
+          includeInAssets: true,
+          hidden: false,
+          currencyCode: 'CNY',
+          cardLast4: '4185',
+          creditLimit: 20000,
+          statementDay: 25,
+          dueDay: 13,
+        ),
+      ),
+      isTrue,
+    );
+    final root = jsonDecode(source.exportDataJson()) as Map<String, dynamic>;
+    root['version'] = 4;
+    final data = root['data'] as Map<String, dynamic>;
+    data.remove('creditAccounts');
+    for (final rawAccount in data['accounts'] as List<dynamic>) {
+      (rawAccount as Map<String, dynamic>).remove('creditAccountId');
+    }
+
+    final target = await makeController();
+    target.importDataJson(jsonEncode(root));
+    final child = target.accounts.singleWhere(
+      (account) => account.id == 'legacy-card',
+    );
+    final creditAccount = target.creditAccountForAccount(child);
+    expect(creditAccount, isNotNull);
+    expect(creditAccount!.id, 'credit-account-legacy-card');
+    expect(creditAccount.creditLimit, 20000);
+    expect(creditAccount.statementDay, 25);
+    expect(creditAccount.dueDay, 13);
+
+    source.dispose();
+    target.dispose();
+  });
+
   test('sample backup imports into controller', () async {
     final rawJson = File(
       'docs/dev/verifin-sample-backup.json',
@@ -497,13 +545,24 @@ void main() {
       AccountType.onlinePayment.name,
     );
     expect(controller.profile.occupation, '产品设计师');
-    final creditAccount = controller.accounts.firstWhere(
+    final creditChildAccount = controller.accounts.firstWhere(
       (account) => account.id == 'acc_credit',
     );
-    expect(creditAccount.cardLast4, '8321');
+    expect(creditChildAccount.cardLast4, '8321');
     // 信用卡账期：样例信用卡设了账单日/还款日，导入后应保留。
-    expect(creditAccount.statementDay, 5);
-    expect(creditAccount.dueDay, 25);
+    expect(creditChildAccount.statementDay, 5);
+    expect(creditChildAccount.dueDay, 25);
+    final creditAccount = controller.creditAccountForAccount(
+      creditChildAccount,
+    );
+    expect(creditAccount, isNotNull);
+    expect(creditAccount!.name, '招商信用卡 8321');
+    expect(creditAccount.institution, '招商银行');
+    expect(creditAccount.cycleBudget, 4000);
+    expect(
+      controller.accountsForCreditAccount(creditAccount.id).single.id,
+      creditChildAccount.id,
+    );
     expect(controller.enabledPanelIds(PanelPageKind.home), <String>[
       'trend',
       'budget',

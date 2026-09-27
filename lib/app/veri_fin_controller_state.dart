@@ -41,6 +41,7 @@ mixin _ControllerState on ChangeNotifier {
   final List<LedgerBook> _ledgerBooks = <LedgerBook>[];
   final List<Account> _accounts = <Account>[];
   final List<AccountGroup> _accountGroups = <AccountGroup>[];
+  final List<CreditAccount> _creditAccounts = <CreditAccount>[];
   final List<Category> _categories = <Category>[];
   final List<Tag> _tags = <Tag>[];
   final List<ExchangeRate> _exchangeRates = <ExchangeRate>[];
@@ -59,6 +60,7 @@ mixin _ControllerState on ChangeNotifier {
   List<LedgerEntry>? _entriesView;
   List<Account>? _accountsView;
   List<AccountGroup>? _accountGroupsView;
+  List<CreditAccount>? _creditAccountsView;
   List<Category>? _categoriesView;
   List<ExchangeRate>? _exchangeRatesView;
   Map<String, double>? _accountBalanceCache;
@@ -68,6 +70,7 @@ mixin _ControllerState on ChangeNotifier {
     _entriesView = null;
     _accountsView = null;
     _accountGroupsView = null;
+    _creditAccountsView = null;
     _categoriesView = null;
     _exchangeRatesView = null;
     _accountBalanceCache = null;
@@ -318,6 +321,9 @@ mixin _ControllerState on ChangeNotifier {
       _accountGroups
         ..clear()
         ..addAll(await _repository.loadAccountGroups());
+      _creditAccounts
+        ..clear()
+        ..addAll(await _repository.loadCreditAccounts());
       _normalizeGroupOrder();
       final categories = await _repository.loadCategories();
       _categories
@@ -882,6 +888,7 @@ mixin _ControllerState on ChangeNotifier {
     List<LedgerBook>? books,
     List<Account>? accounts,
     List<AccountGroup>? accountGroups,
+    List<CreditAccount>? creditAccounts,
     List<Category>? categories,
     List<Tag>? tags,
     List<Attachment>? attachments,
@@ -899,6 +906,7 @@ mixin _ControllerState on ChangeNotifier {
       books: books ?? List<LedgerBook>.of(_ledgerBooks),
       accounts: accounts ?? List<Account>.of(_accounts),
       accountGroups: accountGroups ?? List<AccountGroup>.of(_accountGroups),
+      creditAccounts: creditAccounts ?? List<CreditAccount>.of(_creditAccounts),
       categories: categories ?? List<Category>.of(_categories),
       tags: tags ?? List<Tag>.of(_tags),
       attachments: attachments ?? List<Attachment>.of(_attachments),

@@ -5,6 +5,8 @@ import 'package:flutter/material.dart';
 import '../app/app_theme.dart';
 import '../app/chart_painters.dart';
 import '../app/common_widgets.dart';
+import '../app/credit_card.dart';
+import '../app/currency_math.dart';
 import '../app/home_metrics.dart';
 import '../app/ledger_math.dart';
 import '../app/models.dart';
@@ -13,6 +15,7 @@ import '../app/series_math.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'budget_pages.dart';
+import 'credit_account_editor_page.dart';
 import 'home_metrics_settings_page.dart';
 import 'panel_settings_page.dart';
 import 'recurring_page.dart';
@@ -72,6 +75,12 @@ class HomePage extends StatelessWidget {
     final recurringMissingCodes =
         recurringMissingByRule.values.expand((codes) => codes).toSet().toList()
           ..sort();
+    final visibleCreditAccounts = controller.creditAccounts
+        .where(
+          (creditAccount) =>
+              controller.accountsForCreditAccount(creditAccount.id).isNotEmpty,
+        )
+        .toList(growable: false);
 
     // 面板 id 对应的卡片,渲染顺序与开关由面板管理页配置。
     Widget panelFor(String id) {
@@ -240,6 +249,24 @@ class HomePage extends StatelessWidget {
               ),
             ),
           ],
+          for (final creditAccount in visibleCreditAccounts) ...<Widget>[
+            const SizedBox(height: 10),
+            CreditAccountCycleCard(
+              creditAccount: creditAccount,
+              overview: !creditAccount.hasCompleteCycleRule
+                  ? null
+                  : controller.creditCycleOverview(creditAccount, now: now),
+              childAccounts: controller.accountsForCreditAccount(
+                creditAccount.id,
+              ),
+              onTap: () => Navigator.of(context).push<void>(
+                MaterialPageRoute<void>(
+                  builder: (context) =>
+                      CreditAccountEditorPage(creditAccount: creditAccount),
+                ),
+              ),
+            ),
+          ],
           for (final id in panelIds) ...<Widget>[
             const SizedBox(height: 10),
             panelFor(id),
@@ -248,6 +275,289 @@ class HomePage extends StatelessWidget {
           const PanelSettingsEntry(kind: PanelPageKind.home),
         ],
       ),
+    );
+  }
+}
+
+/// 首页信用主体账期概览卡。
+///
+/// 卡片刻意把“净消费”“当前账期欠款”“已出账待还”和“总欠款”拆成四个指标；
+/// 提前还款只改变欠款，不改写消费，避免把上期还款误算成本期负消费。
+class CreditAccountCycleCard extends StatelessWidget {
+  const CreditAccountCycleCard({
+    super.key,
+    required this.creditAccount,
+    required this.overview,
+    required this.childAccounts,
+    required this.onTap,
+  });
+
+  final CreditAccount creditAccount;
+  final CreditCycleOverview? overview;
+  final List<Account> childAccounts;
+  final VoidCallback onTap;
+
+  /// 渲染信用主体卡片；未设置账单日时展示明确配置入口，不用虚构账期日期。
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final snapshot = overview;
+    final childCodes = childAccounts
+        .map((item) => item.currencyCode)
+        .toSet()
+        .join(' · ');
+    return VeriCard(
+      key: Key('home_credit_cycle_${creditAccount.id}'),
+      onTap: onTap,
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(
+                      creditAccount.name,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    const SizedBox(height: 2),
+                    Text(
+                      snapshot == null
+                          ? l10n.creditCycleSetupHint
+                          : l10n.creditCycleRange(
+                              l10n.dateMonthDay(snapshot.cycle.start),
+                              l10n.dateMonthDay(snapshot.cycle.end),
+                            ),
+                      style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                        color: Theme.of(
+                          context,
+                        ).colorScheme.onSurface.withValues(alpha: 0.56),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              if (childCodes.isNotEmpty)
+                Text(
+                  childCodes,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.52),
+                  ),
+                ),
+              const SizedBox(width: 6),
+              const Icon(Icons.chevron_right_rounded),
+            ],
+          ),
+          if (snapshot != null) ...<Widget>[
+            const SizedBox(height: 12),
+            if (snapshot.missingConversion)
+              Padding(
+                padding: const EdgeInsets.only(bottom: 10),
+                child: Text(
+                  l10n.creditCycleMissingRate,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: veriSemantic(context, veriWarning),
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+              ),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _CreditCycleMetric(
+                    label: l10n.creditCycleNetSpending,
+                    value: snapshot.missingConversion
+                        ? l10n.notSet
+                        : _money(snapshot.netSpending),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _CreditCycleMetric(
+                    label: l10n.creditCycleCurrentDebt,
+                    value: snapshot.missingConversion
+                        ? l10n.notSet
+                        : _money(snapshot.currentCycleDebt),
+                    highlight: true,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 8),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _CreditCycleMetric(
+                    label: l10n.billedOutstandingLabel,
+                    value: snapshot.missingConversion
+                        ? l10n.notSet
+                        : _money(snapshot.billedOutstanding),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                Expanded(
+                  child: _CreditCycleMetric(
+                    label: l10n.creditCycleTotalDebt,
+                    value: snapshot.missingConversion
+                        ? l10n.notSet
+                        : _money(snapshot.totalDebt),
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 10),
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: Text(
+                    '${l10n.creditNextStatement}  ${l10n.dateMonthDay(snapshot.nextStatementDate)}',
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ),
+                Text(
+                  '${l10n.creditDueDateLabel}  ${l10n.dateMonthDay(snapshot.dueDate)}',
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+              ],
+            ),
+            if (creditAccount.cycleBudget != null &&
+                !snapshot.missingConversion) ...<Widget>[
+              const SizedBox(height: 10),
+              _CreditCycleBudgetProgress(
+                spent: snapshot.netSpending,
+                budget: creditAccount.cycleBudget!,
+                currencyCode: creditAccount.currencyCode,
+              ),
+            ],
+          ],
+        ],
+      ),
+    );
+  }
+
+  /// 按主体币种格式化首页金额，避免多币种子账户各自显示一套不可比较的数字。
+  String _money(double amount) =>
+      formatUserMoney(amount, creditAccount.currencyCode);
+}
+
+/// 信用账期卡片内的单个指标方块。局部组件只服务这张卡，不扩张公共组件 API。
+class _CreditCycleMetric extends StatelessWidget {
+  const _CreditCycleMetric({
+    required this.label,
+    required this.value,
+    this.highlight = false,
+  });
+
+  final String label;
+  final String value;
+  final bool highlight;
+
+  /// 使用不透明实色容器呈现指标层级，遵守统一设计中“不使用玻璃或渐变”的约定。
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context);
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 9),
+      decoration: BoxDecoration(
+        color: theme.colorScheme.surfaceContainerHighest,
+        borderRadius: BorderRadius.circular(veriRadiusMd),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Text(
+            label,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.labelSmall?.copyWith(
+              color: theme.colorScheme.onSurface.withValues(alpha: 0.56),
+            ),
+          ),
+          const SizedBox(height: 4),
+          Text(
+            value,
+            maxLines: 1,
+            overflow: TextOverflow.ellipsis,
+            style: theme.textTheme.titleSmall?.copyWith(
+              color: highlight
+                  ? veriSemantic(context, veriBlue)
+                  : theme.colorScheme.onSurface,
+              fontWeight: FontWeight.w800,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 账期预算进度。支出超过预算后明确展示超额金额，而不是把进度条截断后失去信息。
+class _CreditCycleBudgetProgress extends StatelessWidget {
+  const _CreditCycleBudgetProgress({
+    required this.spent,
+    required this.budget,
+    required this.currencyCode,
+  });
+
+  final double spent;
+  final double budget;
+  final String currencyCode;
+
+  /// 根据支出/预算比绘制进度，并使用语义警告色标记超支。
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final over = spent > budget;
+    final ratio = budget <= 0
+        ? 0.0
+        : (spent / budget).clamp(0.0, 1.0).toDouble();
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Row(
+          children: <Widget>[
+            Expanded(
+              child: Text(
+                l10n.creditCycleBudgetProgress(
+                  formatUserMoney(spent, currencyCode),
+                  formatUserMoney(budget, currencyCode),
+                ),
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+            ),
+            if (over)
+              Text(
+                l10n.creditCycleBudgetOver(
+                  formatUserMoney(spent - budget, currencyCode),
+                ),
+                style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                  color: veriSemantic(context, veriWarning),
+                  fontWeight: FontWeight.w700,
+                ),
+              ),
+          ],
+        ),
+        const SizedBox(height: 6),
+        ClipRRect(
+          borderRadius: BorderRadius.circular(veriRadiusSm),
+          child: LinearProgressIndicator(
+            value: ratio,
+            minHeight: 7,
+            backgroundColor: Theme.of(
+              context,
+            ).colorScheme.surfaceContainerHighest,
+            color: over
+                ? veriSemantic(context, veriWarning)
+                : veriSemantic(context, veriBlue),
+          ),
+        ),
+      ],
     );
   }
 }

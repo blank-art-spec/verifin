@@ -1937,5 +1937,52 @@
   "aiBudgetAttention": "Needs attention: {items}.",
   "aiBudgetAttentionRow": "{label} {spent}/{budget} ({status})",
   "aiDailyRemainingLine": ", {amount}/day remaining",
-  "aiBudgetSummary": "{period} budget {budget}, spent {spent}, remaining {remaining}{daily}. {attention}"
+  "aiBudgetSummary": "{period} budget {budget}, spent {spent}, remaining {remaining}{daily}. {attention}",
+  "creditAccountEditTitle": "Credit account settings",
+  "creditAccountNameLabel": "Credit account name",
+  "creditInstitutionLabel": "Bank or provider",
+  "creditAccountParentLabel": "Credit account",
+  "creditAccountCreateNew": "Create a new credit account",
+  "creditAccountSaved": "Credit account saved",
+  "creditChildAccountsSummary": "{count} currency accounts · {currencies}",
+  "@creditChildAccountsSummary": {
+    "placeholders": {
+      "count": {"type": "int"},
+      "currencies": {"type": "String"}
+    }
+  },
+  "creditDueRuleLabel": "Payment due rule",
+  "creditDueRuleFixedDay": "Fixed day next month",
+  "creditDueRuleDaysAfter": "Days after statement",
+  "creditDaysAfterStatementLabel": "Days after statement",
+  "creditDaysAfterStatement": "{days} days after statement",
+  "@creditDaysAfterStatement": {
+    "placeholders": {"days": {"type": "int"}}
+  },
+  "creditCycleBudgetLabel": "Billing-cycle budget",
+  "creditCycleSetupHint": "Set the statement day and payment rule to see cycle details",
+  "creditCycleRange": "Current cycle {start} - {end}",
+  "@creditCycleRange": {
+    "placeholders": {
+      "start": {"type": "String"},
+      "end": {"type": "String"}
+    }
+  },
+  "creditCycleMissingRate": "Some currency accounts are missing rates; totals are hidden",
+  "creditCycleNetSpending": "Cycle net spending",
+  "creditCycleCurrentDebt": "Current cycle debt",
+  "creditCycleTotalDebt": "Total current debt",
+  "creditNextStatement": "Next statement",
+  "creditDueDateLabel": "Payment due",
+  "creditCycleBudgetProgress": "Budget {spent} / {budget}",
+  "@creditCycleBudgetProgress": {
+    "placeholders": {
+      "spent": {"type": "String"},
+      "budget": {"type": "String"}
+    }
+  },
+  "creditCycleBudgetOver": "Over by {amount}",
+  "@creditCycleBudgetOver": {
+    "placeholders": {"amount": {"type": "String"}}
+  }
 }

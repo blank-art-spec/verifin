@@ -1,6 +1,6 @@
 {
   "app": "verifin",
-  "version": 4,
+  "version": 5,
   "exportedAt": "2026-07-03T16:00:00.000",
   "data": {
     "ledgerBooks": [
@@ -418,7 +418,8 @@
         "cardLast4Follows": true,
         "creditLimit": 30000.0,
         "statementDay": 5,
-        "dueDay": 25
+        "dueDay": 25,
+        "creditAccountId": "credit_cmb_8321"
       },
       {
         "id": "acc_huabei",
@@ -435,7 +436,8 @@
         "cardNumber": "",
         "creditLimit": 5000.0,
         "statementDay": 1,
-        "dueDay": 10
+        "dueDay": 10,
+        "creditAccountId": "credit_huabei"
       },
       {
         "id": "acc_debit",
@@ -535,7 +537,8 @@
         "note": "旅行账本信用卡",
         "includeInAssets": true,
         "hidden": false,
-        "cardLast4": "7788"
+        "cardLast4": "7788",
+        "creditAccountId": "credit_travel_7788"
       }
     ],
     "accountGroups": [
@@ -736,6 +739,45 @@
         "source": "manual",
         "createdAt": "2026-07-01T09:00:00.000",
         "updatedAt": "2026-07-01T09:00:00.000"
+      }
+    ],
+    "creditAccounts": [
+      {
+        "id": "credit_cmb_8321",
+        "bookId": "default",
+        "name": "招商信用卡 8321",
+        "institution": "招商银行",
+        "cardLast4": "8321",
+        "currencyCode": "CNY",
+        "creditLimit": 30000.0,
+        "statementDay": 5,
+        "dueRuleType": "fixedDay",
+        "dueDay": 25,
+        "cycleBudget": 4000.0
+      },
+      {
+        "id": "credit_huabei",
+        "bookId": "default",
+        "name": "花呗",
+        "institution": "支付宝",
+        "cardLast4": "",
+        "currencyCode": "CNY",
+        "creditLimit": 5000.0,
+        "statementDay": 1,
+        "dueRuleType": "daysAfterStatement",
+        "daysAfterStatement": 9,
+        "cycleBudget": 1500.0
+      },
+      {
+        "id": "credit_travel_7788",
+        "bookId": "book_travel",
+        "name": "旅行信用卡 7788",
+        "institution": "",
+        "cardLast4": "7788",
+        "currencyCode": "CNY",
+        "statementDay": 20,
+        "dueRuleType": "fixedDay",
+        "dueDay": 10
       }
     ],
     "balanceAnchors": [

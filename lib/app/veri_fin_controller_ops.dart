@@ -160,6 +160,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         _exchangeRates.any((rate) => rate.bookId == bookId) ||
         _balanceAnchors.any((anchor) => anchor.bookId == bookId) ||
         _billingStatements.any((statement) => statement.bookId == bookId) ||
+        _creditAccounts.any(
+          (creditAccount) =>
+              creditAccount.bookId == bookId &&
+              (creditAccount.creditLimit != null ||
+                  creditAccount.cycleBudget != null),
+        ) ||
         hasBudget(_monthlyBudgets) ||
         hasBudget(_categoryBudgets) ||
         (_dailyBudgets[bookId] ?? 0) != 0;
@@ -199,6 +205,147 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _accounts.where((account) => account.bookId == _activeBookId),
   );
 
+  /// 当前账本的信用主体。一个主体可关联多个不同币种的 [Account] 子账户。
+  List<CreditAccount> get creditAccounts =>
+      _creditAccountsView ??= List<CreditAccount>.unmodifiable(
+        _creditAccounts.where((item) => item.bookId == _activeBookId),
+      );
+
+  /// 查找账户所属的信用主体；普通账户或未迁移的异常数据返回 null。
+  CreditAccount? creditAccountForAccount(Account account) {
+    // 页面可能仍持有创建前的 Account 快照（其中尚无 parent id）；优先从 Controller
+    // 当前账户集合补取关联，避免刚创建后进入详情页看不到主体，或保存时重复建主体。
+    final persistedId = _accounts
+        .where((item) => item.id == account.id && item.bookId == account.bookId)
+        .firstOrNull
+        ?.creditAccountId;
+    final creditAccountId = account.creditAccountId ?? persistedId;
+    return _creditAccounts
+        .where(
+          (item) => item.id == creditAccountId && item.bookId == account.bookId,
+        )
+        .firstOrNull;
+  }
+
+  /// 返回信用主体下的币种子账户，保持账户列表中的用户排序。
+  List<Account> accountsForCreditAccount(String creditAccountId) =>
+      List<Account>.unmodifiable(
+        _accounts.where(
+          (account) =>
+              account.bookId == _activeBookId &&
+              account.creditAccountId == creditAccountId,
+        ),
+      );
+
+  /// 计算首页信用主体账期快照；缺汇率时快照会标记 [CreditCycleOverview.missingConversion]。
+  CreditCycleOverview creditCycleOverview(
+    CreditAccount creditAccount, {
+    DateTime? now,
+  }) => buildCreditCycleOverview(
+    creditAccount: creditAccount,
+    accounts: _accounts.where((item) => item.bookId == creditAccount.bookId),
+    entries: _entries.where((item) => item.bookId == creditAccount.bookId),
+    statements: _billingStatements.where(
+      (item) => item.bookId == creditAccount.bookId,
+    ),
+    allocations: _statementRepaymentAllocations.where(
+      (item) => item.bookId == creditAccount.bookId,
+    ),
+    baseCurrencyCode: activeBook.baseCurrencyCode,
+    now: now ?? DateTime.now(),
+    balanceOf: accountBalance,
+    convertToCreditCurrency: (amount, sourceCurrencyCode, date) {
+      final result = convertAmount(
+        amount: amount,
+        sourceCurrencyCode: sourceCurrencyCode,
+        targetCurrencyCode: creditAccount.currencyCode,
+        date: date,
+      );
+      return result is ConvertedCurrencyAmount ? result.amount : null;
+    },
+  );
+
+  /// 保存信用主体草稿，并把额度/日期同步到子账户的兼容镜像字段。
+  /// 主体和子账户在同一事务落库，保存失败时内存保持原状。
+  Future<bool> saveCreditAccountDraft(CreditAccount creditAccount) async {
+    final index = _creditAccounts.indexWhere(
+      (item) => item.id == creditAccount.id,
+    );
+    final statementDay = creditAccount.statementDay;
+    final dueDay = creditAccount.dueDay;
+    final daysAfterStatement = creditAccount.daysAfterStatement;
+    final creditLimit = creditAccount.creditLimit;
+    final cycleBudget = creditAccount.cycleBudget;
+    if (index == -1 ||
+        creditAccount.bookId != _activeBookId ||
+        creditAccount.name.trim().isEmpty ||
+        !CurrencyCatalog.isSupported(creditAccount.currencyCode) ||
+        (creditLimit != null && (!creditLimit.isFinite || creditLimit < 0)) ||
+        (cycleBudget != null && (!cycleBudget.isFinite || cycleBudget < 0)) ||
+        (statementDay != null && (statementDay < 1 || statementDay > 28)) ||
+        (creditAccount.dueRuleType == CreditDueRuleType.fixedDay &&
+            dueDay != null &&
+            (dueDay < 1 || dueDay > 28)) ||
+        (creditAccount.dueRuleType == CreditDueRuleType.daysAfterStatement &&
+            (daysAfterStatement == null ||
+                daysAfterStatement <= 0 ||
+                daysAfterStatement > 3650))) {
+      return false;
+    }
+    final normalized = creditAccount.copyWith(
+      name: creditAccount.name.trim(),
+      institution: creditAccount.institution.trim(),
+      cardLast4: cardLast4Of(creditAccount.cardLast4),
+      creditLimit: creditAccount.creditLimit == null
+          ? null
+          : normalizeCurrencyAmount(
+              creditAccount.creditLimit!,
+              creditAccount.currencyCode,
+            ),
+      clearCreditLimit: creditAccount.creditLimit == null,
+      cycleBudget: creditAccount.cycleBudget == null
+          ? null
+          : normalizeCurrencyAmount(
+              creditAccount.cycleBudget!,
+              creditAccount.currencyCode,
+            ),
+      clearCycleBudget: creditAccount.cycleBudget == null,
+      dueDay: creditAccount.dueRuleType == CreditDueRuleType.fixedDay
+          ? creditAccount.dueDay
+          : null,
+      clearDueDay:
+          creditAccount.dueRuleType != CreditDueRuleType.fixedDay ||
+          creditAccount.dueDay == null,
+      daysAfterStatement:
+          creditAccount.dueRuleType == CreditDueRuleType.daysAfterStatement
+          ? creditAccount.daysAfterStatement
+          : null,
+      clearDaysAfterStatement:
+          creditAccount.dueRuleType != CreditDueRuleType.daysAfterStatement ||
+          creditAccount.daysAfterStatement == null,
+    );
+    final nextCreditAccounts = List<CreditAccount>.of(_creditAccounts)
+      ..[index] = normalized;
+    final nextAccounts = _accountsWithCreditMirrors(_accounts, normalized);
+    try {
+      await _repository.saveCreditAccountAggregate(
+        creditAccounts: nextCreditAccounts,
+        accounts: nextAccounts,
+      );
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _creditAccounts
+      ..clear()
+      ..addAll(nextCreditAccounts);
+    _accounts
+      ..clear()
+      ..addAll(nextAccounts);
+    notifyListeners();
+    return true;
+  }
+
   /// 当前账本的余额核准锚点，按核准时间倒序。
   List<BalanceAnchor> get balanceAnchors {
     final list =
@@ -218,6 +365,14 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           ..sort((a, b) => b.statementDate.compareTo(a.statementDate));
     return List<BillingStatement>.unmodifiable(list);
   }
+
+  /// 当前账本的正式账单还款归属快照，供只读 AI 工具按信用主体计算提前还款。
+  List<StatementRepaymentAllocation> get statementRepaymentAllocations =>
+      List<StatementRepaymentAllocation>.unmodifiable(
+        _statementRepaymentAllocations.where(
+          (allocation) => allocation.bookId == _activeBookId,
+        ),
+      );
 
   List<BillingStatement> billingStatementsForAccount(String accountId) =>
       List<BillingStatement>.unmodifiable(
@@ -3363,6 +3518,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _entries.removeWhere((entry) => entry.bookId == bookId);
     _accounts.removeWhere((account) => account.bookId == bookId);
     _accountGroups.removeWhere((group) => group.bookId == bookId);
+    _creditAccounts.removeWhere(
+      (creditAccount) => creditAccount.bookId == bookId,
+    );
     _recurringRules.removeWhere((rule) => rule.bookId == bookId);
     _exchangeRates.removeWhere((rate) => rate.bookId == bookId);
     _balanceAnchors.removeWhere((anchor) => anchor.bookId == bookId);
@@ -3674,38 +3832,167 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           ? null
           : normalizeCurrencyAmount(creditLimit, account.currencyCode),
       clearCreditLimit: creditLimit == null,
+      // 普通账户不能保留信用主体引用；账户类型切换后在此统一清理，避免悬空父子关系。
+      clearCreditAccountId: !account.type.supportsCredit,
     );
   }
+
+  /// 校验已有信用主体引用必须存在于同一账本；null 表示稍后自动新建主体。
+  bool _hasValidCreditAccountLink(Account account) {
+    final creditAccountId = account.creditAccountId;
+    if (!account.type.supportsCredit ||
+        creditAccountId == null ||
+        creditAccountId.isEmpty) {
+      return true;
+    }
+    return _creditAccounts.any(
+      (item) => item.id == creditAccountId && item.bookId == account.bookId,
+    );
+  }
+
+  /// 把主体的共享额度与日期规则复制到全部币种子账户的兼容字段。
+  ///
+  /// 旧页面和旧备份仍会读取这些字段；新计算只认 [CreditAccount]。集中同步可避免
+  /// 编辑人民币子账户后美元子账户仍保留另一份额度。相对日规则没有固定 dueDay，
+  /// 因此兼容字段统一清空。
+  List<Account> _accountsWithCreditMirrors(
+    Iterable<Account> accounts,
+    CreditAccount creditAccount,
+  ) => accounts
+      .map(
+        (account) => account.creditAccountId != creditAccount.id
+            ? account
+            : account.copyWith(
+                cardLast4: creditAccount.cardLast4,
+                // 旧账户字段没有“额度币种”。只有与主体同币种的子账户保留镜像值；
+                // 外币子账户必须清空，避免把 ¥70,000 错显示成 $70,000。
+                creditLimit: account.currencyCode == creditAccount.currencyCode
+                    ? creditAccount.creditLimit
+                    : null,
+                clearCreditLimit:
+                    account.currencyCode != creditAccount.currencyCode ||
+                    creditAccount.creditLimit == null,
+                statementDay: creditAccount.statementDay,
+                clearStatementDay: creditAccount.statementDay == null,
+                dueDay: creditAccount.dueRuleType == CreditDueRuleType.fixedDay
+                    ? creditAccount.dueDay
+                    : null,
+                clearDueDay:
+                    creditAccount.dueRuleType != CreditDueRuleType.fixedDay ||
+                    creditAccount.dueDay == null,
+              ),
+      )
+      .toList();
+
+  /// 判断币种子账户编辑页是否真的改动了共享额度/日期；普通名称、备注和卡号编辑
+  /// 不得反向覆盖信用主体，主体卡尾号只允许在专用编辑页修改。
+  bool _creditMirrorsChanged(Account before, Account after) =>
+      before.creditAccountId == after.creditAccountId &&
+      (before.creditLimit != after.creditLimit ||
+          before.statementDay != after.statementDay ||
+          before.dueDay != after.dueDay);
 
   void addAccount(Account account) {
     if (!_isAccountCurrencyAllowed(account)) return;
     // 名称统一去首尾空格（与 addAccountGroup、导入侧 plan_builder 同规则）。
-    _accounts.add(
-      _normalizeAccountCurrencyAmounts(
-        account.copyWith(name: account.name.trim()),
-      ),
+    var normalized = _normalizeAccountCurrencyAmounts(
+      account.copyWith(name: account.name.trim()),
     );
-    _persistAccounts();
+    if (!_hasValidCreditAccountLink(normalized)) return;
+    CreditAccount? createdCreditAccount;
+    if (normalized.type.supportsCredit &&
+        (normalized.creditAccountId == null ||
+            normalized.creditAccountId!.isEmpty)) {
+      final creditAccount = _creditAccountFromLegacyAccount(normalized);
+      createdCreditAccount = creditAccount;
+      _creditAccounts.add(creditAccount);
+      normalized = normalized.copyWith(creditAccountId: creditAccount.id);
+    } else if (normalized.creditAccountId != null) {
+      final parent = _creditAccounts.firstWhere(
+        (item) => item.id == normalized.creditAccountId,
+      );
+      normalized = _accountsWithCreditMirrors(<Account>[
+        normalized,
+      ], parent).single;
+    }
+    _accounts.add(normalized);
+    if (createdCreditAccount == null) {
+      _persistAccounts();
+    } else {
+      _trackWrite(
+        _repository.saveCreditAccountAggregate(
+          creditAccounts: List<CreditAccount>.of(_creditAccounts),
+          accounts: List<Account>.of(_accounts),
+        ),
+      );
+    }
     notifyListeners();
   }
 
   /// 编辑页提交新账户：只有 SQLite 写入成功后才更新内存并通知 UI。
   Future<bool> addAccountDraft(Account account) async {
     if (!_isAccountCurrencyAllowed(account)) return false;
-    final normalized = _normalizeAccountCurrencyAmounts(
+    var normalized = _normalizeAccountCurrencyAmounts(
       account.copyWith(name: account.name.trim()),
     );
+    if (!_hasValidCreditAccountLink(normalized)) return false;
+    CreditAccount? createdCreditAccount;
+    if (normalized.type.supportsCredit &&
+        (normalized.creditAccountId == null ||
+            normalized.creditAccountId!.isEmpty)) {
+      createdCreditAccount = _creditAccountFromLegacyAccount(normalized);
+      normalized = normalized.copyWith(
+        creditAccountId: createdCreditAccount.id,
+      );
+    } else if (normalized.creditAccountId != null) {
+      final parent = _creditAccounts.firstWhere(
+        (item) => item.id == normalized.creditAccountId,
+      );
+      normalized = _accountsWithCreditMirrors(<Account>[
+        normalized,
+      ], parent).single;
+    }
     final next = <Account>[..._accounts, normalized];
     try {
-      await _repository.saveAccounts(next);
+      if (createdCreditAccount == null) {
+        await _repository.saveAccounts(next);
+      } else {
+        await _repository.saveCreditAccountAggregate(
+          creditAccounts: <CreditAccount>[
+            ..._creditAccounts,
+            createdCreditAccount,
+          ],
+          accounts: next,
+        );
+      }
     } catch (error, stackTrace) {
       _handlePersistError(error, stackTrace);
       return false;
     }
     _accounts.add(normalized);
+    if (createdCreditAccount != null) {
+      _creditAccounts.add(createdCreditAccount);
+    }
     notifyListeners();
     return true;
   }
+
+  /// 用旧账户字段创建一对一信用主体。id 由账户 id 稳定派生，重复调用不会产生漂移。
+  CreditAccount _creditAccountFromLegacyAccount(Account account) =>
+      CreditAccount(
+        id: 'credit-account-${account.id}',
+        bookId: account.bookId,
+        name: account.name,
+        institution: '',
+        cardLast4: account.cardLast4,
+        currencyCode: account.currencyCode,
+        creditLimit: account.creditLimit,
+        statementDay: account.statementDay,
+        dueRuleType: CreditDueRuleType.fixedDay,
+        dueDay: account.dueDay,
+        daysAfterStatement: null,
+        cycleBudget: null,
+      );
 
   void updateAccount(Account account) {
     final index = _accounts.indexWhere((item) => item.id == account.id);
@@ -3718,10 +4005,88 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             accountCurrencyLocked(current))) {
       return;
     }
-    _accounts[index] = _normalizeAccountCurrencyAmounts(
-      account.copyWith(name: account.name.trim()),
+    final accountWithPersistedLink =
+        account.type.supportsCredit && account.creditAccountId == null
+        ? account.copyWith(creditAccountId: current.creditAccountId)
+        : account;
+    var normalized = _normalizeAccountCurrencyAmounts(
+      accountWithPersistedLink.copyWith(name: account.name.trim()),
     );
-    _persistAccounts();
+    if (!_hasValidCreditAccountLink(normalized)) return;
+    final nextCreditAccounts = List<CreditAccount>.of(_creditAccounts);
+    CreditAccount? createdCreditAccount;
+    if (normalized.type.supportsCredit &&
+        (normalized.creditAccountId == null ||
+            normalized.creditAccountId!.isEmpty)) {
+      createdCreditAccount = _creditAccountFromLegacyAccount(normalized);
+      normalized = normalized.copyWith(
+        creditAccountId: createdCreditAccount.id,
+      );
+      nextCreditAccounts.add(createdCreditAccount);
+    }
+    var nextAccounts = List<Account>.of(_accounts)..[index] = normalized;
+    final creditIndex = nextCreditAccounts.indexWhere(
+      (item) => item.id == normalized.creditAccountId,
+    );
+    final associationChanged =
+        current.creditAccountId != normalized.creditAccountId;
+    var creditProfileChanged = false;
+    if (creditIndex != -1 && _creditMirrorsChanged(current, normalized)) {
+      final currentCredit = nextCreditAccounts[creditIndex];
+      final nextCredit = currentCredit.copyWith(
+        creditLimit: normalized.currencyCode == currentCredit.currencyCode
+            ? normalized.creditLimit
+            : currentCredit.creditLimit,
+        clearCreditLimit:
+            normalized.currencyCode == currentCredit.currencyCode &&
+            normalized.creditLimit == null,
+        statementDay: normalized.statementDay,
+        clearStatementDay: normalized.statementDay == null,
+        dueDay: currentCredit.dueRuleType == CreditDueRuleType.fixedDay
+            ? normalized.dueDay
+            : null,
+        clearDueDay:
+            currentCredit.dueRuleType != CreditDueRuleType.fixedDay ||
+            normalized.dueDay == null,
+      );
+      nextCreditAccounts[creditIndex] = nextCredit;
+      nextAccounts = _accountsWithCreditMirrors(nextAccounts, nextCredit);
+      creditProfileChanged = true;
+    } else if (creditIndex != -1 && associationChanged) {
+      nextAccounts = _accountsWithCreditMirrors(
+        nextAccounts,
+        nextCreditAccounts[creditIndex],
+      );
+    }
+    if (current.creditAccountId != null &&
+        current.creditAccountId != normalized.creditAccountId &&
+        !nextAccounts.any(
+          (item) => item.creditAccountId == current.creditAccountId,
+        )) {
+      nextCreditAccounts.removeWhere(
+        (item) => item.id == current.creditAccountId,
+      );
+    }
+    _accounts
+      ..clear()
+      ..addAll(nextAccounts);
+    final requiresAggregate =
+        createdCreditAccount != null ||
+        creditProfileChanged ||
+        nextCreditAccounts.length != _creditAccounts.length;
+    if (requiresAggregate) {
+      _creditAccounts
+        ..clear()
+        ..addAll(nextCreditAccounts);
+      _trackWrite(
+        _repository.saveCreditAccountAggregate(
+          creditAccounts: List<CreditAccount>.of(_creditAccounts),
+          accounts: List<Account>.of(_accounts),
+        ),
+      );
+    } else {
+      _persistAccounts();
+    }
     notifyListeners();
   }
 
@@ -3737,17 +4102,88 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             accountCurrencyLocked(current))) {
       return false;
     }
-    final normalized = _normalizeAccountCurrencyAmounts(
-      account.copyWith(name: account.name.trim()),
+    final accountWithPersistedLink =
+        account.type.supportsCredit && account.creditAccountId == null
+        ? account.copyWith(creditAccountId: current.creditAccountId)
+        : account;
+    var normalized = _normalizeAccountCurrencyAmounts(
+      accountWithPersistedLink.copyWith(name: account.name.trim()),
     );
-    final next = List<Account>.of(_accounts)..[index] = normalized;
+    if (!_hasValidCreditAccountLink(normalized)) return false;
+    final nextCreditAccounts = List<CreditAccount>.of(_creditAccounts);
+    CreditAccount? createdCreditAccount;
+    if (normalized.type.supportsCredit &&
+        (normalized.creditAccountId == null ||
+            normalized.creditAccountId!.isEmpty)) {
+      createdCreditAccount = _creditAccountFromLegacyAccount(normalized);
+      normalized = normalized.copyWith(
+        creditAccountId: createdCreditAccount.id,
+      );
+      nextCreditAccounts.add(createdCreditAccount);
+    }
+    var next = List<Account>.of(_accounts)..[index] = normalized;
+    final creditIndex = nextCreditAccounts.indexWhere(
+      (item) => item.id == normalized.creditAccountId,
+    );
+    final associationChanged =
+        current.creditAccountId != normalized.creditAccountId;
+    var creditProfileChanged = false;
+    if (creditIndex != -1 && _creditMirrorsChanged(current, normalized)) {
+      final currentCredit = nextCreditAccounts[creditIndex];
+      final nextCredit = currentCredit.copyWith(
+        creditLimit: normalized.currencyCode == currentCredit.currencyCode
+            ? normalized.creditLimit
+            : currentCredit.creditLimit,
+        clearCreditLimit:
+            normalized.currencyCode == currentCredit.currencyCode &&
+            normalized.creditLimit == null,
+        statementDay: normalized.statementDay,
+        clearStatementDay: normalized.statementDay == null,
+        dueDay: currentCredit.dueRuleType == CreditDueRuleType.fixedDay
+            ? normalized.dueDay
+            : null,
+        clearDueDay:
+            currentCredit.dueRuleType != CreditDueRuleType.fixedDay ||
+            normalized.dueDay == null,
+      );
+      nextCreditAccounts[creditIndex] = nextCredit;
+      next = _accountsWithCreditMirrors(next, nextCredit);
+      creditProfileChanged = true;
+    } else if (creditIndex != -1 && associationChanged) {
+      next = _accountsWithCreditMirrors(next, nextCreditAccounts[creditIndex]);
+    }
+    if (current.creditAccountId != null &&
+        current.creditAccountId != normalized.creditAccountId &&
+        !next.any((item) => item.creditAccountId == current.creditAccountId)) {
+      nextCreditAccounts.removeWhere(
+        (item) => item.id == current.creditAccountId,
+      );
+    }
+    final requiresAggregate =
+        createdCreditAccount != null ||
+        creditProfileChanged ||
+        nextCreditAccounts.length != _creditAccounts.length;
     try {
-      await _repository.saveAccounts(next);
+      if (!requiresAggregate) {
+        await _repository.saveAccounts(next);
+      } else {
+        await _repository.saveCreditAccountAggregate(
+          creditAccounts: nextCreditAccounts,
+          accounts: next,
+        );
+      }
     } catch (error, stackTrace) {
       _handlePersistError(error, stackTrace);
       return false;
     }
-    _accounts[index] = normalized;
+    _accounts
+      ..clear()
+      ..addAll(next);
+    if (requiresAggregate) {
+      _creditAccounts
+        ..clear()
+        ..addAll(nextCreditAccounts);
+    }
     notifyListeners();
     return true;
   }
@@ -3766,7 +4202,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     String accountId, {
     required bool deleteRelatedEntries,
   }) async {
-    if (!_accounts.any((account) => account.id == accountId)) {
+    final removedAccount = _accounts
+        .where((account) => account.id == accountId)
+        .firstOrNull;
+    if (removedAccount == null) {
       return null;
     }
     final directlyRelatedIds = _entries
@@ -3800,6 +4239,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     }
     final nextAccounts = _accounts
         .where((account) => account.id != accountId)
+        .toList();
+    final nextCreditAccounts = _creditAccounts
+        .where(
+          (creditAccount) =>
+              creditAccount.id != removedAccount.creditAccountId ||
+              nextAccounts.any(
+                (account) => account.creditAccountId == creditAccount.id,
+              ),
+        )
         .toList();
     final nextEntries = _entriesWithSyncedRefundCache(
       _entries.where((entry) => !removeIds.contains(entry.id)),
@@ -3835,6 +4283,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       () => _repository.replaceAllLedgerData(
         _ledgerDataSnapshot(
           accounts: nextAccounts,
+          creditAccounts: nextCreditAccounts,
           attachments: nextAttachments,
           entries: nextEntries,
           recurringRules: nextRules,
@@ -3851,6 +4300,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _accounts
       ..clear()
       ..addAll(nextAccounts);
+    _creditAccounts
+      ..clear()
+      ..addAll(nextCreditAccounts);
     _entries
       ..clear()
       ..addAll(nextEntries);
@@ -4587,6 +5039,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _accountGroups
       ..clear()
       ..addAll(defaultAccountGroups);
+    _creditAccounts.clear();
     _ledgerBooks
       ..clear()
       ..addAll(_seedLedgerBooks);
@@ -4630,7 +5083,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 4,
+      'version': 5,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'ledgerBooks': _ledgerBooks.map((book) => book.toJson()).toList(),
@@ -4638,6 +5091,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         'entries': _entries.map((entry) => entry.toJson()).toList(),
         'accounts': _accounts.map((account) => account.toJson()).toList(),
         'accountGroups': _accountGroups.map((group) => group.toJson()).toList(),
+        'creditAccounts': _creditAccounts
+            .map((creditAccount) => creditAccount.toJson())
+            .toList(),
         'categories': _categories.map((category) => category.toJson()).toList(),
         'tags': _tags.map((tag) => tag.toJson()).toList(),
         'attachments': _attachments.map((a) => a.toJson()).toList(),
@@ -4703,7 +5159,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 4) {
+    if (version < 1 || version > 5) {
       throw FormatException('不支持的备份版本：$version');
     }
 
@@ -4748,7 +5204,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       data['entries'],
       LedgerEntry.fromJson,
     )..sort(_compareEntriesLatestFirst);
-    final nextAccounts = _decodeModelList<Account>(
+    var nextAccounts = _decodeModelList<Account>(
       data['accounts'],
       Account.fromJson,
     );
@@ -4756,6 +5212,45 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       data['accountGroups'],
       AccountGroup.fromJson,
     );
+    var nextCreditAccounts = _decodeModelList<CreditAccount>(
+      data['creditAccounts'],
+      CreditAccount.fromJson,
+    );
+    // v4 及更早备份只有账户内的额度/日期。为每个信用账户补一个稳定的一对一主体，
+    // 保持旧行为；新备份则直接恢复显式父子关系。
+    if (nextCreditAccounts.isEmpty) {
+      final migratedAccounts = <Account>[];
+      final migratedCreditAccounts = <CreditAccount>[];
+      for (final account in nextAccounts) {
+        if (!account.type.supportsCredit) {
+          migratedAccounts.add(account);
+          continue;
+        }
+        final creditAccountId =
+            account.creditAccountId ?? 'credit-account-${account.id}';
+        migratedCreditAccounts.add(
+          CreditAccount(
+            id: creditAccountId,
+            bookId: account.bookId,
+            name: account.name,
+            institution: '',
+            cardLast4: account.cardLast4,
+            currencyCode: account.currencyCode,
+            creditLimit: account.creditLimit,
+            statementDay: account.statementDay,
+            dueRuleType: CreditDueRuleType.fixedDay,
+            dueDay: account.dueDay,
+            daysAfterStatement: null,
+            cycleBudget: null,
+          ),
+        );
+        migratedAccounts.add(
+          account.copyWith(creditAccountId: creditAccountId),
+        );
+      }
+      nextAccounts = migratedAccounts;
+      nextCreditAccounts = migratedCreditAccounts;
+    }
     final importedCategories = _decodeModelList<Category>(
       data['categories'],
       Category.fromJson,
@@ -4880,6 +5375,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _validateImportedCurrencyData(
       books: nextLedgerBooks,
       accounts: nextAccounts,
+      creditAccounts: nextCreditAccounts,
       entries: nextEntries,
       recurringRules: nextRecurringRules,
       exchangeRates: nextExchangeRates,
@@ -4914,6 +5410,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _accountGroups
       ..clear()
       ..addAll(nextAccountGroups);
+    _creditAccounts
+      ..clear()
+      ..addAll(nextCreditAccounts);
     _normalizeGroupOrder();
     _categories
       ..clear()
@@ -5022,6 +5521,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   void _validateImportedCurrencyData({
     required List<LedgerBook> books,
     required List<Account> accounts,
+    required List<CreditAccount> creditAccounts,
     required List<LedgerEntry> entries,
     required List<RecurringRule> recurringRules,
     required List<ExchangeRate> exchangeRates,
@@ -5061,6 +5561,48 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       booksById[book.id] = book;
     }
 
+    final creditAccountsById = <String, CreditAccount>{};
+    for (final creditAccount in creditAccounts) {
+      if (creditAccount.id.isEmpty ||
+          creditAccountsById.containsKey(creditAccount.id)) {
+        throw FormatException('信用账户主体 id 为空或重复：${creditAccount.id}');
+      }
+      if (!booksById.containsKey(creditAccount.bookId)) {
+        throw FormatException('信用账户主体 ${creditAccount.id} 引用了不存在的账本');
+      }
+      if (creditAccount.name.trim().isEmpty) {
+        throw FormatException('信用账户主体 ${creditAccount.id} 名称为空');
+      }
+      requireCurrency(creditAccount.currencyCode, '信用账户主体 ${creditAccount.id}');
+      requireFinite(
+        creditAccount.creditLimit,
+        '信用账户主体 ${creditAccount.id} 共享额度',
+        nonNegative: true,
+      );
+      requireFinite(
+        creditAccount.cycleBudget,
+        '信用账户主体 ${creditAccount.id} 账期预算',
+        nonNegative: true,
+      );
+      final statementDay = creditAccount.statementDay;
+      if (statementDay != null && (statementDay < 1 || statementDay > 28)) {
+        throw FormatException('信用账户主体 ${creditAccount.id} 账单日不合法');
+      }
+      switch (creditAccount.dueRuleType) {
+        case CreditDueRuleType.fixedDay:
+          final dueDay = creditAccount.dueDay;
+          if (dueDay != null && (dueDay < 1 || dueDay > 28)) {
+            throw FormatException('信用账户主体 ${creditAccount.id} 固定还款日不合法');
+          }
+        case CreditDueRuleType.daysAfterStatement:
+          final days = creditAccount.daysAfterStatement;
+          if (days == null || days <= 0) {
+            throw FormatException('信用账户主体 ${creditAccount.id} 账单后天数不合法');
+          }
+      }
+      creditAccountsById[creditAccount.id] = creditAccount;
+    }
+
     for (final account in accounts) {
       if (!booksById.containsKey(account.bookId)) {
         throw FormatException('账户 ${account.id} 引用了不存在的账本');
@@ -5072,6 +5614,27 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         '账户 ${account.id} 信用额度',
         nonNegative: true,
       );
+      final creditAccountId = account.creditAccountId;
+      if (account.type.supportsCredit &&
+          (creditAccountId == null || creditAccountId.isEmpty)) {
+        throw FormatException('信用账户 ${account.id} 缺少信用账户主体');
+      }
+      if (creditAccountId != null && creditAccountId.isNotEmpty) {
+        final creditAccount = creditAccountsById[creditAccountId];
+        if (creditAccount == null || creditAccount.bookId != account.bookId) {
+          throw FormatException('账户 ${account.id} 引用了不存在或跨账本的信用账户主体');
+        }
+        if (!account.type.supportsCredit) {
+          throw FormatException('非信用账户 ${account.id} 不能关联信用账户主体');
+        }
+      }
+    }
+    for (final creditAccount in creditAccounts) {
+      if (!accounts.any(
+        (account) => account.creditAccountId == creditAccount.id,
+      )) {
+        throw FormatException('信用账户主体 ${creditAccount.id} 没有币种子账户');
+      }
     }
 
     for (final entry in entries) {

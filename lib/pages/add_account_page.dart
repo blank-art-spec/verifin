@@ -25,6 +25,8 @@ class _AddAccountPageState extends State<AddAccountPage> {
   double? _creditLimit;
   int? _statementDay;
   int? _dueDay;
+  // 为空表示创建新的信用主体；非空表示把本账户作为另一个币种子账户挂到已有主体。
+  String? _creditAccountId;
   bool _saved = false;
   final EditorExitController _exitController = EditorExitController();
 
@@ -63,6 +65,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
     final groups = controller.accountGroups;
+    final creditAccounts = controller.creditAccounts;
     final currencyCode =
         _currencyCode ?? controller.activeBook.baseCurrencyCode;
     final currency = CurrencyCatalog.require(currencyCode);
@@ -134,43 +137,69 @@ class _AddAccountPageState extends State<AddAccountPage> {
                     const SizedBox(height: 10),
                   ],
                   if (_type.supportsCredit) ...<Widget>[
-                    SelectField(
-                      key: const Key('add_account_credit_limit'),
-                      label: AppLocalizations.of(context).creditLimitLabel,
-                      value: _creditLimit == null
-                          ? AppLocalizations.of(context).notSet
-                          : formatUserMoney(
-                              _creditLimit!,
-                              _currencyCode ?? defaultCurrencyCode,
-                            ),
-                      icon: Icons.speed_outlined,
-                      onTap: _pickCreditLimit,
-                    ),
-                    const SizedBox(height: 10),
-                    SelectField(
-                      key: const Key('add_account_statement_day'),
-                      label: AppLocalizations.of(context).statementDay,
-                      value: _statementDay == null
-                          ? AppLocalizations.of(context).notSet
-                          : AppLocalizations.of(
-                              context,
-                            ).monthlyDayLabel(_statementDay!),
-                      icon: Icons.event_repeat_outlined,
-                      onTap: () => _pickBillingDay(isDue: false),
-                    ),
-                    const SizedBox(height: 10),
-                    SelectField(
-                      key: const Key('add_account_due_day'),
-                      label: AppLocalizations.of(context).dueDay,
-                      value: _dueDay == null
-                          ? AppLocalizations.of(context).notSet
-                          : AppLocalizations.of(
-                              context,
-                            ).monthlyDayLabel(_dueDay!),
-                      icon: Icons.event_available_outlined,
-                      onTap: () => _pickBillingDay(isDue: true),
-                    ),
-                    const SizedBox(height: 10),
+                    if (creditAccounts.isNotEmpty) ...<Widget>[
+                      SelectField(
+                        key: const Key('add_account_credit_parent'),
+                        label: AppLocalizations.of(
+                          context,
+                        ).creditAccountParentLabel,
+                        value: _creditAccountId == null
+                            ? AppLocalizations.of(
+                                context,
+                              ).creditAccountCreateNew
+                            : creditAccounts
+                                      .where(
+                                        (item) => item.id == _creditAccountId,
+                                      )
+                                      .map((item) => item.name)
+                                      .firstOrNull ??
+                                  AppLocalizations.of(
+                                    context,
+                                  ).creditAccountCreateNew,
+                        icon: Icons.account_balance_outlined,
+                        onTap: () => _pickCreditAccount(creditAccounts),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
+                    if (_creditAccountId == null) ...<Widget>[
+                      SelectField(
+                        key: const Key('add_account_credit_limit'),
+                        label: AppLocalizations.of(context).creditLimitLabel,
+                        value: _creditLimit == null
+                            ? AppLocalizations.of(context).notSet
+                            : formatUserMoney(
+                                _creditLimit!,
+                                _currencyCode ?? defaultCurrencyCode,
+                              ),
+                        icon: Icons.speed_outlined,
+                        onTap: _pickCreditLimit,
+                      ),
+                      const SizedBox(height: 10),
+                      SelectField(
+                        key: const Key('add_account_statement_day'),
+                        label: AppLocalizations.of(context).statementDay,
+                        value: _statementDay == null
+                            ? AppLocalizations.of(context).notSet
+                            : AppLocalizations.of(
+                                context,
+                              ).monthlyDayLabel(_statementDay!),
+                        icon: Icons.event_repeat_outlined,
+                        onTap: () => _pickBillingDay(isDue: false),
+                      ),
+                      const SizedBox(height: 10),
+                      SelectField(
+                        key: const Key('add_account_due_day'),
+                        label: AppLocalizations.of(context).dueDay,
+                        value: _dueDay == null
+                            ? AppLocalizations.of(context).notSet
+                            : AppLocalizations.of(
+                                context,
+                              ).monthlyDayLabel(_dueDay!),
+                        icon: Icons.event_available_outlined,
+                        onTap: () => _pickBillingDay(isDue: true),
+                      ),
+                      const SizedBox(height: 10),
+                    ],
                   ],
                   SelectField(
                     key: const Key('account_currency_select_field'),
@@ -348,7 +377,8 @@ class _AddAccountPageState extends State<AddAccountPage> {
                     cardLast4Of(_cardLast4Controller.text).isNotEmpty ||
                     !_cardLast4Follows)) ||
             (_type.supportsCredit &&
-                (_creditLimit != null ||
+                (_creditAccountId != null ||
+                    _creditLimit != null ||
                     _statementDay != null ||
                     _dueDay != null)));
   }
@@ -367,6 +397,42 @@ class _AddAccountPageState extends State<AddAccountPage> {
       return;
     }
     setState(() => _creditLimit = value <= 0 ? null : value);
+  }
+
+  /// 选择信用主体。首项是“新建主体”哨兵；选择已有主体后，额度与账期由父实体统一
+  /// 管理，本页只继续填写当前币种子账户自身的名称、币种和初始余额。
+  Future<void> _pickCreditAccount(List<CreditAccount> creditAccounts) async {
+    const createNewValue = '';
+    final selected = await showOptionSheet<String>(
+      context: context,
+      title: AppLocalizations.of(context).creditAccountParentLabel,
+      values: <String>[
+        createNewValue,
+        ...creditAccounts.map((item) => item.id),
+      ],
+      selected: _creditAccountId ?? createNewValue,
+      labelOf: (value) => value == createNewValue
+          ? AppLocalizations.of(context).creditAccountCreateNew
+          : creditAccounts
+                    .where((item) => item.id == value)
+                    .map((item) => item.name)
+                    .firstOrNull ??
+                AppLocalizations.of(context).creditAccountCreateNew,
+    );
+    if (!mounted || selected == null) return;
+    final parent = creditAccounts
+        .where((item) => item.id == selected)
+        .firstOrNull;
+    setState(() {
+      _creditAccountId = selected == createNewValue ? null : selected;
+      if (parent != null) {
+        _creditLimit = parent.creditLimit;
+        _statementDay = parent.statementDay;
+        _dueDay = parent.dueRuleType == CreditDueRuleType.fixedDay
+            ? parent.dueDay
+            : null;
+      }
+    });
   }
 
   /// 选择账单日 / 还款日（1–28 或不设置）。
@@ -431,6 +497,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
         creditLimit: _type.supportsCredit ? _creditLimit : null,
         statementDay: _type.supportsCredit ? _statementDay : null,
         dueDay: _type.supportsCredit ? _dueDay : null,
+        creditAccountId: _type.supportsCredit ? _creditAccountId : null,
       ),
     );
   }

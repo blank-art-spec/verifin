@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 17;
+  static const int schemaVersion = 18;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -70,6 +70,7 @@ class AppDatabase {
         15: _migrateToV15,
         16: _migrateToV16,
         17: _migrateToV17,
+        18: _migrateToV18,
       };
 
   /// 只读暴露迁移注册表，供迁移矩阵测试把库推进到任意中间版本。生产代码勿用。
@@ -359,6 +360,41 @@ class AppDatabase {
     await db.execute(_statementRepaymentEntryIndex);
   }
 
+  /// v17 → v18：把共享额度、账期/还款规则和账期预算提升为独立信用主体。
+  ///
+  /// 每个旧信用账户先自动生成一个一对一主体，保持原有行为；用户随后可把不同币种
+  /// 子账户挂到同一主体。旧 accounts 上的额度/日期列暂留作备份兼容镜像，新功能只以
+  /// credit_accounts 为权威，避免一次迁移同时破坏旧备份的可读性。
+  static Future<void> _migrateToV18(Database db) async {
+    await db.execute(_creditAccountsTable);
+    await db.execute(_creditAccountsBookIndex);
+    if (!await _tableExists(db, 'accounts')) return;
+    if (!await _columnsExist(db, 'accounts', <String>['credit_account_id'])) {
+      await db.execute(
+        'ALTER TABLE accounts ADD COLUMN credit_account_id TEXT',
+      );
+    }
+    await db.execute('''
+      INSERT OR IGNORE INTO credit_accounts (
+        id, book_id, name, institution, card_last4, currency_code,
+        credit_limit, statement_day, due_rule_type, due_day,
+        days_after_statement, cycle_budget, sort_order
+      )
+      SELECT
+        'credit-account-' || id, book_id, name, '', card_last4,
+        currency_code, credit_limit, statement_day, 'fixedDay', due_day,
+        NULL, NULL, sort_order
+      FROM accounts
+      WHERE type IN ('creditCard', 'creditAccount')
+    ''');
+    await db.execute('''
+      UPDATE accounts
+      SET credit_account_id = 'credit-account-' || id
+      WHERE type IN ('creditCard', 'creditAccount')
+        AND credit_account_id IS NULL
+    ''');
+  }
+
   static Future<bool> _tableExists(Database db, String name) async {
     final rows = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
@@ -568,6 +604,28 @@ class AppDatabase {
       'CREATE INDEX IF NOT EXISTS idx_statement_allocations_entry '
       'ON statement_repayment_allocations (repayment_entry_id)';
 
+  static const String _creditAccountsTable = '''
+    CREATE TABLE IF NOT EXISTS credit_accounts (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      institution TEXT NOT NULL,
+      card_last4 TEXT NOT NULL,
+      currency_code TEXT NOT NULL,
+      credit_limit REAL,
+      statement_day INTEGER,
+      due_rule_type TEXT NOT NULL,
+      due_day INTEGER,
+      days_after_statement INTEGER,
+      cycle_budget REAL,
+      sort_order INTEGER NOT NULL
+    )
+  ''';
+
+  static const String _creditAccountsBookIndex =
+      'CREATE INDEX IF NOT EXISTS idx_credit_accounts_book '
+      'ON credit_accounts (book_id, sort_order)';
+
   static const String _accountGroupsTableCurrent = '''
     CREATE TABLE account_groups (
       id TEXT PRIMARY KEY,
@@ -641,7 +699,8 @@ class AppDatabase {
       credit_limit REAL,
       sort_order INTEGER NOT NULL,
       statement_day INTEGER,
-      due_day INTEGER
+      due_day INTEGER,
+      credit_account_id TEXT
     )
     ''',
     'CREATE INDEX idx_accounts_book ON accounts (book_id)',
@@ -698,5 +757,7 @@ class AppDatabase {
     _statementRepaymentAllocationsTable,
     _statementRepaymentStatementIndex,
     _statementRepaymentEntryIndex,
+    _creditAccountsTable,
+    _creditAccountsBookIndex,
   ];
 }
