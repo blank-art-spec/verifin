@@ -1,21 +1,27 @@
+import 'dart:async';
+
 import 'package:flutter/material.dart';
 
 import '../app/app_theme.dart';
 import '../app/chart_painters.dart';
 import '../app/common_widgets.dart';
+import '../app/credit_card.dart';
 import '../app/ledger_math.dart';
 import '../app/models.dart';
 import '../app/report_analysis.dart';
 import '../app/series_math.dart';
+import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
+import 'budget_pages.dart';
+import 'sheets.dart';
 import 'transactions_pages.dart';
 
-/// 排行分组维度：顶级分类 / 子分类（按记账所选分类）/ 标签。
-enum _ReportGrouping { topCategory, subCategory, tag }
+/// 排行分组维度：分类树、标签（可表达项目/场景）、账户和结构化商户。
+enum _ReportGrouping { topCategory, subCategory, tag, account, merchant }
 
-/// 统计分析页：支持本月 / 本年 / 自定义时间范围，支出与收入两个维度，
-/// 展示收支汇总、趋势曲线与分类 / 子分类 / 标签排行。（阶段 4.1）
+/// 统计分析页：支持账期 / 月 / 季 / 年 / 自定义范围，支出与收入两个维度，
+/// 展示收支汇总、趋势曲线与分类 / 标签 / 账户 / 商户排行。
 class ReportAnalysisPage extends StatefulWidget {
   const ReportAnalysisPage({super.key});
 
@@ -24,15 +30,19 @@ class ReportAnalysisPage extends StatefulWidget {
 }
 
 class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
-  late ReportRange _range = ReportRange.month(DateTime.now());
+  ReportRangeMode _rangeMode = ReportRangeMode.month;
+  DateTime _periodAnchor = DateTime.now();
+  late ReportRange _customRange = ReportRange.month(_periodAnchor);
+  String? _selectedCreditAccountId;
   EntryType _dimension = EntryType.expense;
   _ReportGrouping _grouping = _ReportGrouping.topCategory;
 
-  Future<void> _pickCustomRange() async {
+  /// 选择任意闭区间；取消时保持原范围与模式不变。
+  Future<void> _pickCustomRange(ReportRange currentRange) async {
     final now = DateTime.now();
     final initial = DateTimeRange(
-      start: _range.start,
-      end: _range.end.isAfter(now) ? now : _range.end,
+      start: currentRange.start,
+      end: currentRange.end.isAfter(now) ? now : currentRange.end,
     );
     final picked = await showDateRangePicker(
       context: context,
@@ -44,22 +54,205 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     );
     if (picked != null && mounted) {
       setState(() {
-        _range = ReportRange.custom(picked.start, picked.end);
+        _customRange = ReportRange.custom(picked.start, picked.end);
+        _rangeMode = ReportRangeMode.custom;
       });
     }
+  }
+
+  /// 返回当前账本中可可靠推导账期、且至少有一个币种子账户的信用主体。
+  List<CreditAccount> _eligibleCreditAccounts(VeriFinController controller) {
+    final usedIds = controller.accounts
+        .map((account) => account.creditAccountId)
+        .whereType<String>()
+        .toSet();
+    return controller.creditAccounts
+        .where(
+          (credit) =>
+              credit.hasCompleteCycleRule && usedIds.contains(credit.id),
+        )
+        .toList(growable: false);
+  }
+
+  /// 解析当前选中的信用主体；主体被删除或切换账本后安全回落到第一个可用项。
+  CreditAccount? _selectedCreditAccount(List<CreditAccount> eligibleCredits) {
+    for (final credit in eligibleCredits) {
+      if (credit.id == _selectedCreditAccountId) {
+        return credit;
+      }
+    }
+    return eligibleCredits.firstOrNull;
+  }
+
+  /// 按选中的时间口径计算真实闭区间。
+  ///
+  /// 账期优先复用 Controller 的正式账单感知投影，避免只按账单日猜边界；若信用
+  /// 主体在页面停留期间被删除，则回落自然月而不是抛异常。
+  ReportRange _resolvedRange(
+    VeriFinController controller,
+    CreditAccount? selectedCredit,
+  ) {
+    return switch (_rangeMode) {
+      ReportRangeMode.billingCycle when selectedCredit != null =>
+        ReportRange.billingCycle(
+          controller
+              .creditCycleOverview(selectedCredit, now: _periodAnchor)
+              .cycle,
+        ),
+      ReportRangeMode.billingCycle => ReportRange.month(_periodAnchor),
+      ReportRangeMode.month => ReportRange.month(_periodAnchor),
+      ReportRangeMode.quarter => ReportRange.quarter(_periodAnchor),
+      ReportRangeMode.year => ReportRange.year(_periodAnchor.year),
+      ReportRangeMode.custom => _customRange,
+    };
+  }
+
+  /// 取当前范围内的交易；账期模式同时限定信用主体并尊重银行确认的账期 id。
+  List<LedgerEntry> _entriesForRange(
+    VeriFinController controller,
+    ReportRange range,
+    CreditAccount? selectedCredit,
+  ) {
+    if (_rangeMode != ReportRangeMode.billingCycle || selectedCredit == null) {
+      return entriesInWindow(controller.entries, range.window);
+    }
+    final childIds = controller.accounts
+        .where((account) => account.creditAccountId == selectedCredit.id)
+        .map((account) => account.id)
+        .toSet();
+    final cycleId = billingCycleIdFor(range.end);
+    final start = dateOnly(range.start);
+    final end = dateOnly(range.end);
+    return controller.entries
+        .where((entry) {
+          if (!childIds.contains(entry.accountId)) {
+            return false;
+          }
+          if (entry.billingCycleId != null) {
+            return entry.billingCycleId == cycleId;
+          }
+          final occurred = dateOnly(entry.occurredAt);
+          return !occurred.isBefore(start) && !occurred.isAfter(end);
+        })
+        .toList(growable: false);
+  }
+
+  /// 返回趋势图使用的分桶日期。
+  ///
+  /// 银行可把账单日当天的交易显式归到下一账期，此时真实发生日会位于推导窗口外一日。
+  /// 汇总仍按 `billingCycleId` 计入，图表则只把点夹到最近边界，保证趋势合计与汇总一致；
+  /// [LedgerEntry.occurredAt] 本身不会被修改。
+  DateTime _trendBucketDate(LedgerEntry entry, ReportRange range) {
+    final occurred = dateOnly(entry.occurredAt);
+    if (occurred.isBefore(range.start)) {
+      return range.start;
+    }
+    if (occurred.isAfter(range.end)) {
+      return range.end;
+    }
+    return occurred;
+  }
+
+  /// 切换时间口径；自定义范围需要先完成日期选择，取消不会改变当前状态。
+  Future<void> _selectRangeMode(
+    ReportRangeMode mode,
+    ReportRange currentRange,
+  ) async {
+    if (mode == ReportRangeMode.custom) {
+      await _pickCustomRange(currentRange);
+      return;
+    }
+    setState(() {
+      _rangeMode = mode;
+      _periodAnchor = DateTime.now();
+    });
+  }
+
+  /// 按当前固定周期前后翻页；自定义区间没有固定步长，因此不提供翻页。
+  void _movePeriod(int direction) {
+    setState(() {
+      _periodAnchor = switch (_rangeMode) {
+        // 账期锚点保留日号（最多 28，账单规则也限制为 1–28）：例如 9 月 28 日的
+        // 9/26–10/25 账期向前一格应落到 8 月 28 日，从而得到 8/26–9/25；若重置
+        // 为月初会错误跳成 7/26–8/25，直接漏掉一期。
+        ReportRangeMode.billingCycle => DateTime(
+          _periodAnchor.year,
+          _periodAnchor.month + direction,
+          _periodAnchor.day.clamp(1, 28),
+        ),
+        ReportRangeMode.month => DateTime(
+          _periodAnchor.year,
+          _periodAnchor.month + direction,
+          1,
+        ),
+        ReportRangeMode.quarter => DateTime(
+          _periodAnchor.year,
+          _periodAnchor.month + direction * 3,
+          1,
+        ),
+        ReportRangeMode.year => DateTime(_periodAnchor.year + direction, 1, 1),
+        ReportRangeMode.custom => _periodAnchor,
+      };
+    });
+  }
+
+  /// 从动态信用主体列表中选择账期观察对象；取消时保持原选择。
+  Future<void> _pickCreditAccount(
+    List<CreditAccount> eligibleCredits,
+    CreditAccount selectedCredit,
+  ) async {
+    final picked = await showOptionSheet<CreditAccount>(
+      context: context,
+      title: AppLocalizations.of(context).reportPickCreditAccount,
+      values: eligibleCredits,
+      selected: selectedCredit,
+      labelOf: (credit) => credit.name,
+    );
+    if (picked == null || !mounted) {
+      return;
+    }
+    setState(() {
+      _selectedCreditAccountId = picked.id;
+      _rangeMode = ReportRangeMode.billingCycle;
+      _periodAnchor = DateTime.now();
+    });
   }
 
   @override
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
-    final entries = entriesInWindow(controller.entries, _range.window);
+    final l10n = AppLocalizations.of(context);
+    final eligibleCredits = _eligibleCreditAccounts(controller);
+    final selectedCredit = _selectedCreditAccount(eligibleCredits);
+    final effectiveMode =
+        _rangeMode == ReportRangeMode.billingCycle && selectedCredit == null
+        ? ReportRangeMode.month
+        : _rangeMode;
+    final range = _resolvedRange(controller, selectedCredit);
+    final entries = _entriesForRange(controller, range, selectedCredit);
     final categories = controller.categories;
     final summary = reportSummary(entries);
-    final trend = reportTrend(entries, _range, _dimension);
+    final trend = reportTrend(
+      entries,
+      range,
+      _dimension,
+      bucketDateOf: effectiveMode == ReportRangeMode.billingCycle
+          ? (entry) => _trendBucketDate(entry, range)
+          : null,
+    );
     final categoryStats = _grouping == _ReportGrouping.subCategory
         ? reportCategoryStatsByOwn(entries, categories, _dimension)
         : reportCategoryStats(entries, categories, _dimension);
     final tagStats = reportTagStats(entries, controller.tags, _dimension);
+    final accountStats = reportAccountStats(
+      entries,
+      controller.accounts,
+      controller.creditAccounts,
+      _dimension,
+      noAccountLabel: l10n.noAccountLabel,
+      deletedAccountLabel: l10n.deletedAccountLabel,
+    );
+    final merchantStats = reportMerchantStats(entries, _dimension);
     final dimensionColor = _dimension == EntryType.expense
         ? veriSemantic(context, veriExpense)
         : veriSemantic(context, veriIncome);
@@ -74,32 +267,61 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 40),
             children: <Widget>[
               VeriHeader(
-                title: AppLocalizations.of(context).statAnalysisTitle,
+                title: l10n.statAnalysisTitle,
                 subtitle: currencyUnitSubtitle(
-                  AppLocalizations.of(context),
-                  _range.label(AppLocalizations.of(context)),
+                  l10n,
+                  effectiveMode == ReportRangeMode.billingCycle &&
+                          selectedCredit != null
+                      ? '${selectedCredit.name} · ${range.label(l10n)}'
+                      : range.label(l10n),
                   controller.activeBook.baseCurrencyCode,
                 ),
                 showBack: true,
               ),
               const SizedBox(height: 10),
               _RangeSelector(
-                range: _range,
-                onMonth: () =>
-                    setState(() => _range = ReportRange.month(DateTime.now())),
-                onYear: () => setState(
-                  () => _range = ReportRange.year(DateTime.now().year),
-                ),
-                onCustom: _pickCustomRange,
+                values: <ReportRangeMode>[
+                  if (eligibleCredits.isNotEmpty) ReportRangeMode.billingCycle,
+                  ReportRangeMode.month,
+                  ReportRangeMode.quarter,
+                  ReportRangeMode.year,
+                  ReportRangeMode.custom,
+                ],
+                selected: effectiveMode,
+                onChanged: (mode) => unawaited(_selectRangeMode(mode, range)),
               ),
+              if (effectiveMode == ReportRangeMode.billingCycle &&
+                  selectedCredit != null) ...<Widget>[
+                const SizedBox(height: 8),
+                Align(
+                  alignment: Alignment.centerLeft,
+                  child: FilterPill(
+                    icon: Icons.credit_card_outlined,
+                    label: selectedCredit.name,
+                    onTap: () => unawaited(
+                      _pickCreditAccount(eligibleCredits, selectedCredit),
+                    ),
+                  ),
+                ),
+              ],
+              if (effectiveMode != ReportRangeMode.custom) ...<Widget>[
+                const SizedBox(height: 2),
+                MonthSwitcher(
+                  label: range.label(l10n),
+                  onPrevious: () => _movePeriod(-1),
+                  onNext: () => _movePeriod(1),
+                  previousTooltip: l10n.prevRange,
+                  nextTooltip: l10n.nextRange,
+                ),
+              ],
               const SizedBox(height: 10),
               _SummaryCard(summary: summary),
-              if (_range.mode == ReportRangeMode.month) ...<Widget>[
+              if (effectiveMode == ReportRangeMode.month) ...<Widget>[
                 const SizedBox(height: 10),
                 _ComparisonCard(
                   comparison: reportMonthlyComparison(
                     controller.entries,
-                    _range.start,
+                    range.start,
                   ),
                 ),
               ],
@@ -121,14 +343,24 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
                 onChanged: (value) => setState(() => _grouping = value),
               ),
               const SizedBox(height: 10),
-              if (_grouping == _ReportGrouping.tag)
-                _TagRankCard(
+              switch (_grouping) {
+                _ReportGrouping.tag => _TagRankCard(
                   stats: tagStats,
                   color: dimensionColor,
                   dimension: _dimension,
-                )
-              else
-                _CategoryRankCard(
+                ),
+                _ReportGrouping.account => _AccountRankCard(
+                  stats: accountStats,
+                  color: dimensionColor,
+                  dimension: _dimension,
+                ),
+                _ReportGrouping.merchant => _MerchantRankCard(
+                  stats: merchantStats,
+                  color: dimensionColor,
+                  dimension: _dimension,
+                ),
+                _ReportGrouping.topCategory ||
+                _ReportGrouping.subCategory => _CategoryRankCard(
                   stats: categoryStats,
                   color: dimensionColor,
                   dimension: _dimension,
@@ -144,6 +376,7 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
                         )
                       : (stat) => _openCategoryEntries(stat.categoryId),
                 ),
+              },
             ],
           ),
         ),
@@ -180,13 +413,8 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     final color = _dimension == EntryType.expense
         ? veriSemantic(context, veriExpense)
         : veriSemantic(context, veriIncome);
-    return showModalBottomSheet<void>(
+    return showVeriContentSheet<void>(
       context: context,
-      showDragHandle: true,
-      backgroundColor: Theme.of(context).colorScheme.surface,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(veriRadiusLg)),
-      ),
       // 命名为 sheetContext 与外层页面 context 区分：跳转前先 pop 弹层（用
       // sheetContext），再用页面 context push 交易列表。
       builder: (sheetContext) {
@@ -268,37 +496,48 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
   }
 }
 
+/// 时间口径锚点菜单；五种选项超过分段控件上限，使用静态单选菜单避免窄屏挤压。
 class _RangeSelector extends StatelessWidget {
   const _RangeSelector({
-    required this.range,
-    required this.onMonth,
-    required this.onYear,
-    required this.onCustom,
+    required this.values,
+    required this.selected,
+    required this.onChanged,
   });
 
-  final ReportRange range;
-  final VoidCallback onMonth;
-  final VoidCallback onYear;
-  final VoidCallback onCustom;
+  final List<ReportRangeMode> values;
+  final ReportRangeMode selected;
+  final ValueChanged<ReportRangeMode> onChanged;
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return VeriSegmentedControl<ReportRangeMode>(
-      values: ReportRangeMode.values,
-      selected: range.mode,
+    String labelOf(ReportRangeMode mode) => switch (mode) {
+      ReportRangeMode.billingCycle => l10n.statementPeriodLabel,
+      ReportRangeMode.month => l10n.thisMonth,
+      ReportRangeMode.quarter => l10n.timeQuarter,
+      ReportRangeMode.year => l10n.timeYear,
+      ReportRangeMode.custom => l10n.customRange,
+    };
+    return VeriAnchoredChoice<ReportRangeMode>(
+      values: values,
+      selected: selected,
+      idOf: (mode) => mode.name,
+      labelOf: labelOf,
+      iconOf: (mode) => switch (mode) {
+        ReportRangeMode.billingCycle => Icons.credit_card_outlined,
+        ReportRangeMode.month => Icons.calendar_view_month_outlined,
+        ReportRangeMode.quarter => Icons.date_range_outlined,
+        ReportRangeMode.year => Icons.calendar_today_outlined,
+        ReportRangeMode.custom => Icons.edit_calendar_outlined,
+      },
+      onSelected: onChanged,
       semanticLabel: l10n.statRangeLabel,
-      labelOf: (mode) => switch (mode) {
-        ReportRangeMode.month => l10n.thisMonth,
-        ReportRangeMode.year => l10n.timeYear,
-        ReportRangeMode.custom => l10n.customRange,
-      },
-      // 具体区间已显示在页首副标题里，分段条只区分口径，不放长文案与图标。
-      onChanged: (mode) => switch (mode) {
-        ReportRangeMode.month => onMonth(),
-        ReportRangeMode.year => onYear(),
-        ReportRangeMode.custom => onCustom(),
-      },
+      builder: (context, openMenu, menuOpen) => FilterPill(
+        key: const Key('report_range_selector'),
+        icon: Icons.calendar_month_outlined,
+        label: labelOf(selected),
+        onTap: openMenu,
+      ),
     );
   }
 }
@@ -676,7 +915,9 @@ class _TrendCard extends StatelessWidget {
   }
 }
 
-/// 排行分组维度选择器（分类 / 子分类 / 标签）。
+/// 排行分组维度选择器。
+///
+/// 五项超过统一分段控件的适用上限，因此使用贴近触发器的静态单选菜单。
 class _GroupingSelector extends StatelessWidget {
   const _GroupingSelector({required this.grouping, required this.onChanged});
 
@@ -686,16 +927,33 @@ class _GroupingSelector extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    return VeriSegmentedControl<_ReportGrouping>(
+    String labelOf(_ReportGrouping value) => switch (value) {
+      _ReportGrouping.topCategory => l10n.rankGroupCategory,
+      _ReportGrouping.subCategory => l10n.rankGroupSubCategory,
+      _ReportGrouping.tag => l10n.rankGroupTagProjectScene,
+      _ReportGrouping.account => l10n.rankGroupAccount,
+      _ReportGrouping.merchant => l10n.rankGroupMerchant,
+    };
+    return VeriAnchoredChoice<_ReportGrouping>(
       values: _ReportGrouping.values,
       selected: grouping,
-      semanticLabel: l10n.statTypeTitle,
-      labelOf: (value) => switch (value) {
-        _ReportGrouping.topCategory => l10n.rankGroupCategory,
-        _ReportGrouping.subCategory => l10n.rankGroupSubCategory,
-        _ReportGrouping.tag => l10n.rankGroupTag,
+      idOf: (value) => value.name,
+      labelOf: labelOf,
+      iconOf: (value) => switch (value) {
+        _ReportGrouping.topCategory => Icons.category_outlined,
+        _ReportGrouping.subCategory => Icons.account_tree_outlined,
+        _ReportGrouping.tag => Icons.label_outline,
+        _ReportGrouping.account => Icons.account_balance_wallet_outlined,
+        _ReportGrouping.merchant => Icons.storefront_outlined,
       },
-      onChanged: onChanged,
+      onSelected: onChanged,
+      semanticLabel: l10n.reportGroupingLabel,
+      builder: (context, openMenu, menuOpen) => FilterPill(
+        key: const Key('report_grouping_selector'),
+        icon: Icons.leaderboard_outlined,
+        label: labelOf(grouping),
+        onTap: openMenu,
+      ),
     );
   }
 }
@@ -823,6 +1081,110 @@ class _TagRankCard extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               l10n.tagRankOverlapNote,
+              style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                color: Theme.of(
+                  context,
+                ).colorScheme.onSurface.withValues(alpha: 0.46),
+              ),
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 账户排行卡；信用子账户已经在纯函数层合并为信用主体，这里只负责展示。
+class _AccountRankCard extends StatelessWidget {
+  const _AccountRankCard({
+    required this.stats,
+    required this.color,
+    required this.dimension,
+  });
+
+  final List<ReportAccountStat> stats;
+  final Color color;
+  final EntryType dimension;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final dimLabel = dimension.label(l10n);
+    return VeriCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SectionTitle(title: l10n.accountRank, trailing: dimLabel),
+          const SizedBox(height: 8),
+          if (stats.isEmpty)
+            EmptyState(
+              icon: Icons.account_balance_wallet_outlined,
+              title: l10n.noAccountRankData,
+              description: l10n.noAccountRankDesc,
+            )
+          else
+            ...stats.map(
+              (stat) => _RankTile(
+                leading: AccountIconBox(iconCode: stat.iconCode, size: 30),
+                label: stat.label,
+                amount: stat.amount,
+                percent: stat.percent,
+                count: stat.count,
+                color: color,
+              ),
+            ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 商户排行卡；只展示有结构化来源证据的商户，并说明占比分母仍包含未识别交易。
+class _MerchantRankCard extends StatelessWidget {
+  const _MerchantRankCard({
+    required this.stats,
+    required this.color,
+    required this.dimension,
+  });
+
+  final List<ReportMerchantStat> stats;
+  final Color color;
+  final EntryType dimension;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final dimLabel = dimension.label(l10n);
+    return VeriCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SectionTitle(title: l10n.merchantRank, trailing: dimLabel),
+          const SizedBox(height: 8),
+          if (stats.isEmpty)
+            EmptyState(
+              icon: Icons.storefront_outlined,
+              title: l10n.noMerchantData,
+              description: l10n.noMerchantDesc,
+            )
+          else ...<Widget>[
+            ...stats.map(
+              (stat) => _RankTile(
+                leading: VeriIconBox(
+                  icon: Icons.storefront_outlined,
+                  color: color,
+                  size: 30,
+                ),
+                label: stat.label,
+                amount: stat.amount,
+                percent: stat.percent,
+                count: stat.count,
+                color: color,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              l10n.merchantRankCoverageNote,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: Theme.of(
                   context,

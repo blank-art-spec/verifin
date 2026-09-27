@@ -3787,6 +3787,84 @@ abstract class AppLocalizations {
   /// **'标签'**
   String get rankGroupTag;
 
+  /// No description provided for @rankGroupTagProjectScene.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签 / 项目 / 场景'**
+  String get rankGroupTagProjectScene;
+
+  /// No description provided for @rankGroupAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户'**
+  String get rankGroupAccount;
+
+  /// No description provided for @rankGroupMerchant.
+  ///
+  /// In zh, this message translates to:
+  /// **'商户'**
+  String get rankGroupMerchant;
+
+  /// No description provided for @reportGroupingLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'排行维度'**
+  String get reportGroupingLabel;
+
+  /// No description provided for @reportPickCreditAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择信用账户账期'**
+  String get reportPickCreditAccount;
+
+  /// No description provided for @accountRank.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户排行'**
+  String get accountRank;
+
+  /// No description provided for @merchantRank.
+  ///
+  /// In zh, this message translates to:
+  /// **'商户排行'**
+  String get merchantRank;
+
+  /// No description provided for @noAccountRankData.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无账户数据'**
+  String get noAccountRankData;
+
+  /// No description provided for @noAccountRankDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'该时间范围内没有可按账户汇总的记录。'**
+  String get noAccountRankDesc;
+
+  /// No description provided for @noMerchantData.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无商户数据'**
+  String get noMerchantData;
+
+  /// No description provided for @noMerchantDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'导入账单或自动识别出商户后，会在这里汇总显示。'**
+  String get noMerchantDesc;
+
+  /// No description provided for @merchantRankCoverageNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅统计带结构化商户信息的交易，占比仍以全部同类收支为分母'**
+  String get merchantRankCoverageNote;
+
+  /// No description provided for @deletedAccountLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'已删除账户'**
+  String get deletedAccountLabel;
+
   /// No description provided for @tagRank.
   ///
   /// In zh, this message translates to:

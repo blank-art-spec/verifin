@@ -7,7 +7,10 @@ import 'models.dart';
 import '../l10n/app_localizations.dart';
 
 /// 报表分析的时间范围类型。
-enum ReportRangeMode { month, year, custom }
+///
+/// [billingCycle] 由信用主体的账单日规则推导；[month]、[quarter]、[year]
+/// 都是自然日历周期；[custom] 保留用户手选任意闭区间的能力。
+enum ReportRangeMode { billingCycle, month, quarter, year, custom }
 
 /// 分析范围：按「天」的闭区间 [start, end]（都取 date-only，end 含当天）。
 @immutable
@@ -34,6 +37,28 @@ class ReportRange {
     return ReportRange(mode: ReportRangeMode.month, start: start, end: end);
   }
 
+  /// 自然季度范围（季度首月 1 日到季度末月最后一天）。
+  factory ReportRange.quarter(DateTime date) {
+    final window = quarterWindowFor(date);
+    return ReportRange(
+      mode: ReportRangeMode.quarter,
+      start: window.start,
+      end: window.end,
+    );
+  }
+
+  /// 信用主体账期范围。
+  ///
+  /// [window] 由 `currentBillingCycle` 等信用账期纯函数产生；这里仍重新走构造器的
+  /// date-only 与起止纠正，避免外部带时分秒后让区间边界漏掉交易。
+  factory ReportRange.billingCycle(DateWindow window) {
+    return ReportRange(
+      mode: ReportRangeMode.billingCycle,
+      start: window.start,
+      end: window.end,
+    );
+  }
+
   /// 整年范围（1 月 1 日到 12 月 31 日）。
   factory ReportRange.year(int year) {
     return ReportRange(
@@ -57,8 +82,12 @@ class ReportRange {
   /// 否则省略年份后无法区分起止年份。
   String label(AppLocalizations l10n) {
     switch (mode) {
+      case ReportRangeMode.billingCycle:
+        return '${l10n.dateMonthDay(start)} - ${l10n.dateMonthDay(end)}';
       case ReportRangeMode.month:
         return l10n.yearMonth(start);
+      case ReportRangeMode.quarter:
+        return l10n.statQuarterRange(start.year, quarterOfMonth(start.month));
       case ReportRangeMode.year:
         return l10n.yearLabel(start.year);
       case ReportRangeMode.custom:
@@ -350,6 +379,190 @@ List<ReportTagStat> reportTagStats(
   return stats;
 }
 
+/// 按账户维度聚合后的统计项。
+///
+/// 信用子账户会按 [creditAccountId] 合并为一个真实信用主体，因此人民币、美元等
+/// 子账户不会在排行中重复出现。普通账户仍保持一账户一行；[accountIds] 记录该行
+/// 实际覆盖的子账户，供后续筛选或下钻复用。
+@immutable
+class ReportAccountStat {
+  const ReportAccountStat({
+    required this.key,
+    required this.label,
+    required this.iconCode,
+    required this.accountIds,
+    required this.creditAccountId,
+    required this.amount,
+    required this.percent,
+    required this.count,
+  });
+
+  final String key;
+  final String label;
+  final String iconCode;
+  final List<String> accountIds;
+  final String? creditAccountId;
+  final double amount;
+  final double percent;
+  final int count;
+}
+
+/// 按普通账户 / 信用主体聚合指定类型的净额并降序返回。
+///
+/// [noAccountLabel] 由调用方按当前语言传入；空账户 id 作为真实的“无账户”分组，
+/// 不得回退为首个账户。悬空账户引用保留为独立“已删除账户”组，便于发现脏数据。
+List<ReportAccountStat> reportAccountStats(
+  Iterable<LedgerEntry> entries,
+  List<Account> accounts,
+  List<CreditAccount> creditAccounts,
+  EntryType type, {
+  required String noAccountLabel,
+  required String deletedAccountLabel,
+}) {
+  final accountById = <String, Account>{
+    for (final account in accounts) account.id: account,
+  };
+  final creditById = <String, CreditAccount>{
+    for (final credit in creditAccounts) credit.id: credit,
+  };
+  final totals = <String, double>{};
+  final counts = <String, int>{};
+  final labels = <String, String>{};
+  final icons = <String, String>{};
+  final groupedAccountIds = <String, Set<String>>{};
+  final groupedCreditIds = <String, String?>{};
+  var dimensionTotal = 0.0;
+
+  for (final entry in entries) {
+    if (entry.type != type) {
+      continue;
+    }
+    dimensionTotal += entry.netAmount;
+    final account = accountById[entry.accountId];
+    final creditId = account?.creditAccountId;
+    final credit = creditId == null ? null : creditById[creditId];
+    final key = entry.accountId.isEmpty
+        ? 'none'
+        : credit == null
+        ? 'account:${entry.accountId}'
+        : 'credit:${credit.id}';
+    final label = entry.accountId.isEmpty
+        ? noAccountLabel
+        : credit?.name ?? account?.name ?? deletedAccountLabel;
+    totals.update(
+      key,
+      (value) => value + entry.netAmount,
+      ifAbsent: () => entry.netAmount,
+    );
+    counts.update(key, (value) => value + 1, ifAbsent: () => 1);
+    labels[key] = label;
+    icons.putIfAbsent(key, () => account?.iconCode ?? 'wallet');
+    groupedCreditIds[key] = credit?.id;
+    if (entry.accountId.isNotEmpty) {
+      groupedAccountIds.putIfAbsent(key, () => <String>{}).add(entry.accountId);
+    }
+  }
+
+  final stats =
+      <ReportAccountStat>[
+        for (final item in totals.entries)
+          ReportAccountStat(
+            key: item.key,
+            label: labels[item.key]!,
+            iconCode: icons[item.key]!,
+            accountIds: List<String>.unmodifiable(
+              groupedAccountIds[item.key] ?? const <String>{},
+            ),
+            creditAccountId: groupedCreditIds[item.key],
+            amount: item.value,
+            percent: dimensionTotal <= 0 ? 0 : item.value / dimensionTotal,
+            count: counts[item.key] ?? 0,
+          ),
+      ]..sort((a, b) {
+        final amountOrder = b.amount.compareTo(a.amount);
+        return amountOrder != 0 ? amountOrder : a.label.compareTo(b.label);
+      });
+  return stats;
+}
+
+/// 按商户聚合后的统计项。
+@immutable
+class ReportMerchantStat {
+  const ReportMerchantStat({
+    required this.key,
+    required this.label,
+    required this.amount,
+    required this.percent,
+    required this.count,
+  });
+
+  /// 归一化后的商户键，供大小写与连续空白不同的来源证据合并。
+  final String key;
+  final String label;
+  final double amount;
+  final double percent;
+  final int count;
+}
+
+/// 按外部来源证据中的商户名聚合指定类型的净额并降序返回。
+///
+/// 同一笔真实交易可能带手工、支付平台与银行多条证据，只取最后一条非空商户名，
+/// 避免一笔消费被重复计入多个商户。没有结构化商户证据的交易不凭备注猜测商户，
+/// 但占比分母仍是该维度全部交易金额，因此排行能如实表达“已识别商户占总消费”。
+List<ReportMerchantStat> reportMerchantStats(
+  Iterable<LedgerEntry> entries,
+  EntryType type,
+) {
+  final totals = <String, double>{};
+  final counts = <String, int>{};
+  final labels = <String, String>{};
+  var dimensionTotal = 0.0;
+  for (final entry in entries) {
+    if (entry.type != type) {
+      continue;
+    }
+    dimensionTotal += entry.netAmount;
+    final merchant = _merchantOf(entry);
+    if (merchant == null) {
+      continue;
+    }
+    final key = merchant.toLowerCase().replaceAll(RegExp(r'\s+'), ' ');
+    totals.update(
+      key,
+      (value) => value + entry.netAmount,
+      ifAbsent: () => entry.netAmount,
+    );
+    counts.update(key, (value) => value + 1, ifAbsent: () => 1);
+    labels.putIfAbsent(key, () => merchant);
+  }
+  final stats =
+      <ReportMerchantStat>[
+        for (final item in totals.entries)
+          ReportMerchantStat(
+            key: item.key,
+            label: labels[item.key]!,
+            amount: item.value,
+            percent: dimensionTotal <= 0 ? 0 : item.value / dimensionTotal,
+            count: counts[item.key] ?? 0,
+          ),
+      ]..sort((a, b) {
+        final amountOrder = b.amount.compareTo(a.amount);
+        return amountOrder != 0 ? amountOrder : a.label.compareTo(b.label);
+      });
+  return stats;
+}
+
+/// 取交易最后一条非空结构化商户证据；返回 null 表示不能可靠识别商户。
+String? _merchantOf(LedgerEntry entry) {
+  for (final source in entry.sourceRecords.reversed) {
+    final merchant = source.merchant.trim();
+    if (merchant.isNotEmpty) {
+      return merchant;
+    }
+  }
+  return null;
+}
+
 /// 趋势颗粒度：短范围按天，长范围（跨多月/整年）按月。
 enum ReportTrendGranularity { daily, monthly }
 
@@ -386,28 +599,35 @@ class ReportTrend {
   );
 }
 
-/// 超过该天数的范围按月聚合，否则按天。
+/// 自定义范围超过该天数后按月聚合；固定月/季/账期仍保留逐日观察能力。
 const int _trendDailyDayLimit = 62;
 
-/// 计算范围内指定类型的趋势序列。整年或跨多月按月，短范围按天。
+/// 计算范围内指定类型的趋势序列。整年或较长自定义范围按月，其余按天。
+///
+/// [bucketDateOf] 只覆盖图表分桶日期，不修改交易；账期页用它把银行明确归入本期、
+/// 但发生日刚好越过推导窗口的交易夹到最近边界，使曲线合计与账期汇总保持一致。
 ReportTrend reportTrend(
   Iterable<LedgerEntry> entries,
   ReportRange range,
-  EntryType type,
-) {
+  EntryType type, {
+  DateTime Function(LedgerEntry entry)? bucketDateOf,
+}) {
   final useMonthly =
       range.mode == ReportRangeMode.year ||
-      range.dayCount > _trendDailyDayLimit;
+      (range.mode == ReportRangeMode.custom &&
+          range.dayCount > _trendDailyDayLimit);
   return useMonthly
-      ? _monthlyTrend(entries, range, type)
-      : _dailyTrend(entries, range, type);
+      ? _monthlyTrend(entries, range, type, bucketDateOf: bucketDateOf)
+      : _dailyTrend(entries, range, type, bucketDateOf: bucketDateOf);
 }
 
+/// 生成逐日趋势；[bucketDateOf] 可在不改写交易的前提下覆盖图表分桶日期。
 ReportTrend _dailyTrend(
   Iterable<LedgerEntry> entries,
   ReportRange range,
-  EntryType type,
-) {
+  EntryType type, {
+  DateTime Function(LedgerEntry entry)? bucketDateOf,
+}) {
   final days = range.window.days;
   final values = List<double>.filled(days.length, 0);
   final index = <int, int>{};
@@ -419,7 +639,7 @@ ReportTrend _dailyTrend(
     if (entry.type != type) {
       continue;
     }
-    final date = entry.occurredAt;
+    final date = bucketDateOf?.call(entry) ?? entry.occurredAt;
     final slot = index[_dayKey(date.year, date.month, date.day)];
     if (slot != null) {
       values[slot] += entry.netAmount;
@@ -439,8 +659,9 @@ ReportTrend _dailyTrend(
 ReportTrend _monthlyTrend(
   Iterable<LedgerEntry> entries,
   ReportRange range,
-  EntryType type,
-) {
+  EntryType type, {
+  DateTime Function(LedgerEntry entry)? bucketDateOf,
+}) {
   // 生成从 start 月到 end 月（含）的连续月份桶。
   final months = <DateTime>[];
   var cursor = DateTime(range.start.year, range.start.month, 1);
@@ -462,7 +683,7 @@ ReportTrend _monthlyTrend(
     if (entry.type != type) {
       continue;
     }
-    final date = entry.occurredAt;
+    final date = bucketDateOf?.call(entry) ?? entry.occurredAt;
     if (date.isBefore(startDay) || !date.isBefore(endExclusive)) {
       continue;
     }

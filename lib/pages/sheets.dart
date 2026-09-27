@@ -58,6 +58,24 @@ Future<T?> _showVeriModalSheet<T>({
   ),
 );
 
+/// 为需要自定义内容的页面提供统一底部弹层外壳。
+///
+/// [builder] 只负责业务内容；实色表面、顶部圆角和拖拽把手由这里统一处理。简单
+/// 单选仍应优先使用 [showOptionSheet]，不要为了一个选项列表自行拼内容。
+Future<T?> showVeriContentSheet<T>({
+  required BuildContext context,
+  required WidgetBuilder builder,
+  bool isScrollControlled = false,
+}) {
+  return _showVeriModalSheet<T>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: isScrollControlled,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    builder: builder,
+  );
+}
+
 /// 底部弹窗内嵌的拖拽把手：与内容连成一体。
 class _VeriSheetDragHandle extends StatelessWidget {
   const _VeriSheetDragHandle();

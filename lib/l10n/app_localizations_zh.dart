@@ -2045,6 +2045,45 @@ class AppLocalizationsZh extends AppLocalizations {
   String get rankGroupTag => '标签';
 
   @override
+  String get rankGroupTagProjectScene => '标签 / 项目 / 场景';
+
+  @override
+  String get rankGroupAccount => '账户';
+
+  @override
+  String get rankGroupMerchant => '商户';
+
+  @override
+  String get reportGroupingLabel => '排行维度';
+
+  @override
+  String get reportPickCreditAccount => '选择信用账户账期';
+
+  @override
+  String get accountRank => '账户排行';
+
+  @override
+  String get merchantRank => '商户排行';
+
+  @override
+  String get noAccountRankData => '暂无账户数据';
+
+  @override
+  String get noAccountRankDesc => '该时间范围内没有可按账户汇总的记录。';
+
+  @override
+  String get noMerchantData => '暂无商户数据';
+
+  @override
+  String get noMerchantDesc => '导入账单或自动识别出商户后，会在这里汇总显示。';
+
+  @override
+  String get merchantRankCoverageNote => '仅统计带结构化商户信息的交易，占比仍以全部同类收支为分母';
+
+  @override
+  String get deletedAccountLabel => '已删除账户';
+
+  @override
   String get tagRank => '标签排行';
 
   @override

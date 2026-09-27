@@ -1,5 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/demo_data.dart';
+import 'package:verifin/app/ledger_math.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/report_analysis.dart';
 
@@ -10,6 +11,8 @@ LedgerEntry entry({
   required String categoryId,
   required DateTime occurredAt,
   double refundedAmount = 0,
+  String accountId = 'cash',
+  List<EntrySourceRecord> sourceRecords = const <EntrySourceRecord>[],
 }) {
   return LedgerEntry(
     id: id,
@@ -17,10 +20,11 @@ LedgerEntry entry({
     type: type,
     amount: amount,
     categoryId: categoryId,
-    accountId: 'cash',
+    accountId: accountId,
     note: '',
     occurredAt: occurredAt,
     refundedAmount: refundedAmount,
+    sourceRecords: sourceRecords,
   );
 }
 
@@ -41,6 +45,25 @@ void main() {
       expect(range.start, DateTime(2026, 1, 1));
       expect(range.end, DateTime(2026, 12, 31));
       expect(range.dayCount, 365);
+    });
+
+    test('quarter range covers the full natural quarter', () {
+      final range = ReportRange.quarter(DateTime(2026, 5, 20));
+      expect(range.start, DateTime(2026, 4, 1));
+      expect(range.end, DateTime(2026, 6, 30));
+      expect(range.mode, ReportRangeMode.quarter);
+    });
+
+    test('billing cycle preserves and normalizes the supplied window', () {
+      final range = ReportRange.billingCycle(
+        DateWindow(
+          start: DateTime(2026, 4, 26, 8),
+          end: DateTime(2026, 5, 25, 23, 59),
+        ),
+      );
+      expect(range.start, DateTime(2026, 4, 26));
+      expect(range.end, DateTime(2026, 5, 25));
+      expect(range.mode, ReportRangeMode.billingCycle);
     });
 
     test('custom range normalizes reversed bounds and strips time', () {
@@ -279,6 +302,156 @@ void main() {
     });
   });
 
+  group('账户与商户统计', () {
+    const accounts = <Account>[
+      Account(
+        id: 'cny-card',
+        bookId: 'default',
+        name: '招商人民币',
+        type: AccountType.creditCard,
+        groupId: null,
+        initialBalance: 0,
+        iconCode: 'credit_card',
+        note: '',
+        includeInAssets: true,
+        hidden: false,
+        creditAccountId: 'cmb',
+      ),
+      Account(
+        id: 'usd-card',
+        bookId: 'default',
+        name: '招商美元',
+        type: AccountType.creditCard,
+        groupId: null,
+        initialBalance: 0,
+        iconCode: 'credit_card',
+        note: '',
+        includeInAssets: true,
+        hidden: false,
+        currencyCode: 'USD',
+        creditAccountId: 'cmb',
+      ),
+      Account(
+        id: 'cash',
+        bookId: 'default',
+        name: '现金',
+        type: AccountType.cash,
+        groupId: null,
+        initialBalance: 0,
+        iconCode: 'cash',
+        note: '',
+        includeInAssets: true,
+        hidden: false,
+      ),
+    ];
+    const credits = <CreditAccount>[
+      CreditAccount(
+        id: 'cmb',
+        bookId: 'default',
+        name: '招商信用卡',
+        institution: '招商银行',
+        cardLast4: '4185',
+        currencyCode: 'CNY',
+        creditLimit: 50000,
+        statementDay: 25,
+        dueRuleType: CreditDueRuleType.fixedDay,
+        dueDay: 13,
+        daysAfterStatement: null,
+        cycleBudget: 4000,
+      ),
+    ];
+
+    test('credit currency child accounts merge into one subject row', () {
+      final entries = <LedgerEntry>[
+        entry(
+          id: 'cny',
+          type: EntryType.expense,
+          amount: 120,
+          categoryId: 'dining',
+          occurredAt: DateTime(2026, 5, 1),
+          accountId: 'cny-card',
+        ),
+        entry(
+          id: 'usd',
+          type: EntryType.expense,
+          amount: 80,
+          categoryId: 'dining',
+          occurredAt: DateTime(2026, 5, 2),
+          accountId: 'usd-card',
+        ),
+        entry(
+          id: 'cash',
+          type: EntryType.expense,
+          amount: 50,
+          categoryId: 'transport',
+          occurredAt: DateTime(2026, 5, 3),
+        ),
+      ];
+      final stats = reportAccountStats(
+        entries,
+        accounts,
+        credits,
+        EntryType.expense,
+        noAccountLabel: '无账户',
+        deletedAccountLabel: '已删除账户',
+      );
+      final credit = stats.firstWhere((stat) => stat.creditAccountId == 'cmb');
+      expect(credit.label, '招商信用卡');
+      expect(credit.amount, 200);
+      expect(credit.count, 2);
+      expect(credit.accountIds, containsAll(<String>['cny-card', 'usd-card']));
+      expect(credit.percent, closeTo(0.8, 1e-9));
+    });
+
+    test(
+      'merchant names normalize whitespace and use all spending as share base',
+      () {
+        EntrySourceRecord source(String id, String merchant) =>
+            EntrySourceRecord(
+              id: id,
+              sourceId: 'bank',
+              fingerprint: 'fp-$id',
+              importedAt: DateTime(2026, 5, 4),
+              transactionDate: DateTime(2026, 5, 4),
+              amount: 50,
+              currencyCode: 'CNY',
+              merchant: merchant,
+            );
+        final entries = <LedgerEntry>[
+          entry(
+            id: 'm1',
+            type: EntryType.expense,
+            amount: 50,
+            categoryId: 'dining',
+            occurredAt: DateTime(2026, 5, 4),
+            sourceRecords: <EntrySourceRecord>[source('1', '麦当劳')],
+          ),
+          entry(
+            id: 'm2',
+            type: EntryType.expense,
+            amount: 30,
+            categoryId: 'dining',
+            occurredAt: DateTime(2026, 5, 5),
+            sourceRecords: <EntrySourceRecord>[source('2', '  麦当劳  ')],
+          ),
+          entry(
+            id: 'unknown',
+            type: EntryType.expense,
+            amount: 20,
+            categoryId: 'dining',
+            occurredAt: DateTime(2026, 5, 6),
+          ),
+        ];
+        final stats = reportMerchantStats(entries, EntryType.expense);
+        expect(stats, hasLength(1));
+        expect(stats.single.label, '麦当劳');
+        expect(stats.single.amount, 80);
+        expect(stats.single.count, 2);
+        expect(stats.single.percent, closeTo(0.8, 1e-9));
+      },
+    );
+  });
+
   group('reportMonthlyComparison & changeRatio', () {
     test('changeRatio uses base magnitude and guards zero base', () {
       expect(changeRatio(120, 100), closeTo(0.2, 1e-9));
@@ -429,5 +602,50 @@ void main() {
       expect(trend.points.length, 4);
       expect(trend.values[1], 80);
     });
+
+    test('quarter range keeps daily buckets for detailed trend inspection', () {
+      final range = ReportRange.quarter(DateTime(2026, 5, 1));
+      final trend = reportTrend(
+        <LedgerEntry>[
+          entry(
+            id: 'apr',
+            type: EntryType.expense,
+            amount: 42,
+            categoryId: 'dining',
+            occurredAt: DateTime(2026, 4, 15),
+          ),
+        ],
+        range,
+        EntryType.expense,
+      );
+      expect(trend.granularity, ReportTrendGranularity.daily);
+      expect(trend.points, hasLength(91));
+      expect(trend.values.reduce((a, b) => a + b), 42);
+    });
+
+    test(
+      'custom bucket date keeps explicitly assigned cycle entries in chart',
+      () {
+        final range = ReportRange.billingCycle(
+          DateWindow(start: DateTime(2026, 4, 26), end: DateTime(2026, 5, 25)),
+        );
+        final assigned = entry(
+          id: 'statement-day',
+          type: EntryType.expense,
+          amount: 88,
+          categoryId: 'dining',
+          occurredAt: DateTime(2026, 4, 25),
+        );
+        final trend = reportTrend(
+          <LedgerEntry>[assigned],
+          range,
+          EntryType.expense,
+          // 真实账期页会仅对已由 billingCycleId 纳入本期、但日期越界的点做同样夹取。
+          bucketDateOf: (_) => range.start,
+        );
+        expect(trend.values.first, 88);
+        expect(trend.values.reduce((a, b) => a + b), 88);
+      },
+    );
   });
 }

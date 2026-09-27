@@ -566,11 +566,17 @@ class MonthSwitcher extends StatelessWidget {
     required this.label,
     required this.onPrevious,
     required this.onNext,
+    this.previousTooltip,
+    this.nextTooltip,
   });
 
   final String label;
   final VoidCallback onPrevious;
   final VoidCallback onNext;
+
+  /// 左右按钮的可选语义提示；省略时保持预算页既有“上/下月”文案。
+  final String? previousTooltip;
+  final String? nextTooltip;
 
   @override
   Widget build(BuildContext context) {
@@ -578,7 +584,8 @@ class MonthSwitcher extends StatelessWidget {
       mainAxisSize: MainAxisSize.min,
       children: <Widget>[
         IconButton(
-          tooltip: AppLocalizations.of(context).calendarPrevMonth,
+          tooltip:
+              previousTooltip ?? AppLocalizations.of(context).calendarPrevMonth,
           onPressed: onPrevious,
           icon: const Icon(Icons.chevron_left),
         ),
@@ -595,7 +602,8 @@ class MonthSwitcher extends StatelessWidget {
           ),
         ),
         IconButton(
-          tooltip: AppLocalizations.of(context).calendarNextMonth,
+          tooltip:
+              nextTooltip ?? AppLocalizations.of(context).calendarNextMonth,
           onPressed: onNext,
           icon: const Icon(Icons.chevron_right),
         ),

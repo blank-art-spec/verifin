@@ -2086,6 +2086,48 @@ class AppLocalizationsEn extends AppLocalizations {
   String get rankGroupTag => 'Tag';
 
   @override
+  String get rankGroupTagProjectScene => 'Tag / project / context';
+
+  @override
+  String get rankGroupAccount => 'Account';
+
+  @override
+  String get rankGroupMerchant => 'Merchant';
+
+  @override
+  String get reportGroupingLabel => 'Ranking dimension';
+
+  @override
+  String get reportPickCreditAccount => 'Choose credit account cycle';
+
+  @override
+  String get accountRank => 'Account ranking';
+
+  @override
+  String get merchantRank => 'Merchant ranking';
+
+  @override
+  String get noAccountRankData => 'No account data';
+
+  @override
+  String get noAccountRankDesc =>
+      'No records can be summarized by account in this time range.';
+
+  @override
+  String get noMerchantData => 'No merchant data';
+
+  @override
+  String get noMerchantDesc =>
+      'Imported statements and automatically recognized merchants will be summarized here.';
+
+  @override
+  String get merchantRankCoverageNote =>
+      'Only transactions with structured merchant data are ranked; shares still use all transactions of this type as the denominator';
+
+  @override
+  String get deletedAccountLabel => 'Deleted account';
+
+  @override
   String get tagRank => 'Tag ranking';
 
   @override
