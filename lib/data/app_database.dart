@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 16;
+  static const int schemaVersion = 17;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -69,6 +69,7 @@ class AppDatabase {
         14: _migrateToV14,
         15: _migrateToV15,
         16: _migrateToV16,
+        17: _migrateToV17,
       };
 
   /// 只读暴露迁移注册表，供迁移矩阵测试把库推进到任意中间版本。生产代码勿用。
@@ -329,6 +330,35 @@ class AppDatabase {
     ''');
   }
 
+  /// v16 → v17：账务正确性第一批底层结构。
+  ///
+  /// 余额锚点、正式账单和还款分配各自独立建表；交易只追加核准状态与来源证据 JSON，
+  /// 不复制正式账单流水。旧交易默认未核准且无来源证据，余额行为在未创建锚点时不变。
+  static Future<void> _migrateToV17(Database db) async {
+    if (await _tableExists(db, 'entries')) {
+      // 迁移矩阵会把“当前结构的临时库”降写 user_version 后重跑历史迁移，
+      // 因此逐列判存在，保证恢复中断迁移与测试降版本两种场景都可安全重入。
+      if (!await _columnsExist(db, 'entries', <String>[
+        'reconciliation_status',
+      ])) {
+        await db.execute(
+          "ALTER TABLE entries ADD COLUMN reconciliation_status TEXT NOT NULL DEFAULT 'unverified'",
+        );
+      }
+      if (!await _columnsExist(db, 'entries', <String>['source_records'])) {
+        await db.execute('ALTER TABLE entries ADD COLUMN source_records TEXT');
+      }
+    }
+    await db.execute(_balanceAnchorsTable);
+    await db.execute(_balanceAnchorsLookupIndex);
+    await db.execute(_billingStatementsTable);
+    await db.execute(_billingStatementsLookupIndex);
+    await db.execute(_billingStatementsSourceIndex);
+    await db.execute(_statementRepaymentAllocationsTable);
+    await db.execute(_statementRepaymentStatementIndex);
+    await db.execute(_statementRepaymentEntryIndex);
+  }
+
   static Future<bool> _tableExists(Database db, String name) async {
     final rows = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
@@ -473,6 +503,71 @@ class AppDatabase {
       'CREATE INDEX idx_exchange_rates_book_currency_date '
       'ON exchange_rates (book_id, currency_code, effective_date)';
 
+  static const String _balanceAnchorsTable = '''
+    CREATE TABLE IF NOT EXISTS balance_anchors (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      effective_at INTEGER NOT NULL,
+      balance REAL NOT NULL,
+      created_at INTEGER NOT NULL,
+      note TEXT NOT NULL
+    )
+  ''';
+
+  static const String _balanceAnchorsLookupIndex =
+      'CREATE INDEX IF NOT EXISTS idx_balance_anchors_account_date '
+      'ON balance_anchors (account_id, effective_at DESC)';
+
+  static const String _billingStatementsTable = '''
+    CREATE TABLE IF NOT EXISTS billing_statements (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      account_id TEXT NOT NULL,
+      statement_date INTEGER NOT NULL,
+      period_start INTEGER NOT NULL,
+      period_end INTEGER NOT NULL,
+      statement_amount REAL NOT NULL,
+      minimum_payment REAL NOT NULL,
+      due_date INTEGER NOT NULL,
+      paid_amount REAL NOT NULL,
+      status TEXT NOT NULL,
+      currency_code TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      source_statement_id TEXT NOT NULL,
+      note TEXT NOT NULL
+    )
+  ''';
+
+  static const String _billingStatementsLookupIndex =
+      'CREATE INDEX IF NOT EXISTS idx_billing_statements_account_date '
+      'ON billing_statements (account_id, statement_date DESC)';
+
+  static const String _billingStatementsSourceIndex =
+      'CREATE UNIQUE INDEX IF NOT EXISTS idx_billing_statements_source '
+      'ON billing_statements (book_id, account_id, source_id, source_statement_id) '
+      "WHERE source_id <> '' AND source_statement_id <> ''";
+
+  static const String _statementRepaymentAllocationsTable = '''
+    CREATE TABLE IF NOT EXISTS statement_repayment_allocations (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      statement_id TEXT NOT NULL,
+      repayment_entry_id TEXT NOT NULL,
+      amount REAL NOT NULL,
+      created_at INTEGER NOT NULL,
+      UNIQUE (statement_id, repayment_entry_id)
+    )
+  ''';
+
+  static const String _statementRepaymentStatementIndex =
+      'CREATE INDEX IF NOT EXISTS idx_statement_allocations_statement '
+      'ON statement_repayment_allocations (statement_id)';
+
+  static const String _statementRepaymentEntryIndex =
+      'CREATE INDEX IF NOT EXISTS idx_statement_allocations_entry '
+      'ON statement_repayment_allocations (repayment_entry_id)';
+
   static const String _accountGroupsTableCurrent = '''
     CREATE TABLE account_groups (
       id TEXT PRIMARY KEY,
@@ -520,7 +615,9 @@ class AppDatabase {
       reimbursable INTEGER NOT NULL DEFAULT 0,
       refunded_amount REAL NOT NULL DEFAULT 0,
       refund_of TEXT,
-      settled_at INTEGER
+      settled_at INTEGER,
+      reconciliation_status TEXT NOT NULL DEFAULT 'unverified',
+      source_records TEXT
     )
     ''',
     'CREATE INDEX idx_entries_book ON entries (book_id)',
@@ -593,5 +690,13 @@ class AppDatabase {
     _recurringRulesTableCurrent,
     _exchangeRatesTable,
     _exchangeRatesLookupIndex,
+    _balanceAnchorsTable,
+    _balanceAnchorsLookupIndex,
+    _billingStatementsTable,
+    _billingStatementsLookupIndex,
+    _billingStatementsSourceIndex,
+    _statementRepaymentAllocationsTable,
+    _statementRepaymentStatementIndex,
+    _statementRepaymentEntryIndex,
   ];
 }

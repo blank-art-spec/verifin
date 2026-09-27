@@ -21,6 +21,7 @@ import '../app/series_math.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'credit_repayment_page.dart';
+import 'billing_statements_page.dart';
 import 'entry_detail_page.dart';
 import 'sheets.dart';
 import 'transactions_pages.dart';
@@ -113,7 +114,9 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                       tooltip: AppLocalizations.of(
                         context,
                       ).balanceAdjustTooltip,
-                      onPressed: () => _editBalance(persistedAccount, balance),
+                      onPressed: () => currentAccount.type.supportsCredit
+                          ? _confirmBalanceAnchor(persistedAccount, balance)
+                          : _editBalance(persistedAccount, balance),
                     ),
                     SaveHeaderAction(onPressed: _isDirty ? _saveAndExit : null),
                   ],
@@ -125,7 +128,9 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                   const SizedBox(height: 10),
                 ],
                 VeriCard(
-                  onTap: () => _editBalance(persistedAccount, balance),
+                  onTap: () => currentAccount.type.supportsCredit
+                      ? _confirmBalanceAnchor(persistedAccount, balance)
+                      : _editBalance(persistedAccount, balance),
                   child: Row(
                     children: <Widget>[
                       Expanded(
@@ -155,11 +160,14 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 const SizedBox(height: 10),
                 if (currentAccount.type.supportsCredit &&
                     (currentAccount.creditLimit != null ||
-                        currentAccount.statementDay != null)) ...<Widget>[
+                        currentAccount.statementDay != null ||
+                        controller
+                            .billingStatementsForAccount(currentAccount.id)
+                            .isNotEmpty)) ...<Widget>[
                   _CreditSummaryCard(
                     account: currentAccount,
                     balance: balance,
-                    entries: entries,
+                    overview: controller.creditOverview(currentAccount),
                   ),
                   const SizedBox(height: 10),
                 ],
@@ -484,6 +492,40 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                           trailingIcon: Icons.chevron_right,
                           onTap: () => _pickBillingDay(currentAccount, true),
                         ),
+                        const Divider(height: 1),
+                        SettingsRow(
+                          icon: Icons.verified_outlined,
+                          title: AppLocalizations.of(
+                            context,
+                          ).balanceAnchorAction,
+                          trailing: _anchorLabel(
+                            context,
+                            controller.latestBalanceAnchor(currentAccount.id),
+                            currentAccount.currencyCode,
+                          ),
+                          trailingIcon: Icons.chevron_right,
+                          onTap: () =>
+                              _confirmBalanceAnchor(persistedAccount, balance),
+                        ),
+                        const Divider(height: 1),
+                        SettingsRow(
+                          icon: Icons.receipt_long_outlined,
+                          title: AppLocalizations.of(
+                            context,
+                          ).billingStatementsAction,
+                          trailing: controller
+                              .billingStatementsForAccount(currentAccount.id)
+                              .length
+                              .toString(),
+                          trailingIcon: Icons.chevron_right,
+                          onTap: () => Navigator.of(context).push<void>(
+                            MaterialPageRoute<void>(
+                              builder: (_) => BillingStatementsPage(
+                                account: persistedAccount,
+                              ),
+                            ),
+                          ),
+                        ),
                       ],
                     ),
                   ),
@@ -652,6 +694,68 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     } else {
       controller.rebaseAccountBalance(account, amount);
     }
+  }
+
+  /// 为信用账户写入正式余额锚点；不生成“历史结清校准”交易。
+  Future<void> _confirmBalanceAnchor(Account account, double balance) async {
+    final l10n = AppLocalizations.of(context);
+    final amount = await showNumberPadSheet(
+      context,
+      title: l10n.balanceAnchorTitle,
+      initialAmount: balance,
+      allowNegative: true,
+      allowZero: true,
+      currencyCode: account.currencyCode,
+    );
+    if (!mounted || amount == null) return;
+    final now = DateTime.now();
+    final picked = await showDatePicker(
+      context: context,
+      initialDate: now,
+      firstDate: DateTime(2000),
+      lastDate: now,
+      helpText: l10n.balanceAnchorDate,
+    );
+    if (!mounted || picked == null) return;
+    final isToday =
+        picked.year == now.year &&
+        picked.month == now.month &&
+        picked.day == now.day;
+    final effectiveAt = isToday
+        ? now
+        : DateTime(picked.year, picked.month, picked.day, 23, 59, 59, 999);
+    final confirmed = await showConfirmDialog(
+      context,
+      title: l10n.balanceAnchorTitle,
+      message: l10n.balanceAnchorHint,
+      confirmLabel: l10n.commonConfirm,
+    );
+    if (!mounted || confirmed != true) return;
+    final saved = await VeriFinScope.of(context).saveBalanceAnchor(
+      account: account,
+      effectiveAt: effectiveAt,
+      balance: amount,
+      note: l10n.balanceAnchorTitle,
+    );
+    if (!mounted || !saved) return;
+    unawaited(
+      VeriFeedbackHost.of(context).showMessage(
+        message: l10n.balanceAnchorSaved,
+        tone: VeriFeedbackTone.success,
+      ),
+    );
+  }
+
+  String _anchorLabel(
+    BuildContext context,
+    BalanceAnchor? anchor,
+    String currencyCode,
+  ) {
+    if (anchor == null) return AppLocalizations.of(context).notSet;
+    return AppLocalizations.of(context).balanceAnchorLatest(
+      AppLocalizations.of(context).dateMonthDay(anchor.effectiveAt),
+      formatUserMoney(anchor.balance, currencyCode),
+    );
   }
 
   Future<void> _startEntryForAccount(
@@ -1182,12 +1286,12 @@ class _CreditSummaryCard extends StatelessWidget {
   const _CreditSummaryCard({
     required this.account,
     required this.balance,
-    required this.entries,
+    required this.overview,
   });
 
   final Account account;
   final double balance;
-  final List<LedgerEntry> entries;
+  final CreditStatementOverview overview;
 
   @override
   Widget build(BuildContext context) {
@@ -1257,23 +1361,61 @@ class _CreditSummaryCard extends StatelessWidget {
               padding: EdgeInsets.symmetric(vertical: 12),
               child: Divider(height: 1),
             ),
-          if (statementDay != null)
-            _CreditStat(
-              label: l10n.currentBillLabel,
-              value: formatUserMoney(
-                billingCycleExpense(
-                  entries,
-                  account.id,
-                  currentBillingCycle(statementDay, DateTime.now()),
+          if (statementDay != null || overview.latestStatement != null)
+            Row(
+              children: <Widget>[
+                Expanded(
+                  child: _CreditStat(
+                    // 保留「本期账单」这一既有页面文案，同时在下方明确
+                    // 标注这是已经出账、尚未还清的金额，避免和未出账消费混淆。
+                    label: l10n.currentBillLabel,
+                    value: formatUserMoney(
+                      overview.billedOutstanding,
+                      account.currencyCode,
+                    ),
+                    hint: l10n.billedOutstandingLabel,
+                  ),
                 ),
-                account.currencyCode,
-              ),
-              hint: _billingHint(l10n, statementDay, account.dueDay),
+                Expanded(
+                  child: _CreditStat(
+                    label: l10n.unbilledAmountLabel,
+                    value: formatUserMoney(
+                      overview.unbilledAmount,
+                      account.currencyCode,
+                    ),
+                  ),
+                ),
+                Expanded(
+                  child: _CreditStat(
+                    label: l10n.latestStatementLabel,
+                    value: overview.latestStatement == null
+                        ? l10n.notSet
+                        : _statementStatusLabel(
+                            l10n,
+                            overview.latestStatement!,
+                          ),
+                    hint: statementDay == null
+                        ? null
+                        : _billingHint(l10n, statementDay, account.dueDay),
+                  ),
+                ),
+              ],
             ),
         ],
       ),
     );
   }
+
+  String _statementStatusLabel(
+    AppLocalizations l10n,
+    BillingStatement statement,
+  ) => switch (statement.status) {
+    BillingStatementStatus.paid => l10n.statementPaid,
+    BillingStatementStatus.partiallyPaid => l10n.statementPartiallyPaid,
+    BillingStatementStatus.overdue => l10n.statementOverdue,
+    BillingStatementStatus.disputed => l10n.statementDisputed,
+    BillingStatementStatus.open => l10n.statementOpen,
+  };
 
   String _billingHint(AppLocalizations l10n, int statementDay, int? dueDay) {
     final parts = <String>[

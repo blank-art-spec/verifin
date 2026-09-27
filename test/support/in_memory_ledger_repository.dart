@@ -16,6 +16,10 @@ class InMemoryLedgerRepository implements LedgerRepository {
   List<Attachment> _attachments = <Attachment>[];
   List<RecurringRule> _recurringRules = <RecurringRule>[];
   List<ExchangeRate> _exchangeRates = <ExchangeRate>[];
+  List<BalanceAnchor> _balanceAnchors = <BalanceAnchor>[];
+  List<BillingStatement> _billingStatements = <BillingStatement>[];
+  List<StatementRepaymentAllocation> _statementRepaymentAllocations =
+      <StatementRepaymentAllocation>[];
   Map<String, double> _monthlyBudgets = <String, double>{};
   Map<String, double> _categoryBudgets = <String, double>{};
   Map<String, double> _dailyBudgets = <String, double>{};
@@ -121,6 +125,51 @@ class InMemoryLedgerRepository implements LedgerRepository {
   }
 
   @override
+  Future<List<BalanceAnchor>> loadBalanceAnchors() async =>
+      List<BalanceAnchor>.of(_balanceAnchors);
+
+  @override
+  Future<void> saveBalanceAnchors(List<BalanceAnchor> anchors) async {
+    _balanceAnchors = List<BalanceAnchor>.of(anchors);
+  }
+
+  @override
+  Future<List<BillingStatement>> loadBillingStatements() async =>
+      List<BillingStatement>.of(_billingStatements);
+
+  @override
+  Future<void> saveBillingStatements(List<BillingStatement> statements) async {
+    _billingStatements = List<BillingStatement>.of(statements);
+  }
+
+  @override
+  Future<List<StatementRepaymentAllocation>>
+  loadStatementRepaymentAllocations() async =>
+      List<StatementRepaymentAllocation>.of(_statementRepaymentAllocations);
+
+  @override
+  Future<void> saveStatementRepaymentAllocations(
+    List<StatementRepaymentAllocation> allocations,
+  ) async {
+    _statementRepaymentAllocations = List<StatementRepaymentAllocation>.of(
+      allocations,
+    );
+  }
+
+  @override
+  Future<void> saveCreditAggregate({
+    required List<LedgerEntry> entries,
+    required List<BillingStatement> statements,
+    required List<StatementRepaymentAllocation> allocations,
+  }) async {
+    _entries = List<LedgerEntry>.of(entries);
+    _billingStatements = List<BillingStatement>.of(statements);
+    _statementRepaymentAllocations = List<StatementRepaymentAllocation>.of(
+      allocations,
+    );
+  }
+
+  @override
   Future<Map<String, double>> loadMonthlyBudgets() async =>
       Map<String, double>.of(_monthlyBudgets);
 
@@ -169,6 +218,11 @@ class InMemoryLedgerRepository implements LedgerRepository {
     _entries = List<LedgerEntry>.of(snapshot.entries);
     _recurringRules = List<RecurringRule>.of(snapshot.recurringRules);
     _exchangeRates = List<ExchangeRate>.of(snapshot.exchangeRates);
+    _balanceAnchors = List<BalanceAnchor>.of(snapshot.balanceAnchors);
+    _billingStatements = List<BillingStatement>.of(snapshot.billingStatements);
+    _statementRepaymentAllocations = List<StatementRepaymentAllocation>.of(
+      snapshot.statementRepaymentAllocations,
+    );
     _monthlyBudgets = Map<String, double>.of(snapshot.monthlyBudgets);
     _categoryBudgets = Map<String, double>.of(snapshot.categoryBudgets);
     _dailyBudgets = Map<String, double>.of(snapshot.dailyBudgets);
@@ -181,5 +235,8 @@ class InMemoryLedgerRepository implements LedgerRepository {
       _accounts.isNotEmpty ||
       _groups.isNotEmpty ||
       _categories.isNotEmpty ||
-      _exchangeRates.isNotEmpty;
+      _exchangeRates.isNotEmpty ||
+      _balanceAnchors.isNotEmpty ||
+      _billingStatements.isNotEmpty ||
+      _statementRepaymentAllocations.isNotEmpty;
 }

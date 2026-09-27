@@ -158,6 +158,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         ) ||
         _recurringRules.any((rule) => rule.bookId == bookId) ||
         _exchangeRates.any((rate) => rate.bookId == bookId) ||
+        _balanceAnchors.any((anchor) => anchor.bookId == bookId) ||
+        _billingStatements.any((statement) => statement.bookId == bookId) ||
         hasBudget(_monthlyBudgets) ||
         hasBudget(_categoryBudgets) ||
         (_dailyBudgets[bookId] ?? 0) != 0;
@@ -166,6 +168,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   bool accountCurrencyLocked(Account account) {
     return account.initialBalance != 0 ||
         account.creditLimit != null ||
+        _balanceAnchors.any((anchor) => anchor.accountId == account.id) ||
+        _billingStatements.any(
+          (statement) => statement.accountId == account.id,
+        ) ||
         _entries.any(
           (entry) =>
               entry.bookId == account.bookId &&
@@ -192,6 +198,473 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   List<Account> get accounts => _accountsView ??= List<Account>.unmodifiable(
     _accounts.where((account) => account.bookId == _activeBookId),
   );
+
+  /// 当前账本的余额核准锚点，按核准时间倒序。
+  List<BalanceAnchor> get balanceAnchors {
+    final list =
+        _balanceAnchors
+            .where((anchor) => anchor.bookId == _activeBookId)
+            .toList()
+          ..sort((a, b) => b.effectiveAt.compareTo(a.effectiveAt));
+    return List<BalanceAnchor>.unmodifiable(list);
+  }
+
+  /// 当前账本的正式账单，按账单日倒序。
+  List<BillingStatement> get billingStatements {
+    final list =
+        _billingStatements
+            .where((statement) => statement.bookId == _activeBookId)
+            .toList()
+          ..sort((a, b) => b.statementDate.compareTo(a.statementDate));
+    return List<BillingStatement>.unmodifiable(list);
+  }
+
+  List<BillingStatement> billingStatementsForAccount(String accountId) =>
+      List<BillingStatement>.unmodifiable(
+        billingStatements.where((item) => item.accountId == accountId),
+      );
+
+  List<StatementRepaymentAllocation> allocationsForStatement(
+    String statementId,
+  ) => List<StatementRepaymentAllocation>.unmodifiable(
+    _statementRepaymentAllocations.where(
+      (allocation) => allocation.statementId == statementId,
+    ),
+  );
+
+  BalanceAnchor? latestBalanceAnchor(String accountId) => _balanceAnchors
+      .where((anchor) => anchor.accountId == accountId)
+      .fold<BalanceAnchor?>(
+        null,
+        (latest, anchor) =>
+            latest == null || anchor.effectiveAt.isAfter(latest.effectiveAt)
+            ? anchor
+            : latest,
+      );
+
+  CreditStatementOverview creditOverview(Account account, {DateTime? now}) =>
+      creditStatementOverview(
+        account: account,
+        entries: _entries.where((entry) => entry.bookId == account.bookId),
+        statements: _billingStatements.where(
+          (statement) => statement.accountId == account.id,
+        ),
+        now: now ?? DateTime.now(),
+      );
+
+  /// 保存一个“该时点余额已确认”的锚点。它不会创建校准交易，也不会改写历史流水。
+  Future<bool> saveBalanceAnchor({
+    required Account account,
+    required DateTime effectiveAt,
+    required double balance,
+    String note = '',
+  }) async {
+    if (!balance.isFinite ||
+        !_accounts.any(
+          (item) => item.id == account.id && item.bookId == account.bookId,
+        )) {
+      return false;
+    }
+    final normalized = normalizeCurrencyAmount(balance, account.currencyCode);
+    final next = List<BalanceAnchor>.of(_balanceAnchors);
+    final sameMoment = next.indexWhere(
+      (anchor) =>
+          anchor.accountId == account.id &&
+          anchor.effectiveAt.millisecondsSinceEpoch ==
+              effectiveAt.millisecondsSinceEpoch,
+    );
+    final now = DateTime.now();
+    final anchor = BalanceAnchor(
+      id: sameMoment == -1 ? _generateId('anchor') : next[sameMoment].id,
+      bookId: account.bookId,
+      accountId: account.id,
+      effectiveAt: effectiveAt,
+      balance: normalized,
+      createdAt: sameMoment == -1 ? now : next[sameMoment].createdAt,
+      note: note.trim(),
+    );
+    if (sameMoment == -1) {
+      next.add(anchor);
+    } else {
+      next[sameMoment] = anchor;
+    }
+    if (!await _runTrackedWrite(() => _repository.saveBalanceAnchors(next))) {
+      return false;
+    }
+    _balanceAnchors
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return true;
+  }
+
+  /// 新建或更新一期正式账单。同一来源账单 id 会幂等更新，不会重复新增。
+  Future<bool> saveBillingStatement(BillingStatement statement) async {
+    final account = _accounts
+        .where(
+          (item) =>
+              item.id == statement.accountId &&
+              item.bookId == statement.bookId &&
+              item.type.supportsCredit,
+        )
+        .firstOrNull;
+    if (account == null ||
+        statement.currencyCode != account.currencyCode ||
+        !statement.statementAmount.isFinite ||
+        statement.statementAmount < 0 ||
+        !statement.minimumPayment.isFinite ||
+        statement.minimumPayment < 0 ||
+        statement.minimumPayment > statement.statementAmount ||
+        !statement.paidAmount.isFinite ||
+        statement.paidAmount < 0 ||
+        statement.periodEnd.isBefore(statement.periodStart)) {
+      return false;
+    }
+    // 先按来源或显式 id 找到旧记录，再计算最终已还金额。重复导入同一期账单时，
+    // 银行文件可能不再携带“导入前已还”字段；因此不能直接用新文件的 0 覆盖本地
+    // 已核准金额，否则账单会从“已结清”倒退成“待还”。
+    final baseCandidate = statement.copyWith(
+      paidAmount: normalizeCurrencyAmount(
+        statement.paidAmount.clamp(0, statement.statementAmount),
+        account.currencyCode,
+      ),
+    );
+    final next = List<BillingStatement>.of(_billingStatements);
+    var index = next.indexWhere((item) => item.id == baseCandidate.id);
+    if (index == -1 &&
+        baseCandidate.sourceId.isNotEmpty &&
+        baseCandidate.sourceStatementId.isNotEmpty) {
+      index = next.indexWhere(
+        (item) =>
+            item.bookId == baseCandidate.bookId &&
+            item.accountId == baseCandidate.accountId &&
+            item.sourceId == baseCandidate.sourceId &&
+            item.sourceStatementId == baseCandidate.sourceStatementId,
+      );
+    }
+    var paidAmount = baseCandidate.paidAmount;
+    if (index != -1) {
+      final previous = next[index];
+      // 同一个账单来源只能更新原账单，不能借同一 source key 把账单挂到
+      // 另一个账本或账户；否则现有还款分配会失去明确归属。
+      if (previous.bookId != baseCandidate.bookId ||
+          previous.accountId != baseCandidate.accountId) {
+        return false;
+      }
+      // 旧 paidAmount 代表此前导入/人工核准的基线，分配表金额代表本地可追溯的
+      // 还款证据；两者都必须保留，取最大值可避免重复导入造成余额失真。
+      final allocated = _statementRepaymentAllocations
+          .where((item) => item.statementId == previous.id)
+          .fold<double>(0, (sum, item) => sum + item.amount);
+      // 账单金额一旦已经被还款或分配证据覆盖，导入一份金额更小的修正版
+      // 不能静默截断 paidAmount；拒绝本次更新可以保留账务可解释性，等待用户
+      // 先修正对应还款/账单证据。
+      final tolerance = currencyAmountTolerance(account.currencyCode);
+      if (previous.paidAmount > baseCandidate.statementAmount + tolerance ||
+          allocated > baseCandidate.statementAmount + tolerance) {
+        return false;
+      }
+      if (previous.paidAmount > paidAmount) {
+        paidAmount = previous.paidAmount;
+      }
+      if (allocated > paidAmount) {
+        paidAmount = allocated;
+      }
+    }
+    final normalized = baseCandidate.copyWith(
+      paidAmount: normalizeCurrencyAmount(
+        paidAmount.clamp(0, baseCandidate.statementAmount),
+        account.currencyCode,
+      ),
+    );
+    final candidate = normalized.copyWith(
+      status: normalizedStatementStatus(normalized),
+    );
+    if (index == -1) {
+      next.add(candidate);
+    } else {
+      next[index] = BillingStatement(
+        id: next[index].id,
+        bookId: candidate.bookId,
+        accountId: candidate.accountId,
+        statementDate: candidate.statementDate,
+        periodStart: candidate.periodStart,
+        periodEnd: candidate.periodEnd,
+        statementAmount: candidate.statementAmount,
+        minimumPayment: candidate.minimumPayment,
+        dueDate: candidate.dueDate,
+        paidAmount: candidate.paidAmount,
+        status: candidate.status,
+        currencyCode: candidate.currencyCode,
+        sourceId: candidate.sourceId,
+        sourceStatementId: candidate.sourceStatementId,
+        note: candidate.note,
+      );
+    }
+    if (!await _runTrackedWrite(
+      () => _repository.saveBillingStatements(next),
+    )) {
+      return false;
+    }
+    _billingStatements
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return true;
+  }
+
+  /// 由页面创建手工正式账单；id 只由 Controller 生成，调用方无需拼接主键。
+  Future<bool> createBillingStatement({
+    required Account account,
+    required DateTime statementDate,
+    required DateTime periodStart,
+    required DateTime periodEnd,
+    required double statementAmount,
+    required double minimumPayment,
+    required DateTime dueDate,
+    required double paidAmount,
+    String note = '',
+  }) {
+    return saveBillingStatement(
+      BillingStatement(
+        id: _generateId('statement'),
+        bookId: account.bookId,
+        accountId: account.id,
+        statementDate: statementDate,
+        periodStart: periodStart,
+        periodEnd: periodEnd,
+        statementAmount: normalizeCurrencyAmount(
+          statementAmount,
+          account.currencyCode,
+        ),
+        minimumPayment: normalizeCurrencyAmount(
+          minimumPayment,
+          account.currencyCode,
+        ),
+        dueDate: dueDate,
+        paidAmount: normalizeCurrencyAmount(paidAmount, account.currencyCode),
+        status: BillingStatementStatus.open,
+        currencyCode: account.currencyCode,
+        note: note.trim(),
+      ),
+    );
+  }
+
+  /// 删除一期正式账单及其还款分配；原还款交易保留，不影响账户真实余额。
+  Future<bool> deleteBillingStatement(String statementId) async {
+    if (!_billingStatements.any((item) => item.id == statementId)) return false;
+    final nextStatements = _billingStatements
+        .where((item) => item.id != statementId)
+        .toList();
+    final nextAllocations = _statementRepaymentAllocations
+        .where((item) => item.statementId != statementId)
+        .toList();
+    if (!await _runTrackedWrite(
+      () => _repository.saveCreditAggregate(
+        entries: _entries,
+        statements: nextStatements,
+        allocations: nextAllocations,
+      ),
+    )) {
+      return false;
+    }
+    _billingStatements
+      ..clear()
+      ..addAll(nextStatements);
+    _statementRepaymentAllocations
+      ..clear()
+      ..addAll(nextAllocations);
+    notifyListeners();
+    return true;
+  }
+
+  /// 清除某笔还款与正式账单之间的全部分配关系。
+  ///
+  /// 编辑交易时，用户可能把原来的信用卡还款改成普通转账，或者改到
+  /// 另一张非信用账户。此时旧分配不能继续保留，否则账单的「已还金额」
+  /// 会和交易实际含义不一致。本方法同时回退各账单的 paidAmount，并以
+  /// 一次原子写入保持账单与分配表的一致性。
+  ///
+  /// [repaymentEntryId] 是要解除关联的还款交易 id。没有旧分配时视为
+  /// 成功，便于调用方安全地重复执行。
+  Future<bool> _clearRepaymentAllocations(String repaymentEntryId) async {
+    final previousAllocations = _statementRepaymentAllocations
+        .where((item) => item.repaymentEntryId == repaymentEntryId)
+        .toList();
+    if (previousAllocations.isEmpty) return true;
+
+    final previousByStatement = <String, double>{};
+    for (final allocation in previousAllocations) {
+      previousByStatement[allocation.statementId] =
+          (previousByStatement[allocation.statementId] ?? 0) +
+          allocation.amount;
+    }
+    final nextStatements = <BillingStatement>[
+      for (final statement in _billingStatements)
+        if (!previousByStatement.containsKey(statement.id))
+          statement
+        else
+          (() {
+            final paid = normalizeCurrencyAmount(
+              (statement.paidAmount - previousByStatement[statement.id]!).clamp(
+                0,
+                statement.statementAmount,
+              ),
+              statement.currencyCode,
+            );
+            final updated = statement.copyWith(paidAmount: paid);
+            return updated.copyWith(status: normalizedStatementStatus(updated));
+          })(),
+    ];
+    final nextAllocations = _statementRepaymentAllocations
+        .where((item) => item.repaymentEntryId != repaymentEntryId)
+        .toList();
+    if (!await _runTrackedWrite(
+      () => _repository.saveCreditAggregate(
+        entries: _entries,
+        statements: nextStatements,
+        allocations: nextAllocations,
+      ),
+    )) {
+      return false;
+    }
+    _billingStatements
+      ..clear()
+      ..addAll(nextStatements);
+    _statementRepaymentAllocations
+      ..clear()
+      ..addAll(nextAllocations);
+    notifyListeners();
+    return true;
+  }
+
+  /// 把一笔已保存的还款按“最早到期优先”自动分配给尚未结清的账单。
+  ///
+  /// 分配可跨多期；超过已出账待还的剩余金额保持未分配，代表提前还款/未出账部分。
+  Future<double> allocateRepaymentToStatements({
+    required String repaymentEntryId,
+    required String creditAccountId,
+    required double repaymentAmount,
+  }) async {
+    final entry = _entries
+        .where((item) => item.id == repaymentEntryId)
+        .firstOrNull;
+    final account = _accounts
+        .where((item) => item.id == creditAccountId)
+        .firstOrNull;
+    if (entry == null ||
+        account == null ||
+        entry.type != EntryType.transfer ||
+        entry.toAccountId != creditAccountId ||
+        entry.bookId != account.bookId ||
+        !repaymentAmount.isFinite ||
+        repaymentAmount <= 0) {
+      return 0;
+    }
+    final previousAllocations = _statementRepaymentAllocations
+        .where((item) => item.repaymentEntryId == repaymentEntryId)
+        .toList();
+    final previousByStatement = <String, double>{};
+    for (final allocation in previousAllocations) {
+      previousByStatement[allocation.statementId] =
+          (previousByStatement[allocation.statementId] ?? 0) +
+          allocation.amount;
+    }
+    final nextAllocations = _statementRepaymentAllocations
+        .where((item) => item.repaymentEntryId != repaymentEntryId)
+        .toList();
+    final nextStatements = <BillingStatement>[
+      for (final statement in _billingStatements)
+        if (!previousByStatement.containsKey(statement.id))
+          statement
+        else
+          (() {
+            final paid = normalizeCurrencyAmount(
+              (statement.paidAmount - previousByStatement[statement.id]!).clamp(
+                0,
+                statement.statementAmount,
+              ),
+              account.currencyCode,
+            );
+            final updated = statement.copyWith(paidAmount: paid);
+            return updated.copyWith(status: normalizedStatementStatus(updated));
+          })(),
+    ];
+    final candidates =
+        <int>[
+          for (var i = 0; i < nextStatements.length; i++)
+            if (nextStatements[i].accountId == creditAccountId &&
+                nextStatements[i].outstandingAmount > 0)
+              i,
+        ]..sort(
+          (a, b) =>
+              nextStatements[a].dueDate.compareTo(nextStatements[b].dueDate),
+        );
+    // 还款分配的上限必须是真实转账进入信用账户的金额，避免调用方传入
+    // 错误金额时凭空增加账单 paidAmount；超出部分不参与本次账单分配。
+    final transferAmount =
+        entry.toAccountAmount ??
+        (entry.currencyCode == account.currencyCode ? entry.amount : 0);
+    if (!transferAmount.isFinite || transferAmount <= 0) {
+      return 0;
+    }
+    var remaining = normalizeCurrencyAmount(
+      repaymentAmount.clamp(0, transferAmount),
+      account.currencyCode,
+    );
+    var allocated = 0.0;
+    final now = DateTime.now();
+    for (final index in candidates) {
+      if (remaining <= 0) break;
+      final statement = nextStatements[index];
+      final amount = normalizeCurrencyAmount(
+        remaining.clamp(0, statement.outstandingAmount),
+        account.currencyCode,
+      );
+      if (amount <= 0) continue;
+      nextAllocations.add(
+        StatementRepaymentAllocation(
+          id: _generateId('allocation'),
+          bookId: account.bookId,
+          statementId: statement.id,
+          repaymentEntryId: repaymentEntryId,
+          amount: amount,
+          createdAt: now,
+        ),
+      );
+      final updated = statement.copyWith(
+        paidAmount: normalizeCurrencyAmount(
+          statement.paidAmount + amount,
+          account.currencyCode,
+        ),
+      );
+      nextStatements[index] = updated.copyWith(
+        status: normalizedStatementStatus(updated),
+      );
+      allocated += amount;
+      remaining = normalizeCurrencyAmount(
+        remaining - amount,
+        account.currencyCode,
+      );
+    }
+    if (!await _runTrackedWrite(
+      () => _repository.saveCreditAggregate(
+        entries: _entries,
+        statements: nextStatements,
+        allocations: nextAllocations,
+      ),
+    )) {
+      return 0;
+    }
+    _billingStatements
+      ..clear()
+      ..addAll(nextStatements);
+    _statementRepaymentAllocations
+      ..clear()
+      ..addAll(nextAllocations);
+    notifyListeners();
+    return allocated;
+  }
 
   List<AccountGroup> get accountGroups {
     return _accountGroupsView ??= List<AccountGroup>.unmodifiable(
@@ -2054,6 +2527,37 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         ..clear()
         ..addAll(nextRates);
     }
+    final hadStatementAllocations = _statementRepaymentAllocations.any(
+      (allocation) => allocation.repaymentEntryId == entry.id,
+    );
+    if (hadStatementAllocations) {
+      final targetAccount = entry.toAccountId == null
+          ? null
+          : _accounts
+                .where((account) => account.id == entry.toAccountId)
+                .firstOrNull;
+      if (entry.type == EntryType.transfer &&
+          targetAccount != null &&
+          targetAccount.type.supportsCredit &&
+          entry.toAccountAmount != null) {
+        // 目标仍是信用账户时，先回退旧分配，再按新金额重新计算。
+        final allocated = await allocateRepaymentToStatements(
+          repaymentEntryId: entry.id,
+          creditAccountId: targetAccount.id,
+          repaymentAmount: entry.toAccountAmount!,
+        );
+        // 金额全部覆盖已结清账单时 allocated 可能为 0；只有旧分配仍
+        // 留在内存中，才说明二次原子写入失败，需要向调用方报告失败。
+        if (allocated == 0 &&
+            _statementRepaymentAllocations.any(
+              (allocation) => allocation.repaymentEntryId == entry.id,
+            )) {
+          return const EntrySavePersistenceFailure();
+        }
+      } else if (!await _clearRepaymentAllocations(entry.id)) {
+        return const EntrySavePersistenceFailure();
+      }
+    }
     notifyListeners();
     if (hasNewEntry) {
       onEntryAdded?.call();
@@ -2148,6 +2652,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       exchangeRates: exchangeRates,
       existingTags: tags,
       seedEnglish: _seedEnglish,
+      existingEntries: entries,
     );
     _applyImportPlan(plan);
     return plan;
@@ -2168,14 +2673,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     if (plan.newTags.isNotEmpty) {
       _tags.addAll(plan.newTags);
     }
-    _entries.addAll(plan.entries);
+    final importedById = <String, LedgerEntry>{
+      for (final entry in plan.entries) entry.id: entry,
+      for (final entry in plan.reconciliationUpdates) entry.id: entry,
+    };
+    _entries.removeWhere((entry) => importedById.containsKey(entry.id));
+    _entries.addAll(importedById.values);
     _entries.sort(_compareEntriesLatestFirst);
-    _persistAccounts();
-    _persistCategories();
-    if (plan.newTags.isNotEmpty) {
-      _persistTags();
-    }
-    _persistEntries();
+    // 导入会同时写账户/分类/交易与核准证据，必须单事务保存，不能留下半套数据。
+    _persistAllLedgerData();
     notifyListeners();
     // 导入也新增了交易：触发自动备份与小组件刷新，与手动记账一致。
     onEntryAdded?.call();
@@ -2199,6 +2705,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       exchangeRates: exchangeRates,
       rateOverrides: rateOverrides,
       seedEnglish: _seedEnglish,
+      existingEntries: entries,
     );
   }
 
@@ -2213,8 +2720,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     List<Tag> candidateTags = const <Tag>[],
     Set<String> alwaysCreateAccountIds = const <String>{},
     List<ExchangeRate> candidateExchangeRates = const <ExchangeRate>[],
+    List<LedgerEntry> reconciliationUpdates = const <LedgerEntry>[],
   }) {
-    if (entries.isEmpty && alwaysCreateAccountIds.isEmpty) {
+    if (entries.isEmpty &&
+        alwaysCreateAccountIds.isEmpty &&
+        reconciliationUpdates.isEmpty) {
       return false;
     }
     final importIssue = validateLedgerEntries(
@@ -2332,20 +2842,18 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     if (newRates.isNotEmpty) {
       _exchangeRates.addAll(newRates);
     }
-    _entries.addAll(entries);
+    final importedById = <String, LedgerEntry>{
+      for (final entry in entries) entry.id: entry,
+      for (final entry in reconciliationUpdates) entry.id: entry,
+    };
+    _entries.removeWhere((entry) => importedById.containsKey(entry.id));
+    _entries.addAll(importedById.values);
     _entries.sort(_compareEntriesLatestFirst);
     // 导入数据里的旧式单标量退款（如一木账单的「退款」列）迁成关联退款条目、
     // 并重算净额缓存，使余额/统计当场即正确（不必等下次载入自愈）。
     _syncRefundData();
-    _persistAccounts();
-    _persistCategories();
-    if (newTags.isNotEmpty) {
-      _persistTags();
-    }
-    if (newRates.isNotEmpty) {
-      _persistExchangeRates();
-    }
-    _persistEntries();
+    // 交易与其来源证据、候选账户/分类/标签/汇率是一份导入提交，原子整替保存。
+    _persistAllLedgerData();
     notifyListeners();
     // 导入也新增了交易：触发自动备份与小组件刷新，与手动记账一致。
     onEntryAdded?.call();
@@ -2361,6 +2869,24 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _entries.sort(_compareEntriesLatestFirst);
     _persistEntries();
     notifyListeners();
+  }
+
+  /// 用户确认来源证据与本地交易属于同一笔后，标记为人工核准；金额不自动改变。
+  Future<bool> confirmEntryReconciliation(String entryId) async {
+    final index = _entries.indexWhere((entry) => entry.id == entryId);
+    if (index == -1 || _entries[index].sourceRecords.isEmpty) return false;
+    final next = List<LedgerEntry>.of(_entries);
+    next[index] = next[index].copyWith(
+      reconciliationStatus: ReconciliationStatus.manuallyConfirmed,
+    );
+    if (!await _runTrackedWrite(() => _repository.saveEntries(next))) {
+      return false;
+    }
+    _entries
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return true;
   }
 
   /// 标记 / 取消标记支出为「待报销」。仅支出有效。
@@ -2755,6 +3281,29 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       for (final rate in _exchangeRates)
         if (rate.bookId != bookId) rate,
     ];
+    final nextStatements = <BillingStatement>[
+      for (final statement in _billingStatements)
+        if (statement.bookId != bookId)
+          statement
+        else
+          BillingStatement(
+            id: statement.id,
+            bookId: statement.bookId,
+            accountId: statement.accountId,
+            statementDate: statement.statementDate,
+            periodStart: statement.periodStart,
+            periodEnd: statement.periodEnd,
+            statementAmount: statement.statementAmount,
+            minimumPayment: statement.minimumPayment,
+            dueDate: statement.dueDate,
+            paidAmount: statement.paidAmount,
+            status: statement.status,
+            currencyCode: code,
+            sourceId: statement.sourceId,
+            sourceStatementId: statement.sourceStatementId,
+            note: statement.note,
+          ),
+    ];
     try {
       await _repository.replaceAllLedgerData(
         _ledgerDataSnapshot(
@@ -2763,6 +3312,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           entries: nextEntries,
           recurringRules: nextRecurringRules,
           exchangeRates: nextRates,
+          billingStatements: nextStatements,
         ),
       );
     } catch (error, stackTrace) {
@@ -2784,6 +3334,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _exchangeRates
       ..clear()
       ..addAll(nextRates);
+    _billingStatements
+      ..clear()
+      ..addAll(nextStatements);
     notifyListeners();
     return true;
   }
@@ -2812,6 +3365,17 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _accountGroups.removeWhere((group) => group.bookId == bookId);
     _recurringRules.removeWhere((rule) => rule.bookId == bookId);
     _exchangeRates.removeWhere((rate) => rate.bookId == bookId);
+    _balanceAnchors.removeWhere((anchor) => anchor.bookId == bookId);
+    final removedStatementIds = _billingStatements
+        .where((statement) => statement.bookId == bookId)
+        .map((statement) => statement.id)
+        .toSet();
+    _billingStatements.removeWhere((statement) => statement.bookId == bookId);
+    _statementRepaymentAllocations.removeWhere(
+      (allocation) =>
+          allocation.bookId == bookId ||
+          removedStatementIds.contains(allocation.statementId),
+    );
     _collapsedAssetSections.removeWhere((key) => key.startsWith('$bookId:'));
     _assetAccountOrders.removeWhere((key, _) => key.startsWith('$bookId:'));
     _assetSectionOrders.removeWhere((key, _) => key.startsWith('$bookId:'));
@@ -2878,10 +3442,45 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final nextAttachments = _attachments
         .where((attachment) => !removeIds.contains(attachment.entryId))
         .toList();
+    final removedAllocations = _statementRepaymentAllocations
+        .where((allocation) => removeIds.contains(allocation.repaymentEntryId))
+        .toList();
+    final removedByStatement = <String, double>{};
+    for (final allocation in removedAllocations) {
+      removedByStatement[allocation.statementId] =
+          (removedByStatement[allocation.statementId] ?? 0) + allocation.amount;
+    }
+    final nextAllocations = _statementRepaymentAllocations
+        .where((allocation) => !removeIds.contains(allocation.repaymentEntryId))
+        .toList();
+    final nextStatements = <BillingStatement>[
+      for (final statement in _billingStatements)
+        if (!removedByStatement.containsKey(statement.id))
+          statement
+        else
+          (() {
+            final account = _accounts
+                .where((item) => item.id == statement.accountId)
+                .firstOrNull;
+            final paid = normalizeCurrencyAmount(
+              (statement.paidAmount - removedByStatement[statement.id]!).clamp(
+                0,
+                statement.statementAmount,
+              ),
+              account?.currencyCode ?? statement.currencyCode,
+            );
+            final updated = statement.copyWith(paidAmount: paid);
+            return updated.copyWith(status: normalizedStatementStatus(updated));
+          })(),
+    ];
     final saved = await _runTrackedWrite(
-      () => _repository.saveEntryAggregate(
-        entries: nextEntries,
-        attachments: nextAttachments,
+      () => _repository.replaceAllLedgerData(
+        _ledgerDataSnapshot(
+          entries: nextEntries,
+          attachments: nextAttachments,
+          billingStatements: nextStatements,
+          statementRepaymentAllocations: nextAllocations,
+        ),
       ),
     );
     if (!saved) {
@@ -2893,6 +3492,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _attachments
       ..clear()
       ..addAll(nextAttachments);
+    _billingStatements
+      ..clear()
+      ..addAll(nextStatements);
+    _statementRepaymentAllocations
+      ..clear()
+      ..addAll(nextAllocations);
     notifyListeners();
     return true;
   }
@@ -3208,6 +3813,23 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     };
     final nextDefaults = Map<String, String>.of(_defaultAccountIds)
       ..removeWhere((_, id) => id == accountId);
+    final removedStatementIds = _billingStatements
+        .where((statement) => statement.accountId == accountId)
+        .map((statement) => statement.id)
+        .toSet();
+    final nextAnchors = _balanceAnchors
+        .where((anchor) => anchor.accountId != accountId)
+        .toList();
+    final nextStatements = _billingStatements
+        .where((statement) => statement.accountId != accountId)
+        .toList();
+    final nextAllocations = _statementRepaymentAllocations
+        .where(
+          (allocation) =>
+              !removedStatementIds.contains(allocation.statementId) &&
+              !removeIds.contains(allocation.repaymentEntryId),
+        )
+        .toList();
 
     final saved = await _runTrackedWrite(
       () => _repository.replaceAllLedgerData(
@@ -3216,6 +3838,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           attachments: nextAttachments,
           entries: nextEntries,
           recurringRules: nextRules,
+          balanceAnchors: nextAnchors,
+          billingStatements: nextStatements,
+          statementRepaymentAllocations: nextAllocations,
         ),
       ),
     );
@@ -3235,6 +3860,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _recurringRules
       ..clear()
       ..addAll(nextRules);
+    _balanceAnchors
+      ..clear()
+      ..addAll(nextAnchors);
+    _billingStatements
+      ..clear()
+      ..addAll(nextStatements);
+    _statementRepaymentAllocations
+      ..clear()
+      ..addAll(nextAllocations);
     _assetAccountOrders
       ..clear()
       ..addAll(nextOrders);
@@ -3963,6 +4597,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _attachments.clear();
     _recurringRules.clear();
     _exchangeRates.clear();
+    _balanceAnchors.clear();
+    _billingStatements.clear();
+    _statementRepaymentAllocations.clear();
     _monthlyBudgets.clear();
     _categoryBudgets.clear();
     _dailyBudgets.clear();
@@ -3993,7 +4630,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 3,
+      'version': 4,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'ledgerBooks': _ledgerBooks.map((book) => book.toJson()).toList(),
@@ -4006,6 +4643,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         'attachments': _attachments.map((a) => a.toJson()).toList(),
         'recurringRules': _recurringRules.map((r) => r.toJson()).toList(),
         'exchangeRates': _exchangeRates.map((rate) => rate.toJson()).toList(),
+        'balanceAnchors': _balanceAnchors.map((item) => item.toJson()).toList(),
+        'billingStatements': _billingStatements
+            .map((item) => item.toJson())
+            .toList(),
+        'statementRepaymentAllocations': _statementRepaymentAllocations
+            .map((item) => item.toJson())
+            .toList(),
         'monthlyBudgets': Map<String, double>.from(_monthlyBudgets),
         'categoryBudgets': Map<String, double>.from(_categoryBudgets),
         'dailyBudgets': Map<String, double>.from(_dailyBudgets),
@@ -4059,7 +4703,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 3) {
+    if (version < 1 || version > 4) {
       throw FormatException('不支持的备份版本：$version');
     }
 
@@ -4132,6 +4776,19 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       data['exchangeRates'],
       ExchangeRate.fromJson,
     );
+    final nextBalanceAnchors = _decodeModelList<BalanceAnchor>(
+      data['balanceAnchors'],
+      BalanceAnchor.fromJson,
+    );
+    final nextBillingStatements = _decodeModelList<BillingStatement>(
+      data['billingStatements'],
+      BillingStatement.fromJson,
+    );
+    final nextStatementRepaymentAllocations =
+        _decodeModelList<StatementRepaymentAllocation>(
+          data['statementRepaymentAllocations'],
+          StatementRepaymentAllocation.fromJson,
+        );
     final nextMonthlyBudgets = _bookScopedBudgets(
       _decodeBudgets(data['monthlyBudgets']),
     );
@@ -4229,6 +4886,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       monthlyBudgets: nextMonthlyBudgets,
       categoryBudgets: nextCategoryBudgets,
       dailyBudgets: nextDailyBudgets,
+      balanceAnchors: nextBalanceAnchors,
+      billingStatements: nextBillingStatements,
+      statementRepaymentAllocations: nextStatementRepaymentAllocations,
     );
     final ledgerIssue = validateLedgerEntries(
       books: nextLedgerBooks,
@@ -4270,6 +4930,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _exchangeRates
       ..clear()
       ..addAll(nextExchangeRates);
+    _balanceAnchors
+      ..clear()
+      ..addAll(nextBalanceAnchors);
+    _billingStatements
+      ..clear()
+      ..addAll(nextBillingStatements);
+    _statementRepaymentAllocations
+      ..clear()
+      ..addAll(nextStatementRepaymentAllocations);
     _monthlyBudgets
       ..clear()
       ..addAll(nextMonthlyBudgets);
@@ -4359,6 +5028,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     required Map<String, double> monthlyBudgets,
     required Map<String, double> categoryBudgets,
     required Map<String, double> dailyBudgets,
+    required List<BalanceAnchor> balanceAnchors,
+    required List<BillingStatement> billingStatements,
+    required List<StatementRepaymentAllocation> statementRepaymentAllocations,
   }) {
     void requireCurrency(String code, String field) {
       if (!CurrencyCatalog.isSupported(code)) {
@@ -4483,6 +5155,117 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         requireFinite(entry.value, '预算 ${entry.key}', nonNegative: true);
       }
     }
+
+    final accountsById = <String, Account>{
+      for (final account in accounts) account.id: account,
+    };
+    final anchorIds = <String>{};
+    for (final anchor in balanceAnchors) {
+      if (anchor.id.isEmpty || !anchorIds.add(anchor.id)) {
+        throw FormatException('余额锚点 id 为空或重复：${anchor.id}');
+      }
+      final account = accountsById[anchor.accountId];
+      if (account == null || account.bookId != anchor.bookId) {
+        throw FormatException('余额锚点 ${anchor.id} 引用了不存在的账户');
+      }
+      requireFinite(anchor.balance, '余额锚点 ${anchor.id}');
+    }
+    final statementsById = <String, BillingStatement>{};
+    final statementSourceKeys = <String>{};
+    for (final statement in billingStatements) {
+      if (statement.id.isEmpty || statementsById.containsKey(statement.id)) {
+        throw FormatException('正式账单 id 为空或重复：${statement.id}');
+      }
+      if (statement.sourceId.isNotEmpty &&
+          statement.sourceStatementId.isNotEmpty &&
+          !statementSourceKeys.add(
+            '${statement.bookId}:${statement.accountId}:${statement.sourceId}:${statement.sourceStatementId}',
+          )) {
+        throw FormatException('正式账单来源 id 重复：${statement.sourceStatementId}');
+      }
+      final account = accountsById[statement.accountId];
+      if (account == null ||
+          account.bookId != statement.bookId ||
+          !account.type.supportsCredit) {
+        throw FormatException('正式账单 ${statement.id} 引用了无效信用账户');
+      }
+      requireCurrency(statement.currencyCode, '正式账单 ${statement.id}');
+      if (statement.currencyCode != account.currencyCode ||
+          statement.periodEnd.isBefore(statement.periodStart)) {
+        throw FormatException('正式账单 ${statement.id} 的币种或账期不合法');
+      }
+      requireFinite(
+        statement.statementAmount,
+        '正式账单 ${statement.id} 应还金额',
+        nonNegative: true,
+      );
+      requireFinite(
+        statement.minimumPayment,
+        '正式账单 ${statement.id} 最低还款',
+        nonNegative: true,
+      );
+      requireFinite(
+        statement.paidAmount,
+        '正式账单 ${statement.id} 已还金额',
+        nonNegative: true,
+      );
+      if (statement.minimumPayment > statement.statementAmount ||
+          statement.paidAmount > statement.statementAmount) {
+        throw FormatException('正式账单 ${statement.id} 金额超过应还金额');
+      }
+      statementsById[statement.id] = statement;
+    }
+    final entriesById = <String, LedgerEntry>{};
+    for (final entry in entries) {
+      entriesById.putIfAbsent(entry.id, () => entry);
+    }
+    final allocationIds = <String>{};
+    final amountByStatement = <String, double>{};
+    final amountByRepayment = <String, double>{};
+    for (final allocation in statementRepaymentAllocations) {
+      if (allocation.id.isEmpty || !allocationIds.add(allocation.id)) {
+        throw FormatException('还款分配 id 为空或重复：${allocation.id}');
+      }
+      final statement = statementsById[allocation.statementId];
+      final repayment = entriesById[allocation.repaymentEntryId];
+      if (statement == null ||
+          repayment == null ||
+          allocation.bookId != statement.bookId ||
+          repayment.bookId != statement.bookId ||
+          repayment.type != EntryType.transfer ||
+          repayment.toAccountId != statement.accountId) {
+        throw FormatException('还款分配 ${allocation.id} 存在悬空引用');
+      }
+      requireFinite(allocation.amount, '还款分配 ${allocation.id}', positive: true);
+      amountByStatement[statement.id] =
+          (amountByStatement[statement.id] ?? 0) + allocation.amount;
+      amountByRepayment[repayment.id] =
+          (amountByRepayment[repayment.id] ?? 0) + allocation.amount;
+    }
+    for (final item in amountByStatement.entries) {
+      final statement = statementsById[item.key]!;
+      if (item.value >
+          statement.statementAmount +
+              currencyAmountTolerance(statement.currencyCode)) {
+        throw FormatException('还款分配 ${statement.id} 超过账单应还金额');
+      }
+    }
+    for (final item in amountByRepayment.entries) {
+      final repayment = entriesById[item.key]!;
+      final target = accountsById[repayment.toAccountId];
+      final capacity =
+          repayment.toAccountAmount ??
+          (target != null && target.currencyCode == repayment.currencyCode
+              ? repayment.amount
+              : 0);
+      if (item.value >
+          capacity +
+              currencyAmountTolerance(
+                target?.currencyCode ?? repayment.currencyCode,
+              )) {
+        throw FormatException('还款交易 ${repayment.id} 的分配超过转入金额');
+      }
+    }
   }
 
   double accountBalance(Account account) {
@@ -4492,10 +5275,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       return value;
     }
     // 不在当前账户集合里（如草稿账户）：退回逐条计算。
-    var balance = account.initialBalance;
+    final anchor = latestBalanceAnchor(account.id);
+    var balance = anchor?.balance ?? account.initialBalance;
     for (final entry in _entries) {
       if (entry.bookId == account.bookId &&
-          entryTouchesAccount(entry, account.id)) {
+          entryTouchesAccount(entry, account.id) &&
+          (anchor == null ||
+              accountEffectDate(entry).isAfter(anchor.effectiveAt))) {
         balance += accountDeltaForEntry(entry, account.id);
       }
     }
@@ -4511,14 +5297,28 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final accountsById = <String, Account>{
       for (final account in _accounts) account.id: account,
     };
+    final latestAnchors = <String, BalanceAnchor>{};
+    for (final anchor in _balanceAnchors) {
+      final current = latestAnchors[anchor.accountId];
+      if (current == null || anchor.effectiveAt.isAfter(current.effectiveAt)) {
+        latestAnchors[anchor.accountId] = anchor;
+      }
+    }
+
     final balances = <String, double>{
-      for (final account in _accounts) account.id: account.initialBalance,
+      for (final account in _accounts)
+        account.id:
+            latestAnchors[account.id]?.balance ?? account.initialBalance,
     };
     for (final entry in _entries) {
       final fromId = entry.accountId;
       if (fromId.isNotEmpty) {
         final account = accountsById[fromId];
-        if (account != null && account.bookId == entry.bookId) {
+        final anchor = latestAnchors[fromId];
+        if (account != null &&
+            account.bookId == entry.bookId &&
+            (anchor == null ||
+                accountEffectDate(entry).isAfter(anchor.effectiveAt))) {
           balances[fromId] =
               balances[fromId]! + accountDeltaForEntry(entry, fromId);
         }
@@ -4527,7 +5327,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       // 转出=转入时不重复计入：accountDeltaForEntry 已把两端的净额合并算好。
       if (toId != null && toId.isNotEmpty && toId != fromId) {
         final account = accountsById[toId];
-        if (account != null && account.bookId == entry.bookId) {
+        final anchor = latestAnchors[toId];
+        if (account != null &&
+            account.bookId == entry.bookId &&
+            (anchor == null ||
+                accountEffectDate(entry).isAfter(anchor.effectiveAt))) {
           balances[toId] = balances[toId]! + accountDeltaForEntry(entry, toId);
         }
       }

@@ -34,6 +34,9 @@ class RawImportRecord {
     this.account = '',
     this.toAccount = '',
     this.note = '',
+    this.merchant = '',
+    this.sourceTransactionId = '',
+    this.postedDate,
     this.fee = 0,
     this.refunded = 0,
     this.tags = const <String>[],
@@ -77,6 +80,11 @@ class RawImportRecord {
   final String toAccount;
   final String note;
 
+  /// 来源中的商户名、稳定交易号与可选记账日。来源不提供时保持空/null；不得猜造。
+  final String merchant;
+  final String sourceTransactionId;
+  final DateTime? postedDate;
+
   /// 转账手续费（>= 0；仅转账用）。
   final double fee;
 
@@ -108,6 +116,9 @@ class RawImportRecord {
       account: account,
       toAccount: toAccount,
       note: note,
+      merchant: merchant,
+      sourceTransactionId: sourceTransactionId,
+      postedDate: postedDate,
       fee: fee,
       refunded: refunded,
       tags: tags,
@@ -279,6 +290,9 @@ RawImportRecord? buildRecordFromStrings({
   String account = '',
   String toAccount = '',
   String note = '',
+  String merchant = '',
+  String sourceTransactionId = '',
+  String postedDate = '',
   String fee = '',
   String refunded = '',
   String currencyCode = '',
@@ -331,6 +345,9 @@ RawImportRecord? buildRecordFromStrings({
     account: account,
     toAccount: toAccount,
     note: note,
+    merchant: merchant,
+    sourceTransactionId: sourceTransactionId.trim(),
+    postedDate: postedDate.trim().isEmpty ? null : parseImportDate(postedDate),
     fee: parseImportFee(fee),
     refunded: parseImportFee(refunded),
     tags: tags,

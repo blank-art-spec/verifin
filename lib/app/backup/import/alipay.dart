@@ -32,6 +32,8 @@ ParsedImport parseAlipay(Uint8List bytes) {
       amount: cellAt(row, cols['金额']),
       category: cellAt(row, cols['交易分类']),
       account: account.isEmpty ? '支付宝' : account,
+      merchant: cellAt(row, cols['交易对方']),
+      sourceTransactionId: cellAt(row, cols['交易订单号']),
       note: joinNote(<String>[
         cellAt(row, cols['商品说明']),
         cellAt(row, cols['交易对方']),

@@ -44,6 +44,10 @@ mixin _ControllerState on ChangeNotifier {
   final List<Category> _categories = <Category>[];
   final List<Tag> _tags = <Tag>[];
   final List<ExchangeRate> _exchangeRates = <ExchangeRate>[];
+  final List<BalanceAnchor> _balanceAnchors = <BalanceAnchor>[];
+  final List<BillingStatement> _billingStatements = <BillingStatement>[];
+  final List<StatementRepaymentAllocation> _statementRepaymentAllocations =
+      <StatementRepaymentAllocation>[];
 
   // 派生视图缓存：按当前账本过滤（并排序/回退种子）后的不可变列表。原本每个
   // getter 每次调用都做一次 O(n) 过滤 + 拷贝，一帧内多个 widget 反复读取会放大
@@ -341,6 +345,15 @@ mixin _ControllerState on ChangeNotifier {
     _exchangeRates
       ..clear()
       ..addAll(await _repository.loadExchangeRates());
+    _balanceAnchors
+      ..clear()
+      ..addAll(await _repository.loadBalanceAnchors());
+    _billingStatements
+      ..clear()
+      ..addAll(await _repository.loadBillingStatements());
+    _statementRepaymentAllocations
+      ..clear()
+      ..addAll(await _repository.loadStatementRepaymentAllocations());
     _monthlyBudgets
       ..clear()
       ..addAll(_bookScopedBudgets(await _repository.loadMonthlyBudgets()));
@@ -847,12 +860,6 @@ mixin _ControllerState on ChangeNotifier {
     );
   }
 
-  void _persistExchangeRates() {
-    _trackWrite(
-      _repository.saveExchangeRates(List<ExchangeRate>.of(_exchangeRates)),
-    );
-  }
-
   void _persistBudgets() {
     _trackWrite(
       _repository.saveMonthlyBudgets(Map<String, double>.of(_monthlyBudgets)),
@@ -884,6 +891,9 @@ mixin _ControllerState on ChangeNotifier {
     Map<String, double>? monthlyBudgets,
     Map<String, double>? categoryBudgets,
     Map<String, double>? dailyBudgets,
+    List<BalanceAnchor>? balanceAnchors,
+    List<BillingStatement>? billingStatements,
+    List<StatementRepaymentAllocation>? statementRepaymentAllocations,
   }) {
     return LedgerDataSnapshot(
       books: books ?? List<LedgerBook>.of(_ledgerBooks),
@@ -899,6 +909,12 @@ mixin _ControllerState on ChangeNotifier {
           categoryBudgets ?? Map<String, double>.of(_categoryBudgets),
       dailyBudgets: dailyBudgets ?? Map<String, double>.of(_dailyBudgets),
       exchangeRates: exchangeRates ?? List<ExchangeRate>.of(_exchangeRates),
+      balanceAnchors: balanceAnchors ?? List<BalanceAnchor>.of(_balanceAnchors),
+      billingStatements:
+          billingStatements ?? List<BillingStatement>.of(_billingStatements),
+      statementRepaymentAllocations:
+          statementRepaymentAllocations ??
+          List<StatementRepaymentAllocation>.of(_statementRepaymentAllocations),
     );
   }
 

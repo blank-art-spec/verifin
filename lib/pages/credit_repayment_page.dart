@@ -421,6 +421,14 @@ class _CreditRepaymentPageState extends State<CreditRepaymentPage> {
       }
       return false;
     }
+    // 还款落账后按最早到期账单自动分配；超过已出账待还的部分保持未分配，
+    // 表示提前还款或覆盖未出账消费，不强行挂到错误账单。
+    await controller.allocateRepaymentToStatements(
+      repaymentEntryId: _entryId,
+      creditAccountId: widget.account.id,
+      repaymentAmount: _amount,
+    );
+    if (!mounted) return true;
     _saved = true;
     unawaited(
       VeriFeedbackHost.of(context).showMessage(

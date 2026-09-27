@@ -1,6 +1,6 @@
 {
   "app": "verifin",
-  "version": 2,
+  "version": 4,
   "exportedAt": "2026-07-03T16:00:00.000",
   "data": {
     "ledgerBooks": [
@@ -736,6 +736,46 @@
         "source": "manual",
         "createdAt": "2026-07-01T09:00:00.000",
         "updatedAt": "2026-07-01T09:00:00.000"
+      }
+    ],
+    "balanceAnchors": [
+      {
+        "id": "anchor_credit_20260625",
+        "bookId": "default",
+        "accountId": "acc_credit",
+        "effectiveAt": "2026-06-25T11:01:00.000",
+        "balance": 0.0,
+        "createdAt": "2026-07-03T16:00:00.000",
+        "note": "6月25日已核准结清"
+      }
+    ],
+    "billingStatements": [
+      {
+        "id": "statement_credit_20260605",
+        "bookId": "default",
+        "accountId": "acc_credit",
+        "statementDate": "2026-06-05T00:00:00.000",
+        "periodStart": "2026-05-06T00:00:00.000",
+        "periodEnd": "2026-06-05T23:59:59.000",
+        "statementAmount": 1200.0,
+        "minimumPayment": 120.0,
+        "dueDate": "2026-06-25T00:00:00.000",
+        "paidAmount": 1200.0,
+        "status": "paid",
+        "currencyCode": "CNY",
+        "sourceId": "",
+        "sourceStatementId": "",
+        "note": "样例已结清账单"
+      }
+    ],
+    "statementRepaymentAllocations": [
+      {
+        "id": "allocation_credit_20260625",
+        "bookId": "default",
+        "statementId": "statement_credit_20260605",
+        "repaymentEntryId": "entry_20260625_001",
+        "amount": 1200.0,
+        "createdAt": "2026-06-25T11:00:00.000"
       }
     ],
     "monthlyBudgets": {

@@ -12,7 +12,11 @@ export 'import/csv_template.dart'
         transactionCsvExportColumns,
         validateCsvTemplateHeader;
 export 'import/plan_builder.dart'
-    show ImportConversionIssue, ImportExchangeRateCandidate, ImportPlan;
+    show
+        ImportConversionIssue,
+        ImportExchangeRateCandidate,
+        ImportPlan,
+        ImportReconciliationSummary;
 export 'import/raw_import.dart' show ImportRowError;
 export 'import/text_format.dart' show parseCsv;
 
@@ -30,6 +34,7 @@ ImportPlan buildImportPlan({
   List<ExchangeRate> exchangeRates = const <ExchangeRate>[],
   List<Tag> existingTags = const <Tag>[],
   bool seedEnglish = false,
+  List<LedgerEntry> existingEntries = const <LedgerEntry>[],
 }) {
   return buildImportPlanFromRecords(
     parsed: parseCsvTemplateRows(rows),
@@ -41,5 +46,7 @@ ImportPlan buildImportPlan({
     exchangeRates: exchangeRates,
     existingTags: existingTags,
     seedEnglish: seedEnglish,
+    sourceId: 'csvTemplate',
+    existingEntries: existingEntries,
   );
 }

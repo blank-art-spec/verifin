@@ -23,6 +23,9 @@ class LedgerDataSnapshot {
     required this.categoryBudgets,
     required this.dailyBudgets,
     this.exchangeRates = const <ExchangeRate>[],
+    this.balanceAnchors = const <BalanceAnchor>[],
+    this.billingStatements = const <BillingStatement>[],
+    this.statementRepaymentAllocations = const <StatementRepaymentAllocation>[],
   });
 
   final List<LedgerBook> books;
@@ -37,6 +40,9 @@ class LedgerDataSnapshot {
   final Map<String, double> categoryBudgets;
   final Map<String, double> dailyBudgets;
   final List<ExchangeRate> exchangeRates;
+  final List<BalanceAnchor> balanceAnchors;
+  final List<BillingStatement> billingStatements;
+  final List<StatementRepaymentAllocation> statementRepaymentAllocations;
 }
 
 /// 账目类数据仓储接口。生产实现为 [SqliteLedgerRepository]；测试可注入内存实现，
@@ -83,6 +89,25 @@ abstract interface class LedgerRepository {
 
   Future<List<ExchangeRate>> loadExchangeRates();
   Future<void> saveExchangeRates(List<ExchangeRate> rates);
+
+  Future<List<BalanceAnchor>> loadBalanceAnchors();
+  Future<void> saveBalanceAnchors(List<BalanceAnchor> anchors);
+
+  Future<List<BillingStatement>> loadBillingStatements();
+  Future<void> saveBillingStatements(List<BillingStatement> statements);
+
+  Future<List<StatementRepaymentAllocation>>
+  loadStatementRepaymentAllocations();
+  Future<void> saveStatementRepaymentAllocations(
+    List<StatementRepaymentAllocation> allocations,
+  );
+
+  /// 原子保存正式账单、还款分配及其关联交易，避免只落下一半关系。
+  Future<void> saveCreditAggregate({
+    required List<LedgerEntry> entries,
+    required List<BillingStatement> statements,
+    required List<StatementRepaymentAllocation> allocations,
+  });
 
   Future<Map<String, double>> loadMonthlyBudgets();
   Future<void> saveMonthlyBudgets(Map<String, double> budgets);
@@ -373,6 +398,114 @@ class SqliteLedgerRepository implements LedgerRepository {
     );
   }
 
+  // ---- 余额核准、正式账单与还款分配 ----
+
+  @override
+  Future<List<BalanceAnchor>> loadBalanceAnchors() async {
+    final rows = await _db.query(
+      'balance_anchors',
+      orderBy: 'effective_at DESC, id DESC',
+    );
+    final anchors = rows.map(_balanceAnchorFromRow).toList();
+    _seedSnapshot('balance_anchors', anchors.map(_balanceAnchorToRow));
+    return anchors;
+  }
+
+  @override
+  Future<void> saveBalanceAnchors(List<BalanceAnchor> anchors) {
+    final snapshot = List<BalanceAnchor>.of(anchors);
+    return _enqueueWrite(
+      () => _incrementalReplace(
+        'balance_anchors',
+        snapshot.map(_balanceAnchorToRow),
+      ),
+    );
+  }
+
+  @override
+  Future<List<BillingStatement>> loadBillingStatements() async {
+    final rows = await _db.query(
+      'billing_statements',
+      orderBy: 'statement_date DESC, id DESC',
+    );
+    final statements = rows.map(_billingStatementFromRow).toList();
+    _seedSnapshot('billing_statements', statements.map(_billingStatementToRow));
+    return statements;
+  }
+
+  @override
+  Future<void> saveBillingStatements(List<BillingStatement> statements) {
+    final snapshot = List<BillingStatement>.of(statements);
+    return _enqueueWrite(
+      () => _incrementalReplace(
+        'billing_statements',
+        snapshot.map(_billingStatementToRow),
+      ),
+    );
+  }
+
+  @override
+  Future<List<StatementRepaymentAllocation>>
+  loadStatementRepaymentAllocations() async {
+    final rows = await _db.query(
+      'statement_repayment_allocations',
+      orderBy: 'created_at ASC, id ASC',
+    );
+    final allocations = rows.map(_statementRepaymentAllocationFromRow).toList();
+    _seedSnapshot(
+      'statement_repayment_allocations',
+      allocations.map(_statementRepaymentAllocationToRow),
+    );
+    return allocations;
+  }
+
+  @override
+  Future<void> saveStatementRepaymentAllocations(
+    List<StatementRepaymentAllocation> allocations,
+  ) {
+    final snapshot = List<StatementRepaymentAllocation>.of(allocations);
+    return _enqueueWrite(
+      () => _incrementalReplace(
+        'statement_repayment_allocations',
+        snapshot.map(_statementRepaymentAllocationToRow),
+      ),
+    );
+  }
+
+  @override
+  Future<void> saveCreditAggregate({
+    required List<LedgerEntry> entries,
+    required List<BillingStatement> statements,
+    required List<StatementRepaymentAllocation> allocations,
+  }) {
+    final entrySnapshot = List<LedgerEntry>.of(entries);
+    final statementSnapshot = List<BillingStatement>.of(statements);
+    final allocationSnapshot = List<StatementRepaymentAllocation>.of(
+      allocations,
+    );
+    return _enqueueWrite(() async {
+      final entryRows = entrySnapshot.map(_entryToRow).toList(growable: false);
+      final statementRows = statementSnapshot
+          .map(_billingStatementToRow)
+          .toList(growable: false);
+      final allocationRows = allocationSnapshot
+          .map(_statementRepaymentAllocationToRow)
+          .toList(growable: false);
+      await _db.transaction((txn) async {
+        await _replaceInTxn(txn, 'entries', entryRows);
+        await _replaceInTxn(txn, 'billing_statements', statementRows);
+        await _replaceInTxn(
+          txn,
+          'statement_repayment_allocations',
+          allocationRows,
+        );
+      });
+      _seedSnapshot('entries', entryRows);
+      _seedSnapshot('billing_statements', statementRows);
+      _seedSnapshot('statement_repayment_allocations', allocationRows);
+    });
+  }
+
   // ---- 预算（键值对：月度 / 分类）----
 
   @override
@@ -488,6 +621,23 @@ class SqliteLedgerRepository implements LedgerRepository {
           'exchange_rates',
           snapshot.exchangeRates.map(_exchangeRateToRow),
         );
+        await _replaceInTxn(
+          txn,
+          'balance_anchors',
+          snapshot.balanceAnchors.map(_balanceAnchorToRow),
+        );
+        await _replaceInTxn(
+          txn,
+          'billing_statements',
+          snapshot.billingStatements.map(_billingStatementToRow),
+        );
+        await _replaceInTxn(
+          txn,
+          'statement_repayment_allocations',
+          snapshot.statementRepaymentAllocations.map(
+            _statementRepaymentAllocationToRow,
+          ),
+        );
       });
       // 整替后重建各增量表基线，使后续单条 saveX 的差分有正确起点（否则会拿导入前
       // 的旧快照去 diff、误删或漏写）。附件/预算不走增量、无需重置。
@@ -508,6 +658,20 @@ class SqliteLedgerRepository implements LedgerRepository {
         'exchange_rates',
         snapshot.exchangeRates.map(_exchangeRateToRow),
       );
+      _seedSnapshot(
+        'balance_anchors',
+        snapshot.balanceAnchors.map(_balanceAnchorToRow),
+      );
+      _seedSnapshot(
+        'billing_statements',
+        snapshot.billingStatements.map(_billingStatementToRow),
+      );
+      _seedSnapshot(
+        'statement_repayment_allocations',
+        snapshot.statementRepaymentAllocations.map(
+          _statementRepaymentAllocationToRow,
+        ),
+      );
     });
   }
 
@@ -521,6 +685,9 @@ class SqliteLedgerRepository implements LedgerRepository {
       'account_groups',
       'categories',
       'exchange_rates',
+      'balance_anchors',
+      'billing_statements',
+      'statement_repayment_allocations',
     ]) {
       final rows = await _db.rawQuery('SELECT COUNT(*) AS c FROM $table');
       final count = (rows.first['c'] as int?) ?? 0;
@@ -712,6 +879,10 @@ class SqliteLedgerRepository implements LedgerRepository {
     'refunded_amount': e.refundedBaseAmount,
     'refund_of': e.refundOf,
     'settled_at': e.settledAt?.millisecondsSinceEpoch,
+    'reconciliation_status': e.reconciliationStatus.name,
+    'source_records': e.sourceRecords.isEmpty
+        ? null
+        : jsonEncode(e.sourceRecords.map((record) => record.toJson()).toList()),
   };
 
   static LedgerEntry _entryFromRow(Map<String, Object?> row) => LedgerEntry(
@@ -739,7 +910,23 @@ class SqliteLedgerRepository implements LedgerRepository {
     settledAt: row['settled_at'] == null
         ? null
         : DateTime.fromMillisecondsSinceEpoch(row['settled_at'] as int),
+    reconciliationStatus: ReconciliationStatus.fromStorage(
+      row['reconciliation_status'] as String?,
+    ),
+    sourceRecords: _decodeSourceRecords(row['source_records']),
   );
+
+  static List<EntrySourceRecord> _decodeSourceRecords(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const <EntrySourceRecord>[];
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const <EntrySourceRecord>[];
+    return decoded
+        .whereType<Map>()
+        .map(
+          (item) => EntrySourceRecord.fromJson(Map<String, Object?>.from(item)),
+        )
+        .toList(growable: false);
+  }
 
   static List<String> _decodeTagIds(Object? raw) {
     if (raw is String && raw.isNotEmpty) {
@@ -852,6 +1039,99 @@ class SqliteLedgerRepository implements LedgerRepository {
       updatedAt: DateTime.fromMillisecondsSinceEpoch(row['updated_at'] as int),
     );
   }
+
+  static Map<String, Object?> _balanceAnchorToRow(BalanceAnchor anchor) =>
+      <String, Object?>{
+        'id': anchor.id,
+        'book_id': anchor.bookId,
+        'account_id': anchor.accountId,
+        'effective_at': anchor.effectiveAt.millisecondsSinceEpoch,
+        'balance': anchor.balance,
+        'created_at': anchor.createdAt.millisecondsSinceEpoch,
+        'note': anchor.note,
+      };
+
+  static BalanceAnchor _balanceAnchorFromRow(Map<String, Object?> row) =>
+      BalanceAnchor(
+        id: row['id'] as String,
+        bookId: row['book_id'] as String,
+        accountId: row['account_id'] as String,
+        effectiveAt: DateTime.fromMillisecondsSinceEpoch(
+          row['effective_at'] as int,
+        ),
+        balance: (row['balance'] as num).toDouble(),
+        createdAt: DateTime.fromMillisecondsSinceEpoch(
+          row['created_at'] as int,
+        ),
+        note: row['note'] as String? ?? '',
+      );
+
+  static Map<String, Object?> _billingStatementToRow(
+    BillingStatement statement,
+  ) => <String, Object?>{
+    'id': statement.id,
+    'book_id': statement.bookId,
+    'account_id': statement.accountId,
+    'statement_date': statement.statementDate.millisecondsSinceEpoch,
+    'period_start': statement.periodStart.millisecondsSinceEpoch,
+    'period_end': statement.periodEnd.millisecondsSinceEpoch,
+    'statement_amount': statement.statementAmount,
+    'minimum_payment': statement.minimumPayment,
+    'due_date': statement.dueDate.millisecondsSinceEpoch,
+    'paid_amount': statement.paidAmount,
+    'status': statement.status.name,
+    'currency_code': statement.currencyCode,
+    'source_id': statement.sourceId,
+    'source_statement_id': statement.sourceStatementId,
+    'note': statement.note,
+  };
+
+  static BillingStatement _billingStatementFromRow(Map<String, Object?> row) =>
+      BillingStatement(
+        id: row['id'] as String,
+        bookId: row['book_id'] as String,
+        accountId: row['account_id'] as String,
+        statementDate: DateTime.fromMillisecondsSinceEpoch(
+          row['statement_date'] as int,
+        ),
+        periodStart: DateTime.fromMillisecondsSinceEpoch(
+          row['period_start'] as int,
+        ),
+        periodEnd: DateTime.fromMillisecondsSinceEpoch(
+          row['period_end'] as int,
+        ),
+        statementAmount: (row['statement_amount'] as num).toDouble(),
+        minimumPayment: (row['minimum_payment'] as num).toDouble(),
+        dueDate: DateTime.fromMillisecondsSinceEpoch(row['due_date'] as int),
+        paidAmount: (row['paid_amount'] as num).toDouble(),
+        status: BillingStatementStatus.fromStorage(row['status'] as String?),
+        currencyCode: row['currency_code'] as String? ?? defaultCurrencyCode,
+        sourceId: row['source_id'] as String? ?? '',
+        sourceStatementId: row['source_statement_id'] as String? ?? '',
+        note: row['note'] as String? ?? '',
+      );
+
+  static Map<String, Object?> _statementRepaymentAllocationToRow(
+    StatementRepaymentAllocation allocation,
+  ) => <String, Object?>{
+    'id': allocation.id,
+    'book_id': allocation.bookId,
+    'statement_id': allocation.statementId,
+    'repayment_entry_id': allocation.repaymentEntryId,
+    'amount': allocation.amount,
+    'created_at': allocation.createdAt.millisecondsSinceEpoch,
+  };
+
+  static StatementRepaymentAllocation _statementRepaymentAllocationFromRow(
+    Map<String, Object?> row,
+  ) => StatementRepaymentAllocation(
+    id: row['id'] as String,
+    bookId: row['book_id'] as String,
+    statementId: row['statement_id'] as String,
+    repaymentEntryId: row['repayment_entry_id'] as String,
+    amount: (row['amount'] as num).toDouble(),
+    createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
+  );
 
   static Map<String, Object?> _bookToRow(LedgerBook b, int index) =>
       <String, Object?>{

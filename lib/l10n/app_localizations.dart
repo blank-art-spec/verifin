@@ -2018,6 +2018,239 @@ abstract class AppLocalizations {
   /// **'已记录还款'**
   String get creditRepaySuccess;
 
+  /// No description provided for @balanceAnchorTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'核准账户余额'**
+  String get balanceAnchorTitle;
+
+  /// No description provided for @balanceAnchorAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'余额核准锚点'**
+  String get balanceAnchorAction;
+
+  /// No description provided for @balanceAnchorDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'核准时间'**
+  String get balanceAnchorDate;
+
+  /// No description provided for @balanceAnchorHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'核准时间之前缺失的消费或还款将不再影响当前余额。这不是一笔交易。'**
+  String get balanceAnchorHint;
+
+  /// No description provided for @balanceAnchorSaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'余额已核准'**
+  String get balanceAnchorSaved;
+
+  /// No description provided for @balanceAnchorLatest.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近核准：{date} · {amount}'**
+  String balanceAnchorLatest(String date, String amount);
+
+  /// No description provided for @billingStatementsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正式账单'**
+  String get billingStatementsTitle;
+
+  /// No description provided for @billingStatementsAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'管理正式账单'**
+  String get billingStatementsAction;
+
+  /// No description provided for @billingStatementAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加账单'**
+  String get billingStatementAdd;
+
+  /// No description provided for @statementAmountLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'应还金额'**
+  String get statementAmountLabel;
+
+  /// No description provided for @minimumPaymentLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'最低还款'**
+  String get minimumPaymentLabel;
+
+  /// No description provided for @paidAmountLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'已还金额'**
+  String get paidAmountLabel;
+
+  /// No description provided for @statementDateLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'账单日期'**
+  String get statementDateLabel;
+
+  /// No description provided for @statementPeriodLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'账期'**
+  String get statementPeriodLabel;
+
+  /// No description provided for @dueDateLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'到期日'**
+  String get dueDateLabel;
+
+  /// No description provided for @billedOutstandingLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'已出账待还'**
+  String get billedOutstandingLabel;
+
+  /// No description provided for @unbilledAmountLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前未出账'**
+  String get unbilledAmountLabel;
+
+  /// No description provided for @latestStatementLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'上期账单'**
+  String get latestStatementLabel;
+
+  /// No description provided for @statementPaid.
+  ///
+  /// In zh, this message translates to:
+  /// **'已结清'**
+  String get statementPaid;
+
+  /// No description provided for @statementPartiallyPaid.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分还款'**
+  String get statementPartiallyPaid;
+
+  /// No description provided for @statementOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'待还款'**
+  String get statementOpen;
+
+  /// No description provided for @statementOverdue.
+  ///
+  /// In zh, this message translates to:
+  /// **'已逾期'**
+  String get statementOverdue;
+
+  /// No description provided for @statementDisputed.
+  ///
+  /// In zh, this message translates to:
+  /// **'有争议'**
+  String get statementDisputed;
+
+  /// No description provided for @statementRemaining.
+  ///
+  /// In zh, this message translates to:
+  /// **'剩余 {amount}'**
+  String statementRemaining(String amount);
+
+  /// No description provided for @repaymentAllocationsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'还款记录'**
+  String get repaymentAllocationsTitle;
+
+  /// No description provided for @billingStatementsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'还没有正式账单'**
+  String get billingStatementsEmpty;
+
+  /// No description provided for @reconciliationSummaryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'正式账单核准'**
+  String get reconciliationSummaryTitle;
+
+  /// No description provided for @reconciliationSummaryLine.
+  ///
+  /// In zh, this message translates to:
+  /// **'{matched} 笔匹配 · {bankOnly} 笔银行有、本地没有 · {conflicts} 笔金额冲突 · {localOnly} 笔本地有、银行没有'**
+  String reconciliationSummaryLine(
+    int matched,
+    int bankOnly,
+    int conflicts,
+    int localOnly,
+  );
+
+  /// No description provided for @reconciliationDuplicates.
+  ///
+  /// In zh, this message translates to:
+  /// **'另有 {count} 笔已导入来源记录被幂等跳过'**
+  String reconciliationDuplicates(int count);
+
+  /// No description provided for @reconciliationSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易核准'**
+  String get reconciliationSection;
+
+  /// No description provided for @sourceRecordsCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 条来源证据'**
+  String sourceRecordsCount(int count);
+
+  /// No description provided for @confirmReconciliationAction.
+  ///
+  /// In zh, this message translates to:
+  /// **'人工确认匹配'**
+  String get confirmReconciliationAction;
+
+  /// No description provided for @reconciliationUnverified.
+  ///
+  /// In zh, this message translates to:
+  /// **'未核准'**
+  String get reconciliationUnverified;
+
+  /// No description provided for @reconciliationAutoMatched.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动匹配'**
+  String get reconciliationAutoMatched;
+
+  /// No description provided for @reconciliationManuallyConfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已人工确认'**
+  String get reconciliationManuallyConfirmed;
+
+  /// No description provided for @reconciliationAmountConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额冲突'**
+  String get reconciliationAmountConflict;
+
+  /// No description provided for @reconciliationBankOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'银行有、本地没有'**
+  String get reconciliationBankOnly;
+
+  /// No description provided for @reconciliationLocalOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地有、银行没有'**
+  String get reconciliationLocalOnly;
+
   /// No description provided for @monthlyDayLabel.
   ///
   /// In zh, this message translates to:

@@ -72,6 +72,8 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 - 账户能力只通过 `supportsCardLast4`、`supportsCredit` 判断，禁止散落硬编码账户类型。`cardLast4Follows` 是持久化字段，不能从卡号和后四位反推用户选择。
 - 转账不计入收支，手续费由转出账户承担；转账分类不得留空。
 - 退款是关联原支出的独立条目；只有已到账退款影响余额和净额，原支出的 `refundedBaseAmount` 是已到账退款 `baseAmount` 之和的派生缓存。修改退款逻辑前必须阅读 `docs/dev/refund-design.md` 和 `docs/dev/multi-currency-design.md` 并以当前代码/测试为准。
+- 信用账户的当前余额优先从最新 `BalanceAnchor` 起算，锚点前交易不再参与余额；`BillingStatement` 与 `StatementRepaymentAllocation` 分别表达正式账单和还款归属，不得回退为伪造校准交易或从总余额猜账单状态。
+- 外部交易证据存于 `LedgerEntry.sourceRecords`，幂等键优先用来源交易号，缺失时用稳定指纹；同一真实交易只保留一条 `LedgerEntry`，各来源只追加证据。
 - 自定义预算周期只改变预算体系口径，统计报表仍按自然月。默认预算使用哨兵键，单月覆盖优先于默认值。
 
 ## 开发、测试与预览命令
