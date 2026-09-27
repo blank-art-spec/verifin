@@ -171,6 +171,7 @@ void main() {
       expect(lunch.conversionSource, ConversionSource.legacy);
       expect(lunch.reconciliationStatus, ReconciliationStatus.unverified);
       expect(lunch.sourceRecords, isEmpty);
+      expect(lunch.billingCycleId, isNull);
       final transfer = entries.singleWhere((entry) => entry.id == 'e4');
       expect(transfer.currencyCode, 'CNY');
       expect(transfer.accountAmount, 50);

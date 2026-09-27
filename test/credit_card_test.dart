@@ -158,6 +158,102 @@ void main() {
     );
   });
 
+  test('账单日当天可显式归入下一账期且首页四项金额保持一致', () {
+    const creditAccount = CreditAccount(
+      id: 'cmb-4185',
+      bookId: 'book',
+      name: '招商信用卡 4185',
+      institution: '招商银行',
+      cardLast4: '4185',
+      currencyCode: 'CNY',
+      creditLimit: 70000,
+      statementDay: 25,
+      dueRuleType: CreditDueRuleType.fixedDay,
+      dueDay: 13,
+      daysAfterStatement: null,
+      cycleBudget: null,
+    );
+    const account = Account(
+      id: 'cmb-cny',
+      bookId: 'book',
+      name: '招商人民币',
+      type: AccountType.creditCard,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'credit',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+      statementDay: 25,
+      dueDay: 13,
+      creditAccountId: 'cmb-4185',
+    );
+    final statement = BillingStatement(
+      id: 'cmb-2026-09-25',
+      bookId: 'book',
+      accountId: account.id,
+      statementDate: DateTime(2026, 9, 25),
+      periodStart: DateTime(2026, 8, 25),
+      periodEnd: DateTime(2026, 9, 25, 8),
+      statementAmount: 5497.15,
+      minimumPayment: 549.72,
+      dueDate: DateTime(2026, 10, 13),
+      paidAmount: 0,
+      status: BillingStatementStatus.open,
+    );
+    final entries = <LedgerEntry>[
+      LedgerEntry(
+        id: 'statement-day-expense',
+        bookId: 'book',
+        type: EntryType.expense,
+        amount: 530.11,
+        baseAmount: 530.11,
+        categoryId: 'shopping',
+        accountId: account.id,
+        note: '账单日当天、银行确认属于下一期',
+        occurredAt: DateTime(2026, 9, 25, 18),
+        billingCycleId: '2026-10-25',
+      ),
+      LedgerEntry(
+        id: 'after-statement-expense',
+        bookId: 'book',
+        type: EntryType.expense,
+        amount: 474.54,
+        baseAmount: 474.54,
+        categoryId: 'dining',
+        accountId: account.id,
+        note: '账单日后消费',
+        occurredAt: DateTime(2026, 9, 27),
+      ),
+    ];
+
+    final overview = buildCreditCycleOverview(
+      creditAccount: creditAccount,
+      accounts: const <Account>[account],
+      entries: entries,
+      statements: <BillingStatement>[statement],
+      allocations: const <StatementRepaymentAllocation>[],
+      baseCurrencyCode: 'CNY',
+      now: DateTime(2026, 9, 27, 23, 59),
+      balanceOf: (_) => -6501.80,
+      convertToCreditCurrency: (amount, source, date) => amount,
+    );
+    final accountOverview = creditStatementOverview(
+      account: account,
+      entries: entries,
+      statements: <BillingStatement>[statement],
+      now: DateTime(2026, 9, 27, 23, 59),
+    );
+
+    expect(billingCycleIdFor(DateTime(2026, 10, 25)), '2026-10-25');
+    expect(overview.netSpending, closeTo(1004.65, 0.001));
+    expect(overview.currentCycleDebt, closeTo(1004.65, 0.001));
+    expect(overview.billedOutstanding, closeTo(5497.15, 0.001));
+    expect(overview.totalDebt, closeTo(6501.80, 0.001));
+    expect(accountOverview.unbilledAmount, closeTo(1004.65, 0.001));
+    expect(accountOverview.billedOutstanding, closeTo(5497.15, 0.001));
+  });
+
   test('本账期欠款只扣未分配给上期账单的提前还款', () {
     const creditAccount = CreditAccount(
       id: 'cmb-4185',

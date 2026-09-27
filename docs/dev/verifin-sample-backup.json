@@ -1,6 +1,6 @@
 {
   "app": "verifin",
-  "version": 5,
+  "version": 6,
   "exportedAt": "2026-07-03T16:00:00.000",
   "data": {
     "ledgerBooks": [
@@ -81,7 +81,8 @@
         "accountId": "acc_credit",
         "toAccountId": null,
         "note": "日用品",
-        "occurredAt": "2026-07-02T20:10:00.000"
+        "occurredAt": "2026-07-02T20:10:00.000",
+        "billingCycleId": "2026-07-05"
       },
       {
         "id": "entry_20260702_002",

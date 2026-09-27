@@ -44,6 +44,19 @@ DateTime nextStatementDate(int statementDay, DateTime now) {
   return thisMonth;
 }
 
+/// 把一期信用账单的出账日编码为可持久化的账期标识 `yyyy-MM-dd`。
+///
+/// 标识只表达银行确认的账期归属，不包含账户 id；调用方仍必须先按账户筛选交易。
+/// 采用出账日而非流水发生日，是因为账单日当天究竟归入本期还是下一期取决于银行
+/// 切账时点，不能从自然日可靠推断。
+String billingCycleIdFor(DateTime statementDate) {
+  final date = dateOnly(statementDate);
+  final month = date.month.toString().padLeft(2, '0');
+  final day = date.day.toString().padLeft(2, '0');
+  return '${date.year.toString().padLeft(4, '0')}-'
+      '$month-$day';
+}
+
 /// 当前账单周期：上一个账单日次日 至 下一个（含今天）账单日当天（含首尾）。
 /// 该窗口内的消费将在下个账单日出账。
 DateWindow currentBillingCycle(int statementDay, DateTime now) {
@@ -131,8 +144,6 @@ CreditCycleOverview buildCreditCycleOverview({
   convertToCreditCurrency,
 }) {
   final statementDay = creditAccount.statementDay ?? 1;
-  final nextStatement = nextStatementDate(statementDay, now);
-  final cycle = currentBillingCycle(statementDay, now);
   final childAccounts = accounts
       .where((account) => account.creditAccountId == creditAccount.id)
       .toList(growable: false);
@@ -140,6 +151,22 @@ CreditCycleOverview buildCreditCycleOverview({
     for (final account in childAccounts) account.id: account,
   };
   final childIds = childById.keys.toSet();
+  final latestStatement = _latestStatementForAccounts(
+    statements: statements,
+    accountIds: childIds,
+    now: now,
+  );
+  final nextStatement = _nextUnbilledStatementDate(
+    statementDay: statementDay,
+    now: now,
+    latestStatement: latestStatement,
+  );
+  final cycle = _currentBillingCycleFromStatement(
+    statementDay: statementDay,
+    nextStatement: nextStatement,
+    latestStatement: latestStatement,
+  );
+  final currentCycleId = billingCycleIdFor(nextStatement);
   final allocationByRepayment = <String, double>{};
   for (final allocation in allocations) {
     allocationByRepayment.update(
@@ -167,10 +194,12 @@ CreditCycleOverview buildCreditCycleOverview({
   final cycleEnd = dateOnly(cycle.end);
   for (final entry in entries) {
     final occurred = dateOnly(entry.occurredAt);
-    final inCycle =
-        !occurred.isBefore(cycleStart) &&
-        !occurred.isAfter(cycleEnd) &&
-        !occurred.isAfter(dateOnly(now));
+    final inCycle = entry.billingCycleId == null
+        ? !occurred.isBefore(cycleStart) &&
+              !occurred.isAfter(cycleEnd) &&
+              !occurred.isAfter(dateOnly(now))
+        : entry.billingCycleId == currentCycleId &&
+              !occurred.isAfter(dateOnly(now));
     if (entry.type == EntryType.expense &&
         childIds.contains(entry.accountId) &&
         inCycle) {
@@ -245,6 +274,86 @@ CreditCycleOverview buildCreditCycleOverview({
   );
 }
 
+/// 找出指定信用子账户中，截至 [now] 最近的一张正式账单。
+///
+/// 多币种子账户可能各有一张同日账单，因此先按出账日、再按账期结束时间排序；这里只
+/// 用它确定当前未出账周期边界，应还金额仍在主聚合循环中逐张换算，不能只读这一张。
+BillingStatement? _latestStatementForAccounts({
+  required Iterable<BillingStatement> statements,
+  required Set<String> accountIds,
+  required DateTime now,
+}) {
+  final today = dateOnly(now);
+  final candidates =
+      statements
+          .where(
+            (statement) =>
+                accountIds.contains(statement.accountId) &&
+                !dateOnly(statement.statementDate).isAfter(today),
+          )
+          .toList()
+        ..sort((a, b) {
+          final byStatementDate = b.statementDate.compareTo(a.statementDate);
+          return byStatementDate != 0
+              ? byStatementDate
+              : b.periodEnd.compareTo(a.periodEnd);
+        });
+  return candidates.firstOrNull;
+}
+
+/// 计算尚未出账的目标出账日。
+///
+/// [nextStatementDate] 在账单日当天会返回“今天”。如果今天的正式账单已经存在，说明
+/// 银行已经完成本期切账，当前未出账交易应归入下个月；否则仍保留今天，兼容尚未收到
+/// 银行账单的旧数据。
+DateTime _nextUnbilledStatementDate({
+  required int statementDay,
+  required DateTime now,
+  required BillingStatement? latestStatement,
+}) {
+  final candidate = nextStatementDate(statementDay, now);
+  if (latestStatement == null ||
+      !dateOnly(
+        latestStatement.statementDate,
+      ).isAtSameMomentAs(dateOnly(candidate))) {
+    return candidate;
+  }
+  return DateTime(
+    candidate.year,
+    candidate.month + 1,
+    statementDay.clamp(1, 28),
+  );
+}
+
+/// 构造首页使用的当前未出账窗口，正式账单的真实截止日优先于日历日猜测。
+///
+/// 只有最近账单恰好是目标账期的上一期时才采用它，避免用户漏录数月账单后把多个月
+/// 的流水误并入本期。没有可用快照时保持旧版“上个账单日次日”回退规则。
+DateWindow _currentBillingCycleFromStatement({
+  required int statementDay,
+  required DateTime nextStatement,
+  required BillingStatement? latestStatement,
+}) {
+  final day = statementDay.clamp(1, 28);
+  final expectedPreviousStatement = DateTime(
+    nextStatement.year,
+    nextStatement.month - 1,
+    day,
+  );
+  final inferredStart = addCalendarDays(expectedPreviousStatement, 1);
+  var start = inferredStart;
+  if (latestStatement != null &&
+      dateOnly(
+        latestStatement.statementDate,
+      ).isAtSameMomentAs(dateOnly(expectedPreviousStatement))) {
+    final confirmedStart = addCalendarDays(latestStatement.periodEnd, 1);
+    if (!confirmedStart.isAfter(nextStatement)) {
+      start = confirmedStart;
+    }
+  }
+  return DateWindow(start: start, end: nextStatement);
+}
+
 /// 本期账单金额：本账单周期内、该账户支出的净额合计（退款冲抵后）。
 /// 还款是转账、不计入支出，故不影响本值；本值与「当前欠款」是两个互不矛盾的口径。
 double billingCycleExpense(
@@ -254,13 +363,16 @@ double billingCycleExpense(
 ) {
   final start = dateOnly(cycle.start);
   final end = dateOnly(cycle.end);
+  final cycleId = billingCycleIdFor(cycle.end);
   return entries
       .where(
         (entry) =>
             entry.type == EntryType.expense &&
             entry.accountId == accountId &&
-            !dateOnly(entry.occurredAt).isBefore(start) &&
-            !dateOnly(entry.occurredAt).isAfter(end),
+            (entry.billingCycleId == null
+                ? !dateOnly(entry.occurredAt).isBefore(start) &&
+                      !dateOnly(entry.occurredAt).isAfter(end)
+                : entry.billingCycleId == cycleId),
       )
       .fold<double>(0, (sum, entry) => sum + entry.netAmount);
 }
@@ -297,14 +409,29 @@ CreditStatementOverview creditStatementOverview({
     (sum, statement) => sum + statement.outstandingAmount,
   );
   final cutoff = latest?.periodEnd;
+  final statementDay = account.statementDay;
+  final nextStatement = statementDay == null
+      ? null
+      : _nextUnbilledStatementDate(
+          statementDay: statementDay,
+          now: now,
+          latestStatement: latest,
+        );
+  final currentCycleId = nextStatement == null
+      ? null
+      : billingCycleIdFor(nextStatement);
   double unbilled;
   if (cutoff == null) {
-    unbilled = account.statementDay == null
+    unbilled = statementDay == null
         ? 0
         : billingCycleExpense(
             entries,
             account.id,
-            currentBillingCycle(account.statementDay!, now),
+            _currentBillingCycleFromStatement(
+              statementDay: statementDay,
+              nextStatement: nextStatement!,
+              latestStatement: null,
+            ),
           );
   } else {
     unbilled = 0;
@@ -312,11 +439,13 @@ CreditStatementOverview creditStatementOverview({
       // 退款只有在实际到账后才会改变信用账户口径，因此筛选未出账条目时
       // 必须使用与余额计算相同的到账日，而不能只看退款原始发生日。
       final effectDate = accountEffectDate(entry);
-      if (entry.accountId != account.id ||
-          !effectDate.isAfter(cutoff) ||
-          effectDate.isAfter(now)) {
+      if (entry.accountId != account.id || effectDate.isAfter(now)) {
         continue;
       }
+      final belongsToCurrentCycle = entry.billingCycleId == null
+          ? effectDate.isAfter(cutoff)
+          : entry.billingCycleId == currentCycleId;
+      if (!belongsToCurrentCycle) continue;
       if (entry.type == EntryType.expense) {
         unbilled += entry.accountAmount ?? entry.amount;
       } else if (entry.isSettledRefund) {

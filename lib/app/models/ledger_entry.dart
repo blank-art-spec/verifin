@@ -159,6 +159,7 @@ class LedgerEntry {
     this.toAccountId,
     required this.note,
     required this.occurredAt,
+    this.billingCycleId,
     this.tagIds = const <String>[],
     this.fee = 0,
     this.reimbursable = false,
@@ -198,6 +199,14 @@ class LedgerEntry {
   final String? toAccountId;
   final String note;
   final DateTime occurredAt;
+
+  /// 银行确认的信用账期标识，格式固定为该期出账日 `yyyy-MM-dd`。
+  ///
+  /// 该字段只负责“交易属于哪一期”，不会改写 [occurredAt]。它主要解决账单日当天
+  /// 的银行切账时点无法仅凭日历日期判断的问题：例如 9 月 25 日发生的消费，银行已
+  /// 明确列入 10 月 25 日账期时写入 `2026-10-25`。`null` 表示旧数据或尚未核准，
+  /// 账期算法才会退回正式账单截止日与交易日期推导。
+  final String? billingCycleId;
 
   /// 该交易关联的标签 id 列表（多对多，可为空）。
   final List<String> tagIds;
@@ -270,6 +279,8 @@ class LedgerEntry {
     bool clearToAccountId = false,
     String? note,
     DateTime? occurredAt,
+    String? billingCycleId,
+    bool clearBillingCycleId = false,
     List<String>? tagIds,
     double? fee,
     bool? reimbursable,
@@ -301,6 +312,9 @@ class LedgerEntry {
       toAccountId: clearToAccountId ? null : toAccountId ?? this.toAccountId,
       note: note ?? this.note,
       occurredAt: occurredAt ?? this.occurredAt,
+      billingCycleId: clearBillingCycleId
+          ? null
+          : billingCycleId ?? this.billingCycleId,
       tagIds: tagIds ?? this.tagIds,
       fee: fee ?? this.fee,
       reimbursable: reimbursable ?? this.reimbursable,
@@ -329,6 +343,7 @@ class LedgerEntry {
       'toAccountId': toAccountId,
       'note': note,
       'occurredAt': occurredAt.toIso8601String(),
+      if (billingCycleId != null) 'billingCycleId': billingCycleId,
       if (tagIds.isNotEmpty) 'tagIds': tagIds,
       if (fee != 0) 'fee': fee,
       if (reimbursable) 'reimbursable': true,
@@ -369,6 +384,7 @@ class LedgerEntry {
       occurredAt:
           DateTime.tryParse(json['occurredAt'] as String? ?? '') ??
           DateTime.now(),
+      billingCycleId: json['billingCycleId'] as String?,
       tagIds: _stringList(json['tagIds']),
       fee: (json['fee'] as num?)?.toDouble() ?? 0,
       reimbursable: json['reimbursable'] as bool? ?? false,

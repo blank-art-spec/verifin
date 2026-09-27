@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 20;
+  static const int schemaVersion = 21;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -73,6 +73,7 @@ class AppDatabase {
         18: _migrateToV18,
         19: _migrateToV19,
         20: _migrateToV20,
+        21: _migrateToV21,
       };
 
   /// 只读暴露迁移注册表，供迁移矩阵测试把库推进到任意中间版本。生产代码勿用。
@@ -424,6 +425,20 @@ class AppDatabase {
       'ALTER TABLE capture_events '
       'ADD COLUMN ai_assisted INTEGER NOT NULL DEFAULT 0',
     );
+  }
+
+  /// v20 → v21：交易增加银行明确确认的信用账期标识。
+  ///
+  /// 历史交易保持 NULL，继续由正式账单截止日和真实交易日期推导；新备份或银行账单
+  /// 可以写入目标出账日 `yyyy-MM-dd`，从而在账单日当天也不必篡改交易日期。
+  static Future<void> _migrateToV21(Database db) async {
+    // 某些历史恢复/测试数据库只保留单一领域表；与 v17 的迁移策略一致，缺少交易表
+    // 时不凭空创建残缺表，完整数据库则继续执行加列。
+    if (!await _tableExists(db, 'entries')) return;
+    if (await _columnsExist(db, 'entries', <String>['billing_cycle_id'])) {
+      return;
+    }
+    await db.execute('ALTER TABLE entries ADD COLUMN billing_cycle_id TEXT');
   }
 
   static Future<bool> _tableExists(Database db, String name) async {
@@ -799,6 +814,7 @@ class AppDatabase {
       to_account_id TEXT,
       note TEXT NOT NULL,
       occurred_at INTEGER NOT NULL,
+      billing_cycle_id TEXT,
       tag_ids TEXT,
       fee REAL NOT NULL DEFAULT 0,
       reimbursable INTEGER NOT NULL DEFAULT 0,

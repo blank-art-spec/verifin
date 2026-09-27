@@ -38,6 +38,7 @@ void main() {
     toAccountId: 'acc-y',
     note: '往返夹具',
     occurredAt: DateTime(2026, 7, 12, 10, 30, 15, 123),
+    billingCycleId: '2026-08-25',
     tagIds: const <String>['t1', 't2'],
     fee: 2.5,
     reimbursable: true,

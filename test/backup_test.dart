@@ -238,7 +238,7 @@ void main() {
 
       final backup = source.exportDataJson();
       final root = jsonDecode(backup) as Map<String, dynamic>;
-      expect(root['version'], 5);
+      expect(root['version'], 6);
       final data = root['data'] as Map<String, dynamic>;
       expect(data['exchangeRates'], hasLength(1));
       expect(data['currencyFractionStyle'], isNotNull);
@@ -559,6 +559,12 @@ void main() {
     expect(creditAccount!.name, '招商信用卡 8321');
     expect(creditAccount.institution, '招商银行');
     expect(creditAccount.cycleBudget, 4000);
+    expect(
+      controller.entries
+          .singleWhere((entry) => entry.id == 'entry_20260702_001')
+          .billingCycleId,
+      '2026-07-05',
+    );
     expect(
       controller.accountsForCreditAccount(creditAccount.id).single.id,
       creditChildAccount.id,

@@ -6137,7 +6137,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 5,
+      'version': 6,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'ledgerBooks': _ledgerBooks.map((book) => book.toJson()).toList(),
@@ -6213,7 +6213,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 5) {
+    if (version < 1 || version > 6) {
       throw FormatException('不支持的备份版本：$version');
     }
 
@@ -6724,6 +6724,14 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         nonNegative: true,
       );
       requireFinite(entry.fee, '交易 ${entry.id} 手续费', nonNegative: true);
+      final billingCycleId = entry.billingCycleId;
+      if (billingCycleId != null) {
+        final cycleDate = DateTime.tryParse(billingCycleId);
+        if (cycleDate == null ||
+            billingCycleIdFor(cycleDate) != billingCycleId) {
+          throw FormatException('交易 ${entry.id} 的账期标识不合法，应为 yyyy-MM-dd');
+        }
+      }
     }
 
     for (final rule in recurringRules) {
