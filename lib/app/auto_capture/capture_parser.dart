@@ -1,5 +1,6 @@
 import 'dart:math' as math;
 
+import '../ai/ai_entry_parser.dart';
 import '../category_suggest.dart';
 import '../currency_math.dart';
 import '../ledger_math.dart';
@@ -319,6 +320,107 @@ CaptureEvent parseCaptureEvent(
     appliedRuleIds: appliedRuleIds,
     failureReason: '',
     processedAt: processedAt ?? DateTime.now(),
+  );
+}
+
+/// 用 AI 草稿补充本地解析仍缺失的候选字段。
+///
+/// [event] 必须先经过 [parseCaptureEvent]。本方法坚持三条安全边界：本地规则已有的
+/// 结果不被覆盖；金额或类型冲突时整份 AI 草稿作废；AI 参与后的置信度最高为中等，
+/// 因而只能进入待确认队列，绝不能触发高置信度自动入账。
+CaptureEvent applyAiCaptureSupplement(
+  CaptureEvent event,
+  AiEntryDraft draft,
+  CaptureParseContext context,
+) {
+  if (event.confidence == CaptureConfidence.high ||
+      event.kind == CaptureTransactionKind.refund ||
+      event.kind == CaptureTransactionKind.transfer ||
+      event.kind == CaptureTransactionKind.creditRepayment ||
+      event.kind == CaptureTransactionKind.creditLineRepayment ||
+      draft.type == EntryType.transfer) {
+    return event;
+  }
+
+  final localAmount = event.parsedAmount;
+  if (localAmount != null &&
+      (localAmount - draft.amount).abs() >=
+          currencyAmountTolerance(event.currencyCode)) {
+    return event;
+  }
+  final draftKind = draft.type == EntryType.income
+      ? CaptureTransactionKind.income
+      : CaptureTransactionKind.expense;
+  if (event.kind != CaptureTransactionKind.unknown &&
+      event.kind.entryType != draft.type) {
+    return event;
+  }
+
+  final amount = localAmount ?? draft.amount;
+  final kind = event.kind == CaptureTransactionKind.unknown
+      ? draftKind
+      : event.kind;
+  final accountId =
+      event.accountCandidateId ??
+      context.accounts
+          .where(
+            (account) =>
+                account.id == draft.accountId &&
+                account.currencyCode == event.currencyCode,
+          )
+          .firstOrNull
+          ?.id;
+  final expectedCategoryType = kind.entryType;
+  final aiCategoryReliable = !draft.warnings.contains(
+    AiDraftWarning.categoryUnmatched,
+  );
+  final categoryId =
+      event.categoryCandidateId ??
+      (aiCategoryReliable
+          ? context.categories
+                .where(
+                  (category) =>
+                      category.id == draft.categoryId &&
+                      category.type == expectedCategoryType,
+                )
+                .firstOrNull
+                ?.id
+          : null);
+  final merchant = event.merchant.isNotEmpty
+      ? event.merchant
+      : draft.note.trim();
+  final changed =
+      localAmount == null ||
+      event.kind == CaptureTransactionKind.unknown ||
+      event.accountCandidateId != accountId ||
+      event.categoryCandidateId != categoryId ||
+      event.merchant != merchant;
+  if (!changed) return event;
+
+  final score = _confidenceScore(
+    amount: amount,
+    kind: kind,
+    accountId: accountId,
+    toAccountId: null,
+    categoryId: categoryId,
+    merchant: merchant,
+    appliedRuleCount: event.appliedRuleIds.length,
+    refundOriginalMatched: false,
+  ).clamp(0.0, 0.84).toDouble();
+  return event.copyWith(
+    parsedAmount: amount,
+    kind: kind,
+    accountCandidateId: accountId,
+    clearAccountCandidateId: accountId == null,
+    categoryCandidateId: categoryId,
+    clearCategoryCandidateId: categoryId == null,
+    merchant: merchant,
+    confidence: score >= 0.55
+        ? CaptureConfidence.medium
+        : CaptureConfidence.low,
+    confidenceScore: score,
+    status: CaptureStatus.pendingReview,
+    aiAssisted: true,
   );
 }
 

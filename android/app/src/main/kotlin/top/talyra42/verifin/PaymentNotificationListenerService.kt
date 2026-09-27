@@ -25,7 +25,11 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             sourceKind = "notification",
             sourceId = sourcePackage,
             sourceLabel = applicationLabel(sourcePackage),
-            sourceEventId = sbn.key ?: "",
+            sourceEventId = AutoCaptureBridge.notificationEventId(
+                notificationKey = sbn.key,
+                postTime = sbn.postTime,
+                rawText = rawText,
+            ),
             rawText = rawText,
             receivedAt = sbn.postTime,
         )

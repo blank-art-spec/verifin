@@ -152,6 +152,21 @@ class _AutoCapturePageState extends State<AutoCapturePage>
     await _saveSettings(_settings!.copyWith(smsEnabled: true));
   }
 
+  /// 切换 AI 补充识别。开启前必须已有完整 AI 配置；该开关只允许发送本地规则无法
+  /// 完整判断的新事件原文，AI 参与的结果始终进入待确认，不会自动落账。
+  Future<void> _toggleAiAssist(bool enabled) async {
+    final controller = VeriFinScope.of(context);
+    if (enabled && !controller.aiSettings.isConfigured) {
+      await VeriFeedbackHost.of(context).showMessage(
+        message: AppLocalizations.of(context).autoCaptureAiAssistNotConfigured,
+        tone: VeriFeedbackTone.warning,
+        duration: VeriFeedbackDuration.long,
+      );
+      return;
+    }
+    await _saveSettings(_settings!.copyWith(aiAssistEnabled: enabled));
+  }
+
   @override
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
@@ -229,6 +244,18 @@ class _AutoCapturePageState extends State<AutoCapturePage>
                               ),
                             )
                           : null,
+                    ),
+                    const Divider(height: 1),
+                    CompactSwitchRow(
+                      icon: Icons.auto_awesome_outlined,
+                      title: Text(l10n.autoCaptureAiAssistTitle),
+                      subtitle: Text(
+                        controller.aiSettings.isConfigured
+                            ? l10n.autoCaptureAiAssistDesc
+                            : l10n.autoCaptureAiAssistNotConfigured,
+                      ),
+                      value: settings.aiAssistEnabled,
+                      onChanged: _toggleAiAssist,
                     ),
                     const Divider(height: 1),
                     CompactSwitchRow(
@@ -504,7 +531,8 @@ class _CaptureEventCard extends StatelessWidget {
                     ),
                     const SizedBox(height: 2),
                     Text(
-                      '${event.sourceLabel} · ${l10n.dateMonthDay(event.receivedAt)} $time',
+                      '${event.sourceLabel} · ${l10n.dateMonthDay(event.receivedAt)} $time'
+                      '${event.aiAssisted ? ' · ${l10n.autoCaptureAiAssistedLabel}' : ''}',
                       style: Theme.of(context).textTheme.bodySmall,
                     ),
                   ],

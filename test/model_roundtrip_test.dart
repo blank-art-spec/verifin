@@ -244,6 +244,7 @@ void main() {
     linkedEntryId: 'entry-full',
     duplicateEntryId: 'entry-min',
     appliedRuleIds: const <String>['capture-rule-1'],
+    aiAssisted: true,
     failureReason: '非默认测试值',
     processedAt: DateTime(2026, 8, 13, 12, 30, 1, 456),
   );

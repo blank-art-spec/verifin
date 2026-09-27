@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 19;
+  static const int schemaVersion = 20;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -72,6 +72,7 @@ class AppDatabase {
         17: _migrateToV17,
         18: _migrateToV18,
         19: _migrateToV19,
+        20: _migrateToV20,
       };
 
   /// 只读暴露迁移注册表，供迁移矩阵测试把库推进到任意中间版本。生产代码勿用。
@@ -402,11 +403,27 @@ class AppDatabase {
   /// entries；用户规则独立保存在 auto_capture_rules。两表不进账本备份，避免把敏感
   /// 原文带离设备，但会随“初始化全部数据”显式清空。
   static Future<void> _migrateToV19(Database db) async {
-    await db.execute(_captureEventsTable);
+    await db.execute(_captureEventsTableV19);
     await db.execute(_captureEventsBookStatusIndex);
     await db.execute(_captureEventsFingerprintIndex);
     await db.execute(_autoCaptureRulesTable);
     await db.execute(_autoCaptureRulesBookIndex);
+  }
+
+  /// v19 → v20：记录某条原始事件是否使用过 AI 补充识别。
+  ///
+  /// 该字段只用于解释待确认结果的来源，不改变原文、正式交易或备份范围。默认值为 0，
+  /// 因而历史事件升级后仍保持“仅本地规则解析”的真实语义。
+  static Future<void> _migrateToV20(Database db) async {
+    // 测试、开发预览或异常中断恢复时，数据库可能已出现新列但 user_version 尚未推进；
+    // 先检查结构可让迁移安全重入，不因重复加列阻断用户打开应用。
+    if (await _columnsExist(db, 'capture_events', <String>['ai_assisted'])) {
+      return;
+    }
+    await db.execute(
+      'ALTER TABLE capture_events '
+      'ADD COLUMN ai_assisted INTEGER NOT NULL DEFAULT 0',
+    );
   }
 
   static Future<bool> _tableExists(Database db, String name) async {
@@ -652,7 +669,9 @@ class AppDatabase {
   static const String _accountGroupsBookIndex =
       'CREATE INDEX idx_account_groups_book ON account_groups (book_id)';
 
-  static const String _captureEventsTable = '''
+  /// v19 首次引入的原始事件表结构。历史迁移必须冻结，不能随当前结构继续变化，
+  /// 否则 v20 迁移会在旧库上重复添加新列。
+  static const String _captureEventsTableV19 = '''
     CREATE TABLE IF NOT EXISTS capture_events (
       id TEXT PRIMARY KEY,
       book_id TEXT NOT NULL,
@@ -678,6 +697,39 @@ class AppDatabase {
       linked_entry_id TEXT,
       duplicate_entry_id TEXT,
       applied_rule_ids TEXT,
+      failure_reason TEXT NOT NULL,
+      processed_at INTEGER
+    )
+  ''';
+
+  /// 全新安装使用的当前原始事件表结构；历史数据库由迁移段逐步补齐到同一结构。
+  static const String _captureEventsTableCurrent = '''
+    CREATE TABLE IF NOT EXISTS capture_events (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      source_kind TEXT NOT NULL,
+      source_id TEXT NOT NULL,
+      source_label TEXT NOT NULL,
+      source_event_id TEXT NOT NULL,
+      raw_text TEXT NOT NULL,
+      received_at INTEGER NOT NULL,
+      fingerprint TEXT NOT NULL,
+      parsed_amount REAL,
+      currency_code TEXT NOT NULL,
+      merchant TEXT NOT NULL,
+      card_last4 TEXT NOT NULL,
+      transaction_kind TEXT NOT NULL,
+      account_candidate_id TEXT,
+      to_account_candidate_id TEXT,
+      category_candidate_id TEXT,
+      tag_candidate_ids TEXT,
+      confidence TEXT NOT NULL,
+      confidence_score REAL NOT NULL,
+      status TEXT NOT NULL,
+      linked_entry_id TEXT,
+      duplicate_entry_id TEXT,
+      applied_rule_ids TEXT,
+      ai_assisted INTEGER NOT NULL DEFAULT 0,
       failure_reason TEXT NOT NULL,
       processed_at INTEGER
     )
@@ -838,7 +890,7 @@ class AppDatabase {
     _statementRepaymentEntryIndex,
     _creditAccountsTable,
     _creditAccountsBookIndex,
-    _captureEventsTable,
+    _captureEventsTableCurrent,
     _captureEventsBookStatusIndex,
     _captureEventsFingerprintIndex,
     _autoCaptureRulesTable,

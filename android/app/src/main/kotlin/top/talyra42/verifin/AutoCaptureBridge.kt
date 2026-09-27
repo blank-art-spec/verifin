@@ -21,6 +21,29 @@ object AutoCaptureBridge {
     private const val MAX_QUEUE_SIZE = 200
     private const val MAX_TEXT_LENGTH = 8_000
 
+    /**
+     * 为一次通知发布生成稳定事件号。
+     *
+     * Android 的通知 key 代表“当前通知槽位”，同一 App 更新同一个通知时可能重复使用；
+     * 只保存 key 会把后续真实交易误判为旧事件。这里把发布时间、原文长度与本地哈希一并
+     * 纳入事件号：同一次系统回调可稳定去重，而同槽位的新内容仍会形成新原始事件。
+     *
+     * @param notificationKey 系统通知槽位 key，部分设备可能为空。
+     * @param postTime 系统记录的本次发布时间（毫秒）。
+     * @param rawText 本次提取的标题与正文，仅计算本地哈希，不写入事件号明文。
+     * @return 仅在本机用于幂等判断的事件号。
+     */
+    fun notificationEventId(
+        notificationKey: String?,
+        postTime: Long,
+        rawText: String,
+    ): String = listOf(
+        notificationKey.orEmpty(),
+        postTime.toString(),
+        rawText.length.toString(),
+        rawText.hashCode().toString(),
+    ).joinToString("|")
+
     /** Flutter 引擎存活时的轻量通知；进程被杀时为空，持久队列仍照常写入。 */
     @Volatile
     var onQueueAvailable: (() -> Unit)? = null

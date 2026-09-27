@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:verifin/app/ai/ai_entry_parser.dart';
 import 'package:verifin/app/auto_capture/capture_parser.dart';
 import 'package:verifin/app/models.dart';
 
@@ -205,6 +206,118 @@ void main() {
 
     expect(parsed.kind, CaptureTransactionKind.creditRepayment);
     expect(parsed.kind.entryType, EntryType.transfer);
+  });
+
+  test('AI 只补充本地缺失字段且结果最高进入待确认', () async {
+    final controller = await makeController();
+    final category = controller.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    const account = Account(
+      id: 'ai-account',
+      bookId: 'default',
+      name: '测试账户',
+      type: AccountType.onlinePayment,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'asset:payment_001',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+    );
+    final receivedAt = DateTime(2026, 9, 27, 18, 30);
+    final parseContext = CaptureParseContext(
+      book: controller.activeBook,
+      accounts: const <Account>[account],
+      creditAccounts: const <CreditAccount>[],
+      categories: controller.categories,
+      tags: const <Tag>[],
+      entries: const <LedgerEntry>[],
+      rules: const <AutoCaptureRule>[],
+    );
+    final local = parseCaptureEvent(
+      captureEventFromInput(
+        id: 'capture-ai-supplement',
+        bookId: controller.activeBook.id,
+        input: RawCaptureInput(
+          sourceKind: CaptureSourceKind.notification,
+          sourceId: 'com.example.payment',
+          sourceEventId: 'ai-supplement-1',
+          rawText: '支付59.49元',
+          receivedAt: receivedAt,
+        ),
+      ),
+      parseContext,
+      processedAt: receivedAt,
+    );
+    final supplemented = applyAiCaptureSupplement(
+      local,
+      AiEntryDraft(
+        type: EntryType.expense,
+        amount: 59.49,
+        currencyCode: 'CNY',
+        categoryId: category.id,
+        accountId: account.id,
+        toAccountId: null,
+        note: '麦当劳',
+        occurredAt: receivedAt,
+      ),
+      parseContext,
+    );
+
+    expect(supplemented.aiAssisted, isTrue);
+    expect(supplemented.accountCandidateId, account.id);
+    expect(supplemented.categoryCandidateId, category.id);
+    expect(supplemented.merchant, '麦当劳');
+    expect(supplemented.confidence, CaptureConfidence.medium);
+    expect(supplemented.status, CaptureStatus.pendingReview);
+  });
+
+  test('AI 金额与本地金额冲突时整份补充结果作废', () async {
+    final controller = await makeController();
+    final receivedAt = DateTime(2026, 9, 27, 18, 30);
+    final parseContext = CaptureParseContext(
+      book: controller.activeBook,
+      accounts: controller.accounts,
+      creditAccounts: controller.creditAccounts,
+      categories: controller.categories,
+      tags: controller.tags,
+      entries: controller.entries,
+      rules: const <AutoCaptureRule>[],
+    );
+    final local = parseCaptureEvent(
+      captureEventFromInput(
+        id: 'capture-ai-conflict',
+        bookId: controller.activeBook.id,
+        input: RawCaptureInput(
+          sourceKind: CaptureSourceKind.notification,
+          sourceId: 'com.example.payment',
+          sourceEventId: 'ai-conflict-1',
+          rawText: '支付59.49元',
+          receivedAt: receivedAt,
+        ),
+      ),
+      parseContext,
+      processedAt: receivedAt,
+    );
+    final supplemented = applyAiCaptureSupplement(
+      local,
+      AiEntryDraft(
+        type: EntryType.expense,
+        amount: 599.49,
+        currencyCode: 'CNY',
+        categoryId: '',
+        accountId: '',
+        toAccountId: null,
+        note: '错误结果',
+        occurredAt: receivedAt,
+      ),
+      parseContext,
+    );
+
+    expect(supplemented.aiAssisted, isFalse);
+    expect(supplemented.parsedAmount, 59.49);
+    expect(supplemented.merchant, local.merchant);
   });
 
   test('金额解析优先交易金额而不是通知里的余额', () async {
@@ -431,5 +544,20 @@ void main() {
     expect(changes.first.notificationEnabled, isTrue);
     expect(changes.last.notificationEnabled, isFalse);
     expect(changes.last.smsEnabled, isFalse);
+  });
+
+  test('AI 补充识别开关可持久化且旧配置默认关闭', () {
+    const enabled = AutoCaptureSettings(aiAssistEnabled: true);
+
+    expect(
+      AutoCaptureSettings.decode(enabled.encode()).aiAssistEnabled,
+      isTrue,
+    );
+    expect(
+      AutoCaptureSettings.decode(
+        '{"notificationEnabled":true}',
+      ).aiAssistEnabled,
+      isFalse,
+    );
   });
 }

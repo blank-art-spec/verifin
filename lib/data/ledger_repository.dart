@@ -1119,6 +1119,7 @@ class SqliteLedgerRepository implements LedgerRepository {
         'applied_rule_ids': event.appliedRuleIds.isEmpty
             ? null
             : jsonEncode(event.appliedRuleIds),
+        'ai_assisted': event.aiAssisted ? 1 : 0,
         'failure_reason': event.failureReason,
         'processed_at': event.processedAt?.millisecondsSinceEpoch,
       };
@@ -1152,6 +1153,7 @@ class SqliteLedgerRepository implements LedgerRepository {
     linkedEntryId: row['linked_entry_id'] as String?,
     duplicateEntryId: row['duplicate_entry_id'] as String?,
     appliedRuleIds: _decodeStringList(row['applied_rule_ids']),
+    aiAssisted: (row['ai_assisted'] as int? ?? 0) == 1,
     failureReason: row['failure_reason'] as String? ?? '',
     processedAt: row['processed_at'] == null
         ? null

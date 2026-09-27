@@ -455,24 +455,77 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         continue;
       }
       try {
-        var parsed = parseCaptureEvent(
-          original,
-          CaptureParseContext(
-            book: book,
-            accounts: _accounts
-                .where((account) => account.bookId == book.id)
-                .toList(),
-            creditAccounts: _creditAccounts
-                .where((credit) => credit.bookId == book.id)
-                .toList(),
-            categories: _categories,
-            tags: _tags,
-            entries: nextEntries
-                .where((entry) => entry.bookId == book.id)
-                .toList(),
-            rules: _autoCaptureRules,
-          ),
+        final parseContext = CaptureParseContext(
+          book: book,
+          accounts: _accounts
+              .where((account) => account.bookId == book.id)
+              .toList(),
+          creditAccounts: _creditAccounts
+              .where((credit) => credit.bookId == book.id)
+              .toList(),
+          categories: _categories,
+          tags: _tags,
+          entries: nextEntries
+              .where((entry) => entry.bookId == book.id)
+              .toList(),
+          rules: _autoCaptureRules,
         );
+        var parsed = parseCaptureEvent(original, parseContext);
+
+        // AI 只补充本地规则仍不完整的普通收支候选。开关默认关闭；请求失败时保留
+        // 本地解析结果继续走待确认/原文保留，不让外部服务可用性阻断采集队列。
+        final aiEligibleKind =
+            parsed.kind == CaptureTransactionKind.unknown ||
+            parsed.kind == CaptureTransactionKind.expense ||
+            parsed.kind == CaptureTransactionKind.income ||
+            parsed.kind == CaptureTransactionKind.cashback;
+        if (_autoCaptureSettings.aiAssistEnabled &&
+            _aiSettings.isConfigured &&
+            parsed.confidence != CaptureConfidence.high &&
+            aiEligibleKind) {
+          try {
+            final draft = await requestCapturedEntryDraft(
+              settings: _aiSettings,
+              capturedText: original.rawText,
+              context: AiEntryContext(
+                expenseCategories: _categories
+                    .where((category) => category.type == EntryType.expense)
+                    .map(
+                      (category) =>
+                          AiOption(id: category.id, label: category.label),
+                    )
+                    .toList(),
+                incomeCategories: _categories
+                    .where((category) => category.type == EntryType.income)
+                    .map(
+                      (category) =>
+                          AiOption(id: category.id, label: category.label),
+                    )
+                    .toList(),
+                accounts: parseContext.accounts
+                    .where((account) => !account.hidden)
+                    .map(
+                      (account) => AiOption(
+                        id: account.id,
+                        label: account.name,
+                        currencyCode: account.currencyCode,
+                      ),
+                    )
+                    .toList(),
+                today: original.receivedAt,
+                bookId: book.id,
+                baseCurrencyCode: book.baseCurrencyCode,
+              ),
+            );
+            parsed = applyAiCaptureSupplement(parsed, draft, parseContext);
+          } on Object catch (error) {
+            // 原文不得进入日志；只记录异常类型，供用户判断端点或网络是否异常。
+            _logger?.warning(
+              '自动采集的 AI 补充识别失败，已保留本地解析结果（${error.runtimeType}）',
+              source: 'auto_capture',
+            );
+          }
+        }
 
         final duplicate = findCaptureDuplicate(parsed, nextEntries);
         if (duplicate?.safeToMerge == true) {

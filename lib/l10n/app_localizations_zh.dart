@@ -5103,7 +5103,20 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCaptureListenAllTitle => '覆盖银行等全部来源';
 
   @override
-  String get autoCaptureListenAllDesc => '读取所有通知后仍先做金融关键词过滤；隐私范围更大';
+  String get autoCaptureListenAllDesc =>
+      '开启后可覆盖银行 App；读取所有通知后仍先做金融关键词过滤，隐私范围更大';
+
+  @override
+  String get autoCaptureAiAssistTitle => 'AI 补充识别';
+
+  @override
+  String get autoCaptureAiAssistDesc => '本地规则不足时发送原文到你配置的 AI；结果始终待确认，不会自动入账';
+
+  @override
+  String get autoCaptureAiAssistNotConfigured => '请先在 AI 设置中配置请求地址、密钥和模型';
+
+  @override
+  String get autoCaptureAiAssistedLabel => 'AI 已补充';
 
   @override
   String get autoCaptureAutoPostTitle => '高置信度自动入账';

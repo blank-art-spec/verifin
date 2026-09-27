@@ -9186,8 +9186,32 @@ abstract class AppLocalizations {
   /// No description provided for @autoCaptureListenAllDesc.
   ///
   /// In zh, this message translates to:
-  /// **'读取所有通知后仍先做金融关键词过滤；隐私范围更大'**
+  /// **'开启后可覆盖银行 App；读取所有通知后仍先做金融关键词过滤，隐私范围更大'**
   String get autoCaptureListenAllDesc;
+
+  /// No description provided for @autoCaptureAiAssistTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 补充识别'**
+  String get autoCaptureAiAssistTitle;
+
+  /// No description provided for @autoCaptureAiAssistDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'本地规则不足时发送原文到你配置的 AI；结果始终待确认，不会自动入账'**
+  String get autoCaptureAiAssistDesc;
+
+  /// No description provided for @autoCaptureAiAssistNotConfigured.
+  ///
+  /// In zh, this message translates to:
+  /// **'请先在 AI 设置中配置请求地址、密钥和模型'**
+  String get autoCaptureAiAssistNotConfigured;
+
+  /// No description provided for @autoCaptureAiAssistedLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'AI 已补充'**
+  String get autoCaptureAiAssistedLabel;
 
   /// No description provided for @autoCaptureAutoPostTitle.
   ///

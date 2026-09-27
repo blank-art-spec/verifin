@@ -141,6 +141,7 @@ class CaptureEvent {
     this.linkedEntryId,
     this.duplicateEntryId,
     this.appliedRuleIds = const <String>[],
+    this.aiAssisted = false,
     this.failureReason = '',
     this.processedAt,
   });
@@ -169,6 +170,9 @@ class CaptureEvent {
   final String? linkedEntryId;
   final String? duplicateEntryId;
   final List<String> appliedRuleIds;
+
+  /// 是否使用过用户主动启用的 AI 补充识别。AI 结果只可进入待确认，不能自动入账。
+  final bool aiAssisted;
   final String failureReason;
   final DateTime? processedAt;
 
@@ -196,6 +200,7 @@ class CaptureEvent {
     String? duplicateEntryId,
     bool clearDuplicateEntryId = false,
     List<String>? appliedRuleIds,
+    bool? aiAssisted,
     String? failureReason,
     DateTime? processedAt,
     bool clearProcessedAt = false,
@@ -234,6 +239,7 @@ class CaptureEvent {
         ? null
         : duplicateEntryId ?? this.duplicateEntryId,
     appliedRuleIds: appliedRuleIds ?? this.appliedRuleIds,
+    aiAssisted: aiAssisted ?? this.aiAssisted,
     failureReason: failureReason ?? this.failureReason,
     processedAt: clearProcessedAt ? null : processedAt ?? this.processedAt,
   );
@@ -265,6 +271,7 @@ class CaptureEvent {
     if (linkedEntryId != null) 'linkedEntryId': linkedEntryId,
     if (duplicateEntryId != null) 'duplicateEntryId': duplicateEntryId,
     'appliedRuleIds': appliedRuleIds,
+    'aiAssisted': aiAssisted,
     'failureReason': failureReason,
     if (processedAt != null) 'processedAt': processedAt!.toIso8601String(),
   };
@@ -298,6 +305,7 @@ class CaptureEvent {
     linkedEntryId: json['linkedEntryId'] as String?,
     duplicateEntryId: json['duplicateEntryId'] as String?,
     appliedRuleIds: _captureStringList(json['appliedRuleIds']),
+    aiAssisted: json['aiAssisted'] as bool? ?? false,
     failureReason: json['failureReason'] as String? ?? '',
     processedAt: DateTime.tryParse(json['processedAt'] as String? ?? ''),
   );
@@ -447,6 +455,7 @@ class AutoCaptureSettings {
     this.smsEnabled = false,
     this.listenAllNotificationSources = false,
     this.autoPostHighConfidence = true,
+    this.aiAssistEnabled = false,
     this.sourcePackages = const <String>[],
   });
 
@@ -454,6 +463,10 @@ class AutoCaptureSettings {
   final bool smsEnabled;
   final bool listenAllNotificationSources;
   final bool autoPostHighConfidence;
+
+  /// 是否允许把本地解析不足的原文发送到用户配置的 AI 端点补充识别。
+  /// 默认关闭；即使启用，AI 参与的事件也必须由用户确认后才能落账。
+  final bool aiAssistEnabled;
   final List<String> sourcePackages;
 
   static const AutoCaptureSettings disabled = AutoCaptureSettings();
@@ -464,6 +477,7 @@ class AutoCaptureSettings {
     bool? smsEnabled,
     bool? listenAllNotificationSources,
     bool? autoPostHighConfidence,
+    bool? aiAssistEnabled,
     List<String>? sourcePackages,
   }) => AutoCaptureSettings(
     notificationEnabled: notificationEnabled ?? this.notificationEnabled,
@@ -472,6 +486,7 @@ class AutoCaptureSettings {
         listenAllNotificationSources ?? this.listenAllNotificationSources,
     autoPostHighConfidence:
         autoPostHighConfidence ?? this.autoPostHighConfidence,
+    aiAssistEnabled: aiAssistEnabled ?? this.aiAssistEnabled,
     sourcePackages: sourcePackages ?? this.sourcePackages,
   );
 
@@ -481,6 +496,7 @@ class AutoCaptureSettings {
     'smsEnabled': smsEnabled,
     'listenAllNotificationSources': listenAllNotificationSources,
     'autoPostHighConfidence': autoPostHighConfidence,
+    'aiAssistEnabled': aiAssistEnabled,
     'sourcePackages': sourcePackages,
   });
 
@@ -497,6 +513,7 @@ class AutoCaptureSettings {
         listenAllNotificationSources:
             json['listenAllNotificationSources'] as bool? ?? false,
         autoPostHighConfidence: json['autoPostHighConfidence'] as bool? ?? true,
+        aiAssistEnabled: json['aiAssistEnabled'] as bool? ?? false,
         sourcePackages:
             (json['sourcePackages'] as List?)?.whereType<String>().toList() ??
             const <String>[],

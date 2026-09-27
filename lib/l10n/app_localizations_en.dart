@@ -5247,7 +5247,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get autoCaptureListenAllDesc =>
-      'Reads all notifications, then applies a financial-keyword filter; wider privacy scope';
+      'Covers bank apps by reading all notifications, then applying a financial-keyword filter; wider privacy scope';
+
+  @override
+  String get autoCaptureAiAssistTitle => 'AI-assisted recognition';
+
+  @override
+  String get autoCaptureAiAssistDesc =>
+      'When local rules are insufficient, sends the raw text to your configured AI; results always require confirmation';
+
+  @override
+  String get autoCaptureAiAssistNotConfigured =>
+      'Configure an AI endpoint, API key, and model first';
+
+  @override
+  String get autoCaptureAiAssistedLabel => 'AI-assisted';
 
   @override
   String get autoCaptureAutoPostTitle => 'Auto-post high confidence';

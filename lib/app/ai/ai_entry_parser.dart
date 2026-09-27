@@ -259,11 +259,10 @@ AiEntryDraft parseAiEntryDraft(String content, AiEntryContext context) {
     if (type == EntryType.transfer) {
       categoryId = '';
     } else if (categories.isNotEmpty) {
-      final wasNonEmpty = categoryId.isNotEmpty;
       categoryId = categories.first.id;
-      if (wasNonEmpty) {
-        warnings.add(AiDraftWarning.categoryUnmatched);
-      }
+      // 空值与无效 id 都是模型未可靠识别分类。虽然交互式记账页仍可用首项作为
+      // 可编辑默认值，但调用方必须看到警告，自动采集管线也会拒绝采用该分类。
+      warnings.add(AiDraftWarning.categoryUnmatched);
     } else {
       categoryId = '';
     }
