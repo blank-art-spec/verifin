@@ -158,6 +158,8 @@ Write-Host "Bumping version to $nextVersion (tag $tag)..."
 # 这四个目录覆盖当前全部受 Git 管理的 Dart 文件，同时保持与 CI 格式检查一致。
 Invoke-Native { dart format lib test integration_test test_driver }
 Invoke-Native { flutter pub get }
+# 发布前显式重建已提交的本地化代码，避免缓存状态导致 analyze 找不到生成文件。
+Invoke-Native { flutter gen-l10n }
 Invoke-Native { flutter analyze }
 Invoke-Native { flutter test }
 
