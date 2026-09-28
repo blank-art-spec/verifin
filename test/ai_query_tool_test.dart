@@ -473,13 +473,7 @@ void main() {
       const <String, Object?>{},
     );
     final display = result.display! as AiTableDisplay;
-    expect(display.headers, <String>[
-      '账户',
-      '币种',
-      '当前欠款',
-      '可用额度',
-      '本账期净消费',
-    ]);
+    expect(display.headers, <String>['账户', '币种', '当前欠款', '可用额度', '本账期净消费']);
     expect(
       display.rows.map((row) => row[1]),
       containsAll(<String>['CNY', 'USD']),
@@ -505,18 +499,12 @@ void main() {
       id: 'cny-card',
       name: '人民币账户',
       currencyCode: 'CNY',
-    ).copyWith(
-      type: AccountType.creditCard,
-      creditAccountId: parent.id,
-    );
+    ).copyWith(type: AccountType.creditCard, creditAccountId: parent.id);
     final usd = _account(
       id: 'usd-card',
       name: '美元账户',
       currencyCode: 'USD',
-    ).copyWith(
-      type: AccountType.creditCard,
-      creditAccountId: parent.id,
-    );
+    ).copyWith(type: AccountType.creditCard, creditAccountId: parent.id);
     final ctx = AiToolContext(
       entries: const <LedgerEntry>[],
       accounts: <Account>[cny, usd],

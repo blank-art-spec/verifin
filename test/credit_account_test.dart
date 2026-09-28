@@ -78,9 +78,7 @@ void main() {
     await controller.waitForPendingWrites();
 
     expect(
-      await controller.saveAccountDraft(
-        staleSnapshot.copyWith(note: '更新备注'),
-      ),
+      await controller.saveAccountDraft(staleSnapshot.copyWith(note: '更新备注')),
       isTrue,
     );
 

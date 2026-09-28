@@ -57,8 +57,7 @@ class AiToolContext {
     this.exchangeRates = const <ExchangeRate>[],
     this.creditAccounts = const <CreditAccount>[],
     this.billingStatements = const <BillingStatement>[],
-    this.statementRepaymentAllocations =
-        const <StatementRepaymentAllocation>[],
+    this.statementRepaymentAllocations = const <StatementRepaymentAllocation>[],
     this.bookId = '',
     this.budget,
     this.currencyDisplay = MoneyCodeDisplay.code,
@@ -1290,9 +1289,7 @@ class CreditCardBillTool extends AiQueryTool {
               usedText,
               ctx.currencyDisplay == MoneyCodeDisplay.none ? '' : currencyCode,
             ) +
-            (available == null
-                ? ''
-                : l10n.aiCardAvailableLine(availableText)) +
+            (available == null ? '' : l10n.aiCardAvailableLine(availableText)) +
             (bill == null ? '' : l10n.aiCardBillLine(billText)) +
             (dueDate == null
                 ? ''
@@ -1328,9 +1325,7 @@ class CreditCardBillTool extends AiQueryTool {
             date: date,
             rates: ctx.exchangeRates,
           );
-          return converted is ConvertedCurrencyAmount
-              ? converted.amount
-              : null;
+          return converted is ConvertedCurrencyAmount ? converted.amount : null;
         },
       );
       final hasOutstandingStatement = ctx.billingStatements.any(
@@ -1342,8 +1337,7 @@ class CreditCardBillTool extends AiQueryTool {
         name: parent.name,
         currencyCode: parent.currencyCode,
         used: overview.missingConversion ? null : overview.totalDebt,
-        available:
-            overview.missingConversion || parent.creditLimit == null
+        available: overview.missingConversion || parent.creditLimit == null
             ? null
             : (parent.creditLimit! - overview.totalDebt)
                   .clamp(0.0, double.infinity)
