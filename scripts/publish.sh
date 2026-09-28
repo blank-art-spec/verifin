@@ -99,9 +99,9 @@ main.write_text(
 )
 PY
 
-# 格式化整个项目，避免 CI 的 dart format 检查（ci.yml）因遗漏格式化而变红。
-# 工作区在脚本开头已强制干净，故此处 add -A 只会纳入版本号改动与格式化修正。
-dart format .
+# 只格式化版本库中的 Dart 源码目录，避免扫描 build 下的隔离 Flutter 工具链。
+# 这四个目录覆盖当前全部受 Git 管理的 Dart 文件，同时保持与 CI 格式检查一致。
+dart format lib test integration_test test_driver
 flutter pub get
 flutter analyze
 flutter test

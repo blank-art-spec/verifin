@@ -154,9 +154,9 @@ Write-TextNoBom -Path $appVersionPath -Text $newAppVersion
 
 Write-Host "Bumping version to $nextVersion (tag $tag)..."
 
-# 格式化整个项目、拉依赖、静态检查、测试。
-# 格式化整项目避免 CI 的 dart format 检查（ci.yml）因遗漏格式化而变红。
-Invoke-Native { dart format . }
+# 只格式化版本库中的 Dart 源码目录，避免扫描 build 下的隔离 Flutter 工具链。
+# 这四个目录覆盖当前全部受 Git 管理的 Dart 文件，同时保持与 CI 格式检查一致。
+Invoke-Native { dart format lib test integration_test test_driver }
 Invoke-Native { flutter pub get }
 Invoke-Native { flutter analyze }
 Invoke-Native { flutter test }
