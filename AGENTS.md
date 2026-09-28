@@ -103,7 +103,7 @@ dart format .
 ### CI 与发布
 
 - `.github/workflows/ci.yml` 在每个 PR 和每次 push 到 `main` 时执行格式检查、analyze、全量测试和 `github` flavor Android debug APK 编译门禁；该 APK 只用于提前发现 Kotlin/Manifest/原生桥编译错误，不作为交付物。
-- `.github/workflows/flutter.yml` 只在推送 `vX.Y.Z` 标签时触发发布构建：
+- `.github/workflows/flutter.yml` 默认在推送 `vX.Y.Z` 标签时触发发布构建；fork 首次启用 Actions 若未收到标签事件，可通过 `workflow_dispatch` 按同一版本标签手动重试：
   - GitHub 自分发：arm64-v8a APK，`--flavor github`。
   - Google Play：AAB，`--flavor play --dart-define=SELF_UPDATE=false`。
 - 两种 release 都开启 R8 代码压缩与资源裁剪。新增依赖若使用反射，必须同步检查 `android/app/proguard-rules.pro`；OCR、通知等问题可能只在 release/R8 下暴露。

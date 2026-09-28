@@ -4,6 +4,8 @@ on:
   push:
     tags:
       - 'v*.*.*'
+  # fork 首次启用 Actions 时可能吞掉第一次标签推送，保留按标签手动重试的入口。
+  workflow_dispatch:
 
 permissions:
   contents: write

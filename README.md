@@ -133,7 +133,7 @@ Android 包名 `top.talyra42.verifin`。本地不构建交付 APK——正式安
   ./scripts/publish.ps1 patch  # Windows/PowerShell 等价脚本
   ```
 
-  脚本会更新版本号、提交、打标签并推送。
+  脚本会更新版本号、提交、打标签并推送。若 fork 首次启用 Actions 时标签推送未产生运行记录，可在 GitHub Actions 的 `Flutter CI` 页面手动运行，并把 ref 选为同一版本标签；手动入口执行完全相同的检查与构建步骤。
 - Release APK 使用项目内稳定 keystore（`android/app/verifin-release.jks`）签名，版本间可覆盖安装。
 
 ## 📁 项目结构
