@@ -153,7 +153,11 @@ ReportSummary reportSummary(Iterable<LedgerEntry> entries) {
   );
 }
 
-/// 环比 / 同比对比：当前月对上月（环比）与去年同月（同比）。仅对「月」范围有意义。
+/// 环比 / 同比对比结果。
+///
+/// 字段名保留最早自然月报表的命名以兼容既有调用方；信用账期通过
+/// [reportPeriodComparison] 使用时，[previousMonth] 表示上账期，
+/// [sameMonthLastYear] 表示去年同期账期。
 @immutable
 class ReportComparison {
   const ReportComparison({
@@ -184,6 +188,25 @@ ReportComparison reportMonthlyComparison(
     current: summaryOfMonth(base),
     previousMonth: summaryOfMonth(DateTime(base.year, base.month - 1)),
     sameMonthLastYear: summaryOfMonth(DateTime(base.year - 1, base.month)),
+  );
+}
+
+/// 把调用方已经按三个可比较周期筛好的交易汇总成统一对比结果。
+///
+/// 自然月可直接用 [reportMonthlyComparison]；信用账期必须先按信用主体、正式账单边界
+/// 和 `billingCycleId` 分别筛出本期、上期、去年同期，不能把账单日不同的周期退化成
+/// 自然月。本方法只负责一致地汇总三个集合，不猜测任何周期边界。
+ReportComparison reportPeriodComparison({
+  required Iterable<LedgerEntry> currentEntries,
+  required Iterable<LedgerEntry> previousEntries,
+  required Iterable<LedgerEntry> samePeriodLastYearEntries,
+}) {
+  return ReportComparison(
+    current: reportSummary(currentEntries),
+    // ReportComparison 的字段名源于最早的自然月报表；在通用周期场景中，该字段表达
+    // “紧邻的上一周期”，保留旧名以兼容 AI 查询和现有调用方。
+    previousMonth: reportSummary(previousEntries),
+    sameMonthLastYear: reportSummary(samePeriodLastYearEntries),
   );
 }
 

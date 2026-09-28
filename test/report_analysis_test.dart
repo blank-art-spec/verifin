@@ -513,6 +513,49 @@ void main() {
       final cmp = reportMonthlyComparison(entries, DateTime(2026, 1, 15));
       expect(cmp.previousMonth.income, 1000);
     });
+
+    test('generic period comparison keeps caller-defined billing cycles', () {
+      final comparison = reportPeriodComparison(
+        currentEntries: <LedgerEntry>[
+          entry(
+            id: 'cycle-current',
+            type: EntryType.expense,
+            amount: 4047,
+            categoryId: 'dining',
+            occurredAt: DateTime(2026, 9, 28),
+          ),
+        ],
+        previousEntries: <LedgerEntry>[
+          entry(
+            id: 'cycle-previous',
+            type: EntryType.expense,
+            amount: 3704,
+            categoryId: 'dining',
+            occurredAt: DateTime(2026, 8, 28),
+          ),
+        ],
+        samePeriodLastYearEntries: <LedgerEntry>[
+          entry(
+            id: 'cycle-last-year',
+            type: EntryType.expense,
+            amount: 3500,
+            categoryId: 'dining',
+            occurredAt: DateTime(2025, 9, 28),
+          ),
+        ],
+      );
+
+      expect(comparison.current.expense, 4047);
+      expect(comparison.previousMonth.expense, 3704);
+      expect(comparison.sameMonthLastYear.expense, 3500);
+      expect(
+        changeRatio(
+          comparison.current.expense,
+          comparison.previousMonth.expense,
+        ),
+        closeTo(343 / 3704, 1e-9),
+      );
+    });
   });
 
   group('reportTrend', () {

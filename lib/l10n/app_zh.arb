@@ -1326,6 +1326,38 @@
   "yoyMomDesc": "较上月为环比，较去年同期为同比",
   "momLabel": "环比",
   "yoyLabel": "同比",
+  "billingCycleComparisonTitle": "账期同比 · 环比",
+  "billingCycleComparisonDesc": "按所选信用账户的真实账期比较净消费",
+  "previousBillingCycleSpending": "上账期净消费",
+  "sameBillingCycleLastYear": "去年同期账期",
+  "reportChangeIncreased": "增加 {amount}",
+  "@reportChangeIncreased": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reportChangeDecreased": "减少 {amount}",
+  "@reportChangeDecreased": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reportChangeUnchanged": "持平",
+  "reportChangeWithRatio": "{change} · {ratio}",
+  "@reportChangeWithRatio": {
+    "placeholders": {
+      "change": {
+        "type": "String"
+      },
+      "ratio": {
+        "type": "String"
+      }
+    }
+  },
   "monthlyTrendTitle": "月度趋势",
   "categoryRank": "分类排行",
   "rankGroupCategory": "分类",

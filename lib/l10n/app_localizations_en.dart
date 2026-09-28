@@ -2071,6 +2071,37 @@ class AppLocalizationsEn extends AppLocalizations {
   String get yoyLabel => 'YoY';
 
   @override
+  String get billingCycleComparisonTitle => 'Billing-cycle YoY · MoM';
+
+  @override
+  String get billingCycleComparisonDesc =>
+      'Compares net spending using the selected credit account\'s actual billing cycles';
+
+  @override
+  String get previousBillingCycleSpending => 'Previous-cycle net spending';
+
+  @override
+  String get sameBillingCycleLastYear => 'Same cycle last year';
+
+  @override
+  String reportChangeIncreased(String amount) {
+    return 'Up $amount';
+  }
+
+  @override
+  String reportChangeDecreased(String amount) {
+    return 'Down $amount';
+  }
+
+  @override
+  String get reportChangeUnchanged => 'No change';
+
+  @override
+  String reportChangeWithRatio(String change, String ratio) {
+    return '$change · $ratio';
+  }
+
+  @override
   String get monthlyTrendTitle => 'Monthly trend';
 
   @override

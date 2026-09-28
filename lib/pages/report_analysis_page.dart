@@ -94,11 +94,7 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
   ) {
     return switch (_rangeMode) {
       ReportRangeMode.billingCycle when selectedCredit != null =>
-        ReportRange.billingCycle(
-          controller
-              .creditCycleOverview(selectedCredit, now: _periodAnchor)
-              .cycle,
-        ),
+        _billingCycleRange(controller, selectedCredit, _periodAnchor),
       ReportRangeMode.billingCycle => ReportRange.month(_periodAnchor),
       ReportRangeMode.month => ReportRange.month(_periodAnchor),
       ReportRangeMode.quarter => ReportRange.quarter(_periodAnchor),
@@ -107,13 +103,28 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     };
   }
 
+  /// 按指定锚点解析一个信用账期，并复用 Controller 的正式账单感知口径。
+  ///
+  /// 账期对比会同时读取本期、上期和去年同期；把这段逻辑集中后，三段范围都能尊重
+  /// 银行正式账单的真实 `periodEnd`，不会一处用正式账单、另一处又退回固定账单日。
+  ReportRange _billingCycleRange(
+    VeriFinController controller,
+    CreditAccount creditAccount,
+    DateTime anchor,
+  ) {
+    return ReportRange.billingCycle(
+      controller.creditCycleOverview(creditAccount, now: anchor).cycle,
+    );
+  }
+
   /// 取当前范围内的交易；账期模式同时限定信用主体并尊重银行确认的账期 id。
   List<LedgerEntry> _entriesForRange(
     VeriFinController controller,
     ReportRange range,
-    CreditAccount? selectedCredit,
-  ) {
-    if (_rangeMode != ReportRangeMode.billingCycle || selectedCredit == null) {
+    CreditAccount? selectedCredit, {
+    required bool useBillingCycleRules,
+  }) {
+    if (!useBillingCycleRules || selectedCredit == null) {
       return entriesInWindow(controller.entries, range.window);
     }
     final childIds = controller.accounts
@@ -135,6 +146,59 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
           return !occurred.isBefore(start) && !occurred.isAfter(end);
         })
         .toList(growable: false);
+  }
+
+  /// 计算当前信用账期相对上账期（环比）和去年同期账期（同比）的净消费汇总。
+  ///
+  /// 锚点按月或按年平移且保留 1–28 日，确保 9/26–10/25 的上一期是
+  /// 8/26–9/25，而不是因为锚点掉到月初跳过一期。每个周期再独立解析正式账单边界，
+  /// 并通过 [_entriesForRange] 让银行确认的 `billingCycleId` 优先于发生日期。
+  ReportComparison _billingCycleComparison(
+    VeriFinController controller,
+    CreditAccount selectedCredit,
+    ReportRange currentRange,
+  ) {
+    final anchorDay = _periodAnchor.day.clamp(1, 28);
+    final previousAnchor = DateTime(
+      _periodAnchor.year,
+      _periodAnchor.month - 1,
+      anchorDay,
+    );
+    final samePeriodLastYearAnchor = DateTime(
+      _periodAnchor.year - 1,
+      _periodAnchor.month,
+      anchorDay,
+    );
+    final previousRange = _billingCycleRange(
+      controller,
+      selectedCredit,
+      previousAnchor,
+    );
+    final samePeriodLastYearRange = _billingCycleRange(
+      controller,
+      selectedCredit,
+      samePeriodLastYearAnchor,
+    );
+    return reportPeriodComparison(
+      currentEntries: _entriesForRange(
+        controller,
+        currentRange,
+        selectedCredit,
+        useBillingCycleRules: true,
+      ),
+      previousEntries: _entriesForRange(
+        controller,
+        previousRange,
+        selectedCredit,
+        useBillingCycleRules: true,
+      ),
+      samePeriodLastYearEntries: _entriesForRange(
+        controller,
+        samePeriodLastYearRange,
+        selectedCredit,
+        useBillingCycleRules: true,
+      ),
+    );
   }
 
   /// 返回趋势图使用的分桶日期。
@@ -229,7 +293,12 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
         ? ReportRangeMode.month
         : _rangeMode;
     final range = _resolvedRange(controller, selectedCredit);
-    final entries = _entriesForRange(controller, range, selectedCredit);
+    final entries = _entriesForRange(
+      controller,
+      range,
+      selectedCredit,
+      useBillingCycleRules: effectiveMode == ReportRangeMode.billingCycle,
+    );
     final categories = controller.categories;
     final summary = reportSummary(entries);
     final trend = reportTrend(
@@ -322,6 +391,16 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
                   comparison: reportMonthlyComparison(
                     controller.entries,
                     range.start,
+                  ),
+                ),
+              ] else if (effectiveMode == ReportRangeMode.billingCycle &&
+                  selectedCredit != null) ...<Widget>[
+                const SizedBox(height: 10),
+                _BillingCycleComparisonCard(
+                  comparison: _billingCycleComparison(
+                    controller,
+                    selectedCredit,
+                    range,
                   ),
                 ),
               ],
@@ -709,6 +788,168 @@ class _ComparisonCard extends StatelessWidget {
             yoyBase: comparison.sameMonthLastYear.net,
             higherIsGood: true,
           ),
+        ],
+      ),
+    );
+  }
+}
+
+/// 信用账期对比卡：直接展示本账期、上账期和去年同期的净消费金额，并给出绝对
+/// 增减额与百分比。自然月沿用上方三指标表格；信用账期则采用更贴近还款场景的金额
+/// 对照，用户无需只凭百分比反推“实际多花了多少钱”。
+class _BillingCycleComparisonCard extends StatelessWidget {
+  const _BillingCycleComparisonCard({required this.comparison});
+
+  final ReportComparison comparison;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final current = comparison.current.expense;
+    final previous = comparison.previousMonth.expense;
+    final samePeriodLastYear = comparison.sameMonthLastYear.expense;
+    return VeriCard(
+      key: const Key('billing_cycle_comparison_card'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          SectionTitle(title: l10n.billingCycleComparisonTitle),
+          const SizedBox(height: 4),
+          Text(
+            l10n.billingCycleComparisonDesc,
+            style: Theme.of(context).textTheme.labelSmall?.copyWith(
+              color: Theme.of(
+                context,
+              ).colorScheme.onSurface.withValues(alpha: 0.48),
+              fontWeight: FontWeight.w600,
+            ),
+          ),
+          const SizedBox(height: 8),
+          _BillingCycleComparisonRow(
+            label: l10n.creditCycleNetSpending,
+            amount: current,
+          ),
+          _BillingCycleComparisonRow(
+            label: l10n.previousBillingCycleSpending,
+            amount: previous,
+            changeLabel: l10n.momLabel,
+            changeText: _changeText(l10n, current, previous),
+            changeColor: _changeColor(context, current, previous),
+          ),
+          _BillingCycleComparisonRow(
+            label: l10n.sameBillingCycleLastYear,
+            amount: samePeriodLastYear,
+            changeLabel: l10n.yoyLabel,
+            changeText: _changeText(l10n, current, samePeriodLastYear),
+            changeColor: _changeColor(context, current, samePeriodLastYear),
+          ),
+        ],
+      ),
+    );
+  }
+
+  /// 将绝对差额与变化率组合为“增加 ¥343 · +9.3%”一类可读文案。
+  String _changeText(AppLocalizations l10n, double current, double baseline) {
+    final delta = current - baseline;
+    final change = isZeroAmount(delta)
+        ? l10n.reportChangeUnchanged
+        : delta > 0
+        ? l10n.reportChangeIncreased(formatAmount(delta.abs()))
+        : l10n.reportChangeDecreased(formatAmount(delta.abs()));
+    return l10n.reportChangeWithRatio(
+      change,
+      formatChangeRatio(changeRatio(current, baseline)),
+    );
+  }
+
+  /// 对“消费”而言，增加表示压力上升，使用支出色；减少表示支出下降，使用收入色。
+  Color _changeColor(BuildContext context, double current, double baseline) {
+    final delta = current - baseline;
+    if (isZeroAmount(delta)) {
+      return Theme.of(context).colorScheme.onSurface.withValues(alpha: 0.48);
+    }
+    return delta > 0
+        ? veriSemantic(context, veriExpense)
+        : veriSemantic(context, veriIncome);
+  }
+}
+
+/// 账期对比单行：左侧保留基准账期及金额，右侧展示本期相对该基准的变化。
+class _BillingCycleComparisonRow extends StatelessWidget {
+  const _BillingCycleComparisonRow({
+    required this.label,
+    required this.amount,
+    this.changeLabel,
+    this.changeText,
+    this.changeColor,
+  });
+
+  final String label;
+  final double amount;
+  final String? changeLabel;
+  final String? changeText;
+  final Color? changeColor;
+
+  @override
+  Widget build(BuildContext context) {
+    final muted = Theme.of(
+      context,
+    ).colorScheme.onSurface.withValues(alpha: 0.48);
+    return Padding(
+      padding: const EdgeInsets.symmetric(vertical: 7),
+      child: Row(
+        children: <Widget>[
+          Expanded(
+            flex: 4,
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  label,
+                  style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                    color: muted,
+                    fontWeight: FontWeight.w700,
+                  ),
+                ),
+                const SizedBox(height: 2),
+                Text(
+                  // 账期净消费是“花了多少”的正值指标，与首页信用卡卡片一致，不加
+                  // 普通支出流水的负号；增减方向另由右侧文案和语义色明确表达。
+                  formatAmount(amount),
+                  style: Theme.of(
+                    context,
+                  ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w900),
+                ),
+              ],
+            ),
+          ),
+          if (changeText != null)
+            Expanded(
+              flex: 6,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.end,
+                children: <Widget>[
+                  Text(
+                    changeLabel!,
+                    style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                      color: muted,
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    changeText!,
+                    textAlign: TextAlign.end,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      color: changeColor,
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                ],
+              ),
+            ),
         ],
       ),
     );

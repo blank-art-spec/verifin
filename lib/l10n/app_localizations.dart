@@ -3757,6 +3757,54 @@ abstract class AppLocalizations {
   /// **'同比'**
   String get yoyLabel;
 
+  /// No description provided for @billingCycleComparisonTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'账期同比 · 环比'**
+  String get billingCycleComparisonTitle;
+
+  /// No description provided for @billingCycleComparisonDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'按所选信用账户的真实账期比较净消费'**
+  String get billingCycleComparisonDesc;
+
+  /// No description provided for @previousBillingCycleSpending.
+  ///
+  /// In zh, this message translates to:
+  /// **'上账期净消费'**
+  String get previousBillingCycleSpending;
+
+  /// No description provided for @sameBillingCycleLastYear.
+  ///
+  /// In zh, this message translates to:
+  /// **'去年同期账期'**
+  String get sameBillingCycleLastYear;
+
+  /// No description provided for @reportChangeIncreased.
+  ///
+  /// In zh, this message translates to:
+  /// **'增加 {amount}'**
+  String reportChangeIncreased(String amount);
+
+  /// No description provided for @reportChangeDecreased.
+  ///
+  /// In zh, this message translates to:
+  /// **'减少 {amount}'**
+  String reportChangeDecreased(String amount);
+
+  /// No description provided for @reportChangeUnchanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'持平'**
+  String get reportChangeUnchanged;
+
+  /// No description provided for @reportChangeWithRatio.
+  ///
+  /// In zh, this message translates to:
+  /// **'{change} · {ratio}'**
+  String reportChangeWithRatio(String change, String ratio);
+
   /// No description provided for @monthlyTrendTitle.
   ///
   /// In zh, this message translates to:

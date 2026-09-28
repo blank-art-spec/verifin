@@ -2030,6 +2030,36 @@ class AppLocalizationsZh extends AppLocalizations {
   String get yoyLabel => '同比';
 
   @override
+  String get billingCycleComparisonTitle => '账期同比 · 环比';
+
+  @override
+  String get billingCycleComparisonDesc => '按所选信用账户的真实账期比较净消费';
+
+  @override
+  String get previousBillingCycleSpending => '上账期净消费';
+
+  @override
+  String get sameBillingCycleLastYear => '去年同期账期';
+
+  @override
+  String reportChangeIncreased(String amount) {
+    return '增加 $amount';
+  }
+
+  @override
+  String reportChangeDecreased(String amount) {
+    return '减少 $amount';
+  }
+
+  @override
+  String get reportChangeUnchanged => '持平';
+
+  @override
+  String reportChangeWithRatio(String change, String ratio) {
+    return '$change · $ratio';
+  }
+
+  @override
   String get monthlyTrendTitle => '月度趋势';
 
   @override

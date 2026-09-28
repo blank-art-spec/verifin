@@ -719,6 +719,38 @@
   "yoyMomDesc": "MoM compares to last month; YoY to the same month last year",
   "momLabel": "MoM",
   "yoyLabel": "YoY",
+  "billingCycleComparisonTitle": "Billing-cycle YoY · MoM",
+  "billingCycleComparisonDesc": "Compares net spending using the selected credit account's actual billing cycles",
+  "previousBillingCycleSpending": "Previous-cycle net spending",
+  "sameBillingCycleLastYear": "Same cycle last year",
+  "reportChangeIncreased": "Up {amount}",
+  "@reportChangeIncreased": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reportChangeDecreased": "Down {amount}",
+  "@reportChangeDecreased": {
+    "placeholders": {
+      "amount": {
+        "type": "String"
+      }
+    }
+  },
+  "reportChangeUnchanged": "No change",
+  "reportChangeWithRatio": "{change} · {ratio}",
+  "@reportChangeWithRatio": {
+    "placeholders": {
+      "change": {
+        "type": "String"
+      },
+      "ratio": {
+        "type": "String"
+      }
+    }
+  },
   "monthlyTrendTitle": "Monthly trend",
   "categoryRank": "Category ranking",
   "rankGroupCategory": "Category",

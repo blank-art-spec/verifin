@@ -368,17 +368,55 @@ void main() {
       ),
     );
     expect(saved, isTrue);
+    final currentCycle = currentBillingCycle(25, now);
+    final previousAnchor = DateTime(
+      now.year,
+      now.month - 1,
+      now.day.clamp(1, 28),
+    );
+    final previousCycle = currentBillingCycle(25, previousAnchor);
+    final lastYearCycle = currentBillingCycle(
+      25,
+      DateTime(now.year - 1, now.month, now.day.clamp(1, 28)),
+    );
     controller
       ..addEntry(
         LedgerEntry(
           id: 'cycle-entry',
           bookId: controller.activeBook.id,
           type: EntryType.expense,
-          amount: 88,
+          amount: 4047,
           categoryId: 'dining',
           accountId: 'report-credit-card',
           note: '账期消费',
           occurredAt: now,
+          billingCycleId: billingCycleIdFor(currentCycle.end),
+        ),
+      )
+      ..addEntry(
+        LedgerEntry(
+          id: 'previous-cycle-entry',
+          bookId: controller.activeBook.id,
+          type: EntryType.expense,
+          amount: 3704,
+          categoryId: 'dining',
+          accountId: 'report-credit-card',
+          note: '上账期消费',
+          occurredAt: previousCycle.start,
+          billingCycleId: billingCycleIdFor(previousCycle.end),
+        ),
+      )
+      ..addEntry(
+        LedgerEntry(
+          id: 'last-year-cycle-entry',
+          bookId: controller.activeBook.id,
+          type: EntryType.expense,
+          amount: 3500,
+          categoryId: 'dining',
+          accountId: 'report-credit-card',
+          note: '去年同期账期消费',
+          occurredAt: lastYearCycle.start,
+          billingCycleId: billingCycleIdFor(lastYearCycle.end),
         ),
       )
       ..dispose();
@@ -396,15 +434,23 @@ void main() {
 
     expect(find.text('测试信用卡'), findsWidgets);
     expect(find.text('账期消费'), findsNothing);
-    expect(find.textContaining('88'), findsWidgets);
+    expect(find.textContaining('4047'), findsWidgets);
+
+    // 账期对比显示本期、上期与去年同期的绝对金额；4047 相对 3704 增加 343，
+    // 环比约 +9.3%。显式账期 id 保证测试同时覆盖银行确认归属优先于发生日期。
+    await tester.ensureVisible(
+      find.byKey(const Key('billing_cycle_comparison_card')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.text('账期同比 · 环比'), findsOneWidget);
+    expect(find.text('上账期净消费'), findsOneWidget);
+    expect(find.text('去年同期账期'), findsOneWidget);
+    expect(find.textContaining('增加 343'), findsOneWidget);
+    expect(find.textContaining('+9.3%'), findsOneWidget);
 
     // 前翻一期必须连续，不能因为把锚点重置为月初而跳过中间账期。
-    final previousAnchor = DateTime(
-      now.year,
-      now.month - 1,
-      now.day.clamp(1, 28),
-    );
-    final previousCycle = currentBillingCycle(25, previousAnchor);
+    await tester.drag(find.byType(Scrollable).first, const Offset(0, 700));
+    await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('上一段'));
     await tester.pumpAndSettle();
     expect(
