@@ -194,6 +194,7 @@ ImportPlan buildImportPlanFromRecords({
       fingerprint: fingerprint,
       importedAt: now,
       transactionDate: record.date,
+      transactionDatePrecision: record.occurredAtPrecision,
       postedDate: record.postedDate,
       amount: imported.amount,
       currencyCode: imported.currencyCode,
@@ -248,6 +249,7 @@ ImportPlan buildImportPlanFromRecords({
       matchedCount++;
       return existing.copyWith(
         reconciliationStatus: ReconciliationStatus.autoMatched,
+        postDate: record.postedDate,
         sourceRecords: <EntrySourceRecord>[
           ...existing.sourceRecords,
           sourceRecord,
@@ -266,6 +268,7 @@ ImportPlan buildImportPlanFromRecords({
       conflictCount++;
       return existing.copyWith(
         reconciliationStatus: ReconciliationStatus.amountConflict,
+        postDate: record.postedDate,
         sourceRecords: <EntrySourceRecord>[
           ...existing.sourceRecords,
           sourceRecord,
@@ -289,6 +292,8 @@ ImportPlan buildImportPlanFromRecords({
       toAccountId: imported.toAccountId,
       note: imported.note,
       occurredAt: imported.occurredAt,
+      occurredAtPrecision: imported.occurredAtPrecision,
+      postDate: imported.postDate,
       tagIds: imported.tagIds,
       fee: imported.fee,
       reimbursable: imported.reimbursable,
@@ -727,6 +732,8 @@ ImportPlan buildImportPlanFromRecords({
         toAccountId: toId,
         note: record.note,
         occurredAt: record.date,
+        occurredAtPrecision: record.occurredAtPrecision,
+        postDate: record.postedDate,
         fee: normalizeCurrencyAmount(record.fee, fromCurrency ?? currencyCode),
         tagIds: tagIds,
       );
@@ -834,6 +841,8 @@ ImportPlan buildImportPlanFromRecords({
       toAccountId: null,
       note: record.note,
       occurredAt: record.date,
+      occurredAtPrecision: record.occurredAtPrecision,
+      postDate: record.postedDate,
       refundedBaseAmount: refundedBase,
       tagIds: tagIds,
     );
@@ -870,6 +879,8 @@ ImportPlan buildImportPlanFromRecords({
           accountId: accountId,
           note: '',
           occurredAt: record.date,
+          occurredAtPrecision: record.occurredAtPrecision,
+          postDate: record.postedDate,
           refundOf: reconciled.id,
           settledAt: record.date,
         ),

@@ -3336,6 +3336,7 @@
   "autoCaptureRulesEmpty": "还没有规则。点右上角新增一条可解释的确定性规则。",
   "autoCaptureQueueTitle": "待处理与最近自动入账",
   "autoCaptureReplayRecent": "回放最近事件",
+  "entryPostDate": "银行记账日",
   "autoCaptureReplayResult": "已重新解析 {count} 条事件",
   "@autoCaptureReplayResult": {"placeholders": {"count": {"type": "int"}}},
   "autoCaptureQueueEmpty": "暂时没有待处理事件",

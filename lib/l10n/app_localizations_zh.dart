@@ -5431,6 +5431,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCaptureReplayRecent => '回放最近事件';
 
   @override
+  String get entryPostDate => '银行记账日';
+
+  @override
   String autoCaptureReplayResult(int count) {
     return '已重新解析 $count 条事件';
   }

@@ -502,7 +502,7 @@ EntrySourceRecord sourceRecordForCapture(
   fingerprint: event.fingerprint,
   importedAt: importedAt ?? DateTime.now(),
   transactionDate: event.receivedAt,
-  postedDate: event.receivedAt,
+  transactionDatePrecision: OccurredAtPrecision.minute,
   amount: event.parsedAmount ?? 0,
   currencyCode: event.currencyCode,
   merchant: event.merchant,

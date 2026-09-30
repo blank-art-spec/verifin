@@ -53,6 +53,7 @@ ParsedImport parseYimuBill(Uint8List bytes) {
     records.add(
       RawImportRecord(
         date: date,
+        occurredAtPrecision: importDatePrecision(cellAt(row, cols['日期'])),
         type: typeText == '支出' ? EntryType.expense : EntryType.income,
         amount: gross,
         category: cellAt(row, cols['类别']),

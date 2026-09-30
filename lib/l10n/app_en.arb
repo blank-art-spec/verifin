@@ -2201,6 +2201,7 @@
   "autoCaptureRulesEmpty": "No rules yet. Add an explainable deterministic rule from the top right.",
   "autoCaptureQueueTitle": "Pending and recent auto-posts",
   "autoCaptureReplayRecent": "Replay recent events",
+  "entryPostDate": "Bank posting date",
   "autoCaptureReplayResult": "Parsed {count} events again",
   "@autoCaptureReplayResult": {"placeholders": {"count": {"type": "int"}}},
   "autoCaptureQueueEmpty": "Nothing needs attention",

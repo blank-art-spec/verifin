@@ -9783,6 +9783,12 @@ abstract class AppLocalizations {
   /// **'回放最近事件'**
   String get autoCaptureReplayRecent;
 
+  /// No description provided for @entryPostDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'银行记账日'**
+  String get entryPostDate;
+
   /// No description provided for @autoCaptureReplayResult.
   ///
   /// In zh, this message translates to:

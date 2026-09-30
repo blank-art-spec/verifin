@@ -1033,6 +1033,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         accountId: account.id,
         note: event.merchant,
         occurredAt: event.receivedAt,
+        occurredAtPrecision: OccurredAtPrecision.minute,
         refundOf: original.id,
         settledAt: event.receivedAt,
         sourceRecords: <EntrySourceRecord>[source],
@@ -1077,6 +1078,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         toAccountId: target.id,
         note: event.merchant,
         occurredAt: event.receivedAt,
+        occurredAtPrecision: OccurredAtPrecision.minute,
         sourceRecords: <EntrySourceRecord>[source],
       );
     }
@@ -1102,6 +1104,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       accountId: account.id,
       note: event.merchant,
       occurredAt: event.receivedAt,
+      occurredAtPrecision: OccurredAtPrecision.minute,
       tagIds: event.tagCandidateIds,
       sourceRecords: <EntrySourceRecord>[source],
     );
@@ -6337,7 +6340,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 6,
+      'version': 7,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'ledgerBooks': _ledgerBooks.map((book) => book.toJson()).toList(),
@@ -6413,7 +6416,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 6) {
+    if (version < 1 || version > 7) {
       throw FormatException('不支持的备份版本：$version');
     }
 

@@ -349,20 +349,29 @@ String formatTime(DateTime date) {
 /// - 今年非今天：`07/08 14:30`
 /// - 往年：`2024/07/08 14:30`
 ///
+/// [precision] 为 `date` 时只显示月日或年月日，绝不把零点排序锚点展示为交易时间。
 /// [now] 可注入以便测试；缺省用 `DateTime.now()`。仅用于平铺、无日期分组头的列表
 /// （如首页「最近交易」）；带分组头的列表日期已在头部，无需逐行重复。
-String formatEntryStamp(DateTime when, {DateTime? now}) {
+String formatEntryStamp(
+  DateTime when, {
+  DateTime? now,
+  OccurredAtPrecision precision = OccurredAtPrecision.minute,
+}) {
   final ref = now ?? DateTime.now();
   final time = formatTime(when);
   final sameDay =
       when.year == ref.year && when.month == ref.month && when.day == ref.day;
-  if (sameDay) {
+  if (sameDay && precision != OccurredAtPrecision.date) {
     return time;
   }
   final month = when.month.toString().padLeft(2, '0');
   final day = when.day.toString().padLeft(2, '0');
   if (when.year == ref.year) {
-    return '$month/$day $time';
+    return precision == OccurredAtPrecision.date
+        ? '$month/$day'
+        : '$month/$day $time';
   }
-  return '${when.year}/$month/$day $time';
+  return precision == OccurredAtPrecision.date
+      ? '${when.year}/$month/$day'
+      : '${when.year}/$month/$day $time';
 }

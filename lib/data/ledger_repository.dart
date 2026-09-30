@@ -1076,6 +1076,8 @@ class SqliteLedgerRepository implements LedgerRepository {
     'to_account_id': e.toAccountId,
     'note': e.note,
     'occurred_at': e.occurredAt.millisecondsSinceEpoch,
+    'occurred_at_precision': e.occurredAtPrecision.name,
+    'post_date': e.postDate?.millisecondsSinceEpoch,
     'billing_cycle_id': e.billingCycleId,
     // 标签 id 列表以 JSON 数组存单列（整表覆盖式读写，无需关联表）。
     'tag_ids': e.tagIds.isEmpty ? null : jsonEncode(e.tagIds),
@@ -1227,6 +1229,12 @@ class SqliteLedgerRepository implements LedgerRepository {
     toAccountId: row['to_account_id'] as String?,
     note: row['note'] as String? ?? '',
     occurredAt: DateTime.fromMillisecondsSinceEpoch(row['occurred_at'] as int),
+    occurredAtPrecision: OccurredAtPrecision.fromStorage(
+      row['occurred_at_precision'] as String?,
+    ),
+    postDate: row['post_date'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(row['post_date'] as int),
     billingCycleId: row['billing_cycle_id'] as String?,
     tagIds: _decodeTagIds(row['tag_ids']),
     fee: (row['fee'] as num?)?.toDouble() ?? 0,

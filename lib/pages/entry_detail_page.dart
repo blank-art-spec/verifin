@@ -87,6 +87,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   bool _noAccount = false;
   String? _toAccountId;
   DateTime _occurredAt = DateTime.now();
+  OccurredAtPrecision _occurredAtPrecision = OccurredAtPrecision.minute;
   double _fee = 0;
   String? _currencyCode;
   double? _accountAmount;
@@ -163,6 +164,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       }
       _toAccountId = editing.toAccountId;
       _occurredAt = editing.occurredAt;
+      _occurredAtPrecision = editing.occurredAtPrecision;
       _fee = editing.fee;
       _currencyCode = editing.currencyCode;
       _accountAmount = editing.accountAmount;
@@ -955,7 +957,11 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                         _EntryMetadataChip(
                           chipKey: const Key('entry_metadata_time'),
                           icon: Icons.schedule_rounded,
-                          label: Text(formatTime(_occurredAt)),
+                          label: Text(
+                            _occurredAtPrecision == OccurredAtPrecision.date
+                                ? AppLocalizations.of(context).commonNoneShort
+                                : formatTime(_occurredAt),
+                          ),
                           onTap: _pickTime,
                         ),
                         _EntryMetadataChip(
@@ -1699,6 +1705,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
         picked.hour,
         picked.minute,
       );
+      _occurredAtPrecision = OccurredAtPrecision.minute;
     });
   }
 
@@ -1758,6 +1765,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       toAccountId: _type == EntryType.transfer ? _toAccountId : null,
       note: _noteController.text.trim(),
       occurredAt: _occurredAt,
+      occurredAtPrecision: _occurredAtPrecision,
+      postDate: original?.postDate,
       tagIds: List<String>.of(_tagIds),
       fee: _type == EntryType.transfer
           ? normalizeCurrencyAmount(_fee, code)

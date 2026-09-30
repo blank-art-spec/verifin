@@ -93,6 +93,26 @@ void main() {
     );
   });
 
+  test('只有日期的正式账单不显示伪造的零点时间', () {
+    final now = DateTime(2026, 9, 30);
+    expect(
+      formatEntryStamp(
+        DateTime(2026, 9, 23),
+        now: now,
+        precision: OccurredAtPrecision.date,
+      ),
+      '09/23',
+    );
+    expect(
+      formatEntryStamp(
+        DateTime(2025, 9, 23),
+        now: now,
+        precision: OccurredAtPrecision.date,
+      ),
+      '2025/09/23',
+    );
+  });
+
   test('weekWindowFor 覆盖周一至周日（含跨月的周）', () {
     // 2026-07-10 是周五，本周为 07-06(周一)~07-12(周日)。
     final w = weekWindowFor(DateTime(2026, 7, 10, 15));

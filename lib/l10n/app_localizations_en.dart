@@ -5599,6 +5599,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoCaptureReplayRecent => 'Replay recent events';
 
   @override
+  String get entryPostDate => 'Bank posting date';
+
+  @override
   String autoCaptureReplayResult(int count) {
     return 'Parsed $count events again';
   }

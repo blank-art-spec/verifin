@@ -122,8 +122,12 @@ class TransactionTile extends StatelessWidget {
       entry.categoryId,
     ).reversed.map((id) => categoryById(id, categories).label).join(' · ');
     // 副行时间：平铺列表（showDate）按今天/今年/往年智能展示，否则只给时分。
-    final stamp = showDate
-        ? formatEntryStamp(entry.occurredAt)
+    final stamp =
+        showDate || entry.occurredAtPrecision == OccurredAtPrecision.date
+        ? formatEntryStamp(
+            entry.occurredAt,
+            precision: entry.occurredAtPrecision,
+          )
         : formatTime(entry.occurredAt);
     final tagLabels = _tagLabels();
     final runningBalanceText = runningBalance == null || fromAccount == null

@@ -50,6 +50,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   late bool _noAccount;
   late String? _toAccountId;
   late DateTime _occurredAt;
+  late OccurredAtPrecision _occurredAtPrecision;
   late List<String> _tagIds;
   late double _fee;
   late bool _reimbursable;
@@ -85,6 +86,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     _noAccount = entry.accountId.isEmpty;
     _toAccountId = entry.toAccountId;
     _occurredAt = entry.occurredAt;
+    _occurredAtPrecision = entry.occurredAtPrecision;
     _tagIds = List<String>.of(entry.tagIds);
     _fee = entry.fee;
     _reimbursable = entry.reimbursable;
@@ -342,9 +344,18 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                             '${AppLocalizations.of(context).dateMonthDay(_occurredAt)}  ${relativeDay(AppLocalizations.of(context), _occurredAt)}',
                         onTap: _pickDate,
                       ),
+                      if (entry.postDate != null)
+                        DetailInfoRow(
+                          label: AppLocalizations.of(context).entryPostDate,
+                          value: AppLocalizations.of(
+                            context,
+                          ).dateMonthDay(entry.postDate!),
+                        ),
                       DetailInfoRow(
                         label: AppLocalizations.of(context).timeLabel,
-                        value: formatTime(_occurredAt),
+                        value: _occurredAtPrecision == OccurredAtPrecision.date
+                            ? AppLocalizations.of(context).commonNoneShort
+                            : formatTime(_occurredAt),
                         onTap: _pickTime,
                       ),
                       DetailInfoRow(
@@ -1100,6 +1111,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
         picked.hour,
         picked.minute,
       );
+      _occurredAtPrecision = OccurredAtPrecision.minute;
     });
   }
 
@@ -1191,6 +1203,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       clearToAccountId: _type != EntryType.transfer,
       note: _noteController.text.trim(),
       occurredAt: _occurredAt,
+      occurredAtPrecision: _occurredAtPrecision,
       tagIds: List<String>.of(_tagIds),
       fee: _type == EntryType.transfer && !noAccount
           ? normalizeCurrencyAmount(_fee, _currencyCode)

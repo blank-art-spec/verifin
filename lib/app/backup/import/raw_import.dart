@@ -18,6 +18,7 @@ class ImportRowError {
 class RawImportRecord {
   const RawImportRecord({
     required this.date,
+    this.occurredAtPrecision = OccurredAtPrecision.second,
     required this.type,
     required this.amount,
     this.currencyCode,
@@ -44,6 +45,9 @@ class RawImportRecord {
   });
 
   final DateTime date;
+
+  /// 来源日期字段的可信精度；只有日期的正式账单应显式传 [OccurredAtPrecision.date]。
+  final OccurredAtPrecision occurredAtPrecision;
   final EntryType type;
 
   /// 恒 > 0：方向由 [type] 表达，各 parser 已取绝对值。
@@ -100,6 +104,7 @@ class RawImportRecord {
   RawImportRecord withImportedRate(double rate) {
     return RawImportRecord(
       date: date,
+      occurredAtPrecision: occurredAtPrecision,
       type: type,
       amount: amount,
       currencyCode: currencyCode,
@@ -264,6 +269,18 @@ DateTime? parseImportDate(String raw) {
   return result;
 }
 
+/// 按原始日期文本判断来源精度；调用前须先用 [parseImportDate] 校验合法性。
+///
+/// 只有日期时返回 [OccurredAtPrecision.date]，存在时分而无秒时返回 `minute`。
+/// 不通过午夜时刻推断精度，避免把真实的 00:00 交易误判为“仅有日期”。
+OccurredAtPrecision importDatePrecision(String raw) {
+  final parts = raw.trim().split(':');
+  if (parts.length == 1) return OccurredAtPrecision.date;
+  return parts.length == 2
+      ? OccurredAtPrecision.minute
+      : OccurredAtPrecision.second;
+}
+
 /// 拆多标签串（如一木「客户, 代购」）：按逗号（半/全角）分割、去空去首尾空白。
 /// 归一化去重与建标签在 plan_builder 里做，这里只负责拆分。
 List<String> splitTagLabels(String raw) {
@@ -323,6 +340,7 @@ RawImportRecord? buildRecordFromStrings({
   }
   return RawImportRecord(
     date: parsedDate,
+    occurredAtPrecision: importDatePrecision(date),
     type: parsedType,
     amount: parsedAmount,
     currencyCode: currencyCode.trim().isEmpty

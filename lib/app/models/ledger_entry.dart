@@ -22,6 +22,20 @@ enum ReconciliationStatus {
       );
 }
 
+/// 交易时间的可信精度。仅有日期的账单不应被显示成零点发生的交易。
+enum OccurredAtPrecision {
+  date,
+  minute,
+  second;
+
+  /// 从存储值恢复精度；旧数据没有该字段，沿用原先显示秒的行为。
+  static OccurredAtPrecision fromStorage(String? value) =>
+      OccurredAtPrecision.values.firstWhere(
+        (item) => item.name == value,
+        orElse: () => OccurredAtPrecision.second,
+      );
+}
+
 /// 外部来源证据。交易表仍只有一笔真实消费；手工记录、支付平台和银行正式账单
 /// 可以各追加一条证据。稳定 [fingerprint] 与可选 [sourceTransactionId] 负责幂等。
 class EntrySourceRecord {
@@ -31,6 +45,7 @@ class EntrySourceRecord {
     required this.fingerprint,
     required this.importedAt,
     required this.transactionDate,
+    this.transactionDatePrecision = OccurredAtPrecision.second,
     required this.amount,
     required this.currencyCode,
     this.sourceTransactionId = '',
@@ -46,6 +61,7 @@ class EntrySourceRecord {
   final String fingerprint;
   final DateTime importedAt;
   final DateTime transactionDate;
+  final OccurredAtPrecision transactionDatePrecision;
   final DateTime? postedDate;
   final double amount;
   final String currencyCode;
@@ -61,6 +77,7 @@ class EntrySourceRecord {
     'fingerprint': fingerprint,
     'importedAt': importedAt.toIso8601String(),
     'transactionDate': transactionDate.toIso8601String(),
+    'transactionDatePrecision': transactionDatePrecision.name,
     if (postedDate != null) 'postedDate': postedDate!.toIso8601String(),
     'amount': amount,
     'currencyCode': currencyCode,
@@ -79,6 +96,9 @@ class EntrySourceRecord {
       importedAt: DateTime.tryParse(json['importedAt'] as String? ?? '') ?? now,
       transactionDate:
           DateTime.tryParse(json['transactionDate'] as String? ?? '') ?? now,
+      transactionDatePrecision: OccurredAtPrecision.fromStorage(
+        json['transactionDatePrecision'] as String?,
+      ),
       postedDate: DateTime.tryParse(json['postedDate'] as String? ?? ''),
       amount: (json['amount'] as num? ?? 0).toDouble(),
       currencyCode: (json['currencyCode'] as String? ?? defaultCurrencyCode)
@@ -159,6 +179,8 @@ class LedgerEntry {
     this.toAccountId,
     required this.note,
     required this.occurredAt,
+    this.occurredAtPrecision = OccurredAtPrecision.second,
+    this.postDate,
     this.billingCycleId,
     this.tagIds = const <String>[],
     this.fee = 0,
@@ -199,6 +221,12 @@ class LedgerEntry {
   final String? toAccountId;
   final String note;
   final DateTime occurredAt;
+
+  /// [occurredAt] 的可信精度；`date` 时其零点只是排序锚点，不代表实际发生时刻。
+  final OccurredAtPrecision occurredAtPrecision;
+
+  /// 银行记账日，独立于交易发生日；来源未给出时为 null。
+  final DateTime? postDate;
 
   /// 银行确认的信用账期标识，格式固定为该期出账日 `yyyy-MM-dd`。
   ///
@@ -279,6 +307,9 @@ class LedgerEntry {
     bool clearToAccountId = false,
     String? note,
     DateTime? occurredAt,
+    OccurredAtPrecision? occurredAtPrecision,
+    DateTime? postDate,
+    bool clearPostDate = false,
     String? billingCycleId,
     bool clearBillingCycleId = false,
     List<String>? tagIds,
@@ -312,6 +343,8 @@ class LedgerEntry {
       toAccountId: clearToAccountId ? null : toAccountId ?? this.toAccountId,
       note: note ?? this.note,
       occurredAt: occurredAt ?? this.occurredAt,
+      occurredAtPrecision: occurredAtPrecision ?? this.occurredAtPrecision,
+      postDate: clearPostDate ? null : postDate ?? this.postDate,
       billingCycleId: clearBillingCycleId
           ? null
           : billingCycleId ?? this.billingCycleId,
@@ -343,6 +376,8 @@ class LedgerEntry {
       'toAccountId': toAccountId,
       'note': note,
       'occurredAt': occurredAt.toIso8601String(),
+      'occurredAtPrecision': occurredAtPrecision.name,
+      if (postDate != null) 'postDate': postDate!.toIso8601String(),
       if (billingCycleId != null) 'billingCycleId': billingCycleId,
       if (tagIds.isNotEmpty) 'tagIds': tagIds,
       if (fee != 0) 'fee': fee,
@@ -384,6 +419,10 @@ class LedgerEntry {
       occurredAt:
           DateTime.tryParse(json['occurredAt'] as String? ?? '') ??
           DateTime.now(),
+      occurredAtPrecision: OccurredAtPrecision.fromStorage(
+        json['occurredAtPrecision'] as String?,
+      ),
+      postDate: DateTime.tryParse(json['postDate'] as String? ?? ''),
       billingCycleId: json['billingCycleId'] as String?,
       tagIds: _stringList(json['tagIds']),
       fee: (json['fee'] as num?)?.toDouble() ?? 0,

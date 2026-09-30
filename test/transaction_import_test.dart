@@ -1,11 +1,27 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/backup/transaction_import.dart';
+import 'package:verifin/app/backup/import/raw_import.dart';
 import 'package:verifin/app/models.dart';
 
 import 'support/test_harness.dart';
 
 void main() {
   useTestDatabases();
+
+  test('账单日期文本保留来源精度，零点交易不能误判为只有日期', () {
+    RawImportRecord record(String date) =>
+        buildRecordFromStrings(date: date, type: '支出', amount: '30')!;
+
+    expect(record('2026-09-23').occurredAtPrecision, OccurredAtPrecision.date);
+    expect(
+      record('2026-09-23 00:00').occurredAtPrecision,
+      OccurredAtPrecision.minute,
+    );
+    expect(
+      record('2026-09-27 19:12:05').occurredAtPrecision,
+      OccurredAtPrecision.second,
+    );
+  });
 
   group('parseCsv', () {
     test('基础逗号分隔', () {
