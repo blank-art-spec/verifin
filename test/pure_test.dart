@@ -13,6 +13,43 @@ import 'package:verifin/app/series_math.dart';
 import 'support/test_harness.dart';
 
 void main() {
+  test('跨账户退款只在到账账户流水出现，并按到账日展示', () {
+    final expense = LedgerEntry(
+      id: 'card-purchase',
+      bookId: 'default',
+      type: EntryType.expense,
+      amount: 100,
+      categoryId: 'shopping',
+      accountId: 'card',
+      note: '原招行消费',
+      occurredAt: DateTime(2026, 9, 20),
+    );
+    final refund = LedgerEntry(
+      id: 'alipay-refund',
+      bookId: 'default',
+      type: EntryType.refund,
+      amount: 100,
+      categoryId: 'shopping',
+      accountId: 'alipay',
+      note: '',
+      occurredAt: DateTime(2026, 9, 24),
+      refundOf: expense.id,
+      settledAt: DateTime(2026, 9, 28),
+    );
+    final pending = refund.copyWith(id: 'pending-refund', clearSettledAt: true);
+    final entries = <LedgerEntry>[expense, refund, pending];
+
+    final alipay = accountTimelineEntries(entries, 'alipay');
+    expect(alipay, hasLength(1));
+    expect(alipay.single.id, refund.id);
+    expect(alipay.single.occurredAt, DateTime(2026, 9, 28));
+    expect(alipay.single.note, '原招行消费');
+    expect(accountTimelineEntries(entries, 'card').map((e) => e.id), <String>[
+      expense.id,
+    ]);
+    expect(refund.occurredAt, DateTime(2026, 9, 24));
+  });
+
   test('退款在到账日而不是发起日改变账户余额趋势', () {
     final now = DateTime.now();
     final account = Account(

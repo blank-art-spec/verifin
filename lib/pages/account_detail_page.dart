@@ -97,6 +97,10 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     final entries = controller.entries
         .where((entry) => entryTouchesAccount(entry, currentAccount.id))
         .toList();
+    final timelineEntries = accountTimelineEntries(
+      controller.entries,
+      currentAccount.id,
+    );
     final balanceTrendValues = _monthlyTrend
         ? accountMonthlyBalanceSeries(currentAccount, entries)
         : accountBalanceSeries(currentAccount, entries);
@@ -310,7 +314,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                         ],
                       ),
                       const SizedBox(height: 6),
-                      if (entries.isEmpty)
+                      if (timelineEntries.isEmpty)
                         EmptyState(
                           icon: Icons.receipt_long_outlined,
                           title: AppLocalizations.of(context).noEntriesTitle,
@@ -319,8 +323,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                           ).accountNoEntriesDesc,
                         )
                       else
-                        ...entries
-                            .where((e) => e.type != EntryType.refund)
+                        ...timelineEntries
                             .take(3)
                             .map(
                               (entry) => TransactionTile(
@@ -1225,6 +1228,10 @@ class AccountReportPage extends StatelessWidget {
     final entries = controller.entries
         .where((entry) => entryTouchesAccount(entry, currentAccount.id))
         .toList();
+    final timelineEntries = accountTimelineEntries(
+      controller.entries,
+      currentAccount.id,
+    );
     final expense = sumByType(entries, EntryType.expense);
     final income = sumByType(entries, EntryType.income);
     final balance = controller.accountBalance(currentAccount);
@@ -1343,7 +1350,7 @@ class AccountReportPage extends StatelessWidget {
                       trailing: null,
                     ),
                     const SizedBox(height: 6),
-                    if (entries.isEmpty)
+                    if (timelineEntries.isEmpty)
                       EmptyState(
                         icon: Icons.receipt_long_outlined,
                         title: AppLocalizations.of(context).noEntriesTitle,
@@ -1352,8 +1359,7 @@ class AccountReportPage extends StatelessWidget {
                         ).accountNoEntriesDesc,
                       )
                     else
-                      ...entries
-                          .where((e) => e.type != EntryType.refund)
+                      ...timelineEntries
                           .take(6)
                           .map(
                             (entry) => TransactionTile(

@@ -61,6 +61,51 @@ bool entryTouchesAccount(LedgerEntry entry, String accountId) {
   return entry.accountId == accountId || entry.toAccountId == accountId;
 }
 
+/// 生成某账户可见的流水，包含退入该账户的跨账户已到账退款。
+///
+/// [entries] 是同账本交易，[accountId] 是当前账户。退款只在原消费使用其他账户、
+/// 已实际到账且原消费仍存在时展示；展示日期采用到账日，原交易数据不被修改。
+/// [now] 控制未来到账退款不提前展示。同账户退款仍由原消费的净额和退款区解释，
+/// 避免在流水里重复显示。
+List<LedgerEntry> accountTimelineEntries(
+  Iterable<LedgerEntry> entries,
+  String accountId, {
+  DateTime? now,
+}) {
+  final today = dateOnly(now ?? DateTime.now());
+  final source = entries.toList();
+  final byId = <String, LedgerEntry>{
+    for (final entry in source) entry.id: entry,
+  };
+  final visible = <LedgerEntry>[];
+  for (final entry in source) {
+    if (!entryTouchesAccount(entry, accountId)) continue;
+    if (entry.type != EntryType.refund) {
+      visible.add(entry);
+      continue;
+    }
+    final original = byId[entry.refundOf];
+    if (!entry.isSettledRefund ||
+        dateOnly(entry.settledAt!).isAfter(today) ||
+        entry.accountId != accountId ||
+        original == null ||
+        original.bookId != entry.bookId ||
+        original.type != EntryType.expense ||
+        original.accountId == accountId) {
+      continue;
+    }
+    visible.add(
+      entry.copyWith(
+        occurredAt: entry.settledAt,
+        occurredAtPrecision: OccurredAtPrecision.date,
+        note: original.note.isEmpty ? entry.note : original.note,
+      ),
+    );
+  }
+  visible.sort((a, b) => b.occurredAt.compareTo(a.occurredAt));
+  return visible;
+}
+
 Color colorForType(BuildContext context, EntryType type) {
   switch (type) {
     case EntryType.expense:

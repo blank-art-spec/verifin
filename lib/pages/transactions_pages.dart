@@ -224,10 +224,15 @@ class _TransactionsPageState extends State<TransactionsPage> {
         !listEquals(_deriveFilterSignature, filterSignature);
     _deriveSignature = signature;
     _deriveFilterSignature = filterSignature;
-    final entries = _sortedEntries(
-      _filteredEntries(controller.entries),
-      controller,
-    ).where((entry) => entry.type != EntryType.refund).toList();
+    final entries =
+        _sortedEntries(_filteredEntries(controller.entries), controller)
+            .where(
+              (entry) =>
+                  entry.type != EntryType.refund ||
+                  widget.accountId != null ||
+                  _selectedAccountId != null,
+            )
+            .toList();
     _derivedEntries = entries;
     _derivedExpense = sumByType(entries, EntryType.expense);
     _derivedIncome = sumByType(entries, EntryType.income);
@@ -588,6 +593,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
                               selectionMode: _selectionMode,
                               selectedIds: _selectedIds,
                               onEntryTap: (entry) {
+                                if (entry.type == EntryType.refund) {
+                                  openEntryDetail(context, entry);
+                                  return;
+                                }
                                 if (_selectionMode) {
                                   _toggleSelected(entry.id);
                                 } else {
@@ -595,6 +604,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
                                 }
                               },
                               onEntryLongPress: (entry) {
+                                if (entry.type == EntryType.refund) return;
                                 setState(() {
                                   _selectionMode = true;
                                   _selectedIds.add(entry.id);
@@ -616,11 +626,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
   }
 
   List<LedgerEntry> _filteredEntries(List<LedgerEntry> entries) {
-    final scopedEntries = widget.accountId == null
-        ? entries
-        : entries
-              .where((entry) => entryTouchesAccount(entry, widget.accountId!))
-              .toList();
+    final timelineAccountId = widget.accountId ?? _selectedAccountId;
+    final scopedEntries = timelineAccountId != null
+        ? accountTimelineEntries(entries, timelineAccountId)
+        : entries;
 
     List<LedgerEntry> filtered;
     if (_dateMode) {

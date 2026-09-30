@@ -1360,9 +1360,17 @@ Future<bool> _confirmDeleteEntry(
 }
 
 void openEntryDetail(BuildContext context, LedgerEntry entry) {
+  // 账户流水里的退款是原消费的到账视图；详情仍由原消费统一管理退款关系。
+  final targetId = entry.type == EntryType.refund
+      ? VeriFinScope.of(context).entries
+                .where((item) => item.id == entry.refundOf)
+                .firstOrNull
+                ?.id ??
+            entry.id
+      : entry.id;
   Navigator.of(context).push<void>(
     MaterialPageRoute<void>(
-      builder: (context) => TransactionDetailPage(entryId: entry.id),
+      builder: (context) => TransactionDetailPage(entryId: targetId),
     ),
   );
 }

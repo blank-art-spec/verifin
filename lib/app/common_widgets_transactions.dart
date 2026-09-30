@@ -66,14 +66,21 @@ class TransactionTile extends StatelessWidget {
     final category = categoryById(entry.categoryId, categories);
     final noneLabel = AppLocalizations.of(context).noAccountLabel;
     final amountColor = colorForType(context, entry.type);
+    final fromAccount = _accountByExactId(accounts, entry.accountId);
+    final toAccount = _accountByExactId(accounts, entry.toAccountId ?? '');
     final amountText = switch (entry.type) {
       EntryType.expense => formatSignedUserMoney(
         -entry.amount,
         entry.currencyCode,
       ),
-      EntryType.income || EntryType.refund => formatSignedUserMoney(
+      EntryType.income => formatSignedUserMoney(
         entry.amount,
         entry.currencyCode,
+      ),
+      // 跨账户退款流水以到账账户的实际入账金额为主值；原币不同则在副行展示。
+      EntryType.refund => formatSignedUserMoney(
+        entry.accountAmount ?? entry.amount,
+        fromAccount?.currencyCode ?? entry.currencyCode,
       ),
       EntryType.transfer => formatUserMoney(entry.amount, entry.currencyCode),
     };
@@ -82,8 +89,6 @@ class TransactionTile extends StatelessWidget {
     final accountLabel = entry.type == EntryType.transfer
         ? '$fromName → ${accountDisplayName(accounts, entry.toAccountId ?? '', noneLabel)}'
         : fromName;
-    final fromAccount = _accountByExactId(accounts, entry.accountId);
-    final toAccount = _accountByExactId(accounts, entry.toAccountId ?? '');
     final accountAmountText = entry.type == EntryType.transfer
         ? switch ((fromAccount, toAccount)) {
             (final from?, final to?)
@@ -95,6 +100,10 @@ class TransactionTile extends StatelessWidget {
               '${formatUserMoney(entry.accountAmount!, from.currencyCode, forceUnit: true)} → ${formatUserMoney(entry.toAccountAmount!, to.currencyCode, forceUnit: true)}',
             _ => null,
           }
+        : entry.type == EntryType.refund &&
+              fromAccount != null &&
+              fromAccount.currencyCode != entry.currencyCode
+        ? formatUserMoney(entry.amount, entry.currencyCode, forceUnit: true)
         : fromAccount != null &&
               entry.accountAmount != null &&
               fromAccount.currencyCode != entry.currencyCode
@@ -179,7 +188,8 @@ class TransactionTile extends StatelessWidget {
                   children: <Widget>[
                     Row(
                       children: <Widget>[
-                        if (parentPrefix.isNotEmpty) ...<Widget>[
+                        if (entry.type != EntryType.refund &&
+                            parentPrefix.isNotEmpty) ...<Widget>[
                           Flexible(
                             flex: 3,
                             child: Text(
@@ -206,7 +216,9 @@ class TransactionTile extends StatelessWidget {
                         Flexible(
                           flex: 7,
                           child: Text(
-                            category.label,
+                            entry.type == EntryType.refund
+                                ? AppLocalizations.of(context).entryTypeRefund
+                                : category.label,
                             maxLines: 1,
                             overflow: TextOverflow.ellipsis,
                             style: Theme.of(context).textTheme.titleLarge
@@ -504,7 +516,7 @@ class TransactionListCard extends StatelessWidget {
               accounts: accounts,
               categories: categories,
               tags: tags,
-              selectionMode: selectionMode,
+              selectionMode: selectionMode && item.$2.type != EntryType.refund,
               selected: selectedIds.contains(item.$2.id),
               baseCurrencyCode: baseCurrencyCode,
               runningBalance: balanceAfterEntry?[item.$2.id],
