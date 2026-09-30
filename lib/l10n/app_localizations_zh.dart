@@ -5437,6 +5437,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statementPostBillRefund => '出账后退款';
 
   @override
+  String get entryTimeSource => '交易时间来源';
+
+  @override
+  String get entryPostingSource => '银行记账日来源';
+
+  @override
+  String get entryAmountSource => '金额核准来源';
+
+  @override
+  String get entryMerchantSource => '商户来源';
+
+  @override
   String autoCaptureReplayResult(int count) {
     return '已重新解析 $count 条事件';
   }

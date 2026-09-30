@@ -5605,6 +5605,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statementPostBillRefund => 'Refunds after statement';
 
   @override
+  String get entryTimeSource => 'Transaction time source';
+
+  @override
+  String get entryPostingSource => 'Bank posting date source';
+
+  @override
+  String get entryAmountSource => 'Amount verification source';
+
+  @override
+  String get entryMerchantSource => 'Merchant source';
+
+  @override
   String autoCaptureReplayResult(int count) {
     return 'Parsed $count events again';
   }

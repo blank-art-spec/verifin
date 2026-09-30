@@ -9795,6 +9795,30 @@ abstract class AppLocalizations {
   /// **'出账后退款'**
   String get statementPostBillRefund;
 
+  /// No description provided for @entryTimeSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易时间来源'**
+  String get entryTimeSource;
+
+  /// No description provided for @entryPostingSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'银行记账日来源'**
+  String get entryPostingSource;
+
+  /// No description provided for @entryAmountSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'金额核准来源'**
+  String get entryAmountSource;
+
+  /// No description provided for @entryMerchantSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'商户来源'**
+  String get entryMerchantSource;
+
   /// No description provided for @autoCaptureReplayResult.
   ///
   /// In zh, this message translates to:

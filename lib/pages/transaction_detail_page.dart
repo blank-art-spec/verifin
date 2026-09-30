@@ -8,6 +8,7 @@ import '../app/common_widgets.dart';
 import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
 import '../app/entry_currency_draft.dart';
+import '../app/entry_provenance.dart';
 import '../app/feedback.dart';
 import '../app/model_lookup.dart';
 import '../app/ledger_math.dart';
@@ -73,6 +74,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     if (entry == null) {
       return;
     }
+
     _initialEntry = entry;
     _type = entry.type;
     _amount = entry.amount;
@@ -117,6 +119,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
         ),
       );
     }
+
+    final provenance = resolveEntryFieldProvenance(entry);
 
     final category = controller.categoryById(_categoryId);
     final accounts = controller.accounts
@@ -423,6 +427,33 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                               .toSet()
                               .join('、'),
                         ),
+                        if (provenance.occurredAt != null)
+                          DetailInfoRow(
+                            label: AppLocalizations.of(context).entryTimeSource,
+                            value: provenance.occurredAt!.sourceId,
+                          ),
+                        if (provenance.postDate != null)
+                          DetailInfoRow(
+                            label: AppLocalizations.of(
+                              context,
+                            ).entryPostingSource,
+                            value: provenance.postDate!.sourceId,
+                          ),
+                        if (provenance.amount != null)
+                          DetailInfoRow(
+                            label: AppLocalizations.of(
+                              context,
+                            ).entryAmountSource,
+                            value: provenance.amount!.sourceId,
+                          ),
+                        if (provenance.merchant != null)
+                          DetailInfoRow(
+                            label: AppLocalizations.of(
+                              context,
+                            ).entryMerchantSource,
+                            value:
+                                '${provenance.merchant!.sourceId} · ${provenance.merchant!.merchant}',
+                          ),
                         if (entry.reconciliationStatus ==
                                 ReconciliationStatus.autoMatched ||
                             entry.reconciliationStatus ==
