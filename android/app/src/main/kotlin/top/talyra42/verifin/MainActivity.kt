@@ -76,15 +76,23 @@ class MainActivity : FlutterFragmentActivity() {
                 }
                 "setAutoCaptureConfig" -> {
                     val packages = call.argument<List<String>>("packages") ?: emptyList()
-                    AutoCaptureBridge.writeConfig(
+                    val notificationEnabled =
+                        call.argument<Boolean>("notificationEnabled") ?: false
+                    val saved = AutoCaptureBridge.writeConfig(
                         context = this,
-                        notificationEnabled = call.argument<Boolean>("notificationEnabled") ?: false,
+                        notificationEnabled = notificationEnabled,
                         smsEnabled = (call.argument<Boolean>("smsEnabled") ?: false) &&
                             BuildConfig.FLAVOR != "play",
                         listenAll = call.argument<Boolean>("listenAll") ?: false,
                         packages = packages,
                     )
-                    result.success(true)
+                    val notificationAccess = notificationListenerAccessGranted()
+                    if (saved && notificationEnabled && notificationAccess &&
+                        !AutoCaptureBridge.notificationListenerConnected()
+                    ) {
+                        PaymentNotificationListenerService.requestReconnect(this)
+                    }
+                    result.success(saved)
                 }
                 "readAutoCaptureQueue" -> result.success(AutoCaptureBridge.read(this))
                 "ackAutoCaptureQueue" -> {
@@ -94,8 +102,16 @@ class MainActivity : FlutterFragmentActivity() {
                     )
                     result.success(true)
                 }
-                "isNotificationListenerEnabled" -> result.success(
-                    NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName),
+                "isNotificationListenerEnabled" ->
+                    result.success(notificationListenerAccessGranted())
+                "getAutoCaptureDiagnostics" -> result.success(
+                    AutoCaptureBridge.diagnostics(
+                        context = this,
+                        notificationAccessGranted = notificationListenerAccessGranted(),
+                    ),
+                )
+                "requestNotificationListenerReconnect" -> result.success(
+                    PaymentNotificationListenerService.requestReconnect(this),
                 )
                 "openNotificationListenerSettings" -> {
                     startActivity(Intent(Settings.ACTION_NOTIFICATION_LISTENER_SETTINGS))
@@ -1293,6 +1309,17 @@ class MainActivity : FlutterFragmentActivity() {
             pending.result.error("EXPORT_FAILED", "需要存储权限才能导出到下载目录。", null)
         }
     }
+
+    /**
+     * 查询本应用是否仍在 Android“通知使用权”授权列表中。
+     *
+     * 这里只能证明用户授权存在，不能证明 NotificationListenerService 此刻已经连接；
+     * 实时连接状态由 AutoCaptureBridge 的进程内标记单独提供给诊断面板。
+     *
+     * @return 系统授权列表包含当前 applicationId 时为 true。
+     */
+    private fun notificationListenerAccessGranted(): Boolean =
+        NotificationManagerCompat.getEnabledListenerPackages(this).contains(packageName)
 
     /**
      * 请求接收未来新短信的运行时权限。

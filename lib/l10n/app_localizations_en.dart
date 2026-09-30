@@ -5399,6 +5399,132 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoCaptureUnrecognizedCount => 'Unrecognized';
 
   @override
+  String get autoCaptureDiagnosticsTitle => 'Capture diagnostics';
+
+  @override
+  String get autoCaptureDiagnosticNotificationAccess => 'Notification access';
+
+  @override
+  String get autoCaptureDiagnosticListener => 'Listener service';
+
+  @override
+  String get autoCaptureDiagnosticNativeSwitch => 'Native capture switch';
+
+  @override
+  String get autoCaptureDiagnosticListenAll => 'Include all sources';
+
+  @override
+  String get autoCaptureDiagnosticNativeQueue => 'Native pending queue';
+
+  @override
+  String get autoCaptureDiagnosticAuthorized => 'Authorized';
+
+  @override
+  String get autoCaptureDiagnosticNotAuthorized => 'Not authorized';
+
+  @override
+  String get autoCaptureDiagnosticConnected => 'Connected';
+
+  @override
+  String get autoCaptureDiagnosticDisconnected => 'Disconnected';
+
+  @override
+  String get autoCaptureDiagnosticEnabled => 'On';
+
+  @override
+  String get autoCaptureDiagnosticDisabled => 'Off';
+
+  @override
+  String get autoCaptureDiagnosticUnavailable => 'Unavailable';
+
+  @override
+  String autoCaptureDiagnosticQueueCount(int count) {
+    return '$count';
+  }
+
+  @override
+  String get autoCaptureDiagnosticReconnect => 'Reconnect';
+
+  @override
+  String get autoCaptureDiagnosticReconnectFailed =>
+      'Android did not accept the reconnect request. Turn Veri Fin off and on again in Notification access.';
+
+  @override
+  String get autoCaptureNativeConfigSyncFailed =>
+      'Your setting was saved, but the native capture switch did not sync. Refresh diagnostics and try again.';
+
+  @override
+  String get autoCaptureDiagnosticRecentNotification =>
+      'Most recent system notification';
+
+  @override
+  String get autoCaptureDiagnosticNoNotification =>
+      'No diagnosable system notification received yet';
+
+  @override
+  String get autoCaptureDiagnosticUnknownSource => 'Unknown source';
+
+  @override
+  String get autoCaptureDiagnosticTextExtraction => 'Text extraction';
+
+  @override
+  String get autoCaptureDiagnosticFinancialFilter => 'Financial filter';
+
+  @override
+  String get autoCaptureDiagnosticQueueResult => 'Queue result';
+
+  @override
+  String get autoCaptureDiagnosticOutcome => 'Outcome';
+
+  @override
+  String get autoCaptureDiagnosticSucceeded => 'Succeeded';
+
+  @override
+  String get autoCaptureDiagnosticFailed => 'Failed';
+
+  @override
+  String get autoCaptureDiagnosticPassed => 'Passed';
+
+  @override
+  String get autoCaptureDiagnosticRejected => 'Rejected';
+
+  @override
+  String get autoCaptureDiagnosticEnqueued => 'Enqueued';
+
+  @override
+  String get autoCaptureDiagnosticDuplicate => 'Deduplicated';
+
+  @override
+  String get autoCaptureDiagnosticNotRun => 'Not run';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeNativeDisabled =>
+      'Native switch is off';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeSourceBlocked =>
+      'Source is outside the listening scope';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeTextUnavailable =>
+      'No text in standard notification fields';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeFinancialRejected =>
+      'No financial keyword matched';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeQueued => 'Saved to the native queue';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeDuplicate =>
+      'Duplicate notification; not queued again';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeQueueWriteFailed =>
+      'Failed to save the native queue';
+
+  @override
   String get autoCaptureSourcesTitle => 'Sources and safeguards';
 
   @override

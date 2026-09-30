@@ -207,7 +207,11 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     _controller.onAutoCaptureSettingsChanged =
         _handleAutoCaptureSettingsChanged;
     setAutoCaptureAvailableHandler(_drainAutoCaptureQueue);
-    unawaited(AppAutoCaptureBridge.syncConfig(_controller.autoCaptureSettings));
+    unawaited(
+      AppAutoCaptureBridge.syncConfig(
+        _controller.autoCaptureSettings,
+      ).then<void>((_) {}),
+    );
     unawaited(_drainAutoCaptureQueue());
     // 打开应用时刷新桌面小组件「今日支出」。
     pushWidgetData(_controller);
@@ -220,7 +224,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   /// 用户修改开关或清空全部数据时，立即把最新配置同步给 Android；
   /// 这样重置后不会继续在后台采集通知或短信。
   void _handleAutoCaptureSettingsChanged(AutoCaptureSettings settings) {
-    unawaited(AppAutoCaptureBridge.syncConfig(settings));
+    unawaited(AppAutoCaptureBridge.syncConfig(settings).then<void>((_) {}));
   }
 
   void _scheduleWidgetRefresh() {
@@ -318,7 +322,9 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
       // 每次回前台对齐一次能把断掉的链重新排上。
       unawaited(_syncNotifications());
       unawaited(
-        AppAutoCaptureBridge.syncConfig(_controller.autoCaptureSettings),
+        AppAutoCaptureBridge.syncConfig(
+          _controller.autoCaptureSettings,
+        ).then<void>((_) {}),
       );
       unawaited(_drainAutoCaptureQueue());
     } else if (state == AppLifecycleState.paused ||

@@ -9429,6 +9429,234 @@ abstract class AppLocalizations {
   /// **'未识别'**
   String get autoCaptureUnrecognizedCount;
 
+  /// No description provided for @autoCaptureDiagnosticsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'采集诊断'**
+  String get autoCaptureDiagnosticsTitle;
+
+  /// No description provided for @autoCaptureDiagnosticNotificationAccess.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知使用权'**
+  String get autoCaptureDiagnosticNotificationAccess;
+
+  /// No description provided for @autoCaptureDiagnosticListener.
+  ///
+  /// In zh, this message translates to:
+  /// **'监听服务状态'**
+  String get autoCaptureDiagnosticListener;
+
+  /// No description provided for @autoCaptureDiagnosticNativeSwitch.
+  ///
+  /// In zh, this message translates to:
+  /// **'原生采集开关'**
+  String get autoCaptureDiagnosticNativeSwitch;
+
+  /// No description provided for @autoCaptureDiagnosticListenAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'覆盖全部来源'**
+  String get autoCaptureDiagnosticListenAll;
+
+  /// No description provided for @autoCaptureDiagnosticNativeQueue.
+  ///
+  /// In zh, this message translates to:
+  /// **'原生待消费队列'**
+  String get autoCaptureDiagnosticNativeQueue;
+
+  /// No description provided for @autoCaptureDiagnosticAuthorized.
+  ///
+  /// In zh, this message translates to:
+  /// **'已授权'**
+  String get autoCaptureDiagnosticAuthorized;
+
+  /// No description provided for @autoCaptureDiagnosticNotAuthorized.
+  ///
+  /// In zh, this message translates to:
+  /// **'未授权'**
+  String get autoCaptureDiagnosticNotAuthorized;
+
+  /// No description provided for @autoCaptureDiagnosticConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'已连接'**
+  String get autoCaptureDiagnosticConnected;
+
+  /// No description provided for @autoCaptureDiagnosticDisconnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未连接'**
+  String get autoCaptureDiagnosticDisconnected;
+
+  /// No description provided for @autoCaptureDiagnosticEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启'**
+  String get autoCaptureDiagnosticEnabled;
+
+  /// No description provided for @autoCaptureDiagnosticDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'关闭'**
+  String get autoCaptureDiagnosticDisabled;
+
+  /// No description provided for @autoCaptureDiagnosticUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'不可用'**
+  String get autoCaptureDiagnosticUnavailable;
+
+  /// No description provided for @autoCaptureDiagnosticQueueCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{count} 条'**
+  String autoCaptureDiagnosticQueueCount(int count);
+
+  /// No description provided for @autoCaptureDiagnosticReconnect.
+  ///
+  /// In zh, this message translates to:
+  /// **'尝试重连'**
+  String get autoCaptureDiagnosticReconnect;
+
+  /// No description provided for @autoCaptureDiagnosticReconnectFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统未接受重连请求，请到“通知使用权”中关闭后重新允许 Veri Fin'**
+  String get autoCaptureDiagnosticReconnectFailed;
+
+  /// No description provided for @autoCaptureNativeConfigSyncFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'设置已保存，但原生采集开关同步失败；请刷新诊断后重试'**
+  String get autoCaptureNativeConfigSyncFailed;
+
+  /// No description provided for @autoCaptureDiagnosticRecentNotification.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近一次系统通知'**
+  String get autoCaptureDiagnosticRecentNotification;
+
+  /// No description provided for @autoCaptureDiagnosticNoNotification.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未收到可诊断的系统通知'**
+  String get autoCaptureDiagnosticNoNotification;
+
+  /// No description provided for @autoCaptureDiagnosticUnknownSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知来源'**
+  String get autoCaptureDiagnosticUnknownSource;
+
+  /// No description provided for @autoCaptureDiagnosticTextExtraction.
+  ///
+  /// In zh, this message translates to:
+  /// **'正文提取'**
+  String get autoCaptureDiagnosticTextExtraction;
+
+  /// No description provided for @autoCaptureDiagnosticFinancialFilter.
+  ///
+  /// In zh, this message translates to:
+  /// **'金融过滤'**
+  String get autoCaptureDiagnosticFinancialFilter;
+
+  /// No description provided for @autoCaptureDiagnosticQueueResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'入队结果'**
+  String get autoCaptureDiagnosticQueueResult;
+
+  /// No description provided for @autoCaptureDiagnosticOutcome.
+  ///
+  /// In zh, this message translates to:
+  /// **'处理结果'**
+  String get autoCaptureDiagnosticOutcome;
+
+  /// No description provided for @autoCaptureDiagnosticSucceeded.
+  ///
+  /// In zh, this message translates to:
+  /// **'成功'**
+  String get autoCaptureDiagnosticSucceeded;
+
+  /// No description provided for @autoCaptureDiagnosticFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'失败'**
+  String get autoCaptureDiagnosticFailed;
+
+  /// No description provided for @autoCaptureDiagnosticPassed.
+  ///
+  /// In zh, this message translates to:
+  /// **'通过'**
+  String get autoCaptureDiagnosticPassed;
+
+  /// No description provided for @autoCaptureDiagnosticRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未通过'**
+  String get autoCaptureDiagnosticRejected;
+
+  /// No description provided for @autoCaptureDiagnosticEnqueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'成功'**
+  String get autoCaptureDiagnosticEnqueued;
+
+  /// No description provided for @autoCaptureDiagnosticDuplicate.
+  ///
+  /// In zh, this message translates to:
+  /// **'已去重'**
+  String get autoCaptureDiagnosticDuplicate;
+
+  /// No description provided for @autoCaptureDiagnosticNotRun.
+  ///
+  /// In zh, this message translates to:
+  /// **'未执行'**
+  String get autoCaptureDiagnosticNotRun;
+
+  /// No description provided for @autoCaptureDiagnosticOutcomeNativeDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'原生开关关闭'**
+  String get autoCaptureDiagnosticOutcomeNativeDisabled;
+
+  /// No description provided for @autoCaptureDiagnosticOutcomeSourceBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源不在监听范围'**
+  String get autoCaptureDiagnosticOutcomeSourceBlocked;
+
+  /// No description provided for @autoCaptureDiagnosticOutcomeTextUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'标准通知字段没有正文'**
+  String get autoCaptureDiagnosticOutcomeTextUnavailable;
+
+  /// No description provided for @autoCaptureDiagnosticOutcomeFinancialRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'未命中金融关键词'**
+  String get autoCaptureDiagnosticOutcomeFinancialRejected;
+
+  /// No description provided for @autoCaptureDiagnosticOutcomeQueued.
+  ///
+  /// In zh, this message translates to:
+  /// **'已写入原生队列'**
+  String get autoCaptureDiagnosticOutcomeQueued;
+
+  /// No description provided for @autoCaptureDiagnosticOutcomeDuplicate.
+  ///
+  /// In zh, this message translates to:
+  /// **'重复通知，未重复入队'**
+  String get autoCaptureDiagnosticOutcomeDuplicate;
+
+  /// No description provided for @autoCaptureDiagnosticOutcomeQueueWriteFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'原生队列保存失败'**
+  String get autoCaptureDiagnosticOutcomeQueueWriteFailed;
+
   /// No description provided for @autoCaptureSourcesTitle.
   ///
   /// In zh, this message translates to:

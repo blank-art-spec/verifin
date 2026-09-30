@@ -77,7 +77,7 @@ Veri Fin 关键技术选型与理由。变更相关实现时同步更新本表�
 **设备本地、不进备份**（换机需重设）：
 - **机密凭证**（进明文备份是安全倒退，坚决不备）：应用锁哈希 `app_lock`、备份加密口令 `backup_passphrase`、WebDAV 账号密码 `webdav`、AI `apiKey`（含在 `ai`）。
 - **设备专属**：备份目录路径 `backup_settings`、隐私同意 `privacy_consent`、新手引导 `onboarding`、软件日志 `logs`、AI 聊天历史 `ai_chat`、AI 能力探测缓存 `ai_capabilities`（按 endpoint + model 缓存协议能力，换设备重探即可，没有还原价值）。
-- **自动采集本机数据**：通知/短信原文与解析快照 `capture_events`、本地规则 `auto_capture_rules`、监听权限/来源/AI 补充/高置信度开关 `auto_capture_settings`。换机后重新授权和配置，避免把敏感原文扩散进备份；正式交易只保留来源指纹与商户摘要并照常进入备份。
+- **自动采集本机数据**：通知/短信原文与解析快照 `capture_events`、本地规则 `auto_capture_rules`、监听权限/来源/AI 补充/高置信度开关 `auto_capture_settings`，以及原生侧 NLS 连接时间、最近通知来源与提取/过滤/入队阶段诊断。诊断不额外保存通知正文；这些数据均不进备份，换机后重新授权和配置，避免把敏感原文扩散；正式交易只保留来源指纹与商户摘要并照常进入备份。
 - **设备偏好，维持本地**（语义随设备/换机重设）：语言 `locale`、记账提醒 `reminder`、AI 的 baseUrl/model（`ai`）。
 
 

@@ -39,6 +39,8 @@ class _AutoCapturePageState extends State<AutoCapturePage>
   bool _smsSupported = false;
   bool _smsPermission = false;
   bool _pendingNotificationEnable = false;
+  AutoCaptureNativeDiagnostics _nativeDiagnostics =
+      AutoCaptureNativeDiagnostics.unavailable;
 
   @override
   void initState() {
@@ -66,18 +68,31 @@ class _AutoCapturePageState extends State<AutoCapturePage>
     super.dispose();
   }
 
-  /// 刷新两项系统权限；从通知设置页回来且授权成功时，完成之前挂起的开启动作。
+  /// 刷新系统权限与原生诊断；从通知设置页回来且授权成功时，完成之前挂起的开启动作。
+  ///
+  /// 查询诊断前先把 Dart 权威配置同步到原生，主动修复恢复数据、进程重建或极短时间
+  /// 退后台造成的 SharedPreferences 状态差异。原生同步失败时保留 Dart 设置，并由诊断
+  /// 面板明确显示真实状态。
   Future<void> _refreshPermissions({
     bool enablePendingNotification = false,
   }) async {
+    final settings = _settings ?? VeriFinScope.of(context).autoCaptureSettings;
+    final configSynced = await AppAutoCaptureBridge.syncConfig(settings);
     final notification = await AppAutoCaptureBridge.notificationAccessGranted();
     final smsSupported = await AppAutoCaptureBridge.smsCaptureSupported();
     final sms = await AppAutoCaptureBridge.smsPermissionGranted();
+    final diagnostics = await AppAutoCaptureBridge.diagnostics();
     if (!mounted) return;
+    if (diagnostics.available && !configSynced) {
+      VeriFinScope.of(
+        context,
+      ).logger?.warning('自动采集原生配置同步失败', source: 'AutoCapture');
+    }
     setState(() {
       _notificationAccess = notification;
       _smsSupported = smsSupported;
       _smsPermission = sms;
+      _nativeDiagnostics = diagnostics;
     });
     if (enablePendingNotification &&
         _pendingNotificationEnable &&
@@ -94,15 +109,61 @@ class _AutoCapturePageState extends State<AutoCapturePage>
     }
   }
 
-  /// 先刷盘 Dart 配置；成功后 Controller 的根级钩子会同步原生服务。
-  /// 失败时保留页面原值并显示全局保存失败提示。
+  /// 先刷盘 Dart 配置，再等待原生配置同步并刷新诊断。
+  ///
+  /// Dart 保存失败时保留页面原值并由全局持久化错误入口提示；原生同步失败不回滚已经
+  /// 持久化的用户选择，而是显示警告并让诊断面板保留真实的原生开关状态，下一次启动、
+  /// 回前台或手动刷新会继续重试。
   Future<bool> _saveSettings(AutoCaptureSettings next) async {
-    final saved = await VeriFinScope.of(
-      context,
-    ).saveAutoCaptureSettingsDraft(next);
+    final controller = VeriFinScope.of(context);
+    final saved = await controller.saveAutoCaptureSettingsDraft(next);
     if (!mounted || !saved) return false;
-    setState(() => _settings = next);
+    final nativeSaved = await AppAutoCaptureBridge.syncConfig(next);
+    final diagnostics = await AppAutoCaptureBridge.diagnostics();
+    if (!mounted) return true;
+    setState(() {
+      _settings = next;
+      _nativeDiagnostics = diagnostics;
+    });
+    if (diagnostics.available && !nativeSaved) {
+      controller.logger?.warning('自动采集原生配置同步失败', source: 'AutoCapture');
+      unawaited(
+        VeriFeedbackHost.of(context).showMessage(
+          message: AppLocalizations.of(
+            context,
+          ).autoCaptureNativeConfigSyncFailed,
+          tone: VeriFeedbackTone.warning,
+          duration: VeriFeedbackDuration.long,
+        ),
+      );
+    }
     return true;
+  }
+
+  /// 请求 Android 重新绑定已经授权的通知监听服务，并重新读取连接状态。
+  ///
+  /// 该操作不会代替用户授权；按钮只在“已授权但当前未连接”时出现。短暂等待仅用于给
+  /// 系统完成异步绑定，最终仍以新的原生诊断快照为准。
+  Future<void> _reconnectNotificationListener() async {
+    final requested =
+        await AppAutoCaptureBridge.requestNotificationListenerReconnect();
+    if (requested) {
+      await Future<void>.delayed(const Duration(milliseconds: 500));
+    }
+    final diagnostics = await AppAutoCaptureBridge.diagnostics();
+    if (!mounted) return;
+    setState(() => _nativeDiagnostics = diagnostics);
+    if (!requested) {
+      unawaited(
+        VeriFeedbackHost.of(context).showMessage(
+          message: AppLocalizations.of(
+            context,
+          ).autoCaptureDiagnosticReconnectFailed,
+          tone: VeriFeedbackTone.warning,
+          duration: VeriFeedbackDuration.long,
+        ),
+      );
+    }
   }
 
   /// 切换通知监听。开启必须先由用户在系统通知使用权页授权，关闭不撤销系统授权。
@@ -195,6 +256,18 @@ class _AutoCapturePageState extends State<AutoCapturePage>
               ),
               const SizedBox(height: 10),
               _AutoCaptureStatsCard(stats: stats),
+              const SizedBox(height: 12),
+              _AutoCaptureDiagnosticsCard(
+                diagnostics: _nativeDiagnostics,
+                settings: settings,
+                onRefresh: () => _refreshPermissions(),
+                onReconnect:
+                    _notificationAccess &&
+                        settings.notificationEnabled &&
+                        !_nativeDiagnostics.listenerConnected
+                    ? _reconnectNotificationListener
+                    : null,
+              ),
               const SizedBox(height: 12),
               Text(
                 l10n.autoCaptureSourcesTitle,
@@ -423,6 +496,277 @@ class _AutoCapturePageState extends State<AutoCapturePage>
   Future<void> _markMisidentified(CaptureEvent event) async {
     await VeriFinScope.of(context).markCaptureEventMisidentified(event.id);
   }
+}
+
+/// 自动采集原生链路诊断卡。
+///
+/// 卡片刻意同时显示“系统已授权”和“NLS 已连接”：前者只是 Android 设置状态，后者才
+/// 证明当前进程确实收到监听服务连接回调。最近通知只展示来源和各阶段结果，不展示正文。
+class _AutoCaptureDiagnosticsCard extends StatelessWidget {
+  const _AutoCaptureDiagnosticsCard({
+    required this.diagnostics,
+    required this.settings,
+    required this.onRefresh,
+    this.onReconnect,
+  });
+
+  final AutoCaptureNativeDiagnostics diagnostics;
+  final AutoCaptureSettings settings;
+  final Future<void> Function() onRefresh;
+  final Future<void> Function()? onReconnect;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final recent = diagnostics.lastNotification;
+    return VeriCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  l10n.autoCaptureDiagnosticsTitle,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+              ),
+              IconButton(
+                tooltip: l10n.commonRefresh,
+                onPressed: () => unawaited(onRefresh()),
+                icon: const Icon(Icons.refresh, size: 20),
+              ),
+            ],
+          ),
+          const SizedBox(height: 2),
+          _CaptureDiagnosticRow(
+            label: l10n.autoCaptureDiagnosticNotificationAccess,
+            value: _yesNoStatus(
+              l10n,
+              diagnostics.notificationAccessGranted,
+              positive: l10n.autoCaptureDiagnosticAuthorized,
+              negative: l10n.autoCaptureDiagnosticNotAuthorized,
+            ),
+            healthy:
+                diagnostics.available &&
+                (!settings.notificationEnabled ||
+                    diagnostics.notificationAccessGranted),
+          ),
+          _CaptureDiagnosticRow(
+            label: l10n.autoCaptureDiagnosticListener,
+            value: _yesNoStatus(
+              l10n,
+              diagnostics.listenerConnected,
+              positive: l10n.autoCaptureDiagnosticConnected,
+              negative: l10n.autoCaptureDiagnosticDisconnected,
+            ),
+            healthy:
+                diagnostics.available &&
+                (!settings.notificationEnabled ||
+                    diagnostics.listenerConnected),
+          ),
+          _CaptureDiagnosticRow(
+            label: l10n.autoCaptureDiagnosticNativeSwitch,
+            value: _yesNoStatus(
+              l10n,
+              diagnostics.nativeNotificationEnabled,
+              positive: l10n.autoCaptureDiagnosticEnabled,
+              negative: l10n.autoCaptureDiagnosticDisabled,
+            ),
+            healthy:
+                diagnostics.available &&
+                diagnostics.nativeNotificationEnabled ==
+                    settings.notificationEnabled,
+          ),
+          _CaptureDiagnosticRow(
+            label: l10n.autoCaptureDiagnosticListenAll,
+            value: _yesNoStatus(
+              l10n,
+              diagnostics.nativeListenAll,
+              positive: l10n.autoCaptureDiagnosticEnabled,
+              negative: l10n.autoCaptureDiagnosticDisabled,
+            ),
+            healthy:
+                diagnostics.available &&
+                diagnostics.nativeListenAll ==
+                    settings.listenAllNotificationSources,
+          ),
+          _CaptureDiagnosticRow(
+            label: l10n.autoCaptureDiagnosticNativeQueue,
+            value: l10n.autoCaptureDiagnosticQueueCount(
+              diagnostics.pendingQueueCount,
+            ),
+            healthy: diagnostics.available,
+          ),
+          if (onReconnect != null) ...<Widget>[
+            const SizedBox(height: 6),
+            Align(
+              alignment: Alignment.centerRight,
+              child: TextButton.icon(
+                onPressed: () => unawaited(onReconnect!()),
+                icon: const Icon(Icons.sync, size: 18),
+                label: Text(l10n.autoCaptureDiagnosticReconnect),
+              ),
+            ),
+          ],
+          const Divider(height: 20),
+          Text(
+            l10n.autoCaptureDiagnosticRecentNotification,
+            style: Theme.of(
+              context,
+            ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
+          ),
+          const SizedBox(height: 6),
+          if (recent == null)
+            Text(
+              l10n.autoCaptureDiagnosticNoNotification,
+              style: Theme.of(context).textTheme.bodySmall,
+            )
+          else
+            _RecentNotificationDiagnostic(diagnostic: recent),
+        ],
+      ),
+    );
+  }
+
+  /// 非 Android 测试宿主没有原生诊断，此时统一显示“不可用”，避免误报成开关关闭。
+  String _yesNoStatus(
+    AppLocalizations l10n,
+    bool value, {
+    required String positive,
+    required String negative,
+  }) => diagnostics.available
+      ? (value ? positive : negative)
+      : l10n.autoCaptureDiagnosticUnavailable;
+}
+
+/// 诊断卡中的紧凑键值行；绿色/警告色只表达该项是否与期望状态一致。
+class _CaptureDiagnosticRow extends StatelessWidget {
+  const _CaptureDiagnosticRow({
+    required this.label,
+    required this.value,
+    required this.healthy,
+  });
+
+  final String label;
+  final String value;
+  final bool healthy;
+
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.symmetric(vertical: 3),
+    child: Row(
+      children: <Widget>[
+        Expanded(
+          child: Text(label, style: Theme.of(context).textTheme.bodySmall),
+        ),
+        const SizedBox(width: 12),
+        Text(
+          value,
+          textAlign: TextAlign.end,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: healthy
+                ? veriSemantic(context, veriIncome)
+                : veriSemantic(context, veriWarning),
+            fontWeight: FontWeight.w700,
+          ),
+        ),
+      ],
+    ),
+  );
+}
+
+/// 展示最近通知的来源、时间与“提取 → 金融过滤 → 入队”三个原生阶段。
+class _RecentNotificationDiagnostic extends StatelessWidget {
+  const _RecentNotificationDiagnostic({required this.diagnostic});
+
+  final NativeNotificationDiagnostic diagnostic;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final time = MaterialLocalizations.of(
+      context,
+    ).formatTimeOfDay(TimeOfDay.fromDateTime(diagnostic.occurredAt));
+    final source = diagnostic.sourceLabel.isNotEmpty
+        ? diagnostic.sourceLabel
+        : diagnostic.sourceId.isNotEmpty
+        ? diagnostic.sourceId
+        : l10n.autoCaptureDiagnosticUnknownSource;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.start,
+      children: <Widget>[
+        Text(
+          '$source · ${l10n.dateMonthDay(diagnostic.occurredAt)} $time',
+          style: Theme.of(
+            context,
+          ).textTheme.bodySmall?.copyWith(fontWeight: FontWeight.w700),
+        ),
+        if (diagnostic.sourceId.isNotEmpty &&
+            diagnostic.sourceId != diagnostic.sourceLabel) ...<Widget>[
+          const SizedBox(height: 2),
+          Text(
+            diagnostic.sourceId,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+        ],
+        const SizedBox(height: 5),
+        _CaptureDiagnosticRow(
+          label: l10n.autoCaptureDiagnosticTextExtraction,
+          value: _stageLabel(l10n, diagnostic.textExtraction),
+          healthy: diagnostic.textExtraction == 'success',
+        ),
+        _CaptureDiagnosticRow(
+          label: l10n.autoCaptureDiagnosticFinancialFilter,
+          value: _stageLabel(l10n, diagnostic.financialFilter),
+          healthy: diagnostic.financialFilter == 'passed',
+        ),
+        _CaptureDiagnosticRow(
+          label: l10n.autoCaptureDiagnosticQueueResult,
+          value: _stageLabel(l10n, diagnostic.queueResult),
+          healthy:
+              diagnostic.queueResult == 'enqueued' ||
+              diagnostic.queueResult == 'duplicate',
+        ),
+        _CaptureDiagnosticRow(
+          label: l10n.autoCaptureDiagnosticOutcome,
+          value: _outcomeLabel(l10n, diagnostic.outcome),
+          healthy:
+              diagnostic.outcome == 'queued' ||
+              diagnostic.outcome == 'duplicate',
+        ),
+      ],
+    );
+  }
+
+  /// 把原生稳定阶段代码映射为本地化显示文案；未知代码保守显示“未执行”。
+  String _stageLabel(AppLocalizations l10n, String value) => switch (value) {
+    'success' => l10n.autoCaptureDiagnosticSucceeded,
+    'failed' => l10n.autoCaptureDiagnosticFailed,
+    'passed' => l10n.autoCaptureDiagnosticPassed,
+    'rejected' => l10n.autoCaptureDiagnosticRejected,
+    'enqueued' => l10n.autoCaptureDiagnosticEnqueued,
+    'duplicate' => l10n.autoCaptureDiagnosticDuplicate,
+    'invalidText' => l10n.autoCaptureDiagnosticFailed,
+    'writeFailed' => l10n.autoCaptureDiagnosticFailed,
+    _ => l10n.autoCaptureDiagnosticNotRun,
+  };
+
+  /// 把通知最终结果代码映射为可操作的解释，覆盖所有原生提前返回点。
+  String _outcomeLabel(AppLocalizations l10n, String value) => switch (value) {
+    'nativeDisabled' => l10n.autoCaptureDiagnosticOutcomeNativeDisabled,
+    'sourceBlocked' => l10n.autoCaptureDiagnosticOutcomeSourceBlocked,
+    'textUnavailable' => l10n.autoCaptureDiagnosticOutcomeTextUnavailable,
+    'financialRejected' => l10n.autoCaptureDiagnosticOutcomeFinancialRejected,
+    'queued' => l10n.autoCaptureDiagnosticOutcomeQueued,
+    'duplicate' => l10n.autoCaptureDiagnosticOutcomeDuplicate,
+    'queueWriteFailed' => l10n.autoCaptureDiagnosticOutcomeQueueWriteFailed,
+    _ => l10n.autoCaptureDiagnosticUnavailable,
+  };
 }
 
 class _AutoCaptureStatsCard extends StatelessWidget {

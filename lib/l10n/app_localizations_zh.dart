@@ -5249,6 +5249,123 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCaptureUnrecognizedCount => '未识别';
 
   @override
+  String get autoCaptureDiagnosticsTitle => '采集诊断';
+
+  @override
+  String get autoCaptureDiagnosticNotificationAccess => '通知使用权';
+
+  @override
+  String get autoCaptureDiagnosticListener => '监听服务状态';
+
+  @override
+  String get autoCaptureDiagnosticNativeSwitch => '原生采集开关';
+
+  @override
+  String get autoCaptureDiagnosticListenAll => '覆盖全部来源';
+
+  @override
+  String get autoCaptureDiagnosticNativeQueue => '原生待消费队列';
+
+  @override
+  String get autoCaptureDiagnosticAuthorized => '已授权';
+
+  @override
+  String get autoCaptureDiagnosticNotAuthorized => '未授权';
+
+  @override
+  String get autoCaptureDiagnosticConnected => '已连接';
+
+  @override
+  String get autoCaptureDiagnosticDisconnected => '未连接';
+
+  @override
+  String get autoCaptureDiagnosticEnabled => '开启';
+
+  @override
+  String get autoCaptureDiagnosticDisabled => '关闭';
+
+  @override
+  String get autoCaptureDiagnosticUnavailable => '不可用';
+
+  @override
+  String autoCaptureDiagnosticQueueCount(int count) {
+    return '$count 条';
+  }
+
+  @override
+  String get autoCaptureDiagnosticReconnect => '尝试重连';
+
+  @override
+  String get autoCaptureDiagnosticReconnectFailed =>
+      '系统未接受重连请求，请到“通知使用权”中关闭后重新允许 Veri Fin';
+
+  @override
+  String get autoCaptureNativeConfigSyncFailed => '设置已保存，但原生采集开关同步失败；请刷新诊断后重试';
+
+  @override
+  String get autoCaptureDiagnosticRecentNotification => '最近一次系统通知';
+
+  @override
+  String get autoCaptureDiagnosticNoNotification => '尚未收到可诊断的系统通知';
+
+  @override
+  String get autoCaptureDiagnosticUnknownSource => '未知来源';
+
+  @override
+  String get autoCaptureDiagnosticTextExtraction => '正文提取';
+
+  @override
+  String get autoCaptureDiagnosticFinancialFilter => '金融过滤';
+
+  @override
+  String get autoCaptureDiagnosticQueueResult => '入队结果';
+
+  @override
+  String get autoCaptureDiagnosticOutcome => '处理结果';
+
+  @override
+  String get autoCaptureDiagnosticSucceeded => '成功';
+
+  @override
+  String get autoCaptureDiagnosticFailed => '失败';
+
+  @override
+  String get autoCaptureDiagnosticPassed => '通过';
+
+  @override
+  String get autoCaptureDiagnosticRejected => '未通过';
+
+  @override
+  String get autoCaptureDiagnosticEnqueued => '成功';
+
+  @override
+  String get autoCaptureDiagnosticDuplicate => '已去重';
+
+  @override
+  String get autoCaptureDiagnosticNotRun => '未执行';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeNativeDisabled => '原生开关关闭';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeSourceBlocked => '来源不在监听范围';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeTextUnavailable => '标准通知字段没有正文';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeFinancialRejected => '未命中金融关键词';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeQueued => '已写入原生队列';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeDuplicate => '重复通知，未重复入队';
+
+  @override
+  String get autoCaptureDiagnosticOutcomeQueueWriteFailed => '原生队列保存失败';
+
+  @override
   String get autoCaptureSourcesTitle => '采集与安全边界';
 
   @override

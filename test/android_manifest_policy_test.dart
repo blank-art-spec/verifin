@@ -43,6 +43,30 @@ void main() {
       manifest,
       contains('android.permission.BIND_NOTIFICATION_LISTENER_SERVICE'),
     );
+    expect(manifest, contains('android:stopWithTask="false"'));
+  });
+
+  test('通知监听覆盖扩展正文、连接重绑和阶段诊断', () {
+    final listener = File(
+      'android/app/src/main/kotlin/top/talyra42/verifin/'
+      'PaymentNotificationListenerService.kt',
+    ).readAsStringSync();
+    final bridge = File(
+      'android/app/src/main/kotlin/top/talyra42/verifin/AutoCaptureBridge.kt',
+    ).readAsStringSync();
+
+    expect(listener, contains('override fun onListenerConnected()'));
+    expect(listener, contains('override fun onListenerDisconnected()'));
+    expect(listener, contains('requestRebind('));
+    expect(listener, contains('activeNotifications'));
+    expect(listener, contains('Notification.EXTRA_TEXT_LINES'));
+    expect(listener, contains('Notification.EXTRA_SUB_TEXT'));
+    expect(listener, contains('Notification.EXTRA_SUMMARY_TEXT'));
+    expect(listener, contains('Notification.EXTRA_MESSAGES'));
+    expect(listener, contains('notification.tickerText'));
+    expect(bridge, contains('recordNotificationDiagnostic'));
+    expect(bridge, contains('notificationListenerConnected'));
+    expect(bridge, contains('return editor.commit()'));
   });
 
   test('Play 渠道显式移除短信权限和接收器', () {
