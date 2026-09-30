@@ -5596,6 +5596,14 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoCaptureQueueTitle => 'Pending and recent auto-posts';
 
   @override
+  String get autoCaptureReplayRecent => 'Replay recent events';
+
+  @override
+  String autoCaptureReplayResult(int count) {
+    return 'Parsed $count events again';
+  }
+
+  @override
   String get autoCaptureQueueEmpty => 'Nothing needs attention';
 
   @override

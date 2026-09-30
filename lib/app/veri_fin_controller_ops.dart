@@ -448,8 +448,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
 
   /// 解析所有尚未处理的原始事件，并执行去重、合并与高置信度自动入账。
   ///
+  /// [allowAutomaticActions] 为 false 时只用本地规则更新候选与疑似重复状态，
+  /// 不请求 AI、不自动合并来源或新建交易，供规则变更后的批量回放使用。
+  ///
   /// 正式交易与事件状态在一个 SQLite 事务提交；任何一步失败都保持旧内存快照并返回 0。
-  Future<int> processPendingCaptureEvents() async {
+  Future<int> processPendingCaptureEvents({
+    bool allowAutomaticActions = true,
+  }) async {
     var nextEntries = List<LedgerEntry>.of(_entries);
     final nextEvents = List<CaptureEvent>.of(_captureEvents);
     var processed = 0;
@@ -497,7 +502,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             parsed.kind == CaptureTransactionKind.expense ||
             parsed.kind == CaptureTransactionKind.income ||
             parsed.kind == CaptureTransactionKind.cashback;
-        if (_autoCaptureSettings.aiAssistEnabled &&
+        if (allowAutomaticActions &&
+            _autoCaptureSettings.aiAssistEnabled &&
             _aiSettings.isConfigured &&
             parsed.confidence != CaptureConfidence.high &&
             aiEligibleKind) {
@@ -546,7 +552,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         }
 
         final duplicate = findCaptureDuplicate(parsed, nextEntries);
-        if (duplicate?.safeToMerge == true) {
+        if (allowAutomaticActions && duplicate?.safeToMerge == true) {
           final entryIndex = nextEntries.indexWhere(
             (entry) => entry.id == duplicate!.entryId,
           );
@@ -574,7 +580,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             status: CaptureStatus.duplicateSuspected,
             duplicateEntryId: duplicate.entryId,
           );
-        } else if (_autoCaptureSettings.autoPostHighConfidence &&
+        } else if (allowAutomaticActions &&
+            _autoCaptureSettings.autoPostHighConfidence &&
             parsed.confidence == CaptureConfidence.high) {
           final entry = _buildAutomaticCaptureEntry(parsed, nextEntries, book);
           if (entry != null) {
@@ -775,6 +782,61 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       ..addAll(next);
     notifyListeners();
     return (await processPendingCaptureEvents()) > 0;
+  }
+
+  /// 批量重跑当前账本最近的未落账原始事件。
+  ///
+  /// [limit] 限制一次读取的事件数，避免规则调整后一次处理过多原文。已确认、已自动
+  /// 入账、已合并、已忽略及误识别事件均跳过，避免撤销用户决定或制造重复交易。
+  /// 本次回放只更新解析候选，不执行高置信度自动入账；用户可在待确认列表复核结果。
+  Future<int> replayRecentCaptureEvents({int limit = 100}) async {
+    if (limit <= 0) return 0;
+    final candidates = captureEvents
+        .where(
+          (event) =>
+              event.linkedEntryId == null &&
+              (event.status == CaptureStatus.raw ||
+                  event.status == CaptureStatus.failed ||
+                  event.status == CaptureStatus.pendingReview ||
+                  event.status == CaptureStatus.duplicateSuspected),
+        )
+        .take(limit)
+        .map((event) => event.id)
+        .toSet();
+    if (candidates.isEmpty) return 0;
+    final next = <CaptureEvent>[
+      for (final event in _captureEvents)
+        if (candidates.contains(event.id))
+          event.copyWith(
+            status: CaptureStatus.raw,
+            clearParsedAmount: true,
+            kind: CaptureTransactionKind.unknown,
+            clearAccountCandidateId: true,
+            clearToAccountCandidateId: true,
+            clearCategoryCandidateId: true,
+            tagCandidateIds: const <String>[],
+            confidence: CaptureConfidence.low,
+            confidenceScore: 0,
+            clearDuplicateEntryId: true,
+            appliedRuleIds: const <String>[],
+            aiAssisted: false,
+            failureReason: '',
+            clearProcessedAt: true,
+          )
+        else
+          event,
+    ];
+    try {
+      await _repository.saveCaptureEvents(next);
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return 0;
+    }
+    _captureEvents
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return processPendingCaptureEvents(allowAutomaticActions: false);
   }
 
   /// 用户明确把事件合并到已有交易：追加来源证据并原子更新事件状态。

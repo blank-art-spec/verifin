@@ -380,6 +380,20 @@ class _AutoCapturePageState extends State<AutoCapturePage>
                   ),
                 ],
               ),
+              Align(
+                alignment: Alignment.centerRight,
+                child: TextButton.icon(
+                  onPressed: () async {
+                    final count = await controller.replayRecentCaptureEvents();
+                    if (!context.mounted) return;
+                    await VeriFeedbackHost.of(
+                      context,
+                    ).showMessage(message: l10n.autoCaptureReplayResult(count));
+                  },
+                  icon: const Icon(Icons.replay, size: 18),
+                  label: Text(l10n.autoCaptureReplayRecent),
+                ),
+              ),
               const SizedBox(height: 4),
               if (attention.isEmpty)
                 VeriCard(

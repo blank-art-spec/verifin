@@ -9777,6 +9777,18 @@ abstract class AppLocalizations {
   /// **'待处理与最近自动入账'**
   String get autoCaptureQueueTitle;
 
+  /// No description provided for @autoCaptureReplayRecent.
+  ///
+  /// In zh, this message translates to:
+  /// **'回放最近事件'**
+  String get autoCaptureReplayRecent;
+
+  /// No description provided for @autoCaptureReplayResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'已重新解析 {count} 条事件'**
+  String autoCaptureReplayResult(int count);
+
   /// No description provided for @autoCaptureQueueEmpty.
   ///
   /// In zh, this message translates to:

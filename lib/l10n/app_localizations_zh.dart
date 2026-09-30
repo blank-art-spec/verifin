@@ -5428,6 +5428,14 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCaptureQueueTitle => '待处理与最近自动入账';
 
   @override
+  String get autoCaptureReplayRecent => '回放最近事件';
+
+  @override
+  String autoCaptureReplayResult(int count) {
+    return '已重新解析 $count 条事件';
+  }
+
+  @override
   String get autoCaptureQueueEmpty => '暂时没有待处理事件';
 
   @override

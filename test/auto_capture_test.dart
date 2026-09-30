@@ -8,6 +8,92 @@ import 'support/test_harness.dart';
 void main() {
   useTestDatabases();
 
+  test('批量回放只更新未落账事件的候选，不触发自动入账或撤销忽略', () async {
+    final controller = await makeController();
+    final account = Account(
+      id: 'replay-account',
+      bookId: controller.activeBook.id,
+      name: '回放账户',
+      type: AccountType.cash,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'asset:payment_001',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+    );
+    expect(await controller.addAccountDraft(account), isTrue);
+    final category = controller.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    expect(
+      await controller.saveAutoCaptureRule(
+        AutoCaptureRule(
+          id: 'replay-rule',
+          bookId: controller.activeBook.id,
+          name: '回放规则',
+          priority: 100,
+          textContains: '回放商户',
+          setKind: CaptureTransactionKind.expense,
+          setAccountId: account.id,
+          setCategoryId: category.id,
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      await controller.saveAutoCaptureSettingsDraft(
+        controller.autoCaptureSettings.copyWith(autoPostHighConfidence: false),
+      ),
+      isTrue,
+    );
+    final originalEntryCount = controller.entries.length;
+    expect(
+      await controller.ingestCaptureInputs(<RawCaptureInput>[
+        RawCaptureInput(
+          sourceKind: CaptureSourceKind.notification,
+          sourceId: 'com.example.bank',
+          sourceEventId: 'replay-1',
+          rawText: '消费12.00元，商户回放商户',
+          receivedAt: DateTime(2026, 9, 27, 12),
+        ),
+        RawCaptureInput(
+          sourceKind: CaptureSourceKind.notification,
+          sourceId: 'com.example.bank',
+          sourceEventId: 'replay-2',
+          rawText: '消费13.00元，商户回放商户',
+          receivedAt: DateTime(2026, 9, 27, 13),
+        ),
+      ]),
+      2,
+    );
+    final ignored = controller.captureEvents.firstWhere(
+      (event) => event.sourceEventId == 'replay-2',
+    );
+    expect(await controller.ignoreCaptureEvent(ignored.id), isTrue);
+    expect(
+      await controller.saveAutoCaptureSettingsDraft(
+        controller.autoCaptureSettings.copyWith(autoPostHighConfidence: true),
+      ),
+      isTrue,
+    );
+
+    expect(await controller.replayRecentCaptureEvents(), 1);
+    expect(controller.entries, hasLength(originalEntryCount));
+    expect(
+      controller.captureEvents
+          .firstWhere((event) => event.id == ignored.id)
+          .status,
+      CaptureStatus.ignored,
+    );
+    expect(
+      controller.captureEvents
+          .firstWhere((event) => event.id != ignored.id)
+          .status,
+      CaptureStatus.pendingReview,
+    );
+  });
+
   test('未知资金账户时保留待确认，不回退到第一账户', () async {
     final controller = await makeController();
     final receivedAt = DateTime(2026, 9, 27, 12, 30);
