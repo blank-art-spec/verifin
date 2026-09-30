@@ -527,6 +527,8 @@ class AutoCaptureSettings {
 /// 状态面板使用的聚合统计，只统计当前账本。
 class AutoCaptureStats {
   const AutoCaptureStats({
+    required this.todayCaptured,
+    required this.lastCapturedAt,
     required this.todayRecognized,
     required this.autoPosted,
     required this.pendingReview,
@@ -534,6 +536,11 @@ class AutoCaptureStats {
     required this.unrecognized,
   });
 
+  /// 今日实际落到本地事件表的原始事件数，不把“系统没投递”的通知猜成 0 漏单。
+  final int todayCaptured;
+
+  /// 当前账本最近一条原始事件的接收时间；尚无事件时为 null。
+  final DateTime? lastCapturedAt;
   final int todayRecognized;
   final int autoPosted;
   final int pendingReview;

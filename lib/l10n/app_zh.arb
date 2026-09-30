@@ -3268,6 +3268,10 @@
     "placeholders": {"count": {"type": "int"}}
   },
   "autoCaptureTodayRecognized": "今日识别",
+  "autoCaptureTodayCaptured": "今日捕获",
+  "autoCaptureNoCapture": "尚未捕获原始事件",
+  "autoCaptureLastCaptured": "最近捕获：{date} {time}",
+  "@autoCaptureLastCaptured": {"placeholders": {"date": {"type": "String"}, "time": {"type": "String"}}},
   "autoCapturePostedCount": "自动入账",
   "autoCapturePendingCount": "待确认",
   "autoCaptureDuplicateCount": "疑似重复",

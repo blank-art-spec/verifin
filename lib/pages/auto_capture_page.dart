@@ -797,6 +797,11 @@ class _AutoCaptureStatsCard extends StatelessWidget {
           Row(
             children: <Widget>[
               SummaryMetric(
+                label: l10n.autoCaptureTodayCaptured,
+                value: '${stats.todayCaptured}',
+                color: veriRoyal,
+              ),
+              SummaryMetric(
                 label: l10n.autoCaptureTodayRecognized,
                 value: '${stats.todayRecognized}',
                 color: veriRoyal,
@@ -806,16 +811,16 @@ class _AutoCaptureStatsCard extends StatelessWidget {
                 value: '${stats.autoPosted}',
                 color: veriSemantic(context, veriIncome),
               ),
-              SummaryMetric(
-                label: l10n.autoCapturePendingCount,
-                value: '${stats.pendingReview}',
-                color: veriSemantic(context, veriWarning),
-              ),
             ],
           ),
           const SizedBox(height: 16),
           Row(
             children: <Widget>[
+              SummaryMetric(
+                label: l10n.autoCapturePendingCount,
+                value: '${stats.pendingReview}',
+                color: veriSemantic(context, veriWarning),
+              ),
               SummaryMetric(
                 label: l10n.autoCaptureDuplicateCount,
                 value: '${stats.duplicateSuspected}',
@@ -827,6 +832,18 @@ class _AutoCaptureStatsCard extends StatelessWidget {
                 color: Theme.of(context).colorScheme.onSurfaceVariant,
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          Text(
+            stats.lastCapturedAt == null
+                ? l10n.autoCaptureNoCapture
+                : l10n.autoCaptureLastCaptured(
+                    l10n.dateMonthDay(stats.lastCapturedAt!),
+                    MaterialLocalizations.of(context).formatTimeOfDay(
+                      TimeOfDay.fromDateTime(stats.lastCapturedAt!),
+                    ),
+                  ),
+            style: Theme.of(context).textTheme.bodySmall,
           ),
         ],
       ),

@@ -5237,6 +5237,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCaptureTodayRecognized => '今日识别';
 
   @override
+  String get autoCaptureTodayCaptured => '今日捕获';
+
+  @override
+  String get autoCaptureNoCapture => '尚未捕获原始事件';
+
+  @override
+  String autoCaptureLastCaptured(String date, String time) {
+    return '最近捕获：$date $time';
+  }
+
+  @override
   String get autoCapturePostedCount => '自动入账';
 
   @override

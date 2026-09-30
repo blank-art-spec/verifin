@@ -67,6 +67,9 @@ void main() {
       ]),
       2,
     );
+    final health = controller.autoCaptureStats(now: DateTime(2026, 9, 27, 23));
+    expect(health.todayCaptured, 2);
+    expect(health.lastCapturedAt, DateTime(2026, 9, 27, 13));
     final ignored = controller.captureEvents.firstWhere(
       (event) => event.sourceEventId == 'replay-2',
     );

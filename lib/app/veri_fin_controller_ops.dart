@@ -38,6 +38,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         value.day == today.day;
     final todayEvents = events.where((event) => isToday(event.receivedAt));
     return AutoCaptureStats(
+      todayCaptured: todayEvents.length,
+      lastCapturedAt: events.firstOrNull?.receivedAt,
       todayRecognized: todayEvents
           .where(
             (event) =>

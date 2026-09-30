@@ -2133,6 +2133,10 @@
     "placeholders": {"count": {"type": "int"}}
   },
   "autoCaptureTodayRecognized": "Today",
+  "autoCaptureTodayCaptured": "Captured today",
+  "autoCaptureNoCapture": "No raw event captured yet",
+  "autoCaptureLastCaptured": "Last captured: {date} {time}",
+  "@autoCaptureLastCaptured": {"placeholders": {"date": {"type": "String"}, "time": {"type": "String"}}},
   "autoCapturePostedCount": "Auto-posted",
   "autoCapturePendingCount": "Review",
   "autoCaptureDuplicateCount": "Duplicates",

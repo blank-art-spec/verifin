@@ -5387,6 +5387,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoCaptureTodayRecognized => 'Today';
 
   @override
+  String get autoCaptureTodayCaptured => 'Captured today';
+
+  @override
+  String get autoCaptureNoCapture => 'No raw event captured yet';
+
+  @override
+  String autoCaptureLastCaptured(String date, String time) {
+    return 'Last captured: $date $time';
+  }
+
+  @override
   String get autoCapturePostedCount => 'Auto-posted';
 
   @override

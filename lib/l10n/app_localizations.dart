@@ -9405,6 +9405,24 @@ abstract class AppLocalizations {
   /// **'今日识别'**
   String get autoCaptureTodayRecognized;
 
+  /// No description provided for @autoCaptureTodayCaptured.
+  ///
+  /// In zh, this message translates to:
+  /// **'今日捕获'**
+  String get autoCaptureTodayCaptured;
+
+  /// No description provided for @autoCaptureNoCapture.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未捕获原始事件'**
+  String get autoCaptureNoCapture;
+
+  /// No description provided for @autoCaptureLastCaptured.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近捕获：{date} {time}'**
+  String autoCaptureLastCaptured(String date, String time);
+
   /// No description provided for @autoCapturePostedCount.
   ///
   /// In zh, this message translates to:
