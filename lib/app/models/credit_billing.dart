@@ -89,6 +89,7 @@ class BillingStatement {
     required this.minimumPayment,
     required this.dueDate,
     required this.paidAmount,
+    this.refundAmount = 0,
     required this.status,
     this.currencyCode = defaultCurrencyCode,
     this.sourceId = '',
@@ -106,6 +107,10 @@ class BillingStatement {
   final double minimumPayment;
   final DateTime dueDate;
   final double paidAmount;
+
+  /// 出账后退回原信用账户的已到账退款合计。由原支出、退款与账单关系实时推导，
+  /// 不落库、不写入备份，也绝不混入 [paidAmount] 的实际还款口径。
+  final double refundAmount;
   final BillingStatementStatus status;
   final String currencyCode;
 
@@ -116,11 +121,13 @@ class BillingStatement {
   final String sourceStatementId;
   final String note;
 
-  double get outstandingAmount =>
-      (statementAmount - paidAmount).clamp(0.0, statementAmount).toDouble();
+  double get outstandingAmount => (statementAmount - paidAmount - refundAmount)
+      .clamp(0.0, statementAmount)
+      .toDouble();
 
   BillingStatement copyWith({
     double? paidAmount,
+    double? refundAmount,
     BillingStatementStatus? status,
   }) => BillingStatement(
     id: id,
@@ -133,6 +140,7 @@ class BillingStatement {
     minimumPayment: minimumPayment,
     dueDate: dueDate,
     paidAmount: paidAmount ?? this.paidAmount,
+    refundAmount: refundAmount ?? this.refundAmount,
     status: status ?? this.status,
     currencyCode: currencyCode,
     sourceId: sourceId,
@@ -181,6 +189,24 @@ class BillingStatement {
       note: json['note'] as String? ?? '',
     );
   }
+}
+
+/// 一笔已到账退款对某期正式账单的冲抵关系。
+///
+/// 由 [refundEntryId] 对应的退款、其原消费与账单期间实时推导。原始交易与账单已各自
+/// 持久化，因此这个关系无需再存第二份缓存；删除或修改退款后会自动重算。
+class StatementRefundAllocation {
+  const StatementRefundAllocation({
+    required this.statementId,
+    required this.refundEntryId,
+    required this.amount,
+    required this.settledAt,
+  });
+
+  final String statementId;
+  final String refundEntryId;
+  final double amount;
+  final DateTime settledAt;
 }
 
 /// 一笔还款中分配给某一期正式账单的金额。

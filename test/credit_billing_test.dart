@@ -1,4 +1,5 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:verifin/app/credit_card.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
@@ -22,6 +23,93 @@ void main() {
     statementDay: 25,
     dueDay: 13,
   );
+
+  test('出账后退款独立冲抵待还，不改变实际还款且不重复计入未出账', () {
+    final account = creditAccount('default');
+    final statement = BillingStatement(
+      id: 'statement-sep',
+      bookId: 'default',
+      accountId: account.id,
+      statementDate: DateTime(2026, 9, 25),
+      periodStart: DateTime(2026, 8, 26),
+      periodEnd: DateTime(2026, 9, 25),
+      statementAmount: 5497.15,
+      minimumPayment: 550,
+      dueDate: DateTime(2026, 10, 13),
+      paidAmount: 0,
+      status: BillingStatementStatus.open,
+    );
+    final original = LedgerEntry(
+      id: 'rail-expense',
+      bookId: 'default',
+      type: EntryType.expense,
+      amount: 278,
+      categoryId: 'travel',
+      accountId: account.id,
+      note: '铁路',
+      occurredAt: DateTime(2026, 9, 23),
+    );
+    final refund = LedgerEntry(
+      id: 'rail-refund',
+      bookId: 'default',
+      type: EntryType.refund,
+      amount: 278,
+      categoryId: 'travel',
+      accountId: account.id,
+      note: '铁路退款',
+      occurredAt: DateTime(2026, 9, 27),
+      refundOf: original.id,
+      settledAt: DateTime(2026, 9, 28),
+    );
+    final entries = <LedgerEntry>[original, refund];
+    final allocations = allocateStatementRefunds(
+      entries: entries,
+      statements: <BillingStatement>[statement],
+      now: DateTime(2026, 9, 30),
+    );
+    expect(allocations, hasLength(1));
+    expect(allocations.single.amount, 278);
+    final overview = creditStatementOverview(
+      account: account,
+      entries: entries,
+      statements: <BillingStatement>[statement],
+      now: DateTime(2026, 9, 30),
+    );
+    expect(overview.billedOutstanding, closeTo(5219.15, 0.001));
+    expect(overview.latestStatement!.paidAmount, 0);
+    expect(overview.latestStatement!.refundAmount, 278);
+    expect(overview.unbilledAmount, 0);
+    expect(
+      allocateStatementRefunds(
+        entries: <LedgerEntry>[original, refund.copyWith(clearSettledAt: true)],
+        statements: <BillingStatement>[statement],
+        now: DateTime(2026, 9, 30),
+      ),
+      isEmpty,
+    );
+    expect(
+      allocateStatementRefunds(
+        entries: <LedgerEntry>[
+          original,
+          refund.copyWith(accountId: 'different-account'),
+        ],
+        statements: <BillingStatement>[statement],
+        now: DateTime(2026, 9, 30),
+      ),
+      isEmpty,
+    );
+    expect(
+      allocateStatementRefunds(
+        entries: <LedgerEntry>[
+          original,
+          refund.copyWith(settledAt: DateTime(2026, 9, 25, 18)),
+        ],
+        statements: <BillingStatement>[statement],
+        now: DateTime(2026, 9, 30),
+      ),
+      isEmpty,
+    );
+  });
 
   test('余额锚点截断不完整历史，只累计锚点后变动并可冷启动恢复', () async {
     final store = LocalKeyValueStore();

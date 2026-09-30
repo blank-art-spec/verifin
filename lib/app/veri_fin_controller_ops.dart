@@ -1352,8 +1352,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     creditAccount: creditAccount,
     accounts: _accounts.where((item) => item.bookId == creditAccount.bookId),
     entries: _entries.where((item) => item.bookId == creditAccount.bookId),
-    statements: _billingStatements.where(
-      (item) => item.bookId == creditAccount.bookId,
+    statements: _projectBillingStatements(
+      creditAccount.bookId,
+      now ?? DateTime.now(),
     ),
     allocations: _statementRepaymentAllocations.where(
       (item) => item.bookId == creditAccount.bookId,
@@ -1395,8 +1396,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
                       item.bookId == creditAccount.bookId &&
                       item.creditAccountId == creditAccount.id,
                 ),
-                statements: _billingStatements.where(
-                  (item) => item.bookId == creditAccount.bookId,
+                statements: _projectBillingStatements(
+                  creditAccount.bookId,
+                  reference,
                 ),
                 now: reference,
                 convertToCreditCurrency: (amount, sourceCurrencyCode, date) {
@@ -1583,15 +1585,41 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     return List<BalanceAnchor>.unmodifiable(list);
   }
 
-  /// 当前账本的正式账单，按账单日倒序。
-  List<BillingStatement> get billingStatements {
+  /// 按 [bookId] 与 [now] 投影正式账单的退款冲抵，不修改已落库的实际还款值。
+  List<BillingStatement> _projectBillingStatements(
+    String bookId,
+    DateTime now,
+  ) {
+    final refunds = allocateStatementRefunds(
+      entries: _entries.where((entry) => entry.bookId == bookId),
+      statements: _billingStatements.where((item) => item.bookId == bookId),
+      now: now,
+    );
+    final refundedByStatement = <String, double>{};
+    for (final refund in refunds) {
+      refundedByStatement.update(
+        refund.statementId,
+        (amount) => amount + refund.amount,
+        ifAbsent: () => refund.amount,
+      );
+    }
     final list =
-        _billingStatements
-            .where((statement) => statement.bookId == _activeBookId)
-            .toList()
-          ..sort((a, b) => b.statementDate.compareTo(a.statementDate));
+        _billingStatements.where((statement) => statement.bookId == bookId).map(
+          (statement) {
+            final adjusted = statement.copyWith(
+              refundAmount: refundedByStatement[statement.id] ?? 0,
+            );
+            return adjusted.copyWith(
+              status: normalizedStatementStatus(adjusted),
+            );
+          },
+        ).toList()..sort((a, b) => b.statementDate.compareTo(a.statementDate));
     return List<BillingStatement>.unmodifiable(list);
   }
+
+  /// 当前账本的正式账单，包含从已到账退款实时推导的冲抵金额，按账单日倒序。
+  List<BillingStatement> get billingStatements =>
+      _projectBillingStatements(_activeBookId, DateTime.now());
 
   /// 当前账本的正式账单还款归属快照，供只读 AI 工具按信用主体计算提前还款。
   List<StatementRepaymentAllocation> get statementRepaymentAllocations =>
@@ -1613,6 +1641,29 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       (allocation) => allocation.statementId == statementId,
     ),
   );
+
+  /// 当前账本某期账单的出账后退款冲抵。关系由已到账退款和原消费实时推导，
+  /// 不把退款写进还款分配，也不需要在账单表维护第二份金额缓存。
+  List<StatementRefundAllocation> refundAllocationsForStatement(
+    String statementId, {
+    DateTime? now,
+  }) => List<StatementRefundAllocation>.unmodifiable(
+    allocateStatementRefunds(
+      entries: _entries.where((entry) => entry.bookId == _activeBookId),
+      statements: _billingStatements.where(
+        (statement) => statement.bookId == _activeBookId,
+      ),
+      now: now ?? DateTime.now(),
+    ).where((allocation) => allocation.statementId == statementId),
+  );
+
+  /// 计算还款分配时某张账单在退款冲抵后的实际待还，避免把退款当成可重复分配的额度。
+  double _statementOutstandingWithRefunds(BillingStatement statement) {
+    final refunded = refundAllocationsForStatement(
+      statement.id,
+    ).fold<double>(0, (total, allocation) => total + allocation.amount);
+    return statement.copyWith(refundAmount: refunded).outstandingAmount;
+  }
 
   BalanceAnchor? latestBalanceAnchor(String accountId) => _balanceAnchors
       .where((anchor) => anchor.accountId == accountId)
@@ -1976,7 +2027,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         <int>[
           for (var i = 0; i < nextStatements.length; i++)
             if (nextStatements[i].accountId == creditAccountId &&
-                nextStatements[i].outstandingAmount > 0)
+                _statementOutstandingWithRefunds(nextStatements[i]) > 0)
               i,
         ]..sort(
           (a, b) =>
@@ -2000,7 +2051,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       if (remaining <= 0) break;
       final statement = nextStatements[index];
       final amount = normalizeCurrencyAmount(
-        remaining.clamp(0, statement.outstandingAmount),
+        remaining.clamp(0, _statementOutstandingWithRefunds(statement)),
         account.currencyCode,
       );
       if (amount <= 0) continue;

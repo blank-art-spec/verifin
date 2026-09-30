@@ -71,7 +71,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `CardNumberFields` | Widget | `common_widgets.dart` | 完整卡号 + 后四位输入组，含「后四位跟随卡号」开关（信用卡/储蓄卡录入用）；**受控**：`follows`/`onFollowsChanged` 由调用方持久化（`Account.cardLast4Follows`），组件不自行反推 |
 | `showCardNumberDialog` | Dialog 函数 | `sheets.dart` | 编辑完整卡号+后四位+跟随开关，返回 `({number, last4, follows})?`（内部用 `CardNumberFields`，后四位以 `cardLast4Of` 归一化） |
 | `CreditRepaymentPage` | 页面 Widget | `credit_repayment_page.dart` | 信用卡/信用账户还款页；预填欠款、扣款账户可选/可代还，落一笔转账后按最早到期优先分配到正式账单 |
-| `BillingStatementsPage` / `BillingStatementDetailPage` | 页面 Widget | `billing_statements_page.dart` | 正式信用账单列表、新增与详情；详情展示应还/已还/剩余和对应还款分配 |
+| `BillingStatementsPage` / `BillingStatementDetailPage` | 页面 Widget | `billing_statements_page.dart` | 正式信用账单列表、新增与详情；详情分别展示原账单金额、实际还款、出账后退款冲抵和当前待还，退款行可回到原消费 |
 | `CreditAccountEditorPage` | 页面 Widget | `credit_account_editor_page.dart` | 编辑信用主体名称、机构、共享额度、账单日、固定日/账单后天数还款规则与账期预算；账户详情的共享配置统一进入此页，保存时主体与子账户兼容镜像原子落库（外币子账户不复制无币种标识的旧额度字段） |
 | `AutoCapturePage` / `AutoCaptureRulesPage` / `AutoCaptureRuleEditorPage` | 页面 Widget | `auto_capture_page.dart` | 自动采集权限与高置信度开关、原生链路诊断（系统授权 / NLS 实时连接 / 原生开关 / 最近通知提取·过滤·入队结果）、待确认/疑似重复/自动入账纠错，以及本地确定性规则管理；系统通知/短信原文不直接写交易 |
 | `AttentionCenterPage` / `AttentionCenterSnapshot` | 页面 Widget / 纯投影 | `attention_center_page.dart` / `attention_center.dart` | 统一汇总对账冲突、疑似重复、未匹配退款、未关联还款、缺失汇率与低置信度采集；快照不持久化，处理后随权威数据自动消失；入口位于“我的 → 数据与工具” |

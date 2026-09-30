@@ -5434,6 +5434,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get entryPostDate => '银行记账日';
 
   @override
+  String get statementPostBillRefund => '出账后退款';
+
+  @override
   String autoCaptureReplayResult(int count) {
     return '已重新解析 $count 条事件';
   }

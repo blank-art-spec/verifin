@@ -3337,6 +3337,7 @@
   "autoCaptureQueueTitle": "待处理与最近自动入账",
   "autoCaptureReplayRecent": "回放最近事件",
   "entryPostDate": "银行记账日",
+  "statementPostBillRefund": "出账后退款",
   "autoCaptureReplayResult": "已重新解析 {count} 条事件",
   "@autoCaptureReplayResult": {"placeholders": {"count": {"type": "int"}}},
   "autoCaptureQueueEmpty": "暂时没有待处理事件",

@@ -5602,6 +5602,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get entryPostDate => 'Bank posting date';
 
   @override
+  String get statementPostBillRefund => 'Refunds after statement';
+
+  @override
   String autoCaptureReplayResult(int count) {
     return 'Parsed $count events again';
   }

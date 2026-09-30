@@ -12,6 +12,7 @@ import '../app/models.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
+import 'transaction_detail_page.dart';
 
 class BillingStatementsPage extends StatelessWidget {
   const BillingStatementsPage({super.key, required this.account});
@@ -219,6 +220,7 @@ class BillingStatementDetailPage extends StatelessWidget {
     final l10n = AppLocalizations.of(context);
     if (statement == null) return const SizedBox.shrink();
     final allocations = controller.allocationsForStatement(statement.id);
+    final refunds = controller.refundAllocationsForStatement(statement.id);
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
@@ -271,6 +273,43 @@ class BillingStatementDetailPage extends StatelessWidget {
                 ),
               ),
               const SizedBox(height: 12),
+              if (refunds.isNotEmpty) ...<Widget>[
+                SectionLabel(l10n.statementPostBillRefund),
+                VeriCard(
+                  child: Column(
+                    children: <Widget>[
+                      for (final (index, refund)
+                          in refunds.indexed) ...<Widget>[
+                        if (index > 0) const Divider(height: 1),
+                        SettingsRow(
+                          icon: Icons.undo_outlined,
+                          title: l10n.dateMonthDay(refund.settledAt),
+                          trailing: formatUserMoney(
+                            refund.amount,
+                            account.currencyCode,
+                          ),
+                          onTap: () {
+                            final refundEntry = controller.entries
+                                .where(
+                                  (item) => item.id == refund.refundEntryId,
+                                )
+                                .firstOrNull;
+                            final original = controller.entries
+                                .where(
+                                  (item) => item.id == refundEntry?.refundOf,
+                                )
+                                .firstOrNull;
+                            if (original != null) {
+                              openEntryDetail(context, original);
+                            }
+                          },
+                        ),
+                      ],
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 12),
+              ],
               SectionLabel(l10n.repaymentAllocationsTitle),
               if (allocations.isEmpty)
                 EmptyState(

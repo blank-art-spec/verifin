@@ -9789,6 +9789,12 @@ abstract class AppLocalizations {
   /// **'银行记账日'**
   String get entryPostDate;
 
+  /// No description provided for @statementPostBillRefund.
+  ///
+  /// In zh, this message translates to:
+  /// **'出账后退款'**
+  String get statementPostBillRefund;
+
   /// No description provided for @autoCaptureReplayResult.
   ///
   /// In zh, this message translates to:

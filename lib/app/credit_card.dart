@@ -390,6 +390,69 @@ class CreditStatementOverview {
   final BillingStatement? latestStatement;
 }
 
+/// 从已到账退款推导出账后退款对正式账单的冲抵关系。
+///
+/// [entries] 是同账本交易， [statements] 是正式账单， [now] 控制未来到账退款不提前
+/// 生效。仅原支出与退款都在同一信用账户、且唯一匹配一期账单时分配；账单日当天
+/// 因缺银行切账时刻而保持未分配，避免错误冲抵。退款金额采用账户实际到账金额。
+List<StatementRefundAllocation> allocateStatementRefunds({
+  required Iterable<LedgerEntry> entries,
+  required Iterable<BillingStatement> statements,
+  required DateTime now,
+}) {
+  final entryList = entries.toList();
+  final statementList = statements.toList();
+  final byId = <String, LedgerEntry>{
+    for (final entry in entryList) entry.id: entry,
+  };
+  final allocations = <StatementRefundAllocation>[];
+  for (final refund in entryList) {
+    if (!refund.isSettledRefund ||
+        dateOnly(refund.settledAt!).isAfter(dateOnly(now))) {
+      continue;
+    }
+    final original = byId[refund.refundOf];
+    if (original == null ||
+        original.type != EntryType.expense ||
+        original.bookId != refund.bookId ||
+        original.accountId.isEmpty ||
+        original.accountId != refund.accountId) {
+      continue;
+    }
+    final candidates = statementList.where((statement) {
+      if (statement.bookId != original.bookId ||
+          statement.accountId != original.accountId ||
+          !dateOnly(
+            refund.settledAt!,
+          ).isAfter(dateOnly(statement.statementDate))) {
+        return false;
+      }
+      if (original.billingCycleId != null) {
+        return original.billingCycleId ==
+            billingCycleIdFor(statement.statementDate);
+      }
+      final date = dateOnly(original.occurredAt);
+      return !date.isBefore(dateOnly(statement.periodStart)) &&
+          !date.isAfter(dateOnly(statement.periodEnd));
+    }).toList();
+    if (candidates.length != 1) continue;
+    final statement = candidates.single;
+    final amount =
+        refund.accountAmount ??
+        (refund.currencyCode == statement.currencyCode ? refund.amount : null);
+    if (amount == null || !amount.isFinite || amount <= 0) continue;
+    allocations.add(
+      StatementRefundAllocation(
+        statementId: statement.id,
+        refundEntryId: refund.id,
+        amount: amount,
+        settledAt: refund.settledAt!,
+      ),
+    );
+  }
+  return allocations;
+}
+
 /// 汇总正式账单口径。
 ///
 /// “已出账待还”直接汇总账单剩余，不再从账户总余额猜；“当前未出账”只统计最近一期
@@ -400,9 +463,31 @@ CreditStatementOverview creditStatementOverview({
   required Iterable<BillingStatement> statements,
   required DateTime now,
 }) {
+  final entryList = entries.toList();
+  final statementList = statements.toList();
+  final allocations = allocateStatementRefunds(
+    entries: entryList,
+    statements: statementList,
+    now: now,
+  );
+  final refundsByStatement = <String, double>{};
+  for (final allocation in allocations) {
+    refundsByStatement.update(
+      allocation.statementId,
+      (amount) => amount + allocation.amount,
+      ifAbsent: () => allocation.amount,
+    );
+  }
+  final allocatedRefundIds = allocations
+      .map((item) => item.refundEntryId)
+      .toSet();
   final sorted =
-      statements.where((item) => item.accountId == account.id).toList()
-        ..sort((a, b) => b.statementDate.compareTo(a.statementDate));
+      statementList.where((item) => item.accountId == account.id).map((item) {
+        final adjusted = item.copyWith(
+          refundAmount: refundsByStatement[item.id] ?? 0,
+        );
+        return adjusted.copyWith(status: normalizedStatementStatus(adjusted));
+      }).toList()..sort((a, b) => b.statementDate.compareTo(a.statementDate));
   final latest = sorted.firstOrNull;
   final billed = sorted.fold<double>(
     0,
@@ -425,7 +510,7 @@ CreditStatementOverview creditStatementOverview({
     unbilled = statementDay == null
         ? 0
         : billingCycleExpense(
-            entries,
+            entryList,
             account.id,
             _currentBillingCycleFromStatement(
               statementDay: statementDay,
@@ -435,7 +520,8 @@ CreditStatementOverview creditStatementOverview({
           );
   } else {
     unbilled = 0;
-    for (final entry in entries) {
+    for (final entry in entryList) {
+      if (allocatedRefundIds.contains(entry.id)) continue;
       // 退款只有在实际到账后才会改变信用账户口径，因此筛选未出账条目时
       // 必须使用与余额计算相同的到账日，而不能只看退款原始发生日。
       final effectDate = accountEffectDate(entry);
@@ -461,15 +547,15 @@ CreditStatementOverview creditStatementOverview({
   );
 }
 
-/// 根据应还与已还金额归一账单状态。争议账单保持 disputed，不自动覆盖用户判断。
+/// 根据应还、实还与出账后退款归一账单状态。争议账单保持 disputed。
 BillingStatementStatus normalizedStatementStatus(BillingStatement statement) {
   if (statement.status == BillingStatementStatus.disputed) {
     return statement.status;
   }
-  if (statement.paidAmount >= statement.statementAmount) {
+  if (statement.outstandingAmount <= 0) {
     return BillingStatementStatus.paid;
   }
-  if (statement.paidAmount > 0) {
+  if (statement.paidAmount > 0 || statement.refundAmount > 0) {
     return BillingStatementStatus.partiallyPaid;
   }
   return BillingStatementStatus.open;

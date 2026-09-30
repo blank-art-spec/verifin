@@ -2202,6 +2202,7 @@
   "autoCaptureQueueTitle": "Pending and recent auto-posts",
   "autoCaptureReplayRecent": "Replay recent events",
   "entryPostDate": "Bank posting date",
+  "statementPostBillRefund": "Refunds after statement",
   "autoCaptureReplayResult": "Parsed {count} events again",
   "@autoCaptureReplayResult": {"placeholders": {"count": {"type": "int"}}},
   "autoCaptureQueueEmpty": "Nothing needs attention",
