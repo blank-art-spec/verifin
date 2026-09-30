@@ -111,6 +111,68 @@ void main() {
     );
   });
 
+  test('旧账单把退款误计为还款后可在应用内修正基线', () async {
+    final controller = await makeController();
+    final account = creditAccount(controller.activeBook.id);
+    controller.addAccount(account);
+    controller.addEntry(
+      LedgerEntry(
+        id: 'legacy-rail-expense',
+        bookId: account.bookId,
+        type: EntryType.expense,
+        amount: 278,
+        categoryId: 'travel',
+        accountId: account.id,
+        note: '铁路',
+        occurredAt: DateTime(2026, 9, 23),
+      ),
+    );
+    controller.addEntry(
+      LedgerEntry(
+        id: 'legacy-rail-refund',
+        bookId: account.bookId,
+        type: EntryType.refund,
+        amount: 278,
+        categoryId: 'travel',
+        accountId: account.id,
+        note: '铁路退款',
+        occurredAt: DateTime(2026, 9, 27),
+        refundOf: 'legacy-rail-expense',
+        settledAt: DateTime(2026, 9, 28),
+      ),
+    );
+    await controller.waitForPendingWrites();
+    expect(
+      await controller.saveBillingStatement(
+        BillingStatement(
+          id: 'legacy-statement',
+          bookId: account.bookId,
+          accountId: account.id,
+          statementDate: DateTime(2026, 9, 25),
+          periodStart: DateTime(2026, 8, 26),
+          periodEnd: DateTime(2026, 9, 25),
+          statementAmount: 5497.15,
+          minimumPayment: 550,
+          dueDate: DateTime(2026, 10, 13),
+          paidAmount: 278,
+          status: BillingStatementStatus.partiallyPaid,
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      await controller.correctBillingStatementPaidAmount(
+        statementId: 'legacy-statement',
+        paidAmount: 0,
+      ),
+      isTrue,
+    );
+    final corrected = controller.billingStatements.single;
+    expect(corrected.paidAmount, 0);
+    expect(corrected.refundAmount, 278);
+    expect(corrected.outstandingAmount, closeTo(5219.15, 0.001));
+  });
+
   test('余额锚点截断不完整历史，只累计锚点后变动并可冷启动恢复', () async {
     final store = LocalKeyValueStore();
     final controller = await makeController(store);

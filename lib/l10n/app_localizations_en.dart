@@ -5616,6 +5616,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get statementPostBillRefund => 'Refunds after statement';
 
   @override
+  String get statementCorrectPaid =>
+      'Correct actual payments (exclude refunds)';
+
+  @override
+  String get statementPaidCorrected =>
+      'Actual payments corrected; refunds remain separate';
+
+  @override
+  String get statementPaidCorrectionRejected =>
+      'Correction rejected: below existing repayment allocations';
+
+  @override
   String get entryTimeSource => 'Transaction time source';
 
   @override

@@ -233,6 +233,11 @@ class BillingStatementDetailPage extends StatelessWidget {
                 showBack: true,
                 actions: <Widget>[
                   HeaderAction(
+                    icon: Icons.edit_outlined,
+                    tooltip: l10n.statementCorrectPaid,
+                    onPressed: () => _correctPaid(context, statement),
+                  ),
+                  HeaderAction(
                     icon: Icons.delete_outline,
                     tooltip: l10n.commonDelete,
                     onPressed: () => _delete(context, statement),
@@ -356,6 +361,40 @@ class BillingStatementDetailPage extends StatelessWidget {
       context,
     ).deleteBillingStatement(statement.id);
     if (context.mounted && deleted) Navigator.of(context).pop();
+  }
+
+  /// 只修正实际还款基线；出账后退款由关联退款条目自动单列冲抵。
+  ///
+  /// [context] 提供当前语言与反馈 Host，[statement] 决定可选上限和初始金额。
+  /// 控制器会再次校验已存在的还款分配，拒绝把真实还款证据改没。
+  Future<void> _correctPaid(
+    BuildContext context,
+    BillingStatement statement,
+  ) async {
+    final l10n = AppLocalizations.of(context);
+    final paid = await showNumberPadSheet(
+      context,
+      title: l10n.statementCorrectPaid,
+      initialAmount: statement.paidAmount,
+      allowZero: true,
+      maxAmount: statement.statementAmount,
+      currencyCode: account.currencyCode,
+    );
+    if (!context.mounted || paid == null) return;
+    final saved = await VeriFinScope.of(context)
+        .correctBillingStatementPaidAmount(
+          statementId: statement.id,
+          paidAmount: paid,
+        );
+    if (!context.mounted) return;
+    unawaited(
+      VeriFeedbackHost.of(context).showMessage(
+        message: saved
+            ? l10n.statementPaidCorrected
+            : l10n.statementPaidCorrectionRejected,
+        tone: saved ? VeriFeedbackTone.success : VeriFeedbackTone.warning,
+      ),
+    );
   }
 }
 

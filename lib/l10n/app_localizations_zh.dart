@@ -5448,6 +5448,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get statementPostBillRefund => '出账后退款';
 
   @override
+  String get statementCorrectPaid => '修正实际已还金额（不含退款）';
+
+  @override
+  String get statementPaidCorrected => '实际已还金额已修正，退款仍单独冲抵';
+
+  @override
+  String get statementPaidCorrectionRejected => '修正失败：金额不能低于已有还款分配';
+
+  @override
   String get entryTimeSource => '交易时间来源';
 
   @override

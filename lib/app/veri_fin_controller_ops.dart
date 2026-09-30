@@ -1885,6 +1885,48 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     );
   }
 
+  /// 修正已有正式账单的实际已还金额，用于纠正历史手工核准基线。
+  ///
+  /// [statementId] 必须属于当前账本；[paidAmount] 只包含真实还款，不包含退款。
+  /// 下限是已落库还款分配之和，上限是原账单金额，防止用户修正时抹掉真实转账证据。
+  Future<bool> correctBillingStatementPaidAmount({
+    required String statementId,
+    required double paidAmount,
+  }) async {
+    final index = _billingStatements.indexWhere(
+      (item) => item.id == statementId && item.bookId == _activeBookId,
+    );
+    if (index == -1 || !paidAmount.isFinite) return false;
+    final current = _billingStatements[index];
+    final allocated = _statementRepaymentAllocations
+        .where((item) => item.statementId == statementId)
+        .fold<double>(0, (sum, item) => sum + item.amount);
+    final tolerance = currencyAmountTolerance(current.currencyCode);
+    if (paidAmount < 0 ||
+        paidAmount > current.statementAmount + tolerance ||
+        paidAmount + tolerance < allocated) {
+      return false;
+    }
+    final next = List<BillingStatement>.of(_billingStatements);
+    final updated = current.copyWith(
+      paidAmount: normalizeCurrencyAmount(
+        paidAmount.clamp(0, current.statementAmount),
+        current.currencyCode,
+      ),
+    );
+    next[index] = updated.copyWith(status: normalizedStatementStatus(updated));
+    if (!await _runTrackedWrite(
+      () => _repository.saveBillingStatements(next),
+    )) {
+      return false;
+    }
+    _billingStatements
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return true;
+  }
+
   /// 删除一期正式账单及其还款分配；原还款交易保留，不影响账户真实余额。
   Future<bool> deleteBillingStatement(String statementId) async {
     if (!_billingStatements.any((item) => item.id == statementId)) return false;

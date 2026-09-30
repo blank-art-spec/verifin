@@ -9813,6 +9813,24 @@ abstract class AppLocalizations {
   /// **'出账后退款'**
   String get statementPostBillRefund;
 
+  /// No description provided for @statementCorrectPaid.
+  ///
+  /// In zh, this message translates to:
+  /// **'修正实际已还金额（不含退款）'**
+  String get statementCorrectPaid;
+
+  /// No description provided for @statementPaidCorrected.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际已还金额已修正，退款仍单独冲抵'**
+  String get statementPaidCorrected;
+
+  /// No description provided for @statementPaidCorrectionRejected.
+  ///
+  /// In zh, this message translates to:
+  /// **'修正失败：金额不能低于已有还款分配'**
+  String get statementPaidCorrectionRejected;
+
   /// No description provided for @entryTimeSource.
   ///
   /// In zh, this message translates to:
