@@ -2,11 +2,50 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/ai/ai_entry_parser.dart';
 import 'package:verifin/app/auto_capture/capture_parser.dart';
 import 'package:verifin/app/models.dart';
+import 'package:verifin/app/veri_fin_controller.dart';
+import 'package:verifin/local_storage/local_storage.dart';
 
+import 'support/in_memory_ledger_repository.dart';
 import 'support/test_harness.dart';
 
 void main() {
   useTestDatabases();
+
+  test('批量回放的条数上限只处理本次选中的事件', () async {
+    final store = LocalKeyValueStore();
+    final repository = InMemoryLedgerRepository();
+    final initial = await VeriFinController.create(
+      store,
+      repository: repository,
+    );
+    final bookId = initial.activeBook.id;
+    initial.dispose();
+    final events = <CaptureEvent>[
+      for (var index = 0; index < 2; index++)
+        captureEventFromInput(
+          id: 'replay-limit-$index',
+          bookId: bookId,
+          input: RawCaptureInput(
+            sourceKind: CaptureSourceKind.notification,
+            sourceId: 'com.example.bank',
+            sourceEventId: 'replay-limit-$index',
+            rawText: '消费${index + 1}.00元，商户未知',
+            receivedAt: DateTime(2026, 9, 27, 12, index),
+          ),
+        ),
+    ];
+    await repository.saveCaptureEvents(events);
+    final controller = await VeriFinController.create(
+      store,
+      repository: repository,
+    );
+
+    expect(await controller.replayRecentCaptureEvents(limit: 1), 1);
+    final unchanged = controller.captureEvents.where(
+      (event) => event.status == CaptureStatus.raw && event.processedAt == null,
+    );
+    expect(unchanged, hasLength(1));
+  });
 
   test('批量回放只更新未落账事件的候选，不触发自动入账或撤销忽略', () async {
     final controller = await makeController();

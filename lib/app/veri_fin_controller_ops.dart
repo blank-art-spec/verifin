@@ -452,10 +452,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   ///
   /// [allowAutomaticActions] 为 false 时只用本地规则更新候选与疑似重复状态，
   /// 不请求 AI、不自动合并来源或新建交易，供规则变更后的批量回放使用。
+  /// [eventIds] 仅处理指定事件；为空时沿用正常采集的全部待处理队列。
   ///
   /// 正式交易与事件状态在一个 SQLite 事务提交；任何一步失败都保持旧内存快照并返回 0。
   Future<int> processPendingCaptureEvents({
     bool allowAutomaticActions = true,
+    Set<String>? eventIds,
   }) async {
     var nextEntries = List<LedgerEntry>.of(_entries);
     final nextEvents = List<CaptureEvent>.of(_captureEvents);
@@ -464,7 +466,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     for (var i = 0; i < nextEvents.length; i++) {
       final original = nextEvents[i];
       if (original.status != CaptureStatus.raw ||
-          original.processedAt != null) {
+          original.processedAt != null ||
+          (eventIds != null && !eventIds.contains(original.id))) {
         continue;
       }
       final book = _ledgerBooks
@@ -838,7 +841,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       ..clear()
       ..addAll(next);
     notifyListeners();
-    return processPendingCaptureEvents(allowAutomaticActions: false);
+    return processPendingCaptureEvents(
+      allowAutomaticActions: false,
+      eventIds: candidates,
+    );
   }
 
   /// 用户明确把事件合并到已有交易：追加来源证据并原子更新事件状态。
