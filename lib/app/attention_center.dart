@@ -6,6 +6,7 @@
 /// 双状态问题。
 library;
 
+import 'calendar_days.dart';
 import 'currency_math.dart';
 import 'models.dart';
 
@@ -129,6 +130,7 @@ AttentionCenterSnapshot buildAttentionCenterSnapshot({
     accountsById: accountsById,
     statements: billingStatements,
     allocations: repaymentAllocations,
+    now: now,
   );
   _appendMissingRateIssues(
     issues,
@@ -255,38 +257,87 @@ void _appendUnmatchedRefunds(
   }
 }
 
-/// 查找已还入信用账户、但尚未完整归属到正式账单的转账。
+/// 查找还款时已有正式账单、且当前仍有可关联待还额的信用账户转账。
 ///
-/// 只在目标账户已存在正式账单时提醒；没有正式账单时，转入信用账户
-/// 可能是提前还款，系统无从建立关系，不把它误报为异常。
+/// 旧实现只检查账户是否「曾经有过一张账单」，于是新建一期账单后，历年还款
+/// 全被当成异常。这里按日历日确认账单已在还款前出账，再按未结清金额为待处理项
+/// 分配只读的可关联额度；账单日当天缺少切账时刻，保守视为提前还款。
+/// 历史还款、提前还款和超额部分都不是对账故障。
+/// [now] 用于排除未来日期账单与交易；[allocations] 是已确认的还款关系。
 void _appendUnallocatedRepayments(
   List<AttentionIssue> issues, {
   required Iterable<LedgerEntry> entries,
   required Map<String, Account> accountsById,
   required Iterable<BillingStatement> statements,
   required Iterable<StatementRepaymentAllocation> allocations,
+  required DateTime now,
 }) {
-  final billedAccountIds = statements
-      .map((statement) => statement.accountId)
-      .toSet();
+  final openStatements = statements
+      .where(
+        (statement) =>
+            calendarDaysBetween(statement.statementDate, now) >= 0 &&
+            statement.outstandingAmount >
+                currencyAmountTolerance(statement.currencyCode),
+      )
+      .toList(growable: false);
+  final remainingByStatementId = <String, double>{
+    for (final statement in openStatements)
+      statement.id: statement.outstandingAmount,
+  };
   final allocatedByEntryId = <String, double>{};
   for (final allocation in allocations) {
     allocatedByEntryId[allocation.repaymentEntryId] =
         (allocatedByEntryId[allocation.repaymentEntryId] ?? 0) +
         allocation.amount;
   }
-  for (final entry in entries) {
+  final repayments =
+      entries
+          .where((entry) => entry.type == EntryType.transfer)
+          .toList(growable: false)
+        ..sort((a, b) {
+          final byDate = a.occurredAt.compareTo(b.occurredAt);
+          return byDate != 0 ? byDate : a.id.compareTo(b.id);
+        });
+  for (final entry in repayments) {
     final targetId = entry.toAccountId;
     final target = targetId == null ? null : accountsById[targetId];
-    if (entry.type != EntryType.transfer ||
-        target == null ||
+    if (target == null ||
         !target.type.supportsCredit ||
-        !billedAccountIds.contains(target.id)) {
+        calendarDaysBetween(entry.occurredAt, now) < 0) {
       continue;
     }
+    final eligible =
+        openStatements
+            .where(
+              (statement) =>
+                  statement.accountId == target.id &&
+                  calendarDaysBetween(
+                        statement.statementDate,
+                        entry.occurredAt,
+                      ) >
+                      0 &&
+                  (remainingByStatementId[statement.id] ?? 0) >
+                      currencyAmountTolerance(target.currencyCode),
+            )
+            .toList(growable: false)
+          ..sort((a, b) => a.dueDate.compareTo(b.dueDate));
+    if (eligible.isEmpty) continue;
     final repaidAmount = entry.toAccountAmount ?? entry.amount;
     final unallocated = repaidAmount - (allocatedByEntryId[entry.id] ?? 0);
     if (unallocated <= currencyAmountTolerance(target.currencyCode)) continue;
+    var actionable = 0.0;
+    var remainingRepayment = unallocated;
+    for (final statement in eligible) {
+      if (remainingRepayment <= currencyAmountTolerance(target.currencyCode)) {
+        break;
+      }
+      final available = remainingByStatementId[statement.id] ?? 0;
+      final matched = remainingRepayment.clamp(0.0, available).toDouble();
+      remainingByStatementId[statement.id] = available - matched;
+      actionable += matched;
+      remainingRepayment -= matched;
+    }
+    if (actionable <= currencyAmountTolerance(target.currencyCode)) continue;
     issues.add(
       AttentionIssue(
         id: '${AttentionIssueType.unallocatedRepayment.name}:${entry.id}',
@@ -294,7 +345,7 @@ void _appendUnallocatedRepayments(
         referenceKind: AttentionReferenceKind.entry,
         referenceId: entry.id,
         occurredAt: entry.occurredAt,
-        amount: unallocated,
+        amount: actionable,
         currencyCode: target.currencyCode,
         accountId: target.id,
       ),

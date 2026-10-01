@@ -32,6 +32,7 @@ void main() {
     String? toAccountId,
     String? refundOf,
     double amount = 100,
+    DateTime? occurredAt,
   }) {
     return LedgerEntry(
       id: id,
@@ -42,7 +43,7 @@ void main() {
       accountId: accountId,
       toAccountId: toAccountId,
       note: id,
-      occurredAt: now,
+      occurredAt: occurredAt ?? now,
       refundOf: refundOf,
       reconciliationStatus: status,
     );
@@ -155,7 +156,7 @@ void main() {
       id: 'statement',
       bookId: 'book',
       accountId: 'credit',
-      statementDate: now,
+      statementDate: DateTime(2026, 9, 26),
       periodStart: DateTime(2026, 8, 1),
       periodEnd: DateTime(2026, 8, 31),
       statementAmount: 1000,
@@ -189,6 +190,104 @@ void main() {
         .single;
     expect(issue.amount, 600);
     expect(issue.accountId, 'credit');
+  });
+
+  test('新建一张正式账单不会把此前 310 笔历史还款变成异常', () {
+    final statement = BillingStatement(
+      id: 'statement-new',
+      bookId: 'book',
+      accountId: 'credit',
+      statementDate: DateTime(2026, 9, 25),
+      periodStart: DateTime(2026, 8, 26),
+      periodEnd: DateTime(2026, 9, 25),
+      statementAmount: 100,
+      minimumPayment: 10,
+      dueDate: DateTime(2026, 10, 15),
+      paidAmount: 0,
+      status: BillingStatementStatus.open,
+    );
+    final historical = <LedgerEntry>[
+      for (var i = 0; i < 310; i++)
+        entry(
+          'historical-$i',
+          type: EntryType.transfer,
+          toAccountId: 'credit',
+          occurredAt: DateTime(2026, 9, 13),
+        ),
+    ];
+    final current = entry(
+      'current',
+      type: EntryType.transfer,
+      toAccountId: 'credit',
+      amount: 150,
+      occurredAt: DateTime(2026, 9, 26),
+    );
+    final sameDay = entry(
+      'statement-day',
+      type: EntryType.transfer,
+      toAccountId: 'credit',
+      occurredAt: DateTime(2026, 9, 25, 8),
+    );
+    final snapshot = buildAttentionCenterSnapshot(
+      accounts: <Account>[account('cash'), account('credit', credit: true)],
+      entries: <LedgerEntry>[...historical, sameDay, current],
+      captureEvents: const <CaptureEvent>[],
+      billingStatements: <BillingStatement>[statement],
+      repaymentAllocations: const <StatementRepaymentAllocation>[],
+      recurringMissingRates: const <String, Set<String>>{},
+      accountValuation: valuation(),
+      now: now,
+    );
+    final issues = snapshot.issuesOf(AttentionIssueType.unallocatedRepayment);
+    expect(issues, hasLength(1));
+    expect(issues.single.referenceId, 'current');
+    expect(issues.single.amount, 100);
+  });
+
+  test('已结清账单和未来账单不会触发还款未关联告警', () {
+    final repayment = entry(
+      'advance',
+      type: EntryType.transfer,
+      toAccountId: 'credit',
+      occurredAt: DateTime(2026, 9, 26),
+    );
+    final closed = BillingStatement(
+      id: 'closed',
+      bookId: 'book',
+      accountId: 'credit',
+      statementDate: DateTime(2026, 9, 25),
+      periodStart: DateTime(2026, 8, 26),
+      periodEnd: DateTime(2026, 9, 25),
+      statementAmount: 100,
+      minimumPayment: 10,
+      dueDate: DateTime(2026, 10, 15),
+      paidAmount: 100,
+      status: BillingStatementStatus.paid,
+    );
+    final future = BillingStatement(
+      id: 'future',
+      bookId: 'book',
+      accountId: 'credit',
+      statementDate: DateTime(2026, 10, 25),
+      periodStart: DateTime(2026, 9, 26),
+      periodEnd: DateTime(2026, 10, 25),
+      statementAmount: 100,
+      minimumPayment: 10,
+      dueDate: DateTime(2026, 11, 15),
+      paidAmount: 0,
+      status: BillingStatementStatus.open,
+    );
+    final snapshot = buildAttentionCenterSnapshot(
+      accounts: <Account>[account('cash'), account('credit', credit: true)],
+      entries: <LedgerEntry>[repayment],
+      captureEvents: const <CaptureEvent>[],
+      billingStatements: <BillingStatement>[closed, future],
+      repaymentAllocations: const <StatementRepaymentAllocation>[],
+      recurringMissingRates: const <String, Set<String>>{},
+      accountValuation: valuation(),
+      now: now,
+    );
+    expect(snapshot.issuesOf(AttentionIssueType.unallocatedRepayment), isEmpty);
   });
 
   test('账户和周期规则缺失同一币种汇率时合并成一项', () {

@@ -448,16 +448,25 @@ class AppDatabase {
   /// 旧数据沿用秒级展示，避免凭零点推断“只有日期”；记账日无来源时保持 NULL。
   static Future<void> _migrateToV22(Database db) async {
     if (!await _tableExists(db, 'entries')) return;
-    await db.execute(
-      "ALTER TABLE entries ADD COLUMN occurred_at_precision TEXT NOT NULL DEFAULT 'second'",
-    );
-    await db.execute('ALTER TABLE entries ADD COLUMN post_date INTEGER');
+    // 升级中断后可能只加了其中一列；分别检查，使重入不会重复加列。
+    if (!await _columnsExist(db, 'entries', <String>[
+      'occurred_at_precision',
+    ])) {
+      await db.execute(
+        "ALTER TABLE entries ADD COLUMN occurred_at_precision TEXT NOT NULL DEFAULT 'second'",
+      );
+    }
+    if (!await _columnsExist(db, 'entries', <String>['post_date'])) {
+      await db.execute('ALTER TABLE entries ADD COLUMN post_date INTEGER');
+    }
   }
 
   /// v22 → v23：为交易增加按提交顺序保存的字段修改历史；旧交易默认为空。
   static Future<void> _migrateToV23(Database db) async {
     if (!await _tableExists(db, 'entries')) return;
-    await db.execute('ALTER TABLE entries ADD COLUMN audit_history TEXT');
+    if (!await _columnsExist(db, 'entries', <String>['audit_history'])) {
+      await db.execute('ALTER TABLE entries ADD COLUMN audit_history TEXT');
+    }
   }
 
   static Future<bool> _tableExists(Database db, String name) async {
