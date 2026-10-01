@@ -169,6 +169,7 @@ void main() {
       ..dispose();
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
 
@@ -197,6 +198,7 @@ void main() {
       ..dispose();
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('多选'));
@@ -235,6 +237,7 @@ void main() {
       ..dispose();
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
     await tester.tap(find.byTooltip('多选'));

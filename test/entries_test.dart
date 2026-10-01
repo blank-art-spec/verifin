@@ -125,6 +125,7 @@ void main() {
     await tester.tap(find.byKey(const Key('save_entry_button')));
     await tester.pumpAndSettle();
 
+    await revealHomeRecent(tester);
     expect(find.text('最近交易'), findsOneWidget);
     expect(find.text('餐饮'), findsAtLeastNWidgets(1));
     expect(find.text('-45'), findsAtLeastNWidgets(1));
@@ -212,6 +213,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // 保存成功后交易列表里以「无账户」呈现（accountId 为空、不计入任何账户）。
+    await revealHomeRecent(tester);
     expect(find.text('无账户'), findsAtLeastNWidgets(1));
   });
 
@@ -226,6 +228,7 @@ void main() {
     await tester.tap(find.byKey(const Key('save_entry_button')));
     await tester.pumpAndSettle();
 
+    await revealHomeRecent(tester);
     await tester.tap(find.text('餐饮').first);
     await tester.pumpAndSettle();
 
@@ -238,6 +241,7 @@ void main() {
     await tester.tap(find.text('删除').last);
     await tester.pumpAndSettle();
 
+    await revealHomeRecent(tester);
     expect(find.text('还没有交易'), findsOneWidget);
   });
 
@@ -303,6 +307,7 @@ void main() {
       ..dispose();
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
 
@@ -367,6 +372,7 @@ void main() {
 
     // 默认关闭：列表里不出现余额。
     final controller2 = await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
     expect(find.textContaining('余额'), findsNothing);
@@ -438,6 +444,7 @@ void main() {
       ..dispose();
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
 
@@ -511,6 +518,7 @@ void main() {
         ..dispose();
 
       await pumpApp(tester, store);
+      await revealHomeRecent(tester);
       await tester.tap(find.text('最近交易'));
       await tester.pumpAndSettle();
       // 交易行显示分类标签：子分类「早餐」与顶级「交通」各一行。
@@ -687,6 +695,7 @@ void main() {
     await tester.tap(find.byKey(const Key('save_entry_button')));
     await tester.pumpAndSettle();
 
+    await revealHomeRecent(tester);
     expect(find.text('最近交易'), findsOneWidget);
   });
 
@@ -738,6 +747,7 @@ void main() {
       ..dispose();
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
 
@@ -893,6 +903,7 @@ void main() {
     controller.dispose();
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
 
@@ -934,6 +945,7 @@ void main() {
     controller.dispose();
 
     final app = await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
 
@@ -956,6 +968,7 @@ void main() {
   testWidgets('交易列表提供记账入口', (WidgetTester tester) async {
     final store = LocalKeyValueStore();
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
 
@@ -986,6 +999,7 @@ void main() {
     );
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
     expect(find.textContaining('去年的一笔'), findsOneWidget);

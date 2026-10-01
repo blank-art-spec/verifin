@@ -3233,6 +3233,15 @@
     "placeholders": {"days": {"type": "int"}}
   },
   "creditCycleBudgetLabel": "本账期预算",
+  "homeCreditAccountsCount": "信用账户 · {count} 个",
+  "@homeCreditAccountsCount": {
+    "description": "首页信用账户摘要的标题，count 为当前账本信用主体数量。",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "homeCreditExpand": "查看全部",
+  "@homeCreditExpand": {"description": "展开首页信用账户摘要中的全部账户。"},
+  "homeCreditCollapse": "收起",
+  "@homeCreditCollapse": {"description": "收起首页信用账户摘要，仅显示前两条。"},
   "creditCycleSetupHint": "设置账单日与还款规则后显示账期概览",
   "creditCycleRange": "当前账期 {start} - {end}",
   "@creditCycleRange": {

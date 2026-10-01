@@ -1,3 +1,5 @@
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/common_widgets.dart';
@@ -23,7 +25,6 @@ void main() {
     );
     expect(find.text('4个首页面板'), findsOneWidget);
     expect(find.byType(CalendarPreview), findsOneWidget);
-    expect(find.byType(MoneyUnitLabel), findsWidgets);
 
     await tester.tap(find.byKey(const Key('panel_settings_entry_home')));
     await tester.pumpAndSettle();
@@ -57,13 +58,7 @@ void main() {
     await tester.drag(firstVerticalScrollable(), const Offset(0, 800));
     await tester.pumpAndSettle();
     expect(find.byType(HomeTrendPanel), findsOneWidget);
-    expect(
-      find.descendant(
-        of: find.byType(HomeTrendPanel),
-        matching: find.byType(MoneyUnitLabel),
-      ),
-      findsOneWidget,
-    );
+    // 单币种账本默认隐藏重复单位；这里只验证走势面板仍能显示。
     await tester.scrollUntilVisible(
       find.byKey(const Key('panel_settings_entry_home')),
       200,
@@ -209,8 +204,8 @@ void main() {
 
     expect(controller.enabledPanelIds(PanelPageKind.home), <String>[
       'trend',
-      'recent',
       'budget',
+      'recent',
       'calendar',
     ]);
 
@@ -256,6 +251,43 @@ void main() {
     reloaded.dispose();
   });
 
+  test('旧版默认首页面板顺序升级，手动排序仍被保留', () async {
+    final oldDefaultStore = LocalKeyValueStore();
+    oldDefaultStore.write(
+      'verifin.home_panels.v1',
+      jsonEncode(<Map<String, Object?>>[
+        const PagePanelSetting(id: 'trend', enabled: true).toJson(),
+        const PagePanelSetting(id: 'recent', enabled: false).toJson(),
+        const PagePanelSetting(id: 'budget', enabled: true).toJson(),
+        const PagePanelSetting(id: 'calendar', enabled: true).toJson(),
+      ]),
+    );
+    final migrated = await makeController(oldDefaultStore);
+    expect(
+      migrated.panelSettings(PanelPageKind.home).map((item) => item.id),
+      <String>['trend', 'budget', 'recent', 'calendar'],
+    );
+    expect(migrated.panelSettings(PanelPageKind.home)[2].enabled, isFalse);
+    migrated.dispose();
+
+    final customStore = LocalKeyValueStore();
+    customStore.write(
+      'verifin.home_panels.v1',
+      jsonEncode(<Map<String, Object?>>[
+        const PagePanelSetting(id: 'recent', enabled: true).toJson(),
+        const PagePanelSetting(id: 'trend', enabled: true).toJson(),
+        const PagePanelSetting(id: 'budget', enabled: true).toJson(),
+        const PagePanelSetting(id: 'calendar', enabled: true).toJson(),
+      ]),
+    );
+    final custom = await makeController(customStore);
+    expect(
+      custom.panelSettings(PanelPageKind.home).map((item) => item.id),
+      <String>['recent', 'trend', 'budget', 'calendar'],
+    );
+    custom.dispose();
+  });
+
   test('panel settings survive export and import', () async {
     final source = await makeController();
     source
@@ -268,13 +300,13 @@ void main() {
     target.importDataJson(exported);
 
     expect(target.enabledPanelIds(PanelPageKind.home), <String>[
-      'recent',
       'budget',
+      'recent',
       'trend',
     ]);
     expect(
       target.panelSettings(PanelPageKind.home).map((panel) => panel.id),
-      <String>['recent', 'budget', 'trend', 'calendar'],
+      <String>['budget', 'recent', 'trend', 'calendar'],
     );
 
     target.dispose();

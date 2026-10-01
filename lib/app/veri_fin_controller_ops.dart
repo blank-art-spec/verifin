@@ -6799,9 +6799,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     );
     // 旧备份没有面板字段,归一化会补全默认开启的面板。
     final nextHomePanels = _normalizePanelSettings(
-      _decodeModelList<PagePanelSetting>(
-        data['homePanels'],
-        PagePanelSetting.fromJson,
+      _migrateLegacyHomePanelOrder(
+        _decodeModelList<PagePanelSetting>(
+          data['homePanels'],
+          PagePanelSetting.fromJson,
+        ),
       ),
       homePanelSpecs,
     );

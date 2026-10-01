@@ -5178,6 +5178,17 @@ class AppLocalizationsZh extends AppLocalizations {
   String get creditCycleBudgetLabel => '本账期预算';
 
   @override
+  String homeCreditAccountsCount(int count) {
+    return '信用账户 · $count 个';
+  }
+
+  @override
+  String get homeCreditExpand => '查看全部';
+
+  @override
+  String get homeCreditCollapse => '收起';
+
+  @override
   String get creditCycleSetupHint => '设置账单日与还款规则后显示账期概览';
 
   @override

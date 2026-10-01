@@ -1016,6 +1016,8 @@ mixin _ControllerState on ChangeNotifier {
     _store.write(_assetSectionOrderKey, jsonEncode(_assetSectionOrders));
   }
 
+  /// 从设备偏好恢复首页和看板面板；旧首页默认顺序只在读取时迁移，
+  /// 用户手动排序及各面板开启状态均保留。
   void _loadPagePanels() {
     for (final page in PanelPageKind.values) {
       final key = _panelsKeyFor(page);
@@ -1025,11 +1027,14 @@ mixin _ControllerState on ChangeNotifier {
         continue;
       }
       try {
+        final decoded = _decodeModelList<PagePanelSetting>(
+          jsonDecode(raw),
+          PagePanelSetting.fromJson,
+        );
         _pagePanels[page] = _normalizePanelSettings(
-          _decodeModelList<PagePanelSetting>(
-            jsonDecode(raw),
-            PagePanelSetting.fromJson,
-          ),
+          page == PanelPageKind.home
+              ? _migrateLegacyHomePanelOrder(decoded)
+              : decoded,
           page.specs,
         );
       } catch (_) {

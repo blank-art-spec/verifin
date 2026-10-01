@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../app/app_theme.dart';
 import '../app/category_tree.dart';
 import '../app/chart_painters.dart';
+import '../app/chart_callout_layout.dart';
 import '../app/common_widgets.dart';
 import '../app/model_lookup.dart';
 import '../app/ledger_math.dart';
@@ -838,13 +839,23 @@ class _CategoryCalloutPainter extends CustomPainter {
   final double ringSize;
   final Color textColor;
 
+  /// 在 [size] 范围内绘制分类占比及引导线；依据环直径缩短文字宽度，
+  /// 纵向位置钳在画布内，极窄宽度下不绘制无法阅读的标签。
   @override
   void paint(Canvas canvas, Size size) {
     if (segments.isEmpty) {
       return;
     }
+    // 标签按画布实际宽度布局；裁剪作为极窄视口的最后保护。
+    canvas.save();
+    canvas.clipRect(Offset.zero & size);
     final center = Offset(size.width / 2, size.height / 2);
     final radius = ringSize / 2;
+    final maxLabelWidth = categoryCalloutMaxLabelWidth(size, ringSize);
+    if (maxLabelWidth < 24) {
+      canvas.restore();
+      return;
+    }
     var startAngle = -math.pi / 2;
     for (final item in segments.indexed) {
       final segment = item.$2;
@@ -856,17 +867,11 @@ class _CategoryCalloutPainter extends CustomPainter {
       }
       final direction = Offset(math.cos(angle), math.sin(angle));
       final start = center + direction * radius;
-      final elbow = center + direction * (radius + 12);
       final rightSide = direction.dx >= 0;
-      final end = Offset(elbow.dx + (rightSide ? 32 : -32), elbow.dy);
       final paint = Paint()
         ..color = segment.color.withValues(alpha: 0.82)
         ..strokeWidth = 1.3
         ..strokeCap = StrokeCap.round;
-
-      canvas.drawLine(start, elbow, paint);
-      canvas.drawLine(elbow, end, paint);
-      canvas.drawCircle(start, 2.2, Paint()..color = segment.color);
 
       final label = '${segment.label} ${(segment.percent * 100).round()}%';
       final textPainter = TextPainter(
@@ -882,13 +887,29 @@ class _CategoryCalloutPainter extends CustomPainter {
         ellipsis: '...',
         textDirection: TextDirection.ltr,
         textAlign: rightSide ? TextAlign.left : TextAlign.right,
-      )..layout(maxWidth: 74);
-      final textOffset = Offset(
-        rightSide ? end.dx + 5 : end.dx - textPainter.width - 5,
-        end.dy - textPainter.height / 2,
+      )..layout(maxWidth: math.min(74, maxLabelWidth));
+      final textBounds = categoryCalloutTextBounds(
+        size,
+        textPainter.size,
+        rightSide: rightSide,
+        preferredY: start.dy,
       );
-      textPainter.paint(canvas, textOffset);
+      final end = Offset(
+        rightSide ? textBounds.left - 4 : textBounds.right + 4,
+        textBounds.center.dy,
+      );
+      final elbow = Offset(
+        rightSide
+            ? math.min(start.dx + 12, end.dx)
+            : math.max(start.dx - 12, end.dx),
+        end.dy,
+      );
+      canvas.drawLine(start, elbow, paint);
+      canvas.drawLine(elbow, end, paint);
+      canvas.drawCircle(start, 2.2, Paint()..color = segment.color);
+      textPainter.paint(canvas, textBounds.topLeft);
     }
+    canvas.restore();
   }
 
   @override

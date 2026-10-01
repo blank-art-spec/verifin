@@ -5325,6 +5325,17 @@ class AppLocalizationsEn extends AppLocalizations {
   String get creditCycleBudgetLabel => 'Billing-cycle budget';
 
   @override
+  String homeCreditAccountsCount(int count) {
+    return 'Credit accounts · $count';
+  }
+
+  @override
+  String get homeCreditExpand => 'Show all';
+
+  @override
+  String get homeCreditCollapse => 'Show less';
+
+  @override
   String get creditCycleSetupHint =>
       'Set the statement day and payment rule to see cycle details';
 

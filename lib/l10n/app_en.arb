@@ -2098,6 +2098,15 @@
     "placeholders": {"days": {"type": "int"}}
   },
   "creditCycleBudgetLabel": "Billing-cycle budget",
+  "homeCreditAccountsCount": "Credit accounts · {count}",
+  "@homeCreditAccountsCount": {
+    "description": "Home credit account summary title; count is the number of credit entities in the active book.",
+    "placeholders": {"count": {"type": "int"}}
+  },
+  "homeCreditExpand": "Show all",
+  "@homeCreditExpand": {"description": "Expand the full home credit account list."},
+  "homeCreditCollapse": "Show less",
+  "@homeCreditCollapse": {"description": "Collapse the home credit account list to two rows."},
   "creditCycleSetupHint": "Set the statement day and payment rule to see cycle details",
   "creditCycleRange": "Current cycle {start} - {end}",
   "@creditCycleRange": {

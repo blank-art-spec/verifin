@@ -108,6 +108,7 @@ void main() {
       ..dispose();
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('餐饮').first);
@@ -164,6 +165,7 @@ void main() {
       ..dispose();
 
     await pumpApp(tester, store);
+    await revealHomeRecent(tester);
     await tester.tap(find.text('最近交易'));
     await tester.pumpAndSettle();
     await tester.tap(find.text('餐饮').first);

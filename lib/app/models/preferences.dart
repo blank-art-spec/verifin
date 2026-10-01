@@ -244,8 +244,8 @@ class PagePanelSpec {
 
 const List<PagePanelSpec> homePanelSpecs = <PagePanelSpec>[
   PagePanelSpec(id: 'trend'),
-  PagePanelSpec(id: 'recent'),
   PagePanelSpec(id: 'budget'),
+  PagePanelSpec(id: 'recent'),
   PagePanelSpec(id: 'calendar'),
 ];
 

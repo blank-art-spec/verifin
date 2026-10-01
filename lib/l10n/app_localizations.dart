@@ -9303,6 +9303,24 @@ abstract class AppLocalizations {
   /// **'本账期预算'**
   String get creditCycleBudgetLabel;
 
+  /// 首页信用账户摘要的标题，count 为当前账本信用主体数量。
+  ///
+  /// In zh, this message translates to:
+  /// **'信用账户 · {count} 个'**
+  String homeCreditAccountsCount(int count);
+
+  /// 展开首页信用账户摘要中的全部账户。
+  ///
+  /// In zh, this message translates to:
+  /// **'查看全部'**
+  String get homeCreditExpand;
+
+  /// 收起首页信用账户摘要，仅显示前两条。
+  ///
+  /// In zh, this message translates to:
+  /// **'收起'**
+  String get homeCreditCollapse;
+
   /// No description provided for @creditCycleSetupHint.
   ///
   /// In zh, this message translates to:

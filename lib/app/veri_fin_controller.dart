@@ -425,6 +425,23 @@ List<PagePanelSetting> _defaultPanelSettings(List<PagePanelSpec> specs) {
       .toList();
 }
 
+/// 将旧版本首页默认面板顺序升级为新的默认顺序。
+///
+/// [stored] 是本机偏好或备份中的原始列表；仅四个 id 恰好保持旧默认排列时互换
+/// 预算与最近交易，保留每项原有开关状态。其他自定义排序原样返回。
+List<PagePanelSetting> _migrateLegacyHomePanelOrder(
+  List<PagePanelSetting> stored,
+) {
+  if (stored.length != 4 ||
+      stored[0].id != 'trend' ||
+      stored[1].id != 'recent' ||
+      stored[2].id != 'budget' ||
+      stored[3].id != 'calendar') {
+    return stored;
+  }
+  return <PagePanelSetting>[stored[0], stored[2], stored[1], stored[3]];
+}
+
 /// 面板设置归一化:丢弃目录外的 id 并去重,目录新增的面板默认追加为开启;
 /// 若结果全部关闭则强制开启第一个,保证页面至少保留一个面板。
 List<PagePanelSetting> _normalizePanelSettings(

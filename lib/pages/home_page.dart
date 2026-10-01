@@ -24,6 +24,8 @@ import 'transactions_pages.dart';
 class HomePage extends StatelessWidget {
   const HomePage({super.key});
 
+  /// 读取当前账本的概览、信用账期、预算和最近交易；默认把概览置于信用摘要前，
+  /// 面板管理页中的自定义面板相对顺序仍按 [PanelPageKind.home] 保存值渲染。
   @override
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
@@ -71,6 +73,7 @@ class HomePage extends StatelessWidget {
     );
     final categoryBudgetRisk = topCategoryBudgetRisk(categoryBudgetSnapshots);
     final panelIds = controller.enabledPanelIds(PanelPageKind.home);
+    final showTrendFirst = panelIds.isNotEmpty && panelIds.first == 'trend';
     final recurringMissingByRule = controller.dueRecurringMissingRates(now);
     final recurringMissingCodes =
         recurringMissingByRule.values.expand((codes) => codes).toSet().toList()
@@ -81,6 +84,30 @@ class HomePage extends StatelessWidget {
               controller.accountsForCreditAccount(creditAccount.id).isNotEmpty,
         )
         .toList(growable: false);
+    final creditItems = <_HomeCreditItem>[
+      for (final creditAccount in visibleCreditAccounts)
+        _HomeCreditItem(
+          account: creditAccount,
+          overview: !creditAccount.hasCompleteCycleRule
+              ? null
+              : controller.creditCycleOverview(creditAccount, now: now),
+          childAccounts: controller.accountsForCreditAccount(creditAccount.id),
+        ),
+    ];
+    // 待还账单优先，其余按欠款高低排列；每行只显示自身币种，避免跨币种相加。
+    creditItems.sort((a, b) {
+      final aDue = a.overview?.billedOutstanding ?? 0;
+      final bDue = b.overview?.billedOutstanding ?? 0;
+      if ((aDue > 0) != (bDue > 0)) return aDue > 0 ? -1 : 1;
+      if (aDue > 0 && bDue > 0) {
+        final byDate = a.overview!.dueDate.compareTo(b.overview!.dueDate);
+        if (byDate != 0) return byDate;
+      }
+      final byDebt = (b.overview?.totalDebt ?? 0).compareTo(
+        a.overview?.totalDebt ?? 0,
+      );
+      return byDebt != 0 ? byDebt : a.account.name.compareTo(b.account.name);
+    });
 
     // 面板 id 对应的卡片,渲染顺序与开关由面板管理页配置。
     Widget panelFor(String id) {
@@ -249,31 +276,180 @@ class HomePage extends StatelessWidget {
               ),
             ),
           ],
-          for (final creditAccount in visibleCreditAccounts) ...<Widget>[
+          if (showTrendFirst) ...<Widget>[
             const SizedBox(height: 10),
-            CreditAccountCycleCard(
-              creditAccount: creditAccount,
-              overview: !creditAccount.hasCompleteCycleRule
-                  ? null
-                  : controller.creditCycleOverview(creditAccount, now: now),
-              childAccounts: controller.accountsForCreditAccount(
-                creditAccount.id,
-              ),
-              onTap: () => Navigator.of(context).push<void>(
-                MaterialPageRoute<void>(
-                  builder: (context) =>
-                      CreditAccountEditorPage(creditAccount: creditAccount),
-                ),
-              ),
-            ),
+            panelFor('trend'),
           ],
-          for (final id in panelIds) ...<Widget>[
+          if (creditItems.isNotEmpty) ...<Widget>[
             const SizedBox(height: 10),
-            panelFor(id),
+            _HomeCreditAccountsPanel(items: creditItems),
           ],
+          for (final id in panelIds.where(
+            (id) => !showTrendFirst || id != 'trend',
+          )) ...<Widget>[const SizedBox(height: 10), panelFor(id)],
           const SizedBox(height: 8),
           const PanelSettingsEntry(kind: PanelPageKind.home),
         ],
+      ),
+    );
+  }
+}
+
+/// 首页信用账户摘要的数据项，保留账期快照及子账户，展开时复用原完整卡片。
+class _HomeCreditItem {
+  const _HomeCreditItem({
+    required this.account,
+    required this.overview,
+    required this.childAccounts,
+  });
+
+  final CreditAccount account;
+  final CreditCycleOverview? overview;
+  final List<Account> childAccounts;
+}
+
+/// 将多个信用主体收在一张摘要卡中；点行查看完整四项指标，避免首页首屏被卡片淹没。
+class _HomeCreditAccountsPanel extends StatefulWidget {
+  const _HomeCreditAccountsPanel({required this.items});
+
+  final List<_HomeCreditItem> items;
+
+  /// 创建只持有展示展开状态的局部状态；[items] 的账本数据仍由控制器提供。
+  @override
+  State<_HomeCreditAccountsPanel> createState() =>
+      _HomeCreditAccountsPanelState();
+}
+
+class _HomeCreditAccountsPanelState extends State<_HomeCreditAccountsPanel> {
+  bool _showAll = false;
+  String? _selectedId;
+
+  /// 绘制最多两条默认摘要；展开列表与账期详情由本组件局部管理，不改变账本数据。
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final visible = _showAll ? widget.items : widget.items.take(2);
+    final selected = widget.items.where(
+      (item) => item.account.id == _selectedId,
+    );
+    return Column(
+      children: <Widget>[
+        VeriCard(
+          compact: veriUnifiedDesignPreview,
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: <Widget>[
+              Text(
+                l10n.homeCreditAccountsCount(widget.items.length),
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+              const SizedBox(height: 7),
+              for (final item in visible) ...<Widget>[
+                const Divider(height: 1),
+                _summaryRow(context, item),
+              ],
+              if (widget.items.length > 2)
+                Align(
+                  alignment: Alignment.centerRight,
+                  child: TextButton(
+                    key: const Key('home_credit_show_all'),
+                    onPressed: () => setState(() => _showAll = !_showAll),
+                    child: Text(
+                      _showAll
+                          ? l10n.homeCreditCollapse
+                          : l10n.homeCreditExpand,
+                    ),
+                  ),
+                ),
+            ],
+          ),
+        ),
+        if (selected.isNotEmpty) ...<Widget>[
+          const SizedBox(height: 8),
+          CreditAccountCycleCard(
+            creditAccount: selected.first.account,
+            overview: selected.first.overview,
+            childAccounts: selected.first.childAccounts,
+            onTap: () => Navigator.of(context).push<void>(
+              MaterialPageRoute<void>(
+                builder: (context) => CreditAccountEditorPage(
+                  creditAccount: selected.first.account,
+                ),
+              ),
+            ),
+          ),
+        ],
+      ],
+    );
+  }
+
+  /// 绘制单个账户摘要；金额只取该信用主体自身币种的账期快照。
+  /// [item] 包含账户、子账户和已计算的账期数据，点击后展开完整卡片。
+  Widget _summaryRow(BuildContext context, _HomeCreditItem item) {
+    final l10n = AppLocalizations.of(context);
+    final snapshot = item.overview;
+    final hasBilled = (snapshot?.billedOutstanding ?? 0) > 0;
+    final label = snapshot == null
+        ? l10n.creditCycleSetupHint
+        : snapshot.missingConversion
+        ? l10n.creditCycleMissingRate
+        : hasBilled
+        ? '${l10n.billedOutstandingLabel} · ${l10n.creditDueDateLabel} ${l10n.dateMonthDay(snapshot.dueDate)}'
+        : l10n.creditCycleCurrentDebt;
+    final value = snapshot == null || snapshot.missingConversion
+        ? l10n.notSet
+        : formatUserMoney(
+            hasBilled ? snapshot.billedOutstanding : snapshot.currentCycleDebt,
+            item.account.currencyCode,
+          );
+    return InkWell(
+      key: Key('home_credit_summary_${item.account.id}'),
+      onTap: () => setState(() {
+        _selectedId = _selectedId == item.account.id ? null : item.account.id;
+      }),
+      child: Padding(
+        padding: const EdgeInsets.symmetric(vertical: 10),
+        child: Row(
+          children: <Widget>[
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: <Widget>[
+                  Text(
+                    item.account.name,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 2),
+                  Text(
+                    label,
+                    maxLines: 1,
+                    overflow: TextOverflow.ellipsis,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(width: 8),
+            Flexible(
+              child: Text(
+                value,
+                maxLines: 1,
+                overflow: TextOverflow.ellipsis,
+                textAlign: TextAlign.end,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w800),
+              ),
+            ),
+            const Icon(Icons.chevron_right_rounded, size: 18),
+          ],
+        ),
       ),
     );
   }

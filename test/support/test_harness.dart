@@ -130,6 +130,21 @@ Future<void> tapBottomTab(WidgetTester tester, int index) async {
   await tester.pumpAndSettle();
 }
 
+/// 将首页“最近交易”面板滚动到可见位置。
+///
+/// [tester] 是当前 Widget 测试控制器。首页默认把预算放在最近交易之前，
+/// 800dp 等较矮视口会懒加载下方面板；测试必须先滚动，不能假设文字一开始已挂载。
+Future<void> revealHomeRecent(WidgetTester tester) async {
+  final recent = find.text('最近交易');
+  for (var attempt = 0; attempt < 16 && recent.evaluate().isEmpty; attempt++) {
+    await tester.drag(firstVerticalScrollable(), const Offset(0, -180));
+    await tester.pumpAndSettle();
+  }
+  expect(recent, findsOneWidget);
+  await tester.ensureVisible(recent);
+  await tester.pumpAndSettle();
+}
+
 /// 当前页面自身的纵向滚动视图。
 ///
 /// 主壳用横向 [PageView] 承载四个 Tab（支持左右滑动切换页面），它本身也是一个

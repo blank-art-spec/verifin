@@ -35,6 +35,7 @@ void main() {
     await tester.pumpAndSettle();
 
     // 首页「最近交易」反映原币金额；单币种账本默认隐藏重复单位。
+    await revealHomeRecent(tester);
     expect(find.text('最近交易'), findsOneWidget);
     expect(find.text('-45'), findsAtLeastNWidgets(1));
 
