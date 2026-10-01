@@ -3446,5 +3446,13 @@
   "attentionAllocateRepaymentMessage": "将按到期日由早到晚自动分配这笔还款，超出已出账待还的部分仍保持未分配。",
   "attentionAllocateRepaymentAction": "自动关联",
   "attentionAllocateRepaymentSuccess": "已关联到未结清账单",
-  "attentionAllocateRepaymentNoChange": "没有可分配的未结清账单"
+  "attentionAllocateRepaymentNoChange": "没有可分配的未结清账单",
+  "restorePreviewTitle": "确认恢复预览",
+  "restorePreviewSummary": "将恢复 {entries} 笔交易、{accounts} 个账户、{statements} 张正式账单。",
+  "@restorePreviewSummary": {"placeholders": {"entries": {"type": "int"}, "accounts": {"type": "int"}, "statements": {"type": "int"}}},
+  "restorePreviewAccount": "{name}：{amount}",
+  "@restorePreviewAccount": {"placeholders": {"name": {"type": "String"}, "amount": {"type": "String"}}},
+  "restorePreviewIssues": "缺失账户：{missing}；悬空退款：{orphan}。",
+  "@restorePreviewIssues": {"placeholders": {"missing": {"type": "int"}, "orphan": {"type": "int"}}},
+  "restorePreviewLegacyRefund": "旧版标量退款将在恢复时迁移为独立条目，已计入上方预测。"
 }

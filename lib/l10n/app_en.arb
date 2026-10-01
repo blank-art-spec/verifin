@@ -2303,5 +2303,13 @@
   "attentionAllocateRepaymentMessage": "This repayment will be assigned by due date, earliest first. Any amount beyond billed outstanding balances will remain unassigned.",
   "attentionAllocateRepaymentAction": "Link automatically",
   "attentionAllocateRepaymentSuccess": "Linked to outstanding statements",
-  "attentionAllocateRepaymentNoChange": "There are no outstanding statements to assign"
+  "attentionAllocateRepaymentNoChange": "There are no outstanding statements to assign",
+  "restorePreviewTitle": "Review restore",
+  "restorePreviewSummary": "Restore {entries} transactions, {accounts} accounts, and {statements} official statements.",
+  "@restorePreviewSummary": {"placeholders": {"entries": {"type": "int"}, "accounts": {"type": "int"}, "statements": {"type": "int"}}},
+  "restorePreviewAccount": "{name}: {amount}",
+  "@restorePreviewAccount": {"placeholders": {"name": {"type": "String"}, "amount": {"type": "String"}}},
+  "restorePreviewIssues": "Missing accounts: {missing}; orphan refunds: {orphan}.",
+  "@restorePreviewIssues": {"placeholders": {"missing": {"type": "int"}, "orphan": {"type": "int"}}},
+  "restorePreviewLegacyRefund": "Legacy refund amounts will become separate transactions during restore and are included in this preview."
 }

@@ -5893,4 +5893,26 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get attentionAllocateRepaymentNoChange =>
       'There are no outstanding statements to assign';
+
+  @override
+  String get restorePreviewTitle => 'Review restore';
+
+  @override
+  String restorePreviewSummary(int entries, int accounts, int statements) {
+    return 'Restore $entries transactions, $accounts accounts, and $statements official statements.';
+  }
+
+  @override
+  String restorePreviewAccount(String name, String amount) {
+    return '$name: $amount';
+  }
+
+  @override
+  String restorePreviewIssues(int missing, int orphan) {
+    return 'Missing accounts: $missing; orphan refunds: $orphan.';
+  }
+
+  @override
+  String get restorePreviewLegacyRefund =>
+      'Legacy refund amounts will become separate transactions during restore and are included in this preview.';
 }

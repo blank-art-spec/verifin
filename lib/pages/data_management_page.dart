@@ -623,25 +623,63 @@ class _DataManagementPageState extends State<DataManagementPage> {
     VeriFinController controller,
     List<int> bytes,
   ) async {
+    String? json;
     switch (BackupService.decodeBackupBytes(bytes)) {
       case PlainBackupJson(:final json):
-        controller.importDataJson(json);
-        return true;
+        return _confirmRestorePreview(context, controller, json);
       case EncryptedBackupEnvelope(:final envelope):
         if (!context.mounted) {
           return false;
         }
-        final decrypted = await _decryptForImport(
-          context,
-          controller,
-          envelope,
-        );
-        if (decrypted == null) {
+        json = await _decryptForImport(context, controller, envelope);
+        if (json == null || !context.mounted) {
           return false;
         }
-        controller.importDataJson(decrypted);
-        return true;
+        return _confirmRestorePreview(context, controller, json);
     }
+  }
+
+  /// 使用与正式导入相同的解码和校验生成只读预览，确认后才替换账本。
+  ///
+  /// [json] 是已解密的明文备份；用户取消时不写库、不改 Controller 状态。
+  Future<bool> _confirmRestorePreview(
+    BuildContext context,
+    VeriFinController controller,
+    String json,
+  ) async {
+    final preview = controller.importDataJson(json, dryRun: true);
+    if (!context.mounted) return false;
+    final l10n = AppLocalizations.of(context);
+    final lines = <String>[
+      l10n.restorePreviewSummary(
+        preview.entryCount,
+        preview.accountBalances.length,
+        preview.statementCount,
+      ),
+      '',
+      for (final item in preview.accountBalances)
+        l10n.restorePreviewAccount(
+          item.account.name,
+          formatUserMoney(item.balance, item.account.currencyCode),
+        ),
+      '',
+      l10n.restorePreviewIssues(
+        preview.missingAccountCount,
+        preview.orphanRefundCount,
+      ),
+      if (preview.legacyRefundMigrationPossible)
+        l10n.restorePreviewLegacyRefund,
+    ];
+    final confirmed = await showConfirmDialog(
+      context,
+      title: l10n.restorePreviewTitle,
+      message: lines.join('\n'),
+      confirmLabel: l10n.restoreLabel,
+      destructive: true,
+    );
+    if (!confirmed || !context.mounted) return false;
+    controller.importDataJson(json);
+    return true;
   }
 
   /// 处理加密备份的解密：先尝试已保存口令，失败或未设置则弹窗要求输入，
@@ -932,15 +970,6 @@ class _DataManagementPageState extends State<DataManagementPage> {
       ),
     );
     if (chosen == null || !context.mounted) {
-      return;
-    }
-    final confirmed = await showConfirmDialog(
-      context,
-      title: AppLocalizations.of(context).restoreFromThisTitle,
-      message: AppLocalizations.of(context).restoreFromThisMessage(chosen.name),
-      confirmLabel: AppLocalizations.of(context).restoreLabel,
-    );
-    if (!confirmed) {
       return;
     }
     try {

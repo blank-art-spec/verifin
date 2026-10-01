@@ -10304,6 +10304,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'没有可分配的未结清账单'**
   String get attentionAllocateRepaymentNoChange;
+
+  /// No description provided for @restorePreviewTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认恢复预览'**
+  String get restorePreviewTitle;
+
+  /// No description provided for @restorePreviewSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'将恢复 {entries} 笔交易、{accounts} 个账户、{statements} 张正式账单。'**
+  String restorePreviewSummary(int entries, int accounts, int statements);
+
+  /// No description provided for @restorePreviewAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{name}：{amount}'**
+  String restorePreviewAccount(String name, String amount);
+
+  /// No description provided for @restorePreviewIssues.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺失账户：{missing}；悬空退款：{orphan}。'**
+  String restorePreviewIssues(int missing, int orphan);
+
+  /// No description provided for @restorePreviewLegacyRefund.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧版标量退款将在恢复时迁移为独立条目，已计入上方预测。'**
+  String get restorePreviewLegacyRefund;
 }
 
 class _AppLocalizationsDelegate

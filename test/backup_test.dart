@@ -5,11 +5,84 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/backup/backup_service.dart';
 import 'package:verifin/app/home_metrics.dart';
 import 'package:verifin/app/models.dart';
+import 'package:verifin/local_storage/local_storage.dart';
 
 import 'support/test_harness.dart';
 
 void main() {
   useTestDatabases();
+
+  test('恢复预览计算账户余额且不修改当前内存或冷启动数据', () async {
+    final source = await makeController();
+    final bookId = source.activeBook.id;
+    source
+      ..addAccount(
+        Account(
+          id: 'preview-account',
+          bookId: bookId,
+          name: '待恢复账户',
+          type: AccountType.cash,
+          groupId: null,
+          initialBalance: 100,
+          iconCode: 'wallet',
+          note: '',
+          includeInAssets: true,
+          hidden: false,
+        ),
+      )
+      ..addEntry(
+        LedgerEntry(
+          id: 'preview-entry',
+          bookId: bookId,
+          type: EntryType.expense,
+          amount: 30,
+          categoryId: source.categories
+              .firstWhere((category) => category.type == EntryType.expense)
+              .id,
+          accountId: 'preview-account',
+          note: '测试支出',
+          occurredAt: DateTime(2026, 9, 28),
+        ),
+      );
+    await source.waitForPendingWrites();
+    final backup = source.exportDataJson();
+
+    final targetStore = LocalKeyValueStore();
+    final target = await makeController(targetStore);
+    final beforeAccountIds = target.accounts
+        .map((account) => account.id)
+        .toList();
+    final beforeEntryIds = target.entries.map((entry) => entry.id).toList();
+    final preview = target.importDataJson(backup, dryRun: true);
+    expect(preview.entryCount, 1);
+    expect(preview.accountBalances, hasLength(1));
+    expect(preview.accountBalances.single.balance, 70);
+    expect(preview.missingAccountCount, 0);
+    expect(preview.orphanRefundCount, 0);
+    expect(target.accounts.map((account) => account.id), beforeAccountIds);
+    expect(target.entries.map((entry) => entry.id), beforeEntryIds);
+    await target.waitForPendingWrites();
+    final reopened = await makeController(targetStore);
+    expect(reopened.accounts, isEmpty);
+    expect(reopened.entries, isEmpty);
+
+    final legacyRoot = Map<String, dynamic>.from(jsonDecode(backup) as Map);
+    final legacyData = Map<String, dynamic>.from(legacyRoot['data'] as Map);
+    final legacyEntries = (legacyData['entries'] as List)
+        .map((item) => Map<String, dynamic>.from(item as Map))
+        .toList();
+    legacyEntries.single['refundedBaseAmount'] = 20;
+    legacyData['entries'] = legacyEntries;
+    legacyRoot['data'] = legacyData;
+    final legacyJson = jsonEncode(legacyRoot);
+    final legacyPreview = reopened.importDataJson(legacyJson, dryRun: true);
+    expect(legacyPreview.entryCount, 2);
+    expect(legacyPreview.accountBalances.single.balance, 90);
+    expect(legacyPreview.legacyRefundMigrationPossible, isTrue);
+    reopened.importDataJson(legacyJson);
+    expect(reopened.entries, hasLength(2));
+    expect(reopened.accountBalance(reopened.accounts.single), 90);
+  });
 
   test(
     'exports a zip archive backup and re-imports with attachment intact',

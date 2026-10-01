@@ -149,6 +149,7 @@ Future<void> showInfoDialog({
   return showDialog<void>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      scrollable: true,
       title: Text(title),
       content: Text(message),
       actions: <Widget>[

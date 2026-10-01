@@ -122,6 +122,38 @@ int _compareEntriesLatestFirst(LedgerEntry a, LedgerEntry b) {
   return b.id.compareTo(a.id);
 }
 
+/// 恢复前的只读账户余额预测，币种与名称均来自待恢复备份。
+class BackupAccountBalancePreview {
+  const BackupAccountBalancePreview({
+    required this.account,
+    required this.balance,
+  });
+
+  final Account account;
+  final double balance;
+}
+
+/// 经正式导入校验后生成的恢复预览；构造过程不写 SQLite、KV 或内存账本。
+class BackupRestorePreview {
+  const BackupRestorePreview({
+    required this.entryCount,
+    required this.accountBalances,
+    required this.statementCount,
+    required this.missingAccountCount,
+    required this.orphanRefundCount,
+    required this.legacyRefundMigrationPossible,
+  });
+
+  final int entryCount;
+  final List<BackupAccountBalancePreview> accountBalances;
+  final int statementCount;
+  final int missingAccountCount;
+  final int orphanRefundCount;
+
+  /// 旧版标量退款在实际恢复时会迁移为独立条目；预览已计入这些条目及余额。
+  final bool legacyRefundMigrationPossible;
+}
+
 /// 记账后回调（新增交易时触发），供自动备份「每次记账后」挂钩。
 /// 由应用根组件注入，控制器本身不做文件 I/O，测试宿主保持为空。
 

@@ -6499,7 +6499,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   /// 从明文导出 JSON 导入。**字节层的格式判定（zip/加密信封/明文）不在 controller**
   /// ——调用方先经 `BackupService.decodeBackupBytes`（必要时 `decryptEnvelope`）
   /// 还原成明文 JSON 再传入，controller 只认 JSON。
-  void importDataJson(String rawJson) {
+  /// [dryRun] 为 true 时执行同一套解析与校验并返回预览，绝不替换状态或落库。
+  BackupRestorePreview importDataJson(String rawJson, {bool dryRun = false}) {
     final Object? decoded;
     try {
       decoded = jsonDecode(rawJson);
@@ -6755,6 +6756,14 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw FormatException('账目关联或金额不合法：${ledgerIssue.code.name}');
     }
 
+    final preview = _buildBackupRestorePreview(
+      accounts: nextAccounts,
+      entries: nextEntries,
+      anchors: nextBalanceAnchors,
+      statements: nextBillingStatements,
+    );
+    if (dryRun) return preview;
+
     _ledgerBooks
       ..clear()
       ..addAll(nextLedgerBooks);
@@ -6880,6 +6889,109 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       }),
     );
     notifyListeners();
+    return preview;
+  }
+
+  /// 对待恢复数据计算账户余额及引用异常；只读入参，不接触当前账本状态。
+  ///
+  /// [accounts]、[entries]、[anchors]、[statements] 已经过与正式导入相同的
+  /// 解析和校验。余额沿用账户初始值／最新锚点及其后的账户变动口径。
+  BackupRestorePreview _buildBackupRestorePreview({
+    required List<Account> accounts,
+    required List<LedgerEntry> entries,
+    required List<BalanceAnchor> anchors,
+    required List<BillingStatement> statements,
+  }) {
+    final accountsById = <String, Account>{
+      for (final account in accounts) account.id: account,
+    };
+    final entriesById = <String, LedgerEntry>{
+      for (final entry in entries) entry.id: entry,
+    };
+    final missingAccountIds = <String>{};
+    var orphanRefundCount = 0;
+    for (final entry in entries) {
+      for (final accountId in <String>[
+        entry.accountId,
+        if (entry.toAccountId != null) entry.toAccountId!,
+      ]) {
+        if (accountId.isNotEmpty && !accountsById.containsKey(accountId)) {
+          missingAccountIds.add(accountId);
+        }
+      }
+      if (entry.type == EntryType.refund &&
+          entriesById[entry.refundOf]?.type != EntryType.expense) {
+        orphanRefundCount++;
+      }
+    }
+    final expenseIdsWithRefund = <String>{
+      for (final entry in entries)
+        if (entry.type == EntryType.refund && entry.refundOf != null)
+          entry.refundOf!,
+    };
+    // 与 _migrateLegacyRefunds 使用同一触发条件；只预测条数与账户入账额，
+    // 不生成交易 ID，也不修改待恢复的原始条目。
+    final legacyRefundExpenses = entries
+        .where(
+          (entry) =>
+              entry.type == EntryType.expense &&
+              entry.refundedBaseAmount > 0 &&
+              !expenseIdsWithRefund.contains(entry.id) &&
+              entry.baseAmount > 0 &&
+              entry.amount > 0,
+        )
+        .toList();
+    final balances = <BackupAccountBalancePreview>[];
+    for (final account in accounts) {
+      BalanceAnchor? latest;
+      for (final anchor in anchors) {
+        if (anchor.accountId == account.id &&
+            (latest == null ||
+                anchor.effectiveAt.isAfter(latest.effectiveAt))) {
+          latest = anchor;
+        }
+      }
+      var balance = latest?.balance ?? account.initialBalance;
+      for (final entry in entries) {
+        if (entry.bookId == account.bookId &&
+            entryTouchesAccount(entry, account.id) &&
+            (latest == null ||
+                accountEffectDate(entry).isAfter(latest.effectiveAt))) {
+          balance += accountDeltaForEntry(entry, account.id);
+        }
+      }
+      for (final expense in legacyRefundExpenses) {
+        if (expense.bookId != account.bookId ||
+            expense.accountId != account.id ||
+            expense.accountAmount == null ||
+            (latest != null &&
+                !expense.occurredAt.isAfter(latest.effectiveAt))) {
+          continue;
+        }
+        final refundedBaseAmount = expense.refundedBaseAmount
+            .clamp(0.0, expense.baseAmount)
+            .toDouble();
+        final ratio = (refundedBaseAmount / expense.baseAmount).clamp(0.0, 1.0);
+        balance += normalizeCurrencyAmount(
+          expense.accountAmount! * ratio,
+          account.currencyCode,
+        );
+      }
+      balances.add(
+        BackupAccountBalancePreview(
+          account: account,
+          balance: normalizeCurrencyAmount(balance, account.currencyCode),
+        ),
+      );
+    }
+    return BackupRestorePreview(
+      entryCount: entries.length + legacyRefundExpenses.length,
+      accountBalances: List<BackupAccountBalancePreview>.unmodifiable(balances),
+      statementCount: statements.length,
+      missingAccountCount: missingAccountIds.length,
+      orphanRefundCount: orphanRefundCount,
+      legacyRefundMigrationPossible: legacyRefundExpenses.isNotEmpty,
+    );
   }
 
   void _validateImportedCurrencyData({

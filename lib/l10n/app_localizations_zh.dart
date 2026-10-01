@@ -5704,4 +5704,25 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get attentionAllocateRepaymentNoChange => '没有可分配的未结清账单';
+
+  @override
+  String get restorePreviewTitle => '确认恢复预览';
+
+  @override
+  String restorePreviewSummary(int entries, int accounts, int statements) {
+    return '将恢复 $entries 笔交易、$accounts 个账户、$statements 张正式账单。';
+  }
+
+  @override
+  String restorePreviewAccount(String name, String amount) {
+    return '$name：$amount';
+  }
+
+  @override
+  String restorePreviewIssues(int missing, int orphan) {
+    return '缺失账户：$missing；悬空退款：$orphan。';
+  }
+
+  @override
+  String get restorePreviewLegacyRefund => '旧版标量退款将在恢复时迁移为独立条目，已计入上方预测。';
 }
