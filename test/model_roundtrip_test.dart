@@ -65,6 +65,17 @@ void main() {
         statementId: 'statement-1',
       ),
     ],
+    auditHistory: <EntryAuditRecord>[
+      EntryAuditRecord(
+        at: DateTime(2026, 7, 14, 8, 1, 0, 123),
+        actor: EntryAuditActor.formalStatement,
+        reason: EntryAuditReason.reconciled,
+        sourceId: 'cmb',
+        changes: const <String, EntryAuditChange>{
+          'amount': EntryAuditChange(before: '100.0', after: '123.45'),
+        },
+      ),
+    ],
   );
 
   /// 可空字段全空、可省略字段全默认：保证 null / 缺省路径同样无损。

@@ -1090,6 +1090,9 @@ class SqliteLedgerRepository implements LedgerRepository {
     'source_records': e.sourceRecords.isEmpty
         ? null
         : jsonEncode(e.sourceRecords.map((record) => record.toJson()).toList()),
+    'audit_history': e.auditHistory.isEmpty
+        ? null
+        : jsonEncode(e.auditHistory.map((record) => record.toJson()).toList()),
   };
 
   static Map<String, Object?> _captureEventToRow(CaptureEvent event) =>
@@ -1248,7 +1251,21 @@ class SqliteLedgerRepository implements LedgerRepository {
       row['reconciliation_status'] as String?,
     ),
     sourceRecords: _decodeSourceRecords(row['source_records']),
+    auditHistory: _decodeAuditHistory(row['audit_history']),
   );
+
+  /// 读取交易审计历史；早期数据库该列为空时保留空列表。
+  static List<EntryAuditRecord> _decodeAuditHistory(Object? raw) {
+    if (raw is! String || raw.isEmpty) return const <EntryAuditRecord>[];
+    final decoded = jsonDecode(raw);
+    if (decoded is! List) return const <EntryAuditRecord>[];
+    return decoded
+        .whereType<Map>()
+        .map(
+          (item) => EntryAuditRecord.fromJson(Map<String, Object?>.from(item)),
+        )
+        .toList(growable: false);
+  }
 
   static List<EntrySourceRecord> _decodeSourceRecords(Object? raw) {
     if (raw is! String || raw.isEmpty) return const <EntrySourceRecord>[];

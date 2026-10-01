@@ -21,6 +21,7 @@ import 'currency_catalog.dart';
 import 'currency_math.dart';
 import 'credit_card.dart';
 import 'demo_data.dart';
+import 'entry_audit.dart';
 import 'model_lookup.dart';
 import 'amount_format.dart' as amount_format;
 import 'home_metrics.dart';

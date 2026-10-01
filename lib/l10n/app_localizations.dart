@@ -10370,6 +10370,168 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'来源商户'**
   String get sourceEvidenceMerchant;
+
+  /// No description provided for @entryAuditTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改历史'**
+  String get entryAuditTitle;
+
+  /// No description provided for @entryAuditActorUser.
+  ///
+  /// In zh, this message translates to:
+  /// **'用户'**
+  String get entryAuditActorUser;
+
+  /// No description provided for @entryAuditActorCapture.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动采集'**
+  String get entryAuditActorCapture;
+
+  /// No description provided for @entryAuditActorImport.
+  ///
+  /// In zh, this message translates to:
+  /// **'账单导入'**
+  String get entryAuditActorImport;
+
+  /// No description provided for @entryAuditActorStatement.
+  ///
+  /// In zh, this message translates to:
+  /// **'正式账单'**
+  String get entryAuditActorStatement;
+
+  /// No description provided for @entryAuditActorSystem.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统'**
+  String get entryAuditActorSystem;
+
+  /// No description provided for @entryAuditCreated.
+  ///
+  /// In zh, this message translates to:
+  /// **'创建交易'**
+  String get entryAuditCreated;
+
+  /// No description provided for @entryAuditEdited.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改交易'**
+  String get entryAuditEdited;
+
+  /// No description provided for @entryAuditReconciled.
+  ///
+  /// In zh, this message translates to:
+  /// **'核准交易'**
+  String get entryAuditReconciled;
+
+  /// No description provided for @entryAuditRefundChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改退款'**
+  String get entryAuditRefundChanged;
+
+  /// No description provided for @entryAuditAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易金额'**
+  String get entryAuditAmount;
+
+  /// No description provided for @entryAuditAccountAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户金额'**
+  String get entryAuditAccountAmount;
+
+  /// No description provided for @entryAuditToAccountAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'转入金额'**
+  String get entryAuditToAccountAmount;
+
+  /// No description provided for @entryAuditBaseAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'本位币金额'**
+  String get entryAuditBaseAmount;
+
+  /// No description provided for @entryAuditConversionSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'换算来源'**
+  String get entryAuditConversionSource;
+
+  /// No description provided for @entryAuditAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'付款账户'**
+  String get entryAuditAccount;
+
+  /// No description provided for @entryAuditToAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'收款账户'**
+  String get entryAuditToAccount;
+
+  /// No description provided for @entryAuditNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'备注'**
+  String get entryAuditNote;
+
+  /// No description provided for @entryAuditTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易时间'**
+  String get entryAuditTime;
+
+  /// No description provided for @entryAuditPrecision.
+  ///
+  /// In zh, this message translates to:
+  /// **'时间精度'**
+  String get entryAuditPrecision;
+
+  /// No description provided for @entryAuditPostDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'记账日'**
+  String get entryAuditPostDate;
+
+  /// No description provided for @entryAuditBillingCycle.
+  ///
+  /// In zh, this message translates to:
+  /// **'账期'**
+  String get entryAuditBillingCycle;
+
+  /// No description provided for @entryAuditTags.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签'**
+  String get entryAuditTags;
+
+  /// No description provided for @entryAuditFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'手续费'**
+  String get entryAuditFee;
+
+  /// No description provided for @entryAuditRefundOf.
+  ///
+  /// In zh, this message translates to:
+  /// **'原消费'**
+  String get entryAuditRefundOf;
+
+  /// No description provided for @entryAuditSettledAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'退款到账时间'**
+  String get entryAuditSettledAt;
+
+  /// No description provided for @entryAuditSources.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源记录'**
+  String get entryAuditSources;
 }
 
 class _AppLocalizationsDelegate

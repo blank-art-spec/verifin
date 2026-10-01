@@ -567,11 +567,18 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             if (!current.sourceRecords.any(
               (source) => source.fingerprint == record.fingerprint,
             )) {
-              nextEntries[entryIndex] = current.copyWith(
-                sourceRecords: <EntrySourceRecord>[
-                  ...current.sourceRecords,
-                  record,
-                ],
+              nextEntries[entryIndex] = appendEntryAudit(
+                before: current,
+                after: current.copyWith(
+                  sourceRecords: <EntrySourceRecord>[
+                    ...current.sourceRecords,
+                    record,
+                  ],
+                ),
+                actor: EntryAuditActor.autoCapture,
+                reason: EntryAuditReason.reconciled,
+                at: DateTime.now(),
+                sourceId: parsed.sourceId,
               );
             }
             parsed = parsed.copyWith(
@@ -590,7 +597,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             parsed.confidence == CaptureConfidence.high) {
           final entry = _buildAutomaticCaptureEntry(parsed, nextEntries, book);
           if (entry != null) {
-            nextEntries.add(entry);
+            nextEntries.add(
+              appendEntryAudit(
+                before: null,
+                after: entry,
+                actor: EntryAuditActor.autoCapture,
+                reason: EntryAuditReason.created,
+                at: DateTime.now(),
+                sourceId: parsed.sourceId,
+              ),
+            );
             nextEntries = _entriesWithSyncedRefundCache(nextEntries)
               ..sort(_compareEntriesLatestFirst);
             parsed = parsed.copyWith(
@@ -866,8 +882,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     if (!current.sourceRecords.any(
       (source) => source.fingerprint == record.fingerprint,
     )) {
-      nextEntries[entryIndex] = current.copyWith(
-        sourceRecords: <EntrySourceRecord>[...current.sourceRecords, record],
+      nextEntries[entryIndex] = appendEntryAudit(
+        before: current,
+        after: current.copyWith(
+          sourceRecords: <EntrySourceRecord>[...current.sourceRecords, record],
+        ),
+        actor: EntryAuditActor.user,
+        reason: EntryAuditReason.reconciled,
+        at: DateTime.now(),
+        sourceId: record.sourceId,
       );
     }
     nextEvents[eventIndex] = nextEvents[eventIndex].copyWith(
@@ -3805,7 +3828,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   VoidCallback? onEntryAdded;
 
   void addEntry(LedgerEntry entry) {
-    _entries.insert(0, entry);
+    _entries.insert(
+      0,
+      appendEntryAudit(
+        before: null,
+        after: entry,
+        actor: EntryAuditActor.user,
+        reason: EntryAuditReason.created,
+        at: DateTime.now(),
+      ),
+    );
     _entries.sort(_compareEntriesLatestFirst);
     _persistEntries();
     notifyListeners();
@@ -3877,7 +3909,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final nextEntries = <LedgerEntry>[];
     for (final current in _entries) {
       if (current.id == entry.id) {
-        nextEntries.add(entry.copyWith(refundedBaseAmount: 0));
+        nextEntries.add(
+          appendEntryAudit(
+            before: current,
+            after: entry.copyWith(refundedBaseAmount: 0),
+            actor: EntryAuditActor.user,
+            reason: EntryAuditReason.edited,
+            at: DateTime.now(),
+          ),
+        );
       } else if (current.type == EntryType.refund &&
           current.refundOf == entry.id) {
         continue;
@@ -3886,9 +3926,34 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       }
     }
     if (isNew) {
-      nextEntries.add(entry.copyWith(refundedBaseAmount: 0));
+      nextEntries.add(
+        appendEntryAudit(
+          before: null,
+          after: entry.copyWith(refundedBaseAmount: 0),
+          actor: EntryAuditActor.user,
+          reason: EntryAuditReason.created,
+          at: DateTime.now(),
+        ),
+      );
     }
-    nextEntries.addAll(refunds);
+    final previousRefunds = <String, LedgerEntry>{
+      for (final current in _entries)
+        if (current.type == EntryType.refund && current.refundOf == entry.id)
+          current.id: current,
+    };
+    nextEntries.addAll(
+      refunds.map(
+        (refund) => appendEntryAudit(
+          before: previousRefunds[refund.id],
+          after: refund,
+          actor: EntryAuditActor.user,
+          reason: previousRefunds.containsKey(refund.id)
+              ? EntryAuditReason.refundChanged
+              : EntryAuditReason.created,
+          at: DateTime.now(),
+        ),
+      ),
+    );
 
     final settledByExpense = <String, double>{};
     for (final current in nextEntries) {
@@ -4156,9 +4221,24 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     if (plan.newTags.isNotEmpty) {
       _tags.addAll(plan.newTags);
     }
+    final existingById = <String, LedgerEntry>{
+      for (final entry in _entries) entry.id: entry,
+    };
     final importedById = <String, LedgerEntry>{
-      for (final entry in plan.entries) entry.id: entry,
-      for (final entry in plan.reconciliationUpdates) entry.id: entry,
+      for (final entry in <LedgerEntry>[
+        ...plan.entries,
+        ...plan.reconciliationUpdates,
+      ])
+        entry.id: appendEntryAudit(
+          before: existingById[entry.id],
+          after: entry,
+          actor: EntryAuditActor.externalImport,
+          reason: existingById.containsKey(entry.id)
+              ? EntryAuditReason.reconciled
+              : EntryAuditReason.created,
+          at: DateTime.now(),
+          sourceId: entry.sourceRecords.lastOrNull?.sourceId ?? '',
+        ),
     };
     _entries.removeWhere((entry) => importedById.containsKey(entry.id));
     _entries.addAll(importedById.values);
@@ -4325,9 +4405,25 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     if (newRates.isNotEmpty) {
       _exchangeRates.addAll(newRates);
     }
+    final existingById = <String, LedgerEntry>{
+      for (final entry in _entries) entry.id: entry,
+    };
     final importedById = <String, LedgerEntry>{
-      for (final entry in entries) entry.id: entry,
-      for (final entry in reconciliationUpdates) entry.id: entry,
+      for (final entry in <LedgerEntry>[...entries, ...reconciliationUpdates])
+        entry.id: appendEntryAudit(
+          before: existingById[entry.id],
+          after: entry,
+          actor:
+              entry.sourceRecords.lastOrNull?.sourceId == 'cmb' ||
+                  entry.sourceRecords.lastOrNull?.sourceId == 'boc'
+              ? EntryAuditActor.formalStatement
+              : EntryAuditActor.externalImport,
+          reason: existingById.containsKey(entry.id)
+              ? EntryAuditReason.reconciled
+              : EntryAuditReason.created,
+          at: DateTime.now(),
+          sourceId: entry.sourceRecords.lastOrNull?.sourceId ?? '',
+        ),
     };
     _entries.removeWhere((entry) => importedById.containsKey(entry.id));
     _entries.addAll(importedById.values);
@@ -4348,7 +4444,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     if (index == -1) {
       return;
     }
-    _entries[index] = entry;
+    _entries[index] = appendEntryAudit(
+      before: _entries[index],
+      after: entry,
+      actor: EntryAuditActor.user,
+      reason: EntryAuditReason.edited,
+      at: DateTime.now(),
+    );
     _entries.sort(_compareEntriesLatestFirst);
     _persistEntries();
     notifyListeners();
@@ -4359,8 +4461,14 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final index = _entries.indexWhere((entry) => entry.id == entryId);
     if (index == -1 || _entries[index].sourceRecords.isEmpty) return false;
     final next = List<LedgerEntry>.of(_entries);
-    next[index] = next[index].copyWith(
-      reconciliationStatus: ReconciliationStatus.manuallyConfirmed,
+    next[index] = appendEntryAudit(
+      before: next[index],
+      after: next[index].copyWith(
+        reconciliationStatus: ReconciliationStatus.manuallyConfirmed,
+      ),
+      actor: EntryAuditActor.user,
+      reason: EntryAuditReason.reconciled,
+      at: DateTime.now(),
     );
     if (!await _runTrackedWrite(() => _repository.saveEntries(next))) {
       return false;
@@ -4378,7 +4486,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     if (index == -1 || _entries[index].type != EntryType.expense) {
       return;
     }
-    _entries[index] = _entries[index].copyWith(reimbursable: reimbursable);
+    _entries[index] = appendEntryAudit(
+      before: _entries[index],
+      after: _entries[index].copyWith(reimbursable: reimbursable),
+      actor: EntryAuditActor.user,
+      reason: EntryAuditReason.edited,
+      at: DateTime.now(),
+    );
     _persistEntries();
     notifyListeners();
   }
@@ -6441,7 +6555,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 7,
+      'version': 8,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'ledgerBooks': _ledgerBooks.map((book) => book.toJson()).toList(),
@@ -6518,7 +6632,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 7) {
+    if (version < 1 || version > 8) {
       throw FormatException('不支持的备份版本：$version');
     }
 

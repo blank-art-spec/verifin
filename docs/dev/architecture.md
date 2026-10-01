@@ -21,6 +21,7 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 | Android 系统能力 | `platform_bridge*.dart`、`android/`；单一 MethodChannel 分发，真实权限与冷启动验收 |
 | 自动采集 | `models/auto_capture.dart`、`auto_capture/capture_parser.dart`、`platform_bridge_auto_capture.dart`、原生 `AutoCaptureBridge` / `PaymentNotificationListenerService` / `SmsCaptureReceiver`；原始事件先落 SQLite，再解析、去重和置信度分流 |
 | 异常治理 | `attention_center.dart` 纯投影 + `attention_center_page.dart`；从交易对账状态、自动采集、退款关系、还款分配与缺失汇率实时汇总，不另建异常状态表 |
+| 交易审计 | `entry_audit.dart` 比较提交前后字段；`LedgerEntry.auditHistory` 经 SQLite v23 `entries.audit_history` 保存并纳入备份 v8，交易详情只读展示；旧交易不补造历史 |
 | 国际化 | `lib/l10n/*.arb` 与 gen-l10n 输出；[国际化验收](i18n-verification.md) |
 | 本地调试、发版 | [Android 开发](android-development.md)、`scripts/publish.*` |
 

@@ -20,6 +20,52 @@ import 'attachments_editor.dart';
 import 'refund_editor.dart';
 import 'sheets.dart';
 
+/// 把审计来源显示成当前语言；[actor] 是落库时保存的稳定来源枚举。
+String _auditActorLabel(AppLocalizations l10n, EntryAuditActor actor) =>
+    switch (actor) {
+      EntryAuditActor.user => l10n.entryAuditActorUser,
+      EntryAuditActor.autoCapture => l10n.entryAuditActorCapture,
+      EntryAuditActor.externalImport => l10n.entryAuditActorImport,
+      EntryAuditActor.formalStatement => l10n.entryAuditActorStatement,
+      EntryAuditActor.system => l10n.entryAuditActorSystem,
+    };
+
+/// 把一次提交的业务原因显示成当前语言；[reason] 不随语言切换而改变存储值。
+String _auditReasonLabel(AppLocalizations l10n, EntryAuditReason reason) =>
+    switch (reason) {
+      EntryAuditReason.created => l10n.entryAuditCreated,
+      EntryAuditReason.edited => l10n.entryAuditEdited,
+      EntryAuditReason.reconciled => l10n.entryAuditReconciled,
+      EntryAuditReason.refundChanged => l10n.entryAuditRefundChanged,
+    };
+
+/// 将审计差异中的稳定字段键 [field] 映射为用户能理解的名称。
+String _auditFieldLabel(AppLocalizations l10n, String field) => switch (field) {
+  'type' => l10n.commonType,
+  'amount' => l10n.entryAuditAmount,
+  'currencyCode' => l10n.entryCurrencyLabel,
+  'accountAmount' => l10n.entryAuditAccountAmount,
+  'toAccountAmount' => l10n.entryAuditToAccountAmount,
+  'baseAmount' => l10n.entryAuditBaseAmount,
+  'conversionSource' => l10n.entryAuditConversionSource,
+  'accountId' => l10n.entryAuditAccount,
+  'toAccountId' => l10n.entryAuditToAccount,
+  'categoryId' => l10n.commonCategory,
+  'note' => l10n.entryAuditNote,
+  'occurredAt' => l10n.entryAuditTime,
+  'occurredAtPrecision' => l10n.entryAuditPrecision,
+  'postDate' => l10n.entryAuditPostDate,
+  'billingCycleId' => l10n.entryAuditBillingCycle,
+  'tagIds' => l10n.entryAuditTags,
+  'fee' => l10n.entryAuditFee,
+  'reimbursable' => l10n.markReimbursable,
+  'refundOf' => l10n.entryAuditRefundOf,
+  'settledAt' => l10n.entryAuditSettledAt,
+  'reconciliationStatus' => l10n.reconciliationSection,
+  'sourceIds' => l10n.entryAuditSources,
+  _ => field,
+};
+
 class TransactionDetailPage extends StatefulWidget {
   const TransactionDetailPage({super.key, required this.entryId});
 
@@ -505,6 +551,37 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                       ],
                     ),
                   ),
+                ],
+                if (entry.auditHistory.isNotEmpty) ...<Widget>[
+                  const SizedBox(height: 12),
+                  SectionLabel(AppLocalizations.of(context).entryAuditTitle),
+                  for (final record in entry.auditHistory.reversed) ...<Widget>[
+                    VeriCard(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: <Widget>[
+                          Text(
+                            '${_auditActorLabel(AppLocalizations.of(context), record.actor)} · ${_auditReasonLabel(AppLocalizations.of(context), record.reason)}',
+                            style: Theme.of(context).textTheme.titleSmall,
+                          ),
+                          const SizedBox(height: 4),
+                          Text(
+                            '${MaterialLocalizations.of(context).formatFullDate(record.at)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(record.at))}${record.sourceId.isEmpty ? '' : ' · ${record.sourceId}'}',
+                            style: Theme.of(context).textTheme.bodySmall,
+                          ),
+                          for (final change in record.changes.entries)
+                            Padding(
+                              padding: const EdgeInsets.only(top: 6),
+                              child: Text(
+                                '${_auditFieldLabel(AppLocalizations.of(context), change.key)}：${change.value.before.isEmpty ? '∅' : change.value.before} → ${change.value.after.isEmpty ? '∅' : change.value.after}',
+                                style: Theme.of(context).textTheme.bodySmall,
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                  ],
                 ],
                 // 退款与交易本体共用同一份草稿，只在页头保存时一起落库。
                 if (_type == EntryType.expense) ...<Widget>[

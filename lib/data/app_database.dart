@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 22;
+  static const int schemaVersion = 23;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -75,6 +75,7 @@ class AppDatabase {
         20: _migrateToV20,
         21: _migrateToV21,
         22: _migrateToV22,
+        23: _migrateToV23,
       };
 
   /// 只读暴露迁移注册表，供迁移矩阵测试把库推进到任意中间版本。生产代码勿用。
@@ -451,6 +452,12 @@ class AppDatabase {
       "ALTER TABLE entries ADD COLUMN occurred_at_precision TEXT NOT NULL DEFAULT 'second'",
     );
     await db.execute('ALTER TABLE entries ADD COLUMN post_date INTEGER');
+  }
+
+  /// v22 → v23：为交易增加按提交顺序保存的字段修改历史；旧交易默认为空。
+  static Future<void> _migrateToV23(Database db) async {
+    if (!await _tableExists(db, 'entries')) return;
+    await db.execute('ALTER TABLE entries ADD COLUMN audit_history TEXT');
   }
 
   static Future<bool> _tableExists(Database db, String name) async {
@@ -836,7 +843,8 @@ class AppDatabase {
       refund_of TEXT,
       settled_at INTEGER,
       reconciliation_status TEXT NOT NULL DEFAULT 'unverified',
-      source_records TEXT
+      source_records TEXT,
+      audit_history TEXT
     )
     ''',
     'CREATE INDEX idx_entries_book ON entries (book_id)',

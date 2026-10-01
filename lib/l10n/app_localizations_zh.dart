@@ -5743,4 +5743,85 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get sourceEvidenceMerchant => '来源商户';
+
+  @override
+  String get entryAuditTitle => '修改历史';
+
+  @override
+  String get entryAuditActorUser => '用户';
+
+  @override
+  String get entryAuditActorCapture => '自动采集';
+
+  @override
+  String get entryAuditActorImport => '账单导入';
+
+  @override
+  String get entryAuditActorStatement => '正式账单';
+
+  @override
+  String get entryAuditActorSystem => '系统';
+
+  @override
+  String get entryAuditCreated => '创建交易';
+
+  @override
+  String get entryAuditEdited => '修改交易';
+
+  @override
+  String get entryAuditReconciled => '核准交易';
+
+  @override
+  String get entryAuditRefundChanged => '修改退款';
+
+  @override
+  String get entryAuditAmount => '交易金额';
+
+  @override
+  String get entryAuditAccountAmount => '账户金额';
+
+  @override
+  String get entryAuditToAccountAmount => '转入金额';
+
+  @override
+  String get entryAuditBaseAmount => '本位币金额';
+
+  @override
+  String get entryAuditConversionSource => '换算来源';
+
+  @override
+  String get entryAuditAccount => '付款账户';
+
+  @override
+  String get entryAuditToAccount => '收款账户';
+
+  @override
+  String get entryAuditNote => '备注';
+
+  @override
+  String get entryAuditTime => '交易时间';
+
+  @override
+  String get entryAuditPrecision => '时间精度';
+
+  @override
+  String get entryAuditPostDate => '记账日';
+
+  @override
+  String get entryAuditBillingCycle => '账期';
+
+  @override
+  String get entryAuditTags => '标签';
+
+  @override
+  String get entryAuditFee => '手续费';
+
+  @override
+  String get entryAuditRefundOf => '原消费';
+
+  @override
+  String get entryAuditSettledAt => '退款到账时间';
+
+  @override
+  String get entryAuditSources => '来源记录';
 }

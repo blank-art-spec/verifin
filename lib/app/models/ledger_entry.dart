@@ -36,6 +36,93 @@ enum OccurredAtPrecision {
       );
 }
 
+/// 修改交易的来源类型，审计记录只在本地账本和用户备份中保存。
+enum EntryAuditActor {
+  user,
+  autoCapture,
+  externalImport,
+  formalStatement,
+  system,
+}
+
+/// 修改的业务原因，详情页按当前语言显示标签。
+enum EntryAuditReason { created, edited, reconciled, refundChanged }
+
+/// 某个交易字段修改前后的可读值；空字符串表示此前没有值。
+class EntryAuditChange {
+  const EntryAuditChange({required this.before, required this.after});
+
+  final String before;
+  final String after;
+
+  /// 把单个字段的旧值、新值写成可用于备份与 SQLite JSON 列的对象。
+  Map<String, Object?> toJson() => <String, Object?>{
+    'before': before,
+    'after': after,
+  };
+
+  /// [json] 是备份或 SQLite 中保存的单个字段差异。
+  static EntryAuditChange fromJson(Map<String, Object?> json) =>
+      EntryAuditChange(
+        before: json['before'] as String? ?? '',
+        after: json['after'] as String? ?? '',
+      );
+}
+
+/// 一次已提交的交易变更，记录修改时间、操作者、原因及字段前后值。
+class EntryAuditRecord {
+  const EntryAuditRecord({
+    required this.at,
+    required this.actor,
+    required this.reason,
+    required this.changes,
+    this.sourceId = '',
+  });
+
+  final DateTime at;
+  final EntryAuditActor actor;
+  final EntryAuditReason reason;
+  final Map<String, EntryAuditChange> changes;
+  final String sourceId;
+
+  /// 序列化提交时间、修改来源、原因与字段差异；空 [sourceId] 省略。
+  Map<String, Object?> toJson() => <String, Object?>{
+    'at': at.toIso8601String(),
+    'actor': actor.name,
+    'reason': reason.name,
+    'changes': <String, Object?>{
+      for (final item in changes.entries) item.key: item.value.toJson(),
+    },
+    if (sourceId.isNotEmpty) 'sourceId': sourceId,
+  };
+
+  /// [json] 缺失新字段时采用保守默认，保证旧备份可恢复。
+  static EntryAuditRecord fromJson(Map<String, Object?> json) {
+    final rawChanges = json['changes'];
+    return EntryAuditRecord(
+      at: DateTime.parse(json['at'] as String),
+      actor: EntryAuditActor.values.firstWhere(
+        (item) => item.name == json['actor'],
+        orElse: () => EntryAuditActor.system,
+      ),
+      reason: EntryAuditReason.values.firstWhere(
+        (item) => item.name == json['reason'],
+        orElse: () => EntryAuditReason.edited,
+      ),
+      changes: rawChanges is Map
+          ? <String, EntryAuditChange>{
+              for (final item in rawChanges.entries)
+                if (item.value is Map)
+                  item.key.toString(): EntryAuditChange.fromJson(
+                    Map<String, Object?>.from(item.value as Map),
+                  ),
+            }
+          : const <String, EntryAuditChange>{},
+      sourceId: json['sourceId'] as String? ?? '',
+    );
+  }
+}
+
 /// 外部来源证据。交易表仍只有一笔真实消费；手工记录、支付平台和银行正式账单
 /// 可以各追加一条证据。稳定 [fingerprint] 与可选 [sourceTransactionId] 负责幂等。
 class EntrySourceRecord {
@@ -191,6 +278,7 @@ class LedgerEntry {
     this.settledAt,
     this.reconciliationStatus = ReconciliationStatus.unverified,
     this.sourceRecords = const <EntrySourceRecord>[],
+    this.auditHistory = const <EntryAuditRecord>[],
   }) : accountAmount = accountAmount ?? (accountId == '' ? null : amount),
        toAccountAmount =
            toAccountAmount ??
@@ -271,6 +359,9 @@ class LedgerEntry {
   /// 同一真实交易的来源证据集合。按 fingerprint/sourceTransactionId 去重。
   final List<EntrySourceRecord> sourceRecords;
 
+  /// 已提交修改的追加式历史；旧账目没有历史时为空。
+  final List<EntryAuditRecord> auditHistory;
+
   /// 是否为「待到账」退款（已申请、钱还没回来）。
   bool get isPendingRefund => type == EntryType.refund && settledAt == null;
 
@@ -323,6 +414,7 @@ class LedgerEntry {
     bool clearSettledAt = false,
     ReconciliationStatus? reconciliationStatus,
     List<EntrySourceRecord>? sourceRecords,
+    List<EntryAuditRecord>? auditHistory,
   }) {
     return LedgerEntry(
       id: id ?? this.id,
@@ -357,6 +449,7 @@ class LedgerEntry {
       settledAt: clearSettledAt ? null : settledAt ?? this.settledAt,
       reconciliationStatus: reconciliationStatus ?? this.reconciliationStatus,
       sourceRecords: sourceRecords ?? this.sourceRecords,
+      auditHistory: auditHistory ?? this.auditHistory,
     );
   }
 
@@ -391,6 +484,8 @@ class LedgerEntry {
         'sourceRecords': sourceRecords
             .map((record) => record.toJson())
             .toList(),
+      if (auditHistory.isNotEmpty)
+        'auditHistory': auditHistory.map((item) => item.toJson()).toList(),
     };
   }
 
@@ -437,8 +532,18 @@ class LedgerEntry {
         json['reconciliationStatus'] as String?,
       ),
       sourceRecords: _sourceRecordList(json['sourceRecords']),
+      auditHistory: _auditRecordList(json['auditHistory']),
     );
   }
+}
+
+/// 从备份或 SQLite 的 JSON 数组恢复历史；旧账目缺该字段时为空。
+List<EntryAuditRecord> _auditRecordList(Object? value) {
+  if (value is! List) return const <EntryAuditRecord>[];
+  return value
+      .whereType<Map>()
+      .map((item) => EntryAuditRecord.fromJson(Map<String, Object?>.from(item)))
+      .toList(growable: false);
 }
 
 List<EntrySourceRecord> _sourceRecordList(Object? value) {

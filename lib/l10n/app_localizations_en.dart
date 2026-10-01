@@ -5933,4 +5933,85 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get sourceEvidenceMerchant => 'Source merchant';
+
+  @override
+  String get entryAuditTitle => 'Change history';
+
+  @override
+  String get entryAuditActorUser => 'User';
+
+  @override
+  String get entryAuditActorCapture => 'Auto capture';
+
+  @override
+  String get entryAuditActorImport => 'Statement import';
+
+  @override
+  String get entryAuditActorStatement => 'Formal statement';
+
+  @override
+  String get entryAuditActorSystem => 'System';
+
+  @override
+  String get entryAuditCreated => 'Created transaction';
+
+  @override
+  String get entryAuditEdited => 'Edited transaction';
+
+  @override
+  String get entryAuditReconciled => 'Reconciled transaction';
+
+  @override
+  String get entryAuditRefundChanged => 'Edited refund';
+
+  @override
+  String get entryAuditAmount => 'Transaction amount';
+
+  @override
+  String get entryAuditAccountAmount => 'Account amount';
+
+  @override
+  String get entryAuditToAccountAmount => 'Incoming amount';
+
+  @override
+  String get entryAuditBaseAmount => 'Base amount';
+
+  @override
+  String get entryAuditConversionSource => 'Conversion source';
+
+  @override
+  String get entryAuditAccount => 'Payment account';
+
+  @override
+  String get entryAuditToAccount => 'Receiving account';
+
+  @override
+  String get entryAuditNote => 'Note';
+
+  @override
+  String get entryAuditTime => 'Transaction time';
+
+  @override
+  String get entryAuditPrecision => 'Time precision';
+
+  @override
+  String get entryAuditPostDate => 'Posting date';
+
+  @override
+  String get entryAuditBillingCycle => 'Billing cycle';
+
+  @override
+  String get entryAuditTags => 'Tags';
+
+  @override
+  String get entryAuditFee => 'Fee';
+
+  @override
+  String get entryAuditRefundOf => 'Original expense';
+
+  @override
+  String get entryAuditSettledAt => 'Refund settlement time';
+
+  @override
+  String get entryAuditSources => 'Source records';
 }

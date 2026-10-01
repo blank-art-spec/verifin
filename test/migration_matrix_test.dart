@@ -171,6 +171,7 @@ void main() {
       expect(lunch.conversionSource, ConversionSource.legacy);
       expect(lunch.reconciliationStatus, ReconciliationStatus.unverified);
       expect(lunch.sourceRecords, isEmpty);
+      expect(lunch.auditHistory, isEmpty);
       expect(lunch.billingCycleId, isNull);
       expect(lunch.occurredAtPrecision, OccurredAtPrecision.second);
       expect(lunch.postDate, isNull);
