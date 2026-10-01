@@ -428,31 +428,66 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                               .join('、'),
                         ),
                         if (provenance.occurredAt != null)
-                          DetailInfoRow(
-                            label: AppLocalizations.of(context).entryTimeSource,
-                            value: provenance.occurredAt!.sourceId,
+                          SettingsRow(
+                            icon: Icons.schedule_outlined,
+                            title: AppLocalizations.of(context).entryTimeSource,
+                            trailing: provenance.occurredAt!.sourceId,
+                            trailingIcon: Icons.chevron_right,
+                            onTap: () => showEntrySourceEvidenceSheet(
+                              context: context,
+                              record: provenance.occurredAt!,
+                              title: AppLocalizations.of(
+                                context,
+                              ).entryTimeSource,
+                            ),
                           ),
                         if (provenance.postDate != null)
-                          DetailInfoRow(
-                            label: AppLocalizations.of(
+                          SettingsRow(
+                            icon: Icons.event_note_outlined,
+                            title: AppLocalizations.of(
                               context,
                             ).entryPostingSource,
-                            value: provenance.postDate!.sourceId,
+                            trailing: provenance.postDate!.sourceId,
+                            trailingIcon: Icons.chevron_right,
+                            onTap: () => showEntrySourceEvidenceSheet(
+                              context: context,
+                              record: provenance.postDate!,
+                              title: AppLocalizations.of(
+                                context,
+                              ).entryPostingSource,
+                            ),
                           ),
                         if (provenance.amount != null)
-                          DetailInfoRow(
-                            label: AppLocalizations.of(
+                          SettingsRow(
+                            icon: Icons.payments_outlined,
+                            title: AppLocalizations.of(
                               context,
                             ).entryAmountSource,
-                            value: provenance.amount!.sourceId,
+                            trailing: provenance.amount!.sourceId,
+                            trailingIcon: Icons.chevron_right,
+                            onTap: () => showEntrySourceEvidenceSheet(
+                              context: context,
+                              record: provenance.amount!,
+                              title: AppLocalizations.of(
+                                context,
+                              ).entryAmountSource,
+                            ),
                           ),
                         if (provenance.merchant != null)
-                          DetailInfoRow(
-                            label: AppLocalizations.of(
+                          SettingsRow(
+                            icon: Icons.storefront_outlined,
+                            title: AppLocalizations.of(
                               context,
                             ).entryMerchantSource,
-                            value:
-                                '${provenance.merchant!.sourceId} · ${provenance.merchant!.merchant}',
+                            trailing: provenance.merchant!.sourceId,
+                            trailingIcon: Icons.chevron_right,
+                            onTap: () => showEntrySourceEvidenceSheet(
+                              context: context,
+                              record: provenance.merchant!,
+                              title: AppLocalizations.of(
+                                context,
+                              ).entryMerchantSource,
+                            ),
                           ),
                         if (entry.reconciliationStatus ==
                                 ReconciliationStatus.autoMatched ||

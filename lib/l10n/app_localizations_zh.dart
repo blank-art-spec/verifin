@@ -5725,4 +5725,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get restorePreviewLegacyRefund => '旧版标量退款将在恢复时迁移为独立条目，已计入上方预测。';
+
+  @override
+  String get sourceEvidenceSourceId => '来源';
+
+  @override
+  String get sourceEvidenceTransactionId => '来源交易号';
+
+  @override
+  String get sourceEvidenceTransactionDate => '来源交易时间';
+
+  @override
+  String get sourceEvidencePostingDate => '来源记账日';
+
+  @override
+  String get sourceEvidenceAmount => '来源金额';
+
+  @override
+  String get sourceEvidenceMerchant => '来源商户';
 }

@@ -10334,6 +10334,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'旧版标量退款将在恢复时迁移为独立条目，已计入上方预测。'**
   String get restorePreviewLegacyRefund;
+
+  /// No description provided for @sourceEvidenceSourceId.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源'**
+  String get sourceEvidenceSourceId;
+
+  /// No description provided for @sourceEvidenceTransactionId.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源交易号'**
+  String get sourceEvidenceTransactionId;
+
+  /// No description provided for @sourceEvidenceTransactionDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源交易时间'**
+  String get sourceEvidenceTransactionDate;
+
+  /// No description provided for @sourceEvidencePostingDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源记账日'**
+  String get sourceEvidencePostingDate;
+
+  /// No description provided for @sourceEvidenceAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源金额'**
+  String get sourceEvidenceAmount;
+
+  /// No description provided for @sourceEvidenceMerchant.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源商户'**
+  String get sourceEvidenceMerchant;
 }
 
 class _AppLocalizationsDelegate

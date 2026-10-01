@@ -76,6 +76,69 @@ Future<T?> showVeriContentSheet<T>({
   );
 }
 
+/// 展示单条外部来源证据，供交易详情解释某个字段为何采用当前值。
+///
+/// [context] 提供语言与主题，[record] 是已存入交易的来源快照，[title] 指明用户
+/// 正在核对的字段；此弹层完全只读，不会触发核准或账目修改。
+Future<void> showEntrySourceEvidenceSheet({
+  required BuildContext context,
+  required EntrySourceRecord record,
+  required String title,
+}) async {
+  await showVeriContentSheet<void>(
+    context: context,
+    builder: (sheetContext) {
+      final l10n = AppLocalizations.of(sheetContext);
+      return SafeArea(
+        child: SingleChildScrollView(
+          padding: const EdgeInsets.fromLTRB(18, 18, 18, 28),
+          child: Column(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Text(title, style: Theme.of(sheetContext).textTheme.titleLarge),
+              const SizedBox(height: 12),
+              DetailInfoRow(
+                label: l10n.sourceEvidenceSourceId,
+                value: record.sourceId,
+              ),
+              if (record.sourceTransactionId.isNotEmpty)
+                DetailInfoRow(
+                  label: l10n.sourceEvidenceTransactionId,
+                  value: record.sourceTransactionId,
+                ),
+              DetailInfoRow(
+                label: l10n.sourceEvidenceTransactionDate,
+                value: formatEntryStamp(
+                  record.transactionDate,
+                  precision: record.transactionDatePrecision,
+                ),
+              ),
+              if (record.postedDate != null)
+                DetailInfoRow(
+                  label: l10n.sourceEvidencePostingDate,
+                  value: formatEntryStamp(
+                    record.postedDate!,
+                    precision: OccurredAtPrecision.date,
+                  ),
+                ),
+              DetailInfoRow(
+                label: l10n.sourceEvidenceAmount,
+                value: formatUserMoney(record.amount, record.currencyCode),
+              ),
+              if (record.merchant.isNotEmpty)
+                DetailInfoRow(
+                  label: l10n.sourceEvidenceMerchant,
+                  value: record.merchant,
+                ),
+            ],
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// 底部弹窗内嵌的拖拽把手：与内容连成一体。
 class _VeriSheetDragHandle extends StatelessWidget {
   const _VeriSheetDragHandle();

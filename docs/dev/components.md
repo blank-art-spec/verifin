@@ -113,6 +113,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 |---|---|---|---|
 | `TransactionTile` | Widget | `common_widgets.dart` | 单条交易行（图标+分类+时间/备注+金额+账户 pill+待报销/已退款徽标，多选态内建）；跨账户已到账退款显示「退款」与正向金额。副行的跨币种换算**只在两端币种不同时**渲染（同币种两端的换算整条是重复信息），`forceUnit: true` 只留给真正同屏出现第二个币种的换算字段，「显示逐笔结余」的余额走 `formatUserMoney` 不带单位 |
 | `TransactionListCard` | Widget | `common_widgets.dart` | 交易列表卡（多条 `TransactionTile` + 分隔线） |
+| `showEntrySourceEvidenceSheet` | Sheet helper | `sheets.dart` | 交易详情的只读来源证据弹层：来源、交易号、可信时间精度、记账日、金额和商户；使用统一实色弹层外壳 |
 | `DateGroupHeader` | Widget | `common_widgets.dart` | 日期分组小标题（日期+今天/昨天+当日合计） |
 | `groupEntriesByDate` / `relativeDay` | 纯函数 | `common_widgets.dart` | 按日分组、日期倒序 / 相对今天；`DateEntryGroup` 分组模型 |
 | `CalendarPreview` | Widget | `common_widgets.dart` | 月历预览（内建月份切换 + 日收支）；必传 `currencyCode`；单币种账本隐藏单位时右下角不再显示轻量单位提示，并**连同前置 6dp 间距整块不构建**（`if (!textCurrencyUnitHidden)`，见维护约定），多币种账本照常显示 |

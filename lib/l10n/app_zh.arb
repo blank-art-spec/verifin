@@ -3454,5 +3454,11 @@
   "@restorePreviewAccount": {"placeholders": {"name": {"type": "String"}, "amount": {"type": "String"}}},
   "restorePreviewIssues": "缺失账户：{missing}；悬空退款：{orphan}。",
   "@restorePreviewIssues": {"placeholders": {"missing": {"type": "int"}, "orphan": {"type": "int"}}},
-  "restorePreviewLegacyRefund": "旧版标量退款将在恢复时迁移为独立条目，已计入上方预测。"
+  "restorePreviewLegacyRefund": "旧版标量退款将在恢复时迁移为独立条目，已计入上方预测。",
+  "sourceEvidenceSourceId": "来源",
+  "sourceEvidenceTransactionId": "来源交易号",
+  "sourceEvidenceTransactionDate": "来源交易时间",
+  "sourceEvidencePostingDate": "来源记账日",
+  "sourceEvidenceAmount": "来源金额",
+  "sourceEvidenceMerchant": "来源商户"
 }

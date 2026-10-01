@@ -5915,4 +5915,22 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get restorePreviewLegacyRefund =>
       'Legacy refund amounts will become separate transactions during restore and are included in this preview.';
+
+  @override
+  String get sourceEvidenceSourceId => 'Source';
+
+  @override
+  String get sourceEvidenceTransactionId => 'Source transaction ID';
+
+  @override
+  String get sourceEvidenceTransactionDate => 'Source transaction time';
+
+  @override
+  String get sourceEvidencePostingDate => 'Source posting date';
+
+  @override
+  String get sourceEvidenceAmount => 'Source amount';
+
+  @override
+  String get sourceEvidenceMerchant => 'Source merchant';
 }

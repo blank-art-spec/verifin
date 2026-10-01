@@ -2311,5 +2311,11 @@
   "@restorePreviewAccount": {"placeholders": {"name": {"type": "String"}, "amount": {"type": "String"}}},
   "restorePreviewIssues": "Missing accounts: {missing}; orphan refunds: {orphan}.",
   "@restorePreviewIssues": {"placeholders": {"missing": {"type": "int"}, "orphan": {"type": "int"}}},
-  "restorePreviewLegacyRefund": "Legacy refund amounts will become separate transactions during restore and are included in this preview."
+  "restorePreviewLegacyRefund": "Legacy refund amounts will become separate transactions during restore and are included in this preview.",
+  "sourceEvidenceSourceId": "Source",
+  "sourceEvidenceTransactionId": "Source transaction ID",
+  "sourceEvidenceTransactionDate": "Source transaction time",
+  "sourceEvidencePostingDate": "Source posting date",
+  "sourceEvidenceAmount": "Source amount",
+  "sourceEvidenceMerchant": "Source merchant"
 }
