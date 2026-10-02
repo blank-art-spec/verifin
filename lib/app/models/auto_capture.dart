@@ -322,6 +322,9 @@ class AutoCaptureRule {
     this.sourceKind,
     this.sourceId = '',
     this.textContains = '',
+    this.startDate,
+    this.endDate,
+    this.placeContains = '',
     this.cardLast4 = '',
     this.exactAmount,
     this.matchKind,
@@ -341,6 +344,9 @@ class AutoCaptureRule {
   final CaptureSourceKind? sourceKind;
   final String sourceId;
   final String textContains;
+  final DateTime? startDate;
+  final DateTime? endDate;
+  final String placeContains;
   final String cardLast4;
   final double? exactAmount;
   final CaptureTransactionKind? matchKind;
@@ -360,6 +366,11 @@ class AutoCaptureRule {
     bool clearSourceKind = false,
     String? sourceId,
     String? textContains,
+    DateTime? startDate,
+    bool clearStartDate = false,
+    DateTime? endDate,
+    bool clearEndDate = false,
+    String? placeContains,
     String? cardLast4,
     double? exactAmount,
     bool clearExactAmount = false,
@@ -384,6 +395,9 @@ class AutoCaptureRule {
     sourceKind: clearSourceKind ? null : sourceKind ?? this.sourceKind,
     sourceId: sourceId ?? this.sourceId,
     textContains: textContains ?? this.textContains,
+    startDate: clearStartDate ? null : startDate ?? this.startDate,
+    endDate: clearEndDate ? null : endDate ?? this.endDate,
+    placeContains: placeContains ?? this.placeContains,
     cardLast4: cardLast4 ?? this.cardLast4,
     exactAmount: clearExactAmount ? null : exactAmount ?? this.exactAmount,
     matchKind: clearMatchKind ? null : matchKind ?? this.matchKind,
@@ -409,6 +423,9 @@ class AutoCaptureRule {
     if (sourceKind != null) 'sourceKind': sourceKind!.name,
     'sourceId': sourceId,
     'textContains': textContains,
+    if (startDate != null) 'startDate': startDate!.toIso8601String(),
+    if (endDate != null) 'endDate': endDate!.toIso8601String(),
+    'placeContains': placeContains,
     'cardLast4': cardLast4,
     if (exactAmount != null) 'exactAmount': exactAmount,
     if (matchKind != null) 'matchKind': matchKind!.name,
@@ -432,6 +449,9 @@ class AutoCaptureRule {
         : CaptureSourceKind.fromStorage(json['sourceKind'] as String?),
     sourceId: json['sourceId'] as String? ?? '',
     textContains: json['textContains'] as String? ?? '',
+    startDate: DateTime.tryParse(json['startDate'] as String? ?? ''),
+    endDate: DateTime.tryParse(json['endDate'] as String? ?? ''),
+    placeContains: json['placeContains'] as String? ?? '',
     cardLast4: json['cardLast4'] as String? ?? '',
     exactAmount: (json['exactAmount'] as num?)?.toDouble(),
     matchKind: json['matchKind'] == null

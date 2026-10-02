@@ -688,4 +688,61 @@ void main() {
       isFalse,
     );
   });
+
+  test('日期与地点同时命中才建议项目标签，且不改写商户等固有字段', () async {
+    final controller = await makeController();
+    final projectId = controller.addTag('项目:2026国庆返乡')!;
+    final rule = AutoCaptureRule(
+      id: 'holiday-project',
+      bookId: controller.activeBook.id,
+      name: '国庆返乡',
+      priority: 10,
+      placeContains: '湛江',
+      startDate: DateTime(2026, 10, 1),
+      endDate: DateTime(2026, 10, 7),
+      setTagIds: <String>[projectId],
+    );
+
+    /// 以 [text] 和发生日 [at] 生成原始通知，并返回规则解析后的候选结果。
+    CaptureEvent parse(String text, DateTime at) {
+      final event = captureEventFromInput(
+        id: 'event-${at.day}',
+        bookId: controller.activeBook.id,
+        input: RawCaptureInput(
+          sourceKind: CaptureSourceKind.notification,
+          sourceId: 'com.example.bank',
+          sourceEventId: 'notice-${at.day}',
+          rawText: text,
+          receivedAt: at,
+        ),
+      );
+      return parseCaptureEvent(
+        event,
+        CaptureParseContext(
+          book: controller.activeBook,
+          accounts: controller.accounts,
+          creditAccounts: controller.creditAccounts,
+          categories: controller.categories,
+          tags: controller.tags,
+          entries: controller.entries,
+          rules: <AutoCaptureRule>[rule],
+        ),
+        processedAt: at,
+      );
+    }
+
+    expect(
+      parse('湛江消费38.50元，商户麦当劳', DateTime(2026, 10, 2)).tagCandidateIds,
+      <String>[projectId],
+    );
+    expect(
+      parse('深圳消费38.50元，商户麦当劳', DateTime(2026, 10, 2)).tagCandidateIds,
+      isEmpty,
+    );
+    expect(
+      parse('湛江消费38.50元，商户麦当劳', DateTime(2026, 10, 8)).tagCandidateIds,
+      isEmpty,
+    );
+    controller.dispose();
+  });
 }

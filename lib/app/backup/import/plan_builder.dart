@@ -460,19 +460,29 @@ ImportPlan buildImportPlanFromRecords({
       if (label.isEmpty) {
         continue;
       }
-      final normalized = normalizedCategoryLabel(label);
-      if (!seen.add(normalized)) {
+      final parsed = parseLegacyTagLabel(label);
+      final normalized = normalizedCategoryLabel(parsed.label);
+      if (!seen.add('${parsed.groupId}:$normalized')) {
         continue;
       }
       final match = workingTags.firstWhere(
-        (tag) => normalizedCategoryLabel(tag.label) == normalized,
+        (tag) =>
+            tag.groupId == parsed.groupId &&
+            (normalizedCategoryLabel(tag.label) == normalized ||
+                tag.aliases.any(
+                  (alias) => normalizedCategoryLabel(alias) == normalized,
+                )),
         orElse: () => const Tag(id: '', label: ''),
       );
       if (match.id.isNotEmpty) {
-        ids.add(match.id);
+        ids.add(canonicalTagOf(match.id, workingTags)?.id ?? match.id);
         continue;
       }
-      final tag = Tag(id: nextId('tag'), label: label);
+      final tag = Tag(
+        id: nextId('tag'),
+        groupId: parsed.groupId,
+        label: parsed.label,
+      );
       workingTags.add(tag);
       newTags.add(tag);
       ids.add(tag.id);

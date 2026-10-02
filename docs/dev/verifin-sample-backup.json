@@ -702,9 +702,19 @@
       }
     ],
     "tags": [
-      { "id": "tag_work_meal", "label": "工作餐" },
-      { "id": "tag_reimbursable", "label": "可报销" }
+      { "id": "tag_work_meal", "groupId": "scene", "label": "工作餐", "sortOrder": 0, "archived": false },
+      { "id": "tag_reimbursable", "groupId": "purpose", "label": "可报销", "sortOrder": 1, "archived": false }
     ],
+    "tagGroups": [
+      { "id": "project", "name": "项目", "type": "system", "selectionMode": "single", "sortOrder": 0 },
+      { "id": "scene", "name": "场景", "type": "system", "selectionMode": "single", "sortOrder": 1 },
+      { "id": "purpose", "name": "用途", "type": "system", "selectionMode": "single", "sortOrder": 2 },
+      { "id": "person", "name": "对象", "type": "system", "selectionMode": "multiple", "sortOrder": 3 },
+      { "id": "place", "name": "地点", "type": "system", "selectionMode": "single", "sortOrder": 4 },
+      { "id": "custom", "name": "自定义", "type": "system", "selectionMode": "multiple", "sortOrder": 5 }
+    ],
+    "projects": [],
+    "tagTemplates": [],
     "attachments": [
       {
         "id": "att_sample_1",

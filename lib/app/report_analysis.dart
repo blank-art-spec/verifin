@@ -375,7 +375,11 @@ List<ReportTagStat> reportTagStats(
       continue;
     }
     dimensionTotal += entry.netAmount;
-    for (final tagId in entry.tagIds) {
+    final canonicalIds = entry.tagIds
+        .map((id) => canonicalTagOf(id, tags)?.id)
+        .whereType<String>()
+        .toSet();
+    for (final tagId in canonicalIds) {
       if (!tagById.containsKey(tagId)) {
         continue;
       }
@@ -400,6 +404,46 @@ List<ReportTagStat> reportTagStats(
           .toList()
         ..sort((a, b) => b.amount.compareTo(a.amount));
   return stats;
+}
+
+/// 多维交叉筛选：同一维度内任一标签命中即可，不同维度与分类条件均需同时命中。
+/// 合并标签先解析到最终 id，故旧交易无须改写也能进入新名称的统计。
+List<LedgerEntry> filterEntriesByTagDimensions(
+  Iterable<LedgerEntry> entries,
+  List<Tag> tags,
+  List<String> selectedTagIds, {
+  List<Category> categories = const <Category>[],
+  String? categoryId,
+}) {
+  final requiredGroups = <String, Set<String>>{};
+  for (final id in selectedTagIds) {
+    final tag = canonicalTagOf(id, tags);
+    if (tag != null) {
+      requiredGroups.putIfAbsent(tag.groupId, () => <String>{}).add(tag.id);
+    }
+  }
+  return entries
+      .where((entry) {
+        if (categoryId != null &&
+            entry.categoryId != categoryId &&
+            !isDescendantOf(categories, entry.categoryId, categoryId)) {
+          return false;
+        }
+        if (requiredGroups.isEmpty) return true;
+        final actual = entry.tagIds
+            .map((id) => canonicalTagOf(id, tags))
+            .whereType<Tag>()
+            .toList();
+        for (final group in requiredGroups.entries) {
+          if (!actual.any(
+            (tag) => tag.groupId == group.key && group.value.contains(tag.id),
+          )) {
+            return false;
+          }
+        }
+        return true;
+      })
+      .toList(growable: false);
 }
 
 /// 按账户维度聚合后的统计项。

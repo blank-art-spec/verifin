@@ -214,6 +214,14 @@ void main() {
       expect(await repo.loadCategoryBudgets(), {'default:cat-a': 500.0});
       expect(await repo.loadDailyBudgets(), isEmpty);
       expect(await repo.loadTags(), isEmpty);
+      expect(await repo.loadProjects(), isEmpty);
+      expect(await repo.loadTagTemplates(), isEmpty);
+      expect(
+        (await repo.loadTagGroups()).map(
+          (group) => (group.id, group.selectionMode),
+        ),
+        defaultTagGroups.map((group) => (group.id, group.selectionMode)),
+      );
       expect(await repo.loadAttachments(), isEmpty);
       expect(await repo.loadRecurringRules(), isEmpty);
       expect(await repo.loadExchangeRates(), isEmpty);
@@ -223,10 +231,69 @@ void main() {
       expect(await repo.loadCreditAccounts(), isEmpty);
       expect(await repo.loadCaptureEvents(), isEmpty);
       expect(await repo.loadAutoCaptureRules(), isEmpty);
+      final tagColumns = await app.db.rawQuery('PRAGMA table_info(tags)');
+      expect(
+        tagColumns.map((row) => row['name']),
+        containsAll(<String>['aliases', 'merged_into_id']),
+      );
+      final ruleColumns = await app.db.rawQuery(
+        'PRAGMA table_info(auto_capture_rules)',
+      );
+      expect(
+        ruleColumns.map((row) => row['name']),
+        containsAll(<String>['start_date', 'end_date', 'place_contains']),
+      );
 
       await app.close();
     });
   }
+
+  test('v23 前缀标签迁移保留交易 tagIds 和未知前缀原文', () async {
+    final path = '${tempDir.path}/v23_tag_dimensions.db';
+    final raw = await databaseFactoryFfi.openDatabase(path);
+    for (final statement in _schemaV1) {
+      await raw.execute(statement);
+    }
+    await _seedV1Data(raw);
+    for (var version = 2; version <= 23; version++) {
+      await AppDatabase.migrations[version]!(raw);
+    }
+    await raw.insert('tags', <String, Object?>{
+      'id': 'trip',
+      'label': '项目:2026国庆返乡',
+      'sort_order': 0,
+    });
+    await raw.insert('tags', <String, Object?>{
+      'id': 'kind',
+      'label': '项目类型:旅行',
+      'sort_order': 1,
+    });
+    await raw.rawUpdate(
+      "UPDATE entries SET tag_ids = ? WHERE id = 'e1'",
+      <Object?>['["trip","kind"]'],
+    );
+    await raw.execute('PRAGMA user_version = 23');
+    await raw.close();
+
+    final app = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+    final repo = SqliteLedgerRepository(app);
+    final tags = await repo.loadTags();
+    expect(tags.singleWhere((tag) => tag.id == 'trip').groupId, 'project');
+    expect(tags.singleWhere((tag) => tag.id == 'trip').label, '2026国庆返乡');
+    expect(tags.singleWhere((tag) => tag.id == 'kind').groupId, 'custom');
+    expect(tags.singleWhere((tag) => tag.id == 'kind').label, '项目类型:旅行');
+    expect(
+      (await repo.loadEntries())
+          .singleWhere((entry) => entry.id == 'e1')
+          .tagIds,
+      <String>['trip', 'kind'],
+    );
+    expect(
+      (await repo.loadTagGroups()).map((group) => group.id),
+      contains('project'),
+    );
+    await app.close();
+  });
 
   test('v13 周期规则升级后补齐 CNY 金额模板与固定汇率策略', () async {
     final path = '${tempDir.path}/v13_recurring.db';
@@ -269,25 +336,30 @@ void main() {
 
   test('v15 账户历史图标 code 升级后写回当前 SVG code', () async {
     final path = '${tempDir.path}/v15_account_icons.db';
-    final app = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
-    final repo = SqliteLedgerRepository(app);
-    await repo.saveAccounts(<Account>[
-      for (final legacy in const <String>['alipay', 'wechat', 'folder'])
-        Account(
-          id: 'legacy-$legacy',
-          bookId: 'default',
-          name: legacy,
-          type: AccountType.onlinePayment,
-          groupId: null,
-          initialBalance: 0,
-          iconCode: legacy,
-          note: '',
-          includeInAssets: true,
-          hidden: false,
-        ),
-    ]);
-    await app.db.execute('PRAGMA user_version = 15');
-    await app.close();
+    // 按真实历史链创建 v15，不能先建当前 schema 再伪改 user_version：
+    // 后续迁移会再次建表，伪旧库无法代表真实用户数据。
+    final raw = await databaseFactoryFfi.openDatabase(path);
+    for (final statement in _schemaV1) {
+      await raw.execute(statement);
+    }
+    await _seedV1Data(raw);
+    for (var version = 2; version <= 15; version++) {
+      await AppDatabase.migrations[version]!(raw);
+    }
+    final seedAccount = Map<String, Object?>.from(
+      (await raw.query('accounts')).single,
+    );
+    await raw.delete('accounts');
+    for (final legacy in const <String>['alipay', 'wechat', 'folder']) {
+      await raw.insert('accounts', <String, Object?>{
+        ...seedAccount,
+        'id': 'legacy-$legacy',
+        'name': legacy,
+        'icon_code': legacy,
+      });
+    }
+    await raw.execute('PRAGMA user_version = 15');
+    await raw.close();
 
     final upgraded = await AppDatabase.open(
       factory: databaseFactoryFfi,

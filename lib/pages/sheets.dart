@@ -1665,12 +1665,14 @@ Future<bool> confirmDeleteAccount(
 
 enum AccountDeleteAction { hide, delete }
 
-/// 打开标签多选弹窗，返回用户选定的标签 id 列表（取消返回 null）。
+/// 打开按维度分组的标签弹窗，返回全部选定的标签 id（取消返回 null）。
+/// [groupId] 非空时仅展示这一维度，其他维度的已选 id 原样保留。
 /// 新建标签直接写入 controller（标签全局共享，即时生效）。
 Future<List<String>?> pickEntryTags({
   required BuildContext context,
   required List<String> selectedIds,
   List<Tag> extraTags = const <Tag>[],
+  String? groupId,
 }) {
   final controller = VeriFinScope.of(context);
   // 合并 controller 已落库标签与临时标签（导入草稿待新建、尚未落库），临时标签
@@ -1695,8 +1697,34 @@ Future<List<String>?> pickEntryTags({
         ),
         child: TagSelectorSheet(
           tags: tags,
-          selectedIds: selectedIds,
-          onCreateTag: () async {
+          groups: groupId == null
+              ? controller.tagGroups
+              : controller.tagGroups
+                    .where((group) => group.id == groupId)
+                    .toList(),
+          selectedIds: selectedIds
+              .map((id) => controller.tagById(id)?.id ?? id)
+              .toSet()
+              .toList(),
+          templates: groupId == null
+              ? controller.tagTemplates
+              : const <TagTemplate>[],
+          onApplyTemplate: controller.resolveTagSelection,
+          onSaveTemplate: groupId == null
+              ? (ids) async {
+                  final name = await showTextInputDialog(
+                    context: sheetContext,
+                    title: AppLocalizations.of(sheetContext).tagTemplateSave,
+                    label: AppLocalizations.of(sheetContext).tagTemplateName,
+                  );
+                  if (name == null) return null;
+                  return controller.saveTagTemplate(name, ids);
+                }
+              : null,
+          onDeleteTemplate: groupId == null
+              ? controller.deleteTagTemplate
+              : null,
+          onCreateTag: (groupId) async {
             final l10n = AppLocalizations.of(sheetContext);
             final label = await showTextInputDialog(
               context: sheetContext,
@@ -1706,7 +1734,7 @@ Future<List<String>?> pickEntryTags({
             if (label == null) {
               return null;
             }
-            final id = controller.addTag(label);
+            final id = controller.addTag(label, groupId: groupId);
             return id == null ? null : controller.tagById(id);
           },
         ),

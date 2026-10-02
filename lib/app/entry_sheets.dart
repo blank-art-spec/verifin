@@ -10,6 +10,7 @@ import 'common_widgets.dart';
 import 'currency_math.dart';
 import 'ledger_math.dart';
 import 'models.dart';
+import 'tag_group_labels.dart';
 import '../l10n/app_localizations.dart';
 
 /// 数字键盘弹层组件体。**勿直接实例化**——统一走 `pages/sheets.dart` 的
@@ -764,15 +765,26 @@ class TagSelectorSheet extends StatefulWidget {
   const TagSelectorSheet({
     super.key,
     required this.tags,
+    required this.groups,
     required this.selectedIds,
     required this.onCreateTag,
+    this.templates = const <TagTemplate>[],
+    this.onSaveTemplate,
+    this.onDeleteTemplate,
+    this.onApplyTemplate,
   });
 
   final List<Tag> tags;
+  final List<TagGroup> groups;
   final List<String> selectedIds;
+  final List<TagTemplate> templates;
 
   /// 新建标签：由调用方弹出输入框、创建标签，并返回新标签（重名返回已有，取消返回 null）。
-  final Future<Tag?> Function() onCreateTag;
+  final Future<Tag?> Function(String groupId) onCreateTag;
+  final Future<TagTemplate?> Function(List<String> tagIds)? onSaveTemplate;
+  final Future<bool> Function(String id)? onDeleteTemplate;
+  final List<String> Function(List<String> current, List<String> incoming)?
+  onApplyTemplate;
 
   @override
   State<TagSelectorSheet> createState() => _TagSelectorSheetState();
@@ -781,9 +793,36 @@ class TagSelectorSheet extends StatefulWidget {
 class _TagSelectorSheetState extends State<TagSelectorSheet> {
   late final Set<String> _selected = <String>{...widget.selectedIds};
   late List<Tag> _tags = <Tag>[...widget.tags];
+  late final List<TagTemplate> _templates = <TagTemplate>[...widget.templates];
 
-  Future<void> _createTag() async {
-    final tag = await widget.onCreateTag();
+  /// 保存当前选择为模板；名称输入由统一弹窗 helper 在调用方处理。
+  Future<void> _saveTemplate() async {
+    final template = await widget.onSaveTemplate?.call(_selected.toList());
+    if (!mounted || template == null) return;
+    setState(() => _templates.add(template));
+  }
+
+  /// 删除模板而不修改当前选择或任何交易。
+  Future<void> _deleteTemplate(TagTemplate template) async {
+    final deleted = await widget.onDeleteTemplate?.call(template.id) ?? false;
+    if (!mounted || !deleted) return;
+    setState(() => _templates.removeWhere((item) => item.id == template.id));
+  }
+
+  /// 一键把模板标签按单多选规则合入当前草稿。
+  void _applyTemplate(TagTemplate template) {
+    final incoming =
+        widget.onApplyTemplate?.call(_selected.toList(), template.tagIds) ??
+        template.tagIds;
+    setState(() {
+      _selected
+        ..clear()
+        ..addAll(incoming);
+    });
+  }
+
+  Future<void> _createTag(String groupId) async {
+    final tag = await widget.onCreateTag(groupId);
     if (!mounted || tag == null) {
       return;
     }
@@ -791,8 +830,27 @@ class _TagSelectorSheetState extends State<TagSelectorSheet> {
       if (!_tags.any((t) => t.id == tag.id)) {
         _tags = <Tag>[..._tags, tag];
       }
-      _selected.add(tag.id);
+      if (!_selected.contains(tag.id)) _select(tag);
     });
+  }
+
+  /// 按所属维度的单多选规则切换选中状态；其它维度不受影响。
+  void _select(Tag tag) {
+    if (_selected.contains(tag.id)) {
+      _selected.remove(tag.id);
+      return;
+    }
+    final group = widget.groups
+        .where((value) => value.id == tag.groupId)
+        .firstOrNull;
+    if (group?.selectionMode == TagSelectionMode.single) {
+      _selected.removeAll(
+        _tags
+            .where((value) => value.groupId == tag.groupId)
+            .map((value) => value.id),
+      );
+    }
+    _selected.add(tag.id);
   }
 
   @override
@@ -821,27 +879,73 @@ class _TagSelectorSheetState extends State<TagSelectorSheet> {
           const SizedBox(height: 6),
           Flexible(
             child: SingleChildScrollView(
-              child: Wrap(
-                spacing: 8,
-                runSpacing: 8,
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
                 children: <Widget>[
-                  for (final tag in _tags)
-                    FilterChip(
-                      label: Text(tag.label),
-                      selected: _selected.contains(tag.id),
-                      onSelected: (value) => setState(() {
-                        if (value) {
-                          _selected.add(tag.id);
-                        } else {
-                          _selected.remove(tag.id);
-                        }
-                      }),
+                  if (widget.onSaveTemplate != null ||
+                      _templates.isNotEmpty) ...<Widget>[
+                    Text(
+                      AppLocalizations.of(context).tagTemplatesTitle,
+                      style: Theme.of(context).textTheme.titleSmall,
                     ),
-                  ActionChip(
-                    avatar: const Icon(Icons.add, size: 18),
-                    label: Text(AppLocalizations.of(context).tagCreateTitle),
-                    onPressed: _createTag,
-                  ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        for (final template in _templates)
+                          InputChip(
+                            label: Text(template.name),
+                            onPressed: () => _applyTemplate(template),
+                            onDeleted: widget.onDeleteTemplate == null
+                                ? null
+                                : () => _deleteTemplate(template),
+                          ),
+                        if (widget.onSaveTemplate != null)
+                          ActionChip(
+                            label: Text(
+                              AppLocalizations.of(context).tagTemplateSave,
+                            ),
+                            onPressed: _selected.isEmpty ? null : _saveTemplate,
+                          ),
+                      ],
+                    ),
+                  ],
+                  for (final group in widget.groups) ...<Widget>[
+                    Padding(
+                      padding: const EdgeInsets.only(top: 12, bottom: 8),
+                      child: Text(
+                        tagGroupDisplayName(
+                          group,
+                          AppLocalizations.of(context),
+                        ),
+                        style: Theme.of(context).textTheme.titleSmall,
+                      ),
+                    ),
+                    Wrap(
+                      spacing: 8,
+                      runSpacing: 8,
+                      children: <Widget>[
+                        for (final tag in _tags.where(
+                          (tag) =>
+                              tag.groupId == group.id &&
+                              tag.mergedIntoId == null &&
+                              (!tag.archived || _selected.contains(tag.id)),
+                        ))
+                          FilterChip(
+                            label: Text(tag.label),
+                            selected: _selected.contains(tag.id),
+                            onSelected: (_) => setState(() => _select(tag)),
+                          ),
+                        ActionChip(
+                          avatar: const Icon(Icons.add, size: 18),
+                          label: Text(
+                            AppLocalizations.of(context).tagCreateTitle,
+                          ),
+                          onPressed: () => _createTag(group.id),
+                        ),
+                      ],
+                    ),
+                  ],
                 ],
               ),
             ),

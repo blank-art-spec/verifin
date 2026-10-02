@@ -4843,6 +4843,276 @@ abstract class AppLocalizations {
   /// **'记账时可给交易打多个标签'**
   String get tagMgmtSubtitle;
 
+  /// No description provided for @tagGroupProject.
+  ///
+  /// In zh, this message translates to:
+  /// **'项目'**
+  String get tagGroupProject;
+
+  /// No description provided for @tagGroupScene.
+  ///
+  /// In zh, this message translates to:
+  /// **'场景'**
+  String get tagGroupScene;
+
+  /// No description provided for @tagGroupPurpose.
+  ///
+  /// In zh, this message translates to:
+  /// **'用途'**
+  String get tagGroupPurpose;
+
+  /// No description provided for @tagGroupPerson.
+  ///
+  /// In zh, this message translates to:
+  /// **'对象'**
+  String get tagGroupPerson;
+
+  /// No description provided for @tagGroupPlace.
+  ///
+  /// In zh, this message translates to:
+  /// **'地点'**
+  String get tagGroupPlace;
+
+  /// No description provided for @tagGroupCustom.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义'**
+  String get tagGroupCustom;
+
+  /// No description provided for @tagGroupAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增维度'**
+  String get tagGroupAdd;
+
+  /// No description provided for @tagGroupChoose.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择维度'**
+  String get tagGroupChoose;
+
+  /// No description provided for @tagGroupMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择方式'**
+  String get tagGroupMode;
+
+  /// No description provided for @tagGroupSingle.
+  ///
+  /// In zh, this message translates to:
+  /// **'单选'**
+  String get tagGroupSingle;
+
+  /// No description provided for @tagGroupMultiple.
+  ///
+  /// In zh, this message translates to:
+  /// **'多选'**
+  String get tagGroupMultiple;
+
+  /// No description provided for @tagRulePlaceContains.
+  ///
+  /// In zh, this message translates to:
+  /// **'原文包含地点'**
+  String get tagRulePlaceContains;
+
+  /// No description provided for @tagRuleStartDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始日期'**
+  String get tagRuleStartDate;
+
+  /// No description provided for @tagRuleEndDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'结束日期'**
+  String get tagRuleEndDate;
+
+  /// No description provided for @tagReportDimensionFilter.
+  ///
+  /// In zh, this message translates to:
+  /// **'筛选标签维度'**
+  String get tagReportDimensionFilter;
+
+  /// No description provided for @tagReportCategoryFilter.
+  ///
+  /// In zh, this message translates to:
+  /// **'筛选分类'**
+  String get tagReportCategoryFilter;
+
+  /// No description provided for @tagTemplatesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'标签模板'**
+  String get tagTemplatesTitle;
+
+  /// No description provided for @tagTemplateSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存为模板'**
+  String get tagTemplateSave;
+
+  /// No description provided for @tagTemplateName.
+  ///
+  /// In zh, this message translates to:
+  /// **'模板名称'**
+  String get tagTemplateName;
+
+  /// No description provided for @tagAliasAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加别名'**
+  String get tagAliasAdd;
+
+  /// No description provided for @tagArchive.
+  ///
+  /// In zh, this message translates to:
+  /// **'归档标签'**
+  String get tagArchive;
+
+  /// No description provided for @tagRestore.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复标签'**
+  String get tagRestore;
+
+  /// No description provided for @tagArchivedLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'已归档'**
+  String get tagArchivedLabel;
+
+  /// No description provided for @tagMerge.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并标签'**
+  String get tagMerge;
+
+  /// No description provided for @tagMergeTarget.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择合并目标'**
+  String get tagMergeTarget;
+
+  /// No description provided for @tagMergeConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'将「{source}」合并到「{target}」？旧交易继续保留原标签 ID，但展示和统计使用目标标签。'**
+  String tagMergeConfirm(String source, String target);
+
+  /// No description provided for @projectsTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'项目'**
+  String get projectsTitle;
+
+  /// No description provided for @projectsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无项目，点击右上角新增'**
+  String get projectsEmpty;
+
+  /// No description provided for @projectAdd.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增项目'**
+  String get projectAdd;
+
+  /// No description provided for @projectEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑项目'**
+  String get projectEdit;
+
+  /// No description provided for @projectName.
+  ///
+  /// In zh, this message translates to:
+  /// **'项目名称'**
+  String get projectName;
+
+  /// No description provided for @projectBudget.
+  ///
+  /// In zh, this message translates to:
+  /// **'项目预算（账本本位币）'**
+  String get projectBudget;
+
+  /// No description provided for @projectNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'备注'**
+  String get projectNote;
+
+  /// No description provided for @projectStatus.
+  ///
+  /// In zh, this message translates to:
+  /// **'项目状态'**
+  String get projectStatus;
+
+  /// No description provided for @projectStatusActive.
+  ///
+  /// In zh, this message translates to:
+  /// **'进行中'**
+  String get projectStatusActive;
+
+  /// No description provided for @projectStatusCompleted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已完成'**
+  String get projectStatusCompleted;
+
+  /// No description provided for @projectStatusArchived.
+  ///
+  /// In zh, this message translates to:
+  /// **'已归档'**
+  String get projectStatusArchived;
+
+  /// No description provided for @projectInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请检查项目名称、预算及日期范围'**
+  String get projectInvalid;
+
+  /// No description provided for @projectCategoryBreakdown.
+  ///
+  /// In zh, this message translates to:
+  /// **'支出构成'**
+  String get projectCategoryBreakdown;
+
+  /// No description provided for @projectSpent.
+  ///
+  /// In zh, this message translates to:
+  /// **'已花 {amount}'**
+  String projectSpent(String amount);
+
+  /// No description provided for @projectRemaining.
+  ///
+  /// In zh, this message translates to:
+  /// **'剩余 {amount}'**
+  String projectRemaining(String amount);
+
+  /// No description provided for @projectBudgetValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'预算 {amount}'**
+  String projectBudgetValue(String amount);
+
+  /// No description provided for @projectStartValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'开始 {date}'**
+  String projectStartValue(String date);
+
+  /// No description provided for @projectEndValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'结束 {date}'**
+  String projectEndValue(String date);
+
+  /// No description provided for @projectEntries.
+  ///
+  /// In zh, this message translates to:
+  /// **'关联交易 {count} 笔'**
+  String projectEntries(int count);
+
   /// No description provided for @tagAdd.
   ///
   /// In zh, this message translates to:

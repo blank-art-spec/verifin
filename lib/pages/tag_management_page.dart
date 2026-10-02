@@ -7,6 +7,7 @@ import '../l10n/app_localizations.dart';
 import '../app/models.dart';
 import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
+import '../app/tag_group_labels.dart';
 import 'sheets.dart';
 
 class TagManagementPage extends StatefulWidget {
@@ -59,6 +60,15 @@ class _TagManagementPageState extends State<TagManagementPage> {
                   ],
                 ),
                 const SizedBox(height: 10),
+                if (!_sorting)
+                  Align(
+                    alignment: Alignment.centerLeft,
+                    child: TextButton.icon(
+                      onPressed: _createGroup,
+                      icon: const Icon(Icons.create_new_folder_outlined),
+                      label: Text(AppLocalizations.of(context).tagGroupAdd),
+                    ),
+                  ),
                 if (tags.isEmpty)
                   VeriCard(
                     child: Padding(
@@ -75,8 +85,79 @@ class _TagManagementPageState extends State<TagManagementPage> {
                         ),
                       ),
                     ),
-                  )
-                else
+                  ),
+                if (!_sorting)
+                  for (final group in controller.tagGroups)
+                    Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: VeriCard(
+                        padding: EdgeInsets.zero,
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: <Widget>[
+                            ListTile(
+                              title: Text(
+                                tagGroupDisplayName(
+                                  group,
+                                  AppLocalizations.of(context),
+                                ),
+                              ),
+                              subtitle: Text(
+                                group.selectionMode == TagSelectionMode.single
+                                    ? AppLocalizations.of(
+                                        context,
+                                      ).tagGroupSingle
+                                    : AppLocalizations.of(
+                                        context,
+                                      ).tagGroupMultiple,
+                              ),
+                              trailing: Row(
+                                mainAxisSize: MainAxisSize.min,
+                                children: <Widget>[
+                                  IconButton(
+                                    tooltip: AppLocalizations.of(
+                                      context,
+                                    ).tagAdd,
+                                    icon: const Icon(Icons.add),
+                                    onPressed: () =>
+                                        _createTag(groupId: group.id),
+                                  ),
+                                  IconButton(
+                                    tooltip: AppLocalizations.of(
+                                      context,
+                                    ).tagGroupMode,
+                                    icon: const Icon(Icons.tune),
+                                    onPressed: () => _changeGroupMode(group),
+                                  ),
+                                ],
+                              ),
+                            ),
+                            for (final tag in tags.where(
+                              (tag) =>
+                                  tag.groupId == group.id &&
+                                  tag.mergedIntoId == null,
+                            ))
+                              VeriAnchoredMenuAnchor(
+                                key: ValueKey<String>(tag.id),
+                                entries: _tagMenuEntries(tag),
+                                semanticLabel: tag.label,
+                                builder: (context, openMenu, menuOpen) =>
+                                    _TagManageRow(
+                                      index: 0,
+                                      tag: tag,
+                                      usageCount: controller.tagUsageCount(
+                                        tag.id,
+                                      ),
+                                      sorting: false,
+                                      onTap: openMenu,
+                                      onActions: openMenu,
+                                    ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ),
+                if (_sorting)
                   VeriCard(
                     padding: EdgeInsets.zero,
                     child: ReorderableListView.builder(
@@ -91,28 +172,12 @@ class _TagManagementPageState extends State<TagManagementPage> {
                       },
                       itemBuilder: (context, index) {
                         final tag = tags[index];
-                        if (_sorting) {
-                          return _TagManageRow(
-                            key: ValueKey<String>(tag.id),
-                            index: index,
-                            tag: tag,
-                            usageCount: controller.tagUsageCount(tag.id),
-                            sorting: true,
-                          );
-                        }
-                        return VeriAnchoredMenuAnchor(
+                        return _TagManageRow(
                           key: ValueKey<String>(tag.id),
-                          entries: _tagMenuEntries(tag),
-                          semanticLabel: tag.label,
-                          builder: (context, openMenu, menuOpen) =>
-                              _TagManageRow(
-                                index: index,
-                                tag: tag,
-                                usageCount: controller.tagUsageCount(tag.id),
-                                sorting: false,
-                                onTap: openMenu,
-                                onActions: openMenu,
-                              ),
+                          index: index,
+                          tag: tag,
+                          usageCount: controller.tagUsageCount(tag.id),
+                          sorting: true,
                         );
                       },
                     ),
@@ -193,7 +258,22 @@ class _TagManagementPageState extends State<TagManagementPage> {
     }
   }
 
-  Future<void> _createTag() async {
+  /// 在指定维度中新建标签；页眉入口先让用户挑选维度。
+  Future<void> _createTag({String? groupId}) async {
+    final controller = VeriFinScope.of(context);
+    final group = groupId == null
+        ? await showOptionSheet<TagGroup>(
+            context: context,
+            title: AppLocalizations.of(context).tagGroupChoose,
+            values: controller.tagGroups,
+            selected: controller.tagGroups.last,
+            labelOf: (value) =>
+                tagGroupDisplayName(value, AppLocalizations.of(context)),
+          )
+        : controller.tagGroups
+              .where((group) => group.id == groupId)
+              .firstOrNull;
+    if (!mounted || group == null) return;
     final label = await showTextInputDialog(
       context: context,
       title: AppLocalizations.of(context).tagAdd,
@@ -202,7 +282,33 @@ class _TagManagementPageState extends State<TagManagementPage> {
     if (!mounted || label == null) {
       return;
     }
-    VeriFinScope.of(context).addTag(label);
+    controller.addTag(label, groupId: group.id);
+  }
+
+  /// 新建用户自定义维度；其标签默认允许多选。
+  Future<void> _createGroup() async {
+    final name = await showTextInputDialog(
+      context: context,
+      title: AppLocalizations.of(context).tagGroupAdd,
+      label: AppLocalizations.of(context).groupNameLabel,
+    );
+    if (!mounted || name == null) return;
+    await VeriFinScope.of(context).addTagGroup(name);
+  }
+
+  /// 切换维度的单选/多选约束，历史交易保持原关联。
+  Future<void> _changeGroupMode(TagGroup group) async {
+    final mode = await showOptionSheet<TagSelectionMode>(
+      context: context,
+      title: AppLocalizations.of(context).tagGroupMode,
+      values: TagSelectionMode.values,
+      selected: group.selectionMode,
+      labelOf: (value) => value == TagSelectionMode.single
+          ? AppLocalizations.of(context).tagGroupSingle
+          : AppLocalizations.of(context).tagGroupMultiple,
+    );
+    if (!mounted || mode == null) return;
+    await VeriFinScope.of(context).setTagGroupSelectionMode(group.id, mode);
   }
 
   List<VeriMenuEntry> _tagMenuEntries(Tag tag) {
@@ -214,6 +320,29 @@ class _TagManagementPageState extends State<TagManagementPage> {
         title: l10n.commonRename,
         onPressed: () async => _renameTag(tag),
       ),
+      VeriMenuItem(
+        id: 'tag_alias',
+        icon: Icons.alternate_email,
+        title: l10n.tagAliasAdd,
+        onPressed: () async => _addAlias(tag),
+      ),
+      if (tag.groupId != 'project') ...<VeriMenuEntry>[
+        VeriMenuItem(
+          id: 'tag_archive',
+          icon: tag.archived
+              ? Icons.unarchive_outlined
+              : Icons.archive_outlined,
+          title: tag.archived ? l10n.tagRestore : l10n.tagArchive,
+          onPressed: () async =>
+              VeriFinScope.of(context).setTagArchived(tag.id, !tag.archived),
+        ),
+        VeriMenuItem(
+          id: 'tag_merge',
+          icon: Icons.merge_outlined,
+          title: l10n.tagMerge,
+          onPressed: () async => _mergeTag(tag),
+        ),
+      ],
       const VeriMenuDivider(),
       VeriMenuItem(
         id: 'tag_delete',
@@ -223,6 +352,49 @@ class _TagManagementPageState extends State<TagManagementPage> {
         onPressed: () async => _deleteTag(tag),
       ),
     ];
+  }
+
+  /// 收集别名并交给控制器校验同组冲突。
+  Future<void> _addAlias(Tag tag) async {
+    final alias = await showTextInputDialog(
+      context: context,
+      title: AppLocalizations.of(context).tagAliasAdd,
+      label: AppLocalizations.of(context).tagNameLabel,
+    );
+    if (!mounted || alias == null) return;
+    await VeriFinScope.of(context).addTagAlias(tag.id, alias);
+  }
+
+  /// 只在同维度选择合并目标；保留来源 id，确认后历史交易不重写。
+  Future<void> _mergeTag(Tag source) async {
+    final controller = VeriFinScope.of(context);
+    final targets = controller.tags
+        .where(
+          (tag) =>
+              tag.groupId == source.groupId &&
+              tag.id != source.id &&
+              tag.mergedIntoId == null,
+        )
+        .toList();
+    if (targets.isEmpty) return;
+    final target = await showOptionSheet<Tag>(
+      context: context,
+      title: AppLocalizations.of(context).tagMergeTarget,
+      values: targets,
+      selected: targets.first,
+      labelOf: (tag) => tag.label,
+    );
+    if (!mounted || target == null) return;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: AppLocalizations.of(context).tagMerge,
+      message: AppLocalizations.of(
+        context,
+      ).tagMergeConfirm(source.label, target.label),
+      confirmLabel: AppLocalizations.of(context).commonDone,
+    );
+    if (!mounted || !confirmed) return;
+    await controller.mergeTag(source.id, target.id);
   }
 
   Future<void> _renameTag(Tag tag) async {
@@ -235,7 +407,7 @@ class _TagManagementPageState extends State<TagManagementPage> {
     if (!mounted || label == null) {
       return;
     }
-    VeriFinScope.of(context).renameTag(tag.id, label);
+    await VeriFinScope.of(context).renameTag(tag.id, label);
   }
 
   Future<void> _deleteTag(Tag tag) async {
@@ -304,7 +476,11 @@ class _TagManageRow extends StatelessWidget {
                     ),
                     const SizedBox(height: 3),
                     Text(
-                      AppLocalizations.of(context).entriesCountFull(usageCount),
+                      tag.archived
+                          ? '${AppLocalizations.of(context).tagArchivedLabel} · ${AppLocalizations.of(context).entriesCountFull(usageCount)}'
+                          : AppLocalizations.of(
+                              context,
+                            ).entriesCountFull(usageCount),
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: Theme.of(
                           context,
@@ -312,6 +488,11 @@ class _TagManageRow extends StatelessWidget {
                         fontWeight: FontWeight.w700,
                       ),
                     ),
+                    if (tag.aliases.isNotEmpty)
+                      Text(
+                        tag.aliases.join(' / '),
+                        style: Theme.of(context).textTheme.labelSmall,
+                      ),
                   ],
                 ),
               ),

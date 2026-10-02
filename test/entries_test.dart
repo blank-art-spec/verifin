@@ -656,7 +656,10 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('标签管理'), findsWidgets);
-    await tester.tap(find.byTooltip('新增标签'));
+    // 维度化标签页有页眉入口和每组入口；页眉入口先选择维度。
+    await tester.tap(find.byTooltip('新增标签').first);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('用途').last);
     await tester.pumpAndSettle();
     await tester.enterText(find.byType(TextField).last, '报销');
     await tester.tap(find.text('确认'));

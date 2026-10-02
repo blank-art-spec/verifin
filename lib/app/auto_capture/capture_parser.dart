@@ -38,6 +38,7 @@ class CaptureParseContext {
     required this.creditAccounts,
     required this.categories,
     required this.tags,
+    this.tagGroups = defaultTagGroups,
     required this.entries,
     required this.rules,
   });
@@ -47,6 +48,7 @@ class CaptureParseContext {
   final List<CreditAccount> creditAccounts;
   final List<Category> categories;
   final List<Tag> tags;
+  final List<TagGroup> tagGroups;
   final List<LedgerEntry> entries;
   final List<AutoCaptureRule> rules;
 }
@@ -200,7 +202,9 @@ CaptureEvent parseCaptureEvent(
     accountId = rule.setAccountId ?? accountId;
     toAccountId = rule.setToAccountId ?? toAccountId;
     categoryId = rule.setCategoryId ?? categoryId;
-    if (rule.setTagIds.isNotEmpty) tagIds = rule.setTagIds;
+    if (rule.setTagIds.isNotEmpty) {
+      tagIds = <String>[...tagIds, ...rule.setTagIds];
+    }
     if (rule.setMerchant.trim().isNotEmpty) merchant = rule.setMerchant.trim();
   }
 
@@ -281,9 +285,23 @@ CaptureEvent parseCaptureEvent(
       )) {
     categoryId = null;
   }
-  tagIds = tagIds
-      .where((id) => context.tags.any((tag) => tag.id == id))
-      .toList(growable: false);
+  final selectedTagIds = <String>[];
+  for (final id in tagIds) {
+    final tag = canonicalTagOf(id, context.tags);
+    if (tag == null || tag.archived) continue;
+    if (context.tagGroups
+            .where((group) => group.id == tag.groupId)
+            .firstOrNull
+            ?.selectionMode ==
+        TagSelectionMode.single) {
+      selectedTagIds.removeWhere(
+        (existing) =>
+            canonicalTagOf(existing, context.tags)?.groupId == tag.groupId,
+      );
+    }
+    if (!selectedTagIds.contains(tag.id)) selectedTagIds.add(tag.id);
+  }
+  tagIds = selectedTagIds;
 
   final score = _confidenceScore(
     amount: amount,
@@ -526,6 +544,31 @@ bool _ruleMatches(
   if (rule.sourceId.isNotEmpty && rule.sourceId != event.sourceId) return false;
   if (rule.textContains.isNotEmpty &&
       !text.toLowerCase().contains(rule.textContains.toLowerCase())) {
+    return false;
+  }
+  if (rule.placeContains.isNotEmpty &&
+      !text.toLowerCase().contains(rule.placeContains.toLowerCase())) {
+    return false;
+  }
+  final eventDate = DateTime(
+    event.receivedAt.year,
+    event.receivedAt.month,
+    event.receivedAt.day,
+  );
+  if (rule.startDate != null &&
+      eventDate.isBefore(
+        DateTime(
+          rule.startDate!.year,
+          rule.startDate!.month,
+          rule.startDate!.day,
+        ),
+      )) {
+    return false;
+  }
+  if (rule.endDate != null &&
+      eventDate.isAfter(
+        DateTime(rule.endDate!.year, rule.endDate!.month, rule.endDate!.day),
+      )) {
     return false;
   }
   if (rule.cardLast4.isNotEmpty && rule.cardLast4 != cardLast4) return false;

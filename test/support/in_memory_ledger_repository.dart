@@ -16,6 +16,9 @@ class InMemoryLedgerRepository implements LedgerRepository {
   List<CreditAccount> _creditAccounts = <CreditAccount>[];
   List<Category> _categories = <Category>[];
   List<Tag> _tags = <Tag>[];
+  List<TagGroup> _tagGroups = List<TagGroup>.of(defaultTagGroups);
+  List<Project> _projects = <Project>[];
+  List<TagTemplate> _tagTemplates = <TagTemplate>[];
   List<Attachment> _attachments = <Attachment>[];
   List<RecurringRule> _recurringRules = <RecurringRule>[];
   List<ExchangeRate> _exchangeRates = <ExchangeRate>[];
@@ -130,6 +133,31 @@ class InMemoryLedgerRepository implements LedgerRepository {
   @override
   Future<void> saveTags(List<Tag> tags) async {
     _tags = List<Tag>.of(tags);
+  }
+
+  @override
+  Future<List<TagGroup>> loadTagGroups() async => List<TagGroup>.of(_tagGroups);
+
+  @override
+  Future<void> saveTagGroups(List<TagGroup> groups) async {
+    _tagGroups = List<TagGroup>.of(groups);
+  }
+
+  @override
+  Future<List<Project>> loadProjects() async => List<Project>.of(_projects);
+
+  @override
+  Future<void> saveProjects(List<Project> projects) async {
+    _projects = List<Project>.of(projects);
+  }
+
+  @override
+  Future<List<TagTemplate>> loadTagTemplates() async =>
+      List<TagTemplate>.of(_tagTemplates);
+
+  @override
+  Future<void> saveTagTemplates(List<TagTemplate> templates) async {
+    _tagTemplates = List<TagTemplate>.of(templates);
   }
 
   @override
@@ -272,6 +300,9 @@ class InMemoryLedgerRepository implements LedgerRepository {
     _creditAccounts = List<CreditAccount>.of(snapshot.creditAccounts);
     _categories = List<Category>.of(snapshot.categories);
     _tags = List<Tag>.of(snapshot.tags);
+    _tagGroups = List<TagGroup>.of(snapshot.tagGroups);
+    _projects = List<Project>.of(snapshot.projects);
+    _tagTemplates = List<TagTemplate>.of(snapshot.tagTemplates);
     _attachments = List<Attachment>.of(snapshot.attachments);
     _entries = List<LedgerEntry>.of(snapshot.entries);
     _recurringRules = List<RecurringRule>.of(snapshot.recurringRules);

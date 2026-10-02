@@ -148,8 +148,9 @@ String transactionCsvExport({
           ? ''
           : formatCurrencyNumber(refundedOriginal, entry.currencyCode),
       entry.tagIds
-          .map((id) => tagsById[id]?.label)
-          .whereType<String>()
+          .map((id) => tagsById[id])
+          .whereType<Tag>()
+          .map(tagPortableLabel)
           .join('，'),
       entry.currencyCode,
       entry.accountAmount == null

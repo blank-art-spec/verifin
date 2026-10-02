@@ -498,6 +498,8 @@ void main() {
     await pumpApp(tester);
 
     await tapBottomTab(tester, 3);
+    await tester.ensureVisible(find.text('数据管理'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('数据管理'));
     await tester.pumpAndSettle();
     await tester.scrollUntilVisible(find.text('初始化数据'), 160);

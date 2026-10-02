@@ -593,13 +593,12 @@ void main() {
       'card_last4': '',
       'sort_order': 0,
     });
+    // 这是单段迁移测试：只执行 v7→v8，避免把局部旧表误当完整 v7 库。
+    await AppDatabase.migrations[8]!(v7);
+    final migrated = (await v7.query('accounts')).single;
+    expect(migrated['statement_day'], isNull);
+    expect(migrated['due_day'], isNull);
     await v7.close();
-
-    final db = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
-    final migrated = await SqliteLedgerRepository(db).loadAccounts();
-    expect(migrated.single.statementDay, isNull);
-    expect(migrated.single.dueDay, isNull);
-    await db.close();
     await dir.delete(recursive: true);
   });
 
@@ -639,13 +638,10 @@ void main() {
         },
       ),
     );
+    // 局部 v6 fixture 仅用于验证新增规则表，不执行后续完整数据库升级。
+    await AppDatabase.migrations[7]!(v6);
+    expect(await v6.query('recurring_rules'), isEmpty);
     await v6.close();
-
-    final db = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
-    final repo = SqliteLedgerRepository(db);
-    expect(await repo.loadRecurringRules(), isEmpty);
-
-    await db.close();
     await dir.delete(recursive: true);
   });
 
@@ -697,13 +693,10 @@ void main() {
       'note': '',
       'occurred_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
     });
+    // 局部 v4 fixture 只验证 fee 列迁移；完整历史升级另由迁移矩阵覆盖。
+    await AppDatabase.migrations[5]!(v4);
+    expect((await v4.query('entries')).single['fee'], 0);
     await v4.close();
-
-    final db = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
-    final repo = SqliteLedgerRepository(db);
-    expect((await repo.loadEntries()).single.fee, 0);
-
-    await db.close();
     await dir.delete(recursive: true);
   });
 
@@ -861,26 +854,25 @@ void main() {
       'id': 'e2',
       'category_id': 'dining2',
     });
-    await v9.close();
-
-    final db = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+    // 局部 v9 fixture 只验证分类去重段，不能直接升级成完整当前库。
+    await AppDatabase.migrations[10]!(v9);
     // 重复「餐饮」已合并为一条。
-    final cats = await db.db.rawQuery(
+    final cats = await v9.rawQuery(
       "SELECT id FROM categories WHERE label='餐饮' AND type='expense'",
     );
     expect(cats, hasLength(1));
     final keptId = cats.single['id'] as String;
     // 两条交易都改指向保留者。
-    final entries = await db.db.rawQuery('SELECT category_id FROM entries');
+    final entries = await v9.rawQuery('SELECT category_id FROM entries');
     expect(entries.every((r) => r['category_id'] == keptId), isTrue);
     // 唯一索引已建立。
-    final index = await db.db.rawQuery(
+    final index = await v9.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='index' "
       "AND name='idx_categories_unique'",
     );
     expect(index, hasLength(1));
 
-    await db.close();
+    await v9.close();
     await dir.delete(recursive: true);
   });
 

@@ -2655,6 +2655,155 @@ class AppLocalizationsZh extends AppLocalizations {
   String get tagMgmtSubtitle => '记账时可给交易打多个标签';
 
   @override
+  String get tagGroupProject => '项目';
+
+  @override
+  String get tagGroupScene => '场景';
+
+  @override
+  String get tagGroupPurpose => '用途';
+
+  @override
+  String get tagGroupPerson => '对象';
+
+  @override
+  String get tagGroupPlace => '地点';
+
+  @override
+  String get tagGroupCustom => '自定义';
+
+  @override
+  String get tagGroupAdd => '新增维度';
+
+  @override
+  String get tagGroupChoose => '选择维度';
+
+  @override
+  String get tagGroupMode => '选择方式';
+
+  @override
+  String get tagGroupSingle => '单选';
+
+  @override
+  String get tagGroupMultiple => '多选';
+
+  @override
+  String get tagRulePlaceContains => '原文包含地点';
+
+  @override
+  String get tagRuleStartDate => '开始日期';
+
+  @override
+  String get tagRuleEndDate => '结束日期';
+
+  @override
+  String get tagReportDimensionFilter => '筛选标签维度';
+
+  @override
+  String get tagReportCategoryFilter => '筛选分类';
+
+  @override
+  String get tagTemplatesTitle => '标签模板';
+
+  @override
+  String get tagTemplateSave => '保存为模板';
+
+  @override
+  String get tagTemplateName => '模板名称';
+
+  @override
+  String get tagAliasAdd => '添加别名';
+
+  @override
+  String get tagArchive => '归档标签';
+
+  @override
+  String get tagRestore => '恢复标签';
+
+  @override
+  String get tagArchivedLabel => '已归档';
+
+  @override
+  String get tagMerge => '合并标签';
+
+  @override
+  String get tagMergeTarget => '选择合并目标';
+
+  @override
+  String tagMergeConfirm(String source, String target) {
+    return '将「$source」合并到「$target」？旧交易继续保留原标签 ID，但展示和统计使用目标标签。';
+  }
+
+  @override
+  String get projectsTitle => '项目';
+
+  @override
+  String get projectsEmpty => '暂无项目，点击右上角新增';
+
+  @override
+  String get projectAdd => '新增项目';
+
+  @override
+  String get projectEdit => '编辑项目';
+
+  @override
+  String get projectName => '项目名称';
+
+  @override
+  String get projectBudget => '项目预算（账本本位币）';
+
+  @override
+  String get projectNote => '备注';
+
+  @override
+  String get projectStatus => '项目状态';
+
+  @override
+  String get projectStatusActive => '进行中';
+
+  @override
+  String get projectStatusCompleted => '已完成';
+
+  @override
+  String get projectStatusArchived => '已归档';
+
+  @override
+  String get projectInvalid => '请检查项目名称、预算及日期范围';
+
+  @override
+  String get projectCategoryBreakdown => '支出构成';
+
+  @override
+  String projectSpent(String amount) {
+    return '已花 $amount';
+  }
+
+  @override
+  String projectRemaining(String amount) {
+    return '剩余 $amount';
+  }
+
+  @override
+  String projectBudgetValue(String amount) {
+    return '预算 $amount';
+  }
+
+  @override
+  String projectStartValue(String date) {
+    return '开始 $date';
+  }
+
+  @override
+  String projectEndValue(String date) {
+    return '结束 $date';
+  }
+
+  @override
+  String projectEntries(int count) {
+    return '关联交易 $count 笔';
+  }
+
+  @override
   String get tagAdd => '新增标签';
 
   @override

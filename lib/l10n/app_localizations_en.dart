@@ -2713,6 +2713,155 @@ class AppLocalizationsEn extends AppLocalizations {
   String get tagMgmtSubtitle => 'Add multiple tags to entries';
 
   @override
+  String get tagGroupProject => 'Project';
+
+  @override
+  String get tagGroupScene => 'Context';
+
+  @override
+  String get tagGroupPurpose => 'Purpose';
+
+  @override
+  String get tagGroupPerson => 'Person';
+
+  @override
+  String get tagGroupPlace => 'Place';
+
+  @override
+  String get tagGroupCustom => 'Custom';
+
+  @override
+  String get tagGroupAdd => 'Add dimension';
+
+  @override
+  String get tagGroupChoose => 'Choose dimension';
+
+  @override
+  String get tagGroupMode => 'Selection mode';
+
+  @override
+  String get tagGroupSingle => 'Single';
+
+  @override
+  String get tagGroupMultiple => 'Multiple';
+
+  @override
+  String get tagRulePlaceContains => 'Source text contains place';
+
+  @override
+  String get tagRuleStartDate => 'Start date';
+
+  @override
+  String get tagRuleEndDate => 'End date';
+
+  @override
+  String get tagReportDimensionFilter => 'Filter tag dimensions';
+
+  @override
+  String get tagReportCategoryFilter => 'Filter category';
+
+  @override
+  String get tagTemplatesTitle => 'Tag templates';
+
+  @override
+  String get tagTemplateSave => 'Save template';
+
+  @override
+  String get tagTemplateName => 'Template name';
+
+  @override
+  String get tagAliasAdd => 'Add alias';
+
+  @override
+  String get tagArchive => 'Archive tag';
+
+  @override
+  String get tagRestore => 'Restore tag';
+
+  @override
+  String get tagArchivedLabel => 'Archived';
+
+  @override
+  String get tagMerge => 'Merge tags';
+
+  @override
+  String get tagMergeTarget => 'Choose target tag';
+
+  @override
+  String tagMergeConfirm(String source, String target) {
+    return 'Merge “$source” into “$target”? Existing entries keep their tag IDs; display and reports use the target tag.';
+  }
+
+  @override
+  String get projectsTitle => 'Projects';
+
+  @override
+  String get projectsEmpty => 'No projects yet. Tap + to add one.';
+
+  @override
+  String get projectAdd => 'Add project';
+
+  @override
+  String get projectEdit => 'Edit project';
+
+  @override
+  String get projectName => 'Project name';
+
+  @override
+  String get projectBudget => 'Project budget (ledger base currency)';
+
+  @override
+  String get projectNote => 'Notes';
+
+  @override
+  String get projectStatus => 'Project status';
+
+  @override
+  String get projectStatusActive => 'Active';
+
+  @override
+  String get projectStatusCompleted => 'Completed';
+
+  @override
+  String get projectStatusArchived => 'Archived';
+
+  @override
+  String get projectInvalid => 'Check the project name, budget, and date range';
+
+  @override
+  String get projectCategoryBreakdown => 'Spending breakdown';
+
+  @override
+  String projectSpent(String amount) {
+    return 'Spent $amount';
+  }
+
+  @override
+  String projectRemaining(String amount) {
+    return 'Remaining $amount';
+  }
+
+  @override
+  String projectBudgetValue(String amount) {
+    return 'Budget $amount';
+  }
+
+  @override
+  String projectStartValue(String date) {
+    return 'Starts $date';
+  }
+
+  @override
+  String projectEndValue(String date) {
+    return 'Ends $date';
+  }
+
+  @override
+  String projectEntries(int count) {
+    return '$count linked entries';
+  }
+
+  @override
   String get tagAdd => 'New tag';
 
   @override

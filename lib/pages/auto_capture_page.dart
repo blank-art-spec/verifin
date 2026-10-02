@@ -1057,6 +1057,9 @@ class _AutoCaptureRuleEditorPageState extends State<AutoCaptureRuleEditorPage> {
   late final TextEditingController _cardLast4;
   late final TextEditingController _amount;
   late final TextEditingController _merchant;
+  late final TextEditingController _placeContains;
+  DateTime? _startDate;
+  DateTime? _endDate;
   CaptureSourceKind? _sourceKind;
   CaptureTransactionKind? _matchKind;
   CaptureTransactionKind? _setKind;
@@ -1076,6 +1079,9 @@ class _AutoCaptureRuleEditorPageState extends State<AutoCaptureRuleEditorPage> {
     _cardLast4 = TextEditingController(text: rule?.cardLast4 ?? '');
     _amount = TextEditingController(text: rule?.exactAmount?.toString() ?? '');
     _merchant = TextEditingController(text: rule?.setMerchant ?? '');
+    _placeContains = TextEditingController(text: rule?.placeContains ?? '');
+    _startDate = rule?.startDate;
+    _endDate = rule?.endDate;
     _sourceKind = rule?.sourceKind;
     _matchKind = rule?.matchKind;
     _setKind = rule?.setKind;
@@ -1094,6 +1100,7 @@ class _AutoCaptureRuleEditorPageState extends State<AutoCaptureRuleEditorPage> {
     _cardLast4.dispose();
     _amount.dispose();
     _merchant.dispose();
+    _placeContains.dispose();
     super.dispose();
   }
 
@@ -1172,6 +1179,58 @@ class _AutoCaptureRuleEditorPageState extends State<AutoCaptureRuleEditorPage> {
                       decoration: InputDecoration(
                         labelText: l10n.autoCaptureRuleKeyword,
                       ),
+                    ),
+                    TextField(
+                      controller: _placeContains,
+                      decoration: InputDecoration(
+                        labelText: l10n.tagRulePlaceContains,
+                      ),
+                    ),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: SettingsRow(
+                            icon: Icons.event_available_outlined,
+                            title: l10n.tagRuleStartDate,
+                            trailing: _startDate == null
+                                ? l10n.autoCaptureRuleAny
+                                : MaterialLocalizations.of(
+                                    context,
+                                  ).formatMediumDate(_startDate!),
+                            trailingIcon: Icons.chevron_right,
+                            onTap: () => _pickRuleDate(start: true),
+                          ),
+                        ),
+                        if (_startDate != null)
+                          IconButton(
+                            tooltip: l10n.commonClear,
+                            onPressed: () => setState(() => _startDate = null),
+                            icon: const Icon(Icons.close),
+                          ),
+                      ],
+                    ),
+                    Row(
+                      children: <Widget>[
+                        Expanded(
+                          child: SettingsRow(
+                            icon: Icons.event_outlined,
+                            title: l10n.tagRuleEndDate,
+                            trailing: _endDate == null
+                                ? l10n.autoCaptureRuleAny
+                                : MaterialLocalizations.of(
+                                    context,
+                                  ).formatMediumDate(_endDate!),
+                            trailingIcon: Icons.chevron_right,
+                            onTap: () => _pickRuleDate(start: false),
+                          ),
+                        ),
+                        if (_endDate != null)
+                          IconButton(
+                            tooltip: l10n.commonClear,
+                            onPressed: () => setState(() => _endDate = null),
+                            icon: const Icon(Icons.close),
+                          ),
+                      ],
                     ),
                     TextField(
                       controller: _cardLast4,
@@ -1358,6 +1417,24 @@ class _AutoCaptureRuleEditorPageState extends State<AutoCaptureRuleEditorPage> {
     setState(() => _tagIds = selected);
   }
 
+  /// 选择规则生效起止日；日历使用当前应用 locale，取消不修改草稿。
+  Future<void> _pickRuleDate({required bool start}) async {
+    final selected = await showDatePicker(
+      context: context,
+      initialDate: (start ? _startDate : _endDate) ?? DateTime.now(),
+      firstDate: DateTime(2000),
+      lastDate: DateTime(2100),
+    );
+    if (!mounted || selected == null) return;
+    setState(() {
+      if (start) {
+        _startDate = selected;
+      } else {
+        _endDate = selected;
+      }
+    });
+  }
+
   Future<void> _save() async {
     final controller = VeriFinScope.of(context);
     final initial = widget.initialRule;
@@ -1372,6 +1449,9 @@ class _AutoCaptureRuleEditorPageState extends State<AutoCaptureRuleEditorPage> {
       sourceKind: _sourceKind,
       sourceId: _sourceId.text,
       textContains: _keyword.text,
+      placeContains: _placeContains.text,
+      startDate: _startDate,
+      endDate: _endDate,
       cardLast4: _cardLast4.text,
       exactAmount: double.tryParse(_amount.text.trim()),
       matchKind: _matchKind,

@@ -16,6 +16,9 @@ class LedgerDataSnapshot {
     required this.accountGroups,
     required this.categories,
     required this.tags,
+    this.tagGroups = defaultTagGroups,
+    this.projects = const <Project>[],
+    this.tagTemplates = const <TagTemplate>[],
     required this.attachments,
     required this.entries,
     required this.recurringRules,
@@ -34,6 +37,9 @@ class LedgerDataSnapshot {
   final List<AccountGroup> accountGroups;
   final List<Category> categories;
   final List<Tag> tags;
+  final List<TagGroup> tagGroups;
+  final List<Project> projects;
+  final List<TagTemplate> tagTemplates;
   final List<Attachment> attachments;
   final List<LedgerEntry> entries;
   final List<RecurringRule> recurringRules;
@@ -106,6 +112,24 @@ abstract interface class LedgerRepository {
 
   Future<List<Tag>> loadTags();
   Future<void> saveTags(List<Tag> tags);
+
+  /// 读取全部标签维度，包括用户创建的维度。
+  Future<List<TagGroup>> loadTagGroups();
+
+  /// 以传入集合替换维度表；调用方需保证标签引用仍有对应维度。
+  Future<void> saveTagGroups(List<TagGroup> groups);
+
+  /// 读取账本项目及预算、日期等元数据。
+  Future<List<Project>> loadProjects();
+
+  /// 以传入集合整体替换项目表。
+  Future<void> saveProjects(List<Project> projects);
+
+  /// 读取全部账本的标签模板。
+  Future<List<TagTemplate>> loadTagTemplates();
+
+  /// 以传入集合整体替换模板表。
+  Future<void> saveTagTemplates(List<TagTemplate> templates);
 
   Future<List<Attachment>> loadAttachments();
   Future<void> saveAttachments(List<Attachment> attachments);
@@ -471,6 +495,58 @@ class SqliteLedgerRepository implements LedgerRepository {
     );
   }
 
+  @override
+  Future<List<TagGroup>> loadTagGroups() async {
+    final rows = await _db.query('tag_groups', orderBy: 'sort_order ASC');
+    final groups = rows.map(_tagGroupFromRow).toList();
+    _seedSnapshot('tag_groups', _indexed(groups, _tagGroupToRow));
+    return groups;
+  }
+
+  @override
+  Future<void> saveTagGroups(List<TagGroup> groups) {
+    final snapshot = List<TagGroup>.of(groups);
+    return _enqueueWrite(
+      () =>
+          _incrementalReplace('tag_groups', _indexed(snapshot, _tagGroupToRow)),
+    );
+  }
+
+  @override
+  Future<List<Project>> loadProjects() async {
+    final rows = await _db.query('projects', orderBy: 'sort_order ASC');
+    final projects = rows.map(_projectFromRow).toList();
+    _seedSnapshot('projects', _indexed(projects, _projectToRow));
+    return projects;
+  }
+
+  @override
+  Future<void> saveProjects(List<Project> projects) {
+    final snapshot = List<Project>.of(projects);
+    return _enqueueWrite(
+      () => _incrementalReplace('projects', _indexed(snapshot, _projectToRow)),
+    );
+  }
+
+  @override
+  Future<List<TagTemplate>> loadTagTemplates() async {
+    final rows = await _db.query('tag_templates', orderBy: 'sort_order ASC');
+    final templates = rows.map(_tagTemplateFromRow).toList();
+    _seedSnapshot('tag_templates', _indexed(templates, _tagTemplateToRow));
+    return templates;
+  }
+
+  @override
+  Future<void> saveTagTemplates(List<TagTemplate> templates) {
+    final snapshot = List<TagTemplate>.of(templates);
+    return _enqueueWrite(
+      () => _incrementalReplace(
+        'tag_templates',
+        _indexed(snapshot, _tagTemplateToRow),
+      ),
+    );
+  }
+
   // ---- 图片附件 ----
 
   @override
@@ -788,7 +864,22 @@ class SqliteLedgerRepository implements LedgerRepository {
           'categories',
           _indexed(snapshot.categories, _categoryToRow),
         );
+        await _replaceInTxn(
+          txn,
+          'tag_groups',
+          _indexed(snapshot.tagGroups, _tagGroupToRow),
+        );
         await _replaceInTxn(txn, 'tags', _indexed(snapshot.tags, _tagToRow));
+        await _replaceInTxn(
+          txn,
+          'projects',
+          _indexed(snapshot.projects, _projectToRow),
+        );
+        await _replaceInTxn(
+          txn,
+          'tag_templates',
+          _indexed(snapshot.tagTemplates, _tagTemplateToRow),
+        );
         await _replaceInTxn(
           txn,
           'attachments',
@@ -852,6 +943,12 @@ class SqliteLedgerRepository implements LedgerRepository {
         _indexed(snapshot.categories, _categoryToRow),
       );
       _seedSnapshot('tags', _indexed(snapshot.tags, _tagToRow));
+      _seedSnapshot('projects', _indexed(snapshot.projects, _projectToRow));
+      _seedSnapshot(
+        'tag_templates',
+        _indexed(snapshot.tagTemplates, _tagTemplateToRow),
+      );
+      _seedSnapshot('tag_groups', _indexed(snapshot.tagGroups, _tagGroupToRow));
       _seedSnapshot('entries', snapshot.entries.map(_entryToRow));
       _seedSnapshot(
         'recurring_rules',
@@ -1177,6 +1274,9 @@ class SqliteLedgerRepository implements LedgerRepository {
     'source_kind': rule.sourceKind?.name,
     'source_id': rule.sourceId,
     'text_contains': rule.textContains,
+    'start_date': rule.startDate?.millisecondsSinceEpoch,
+    'end_date': rule.endDate?.millisecondsSinceEpoch,
+    'place_contains': rule.placeContains,
     'card_last4': rule.cardLast4,
     'exact_amount': rule.exactAmount,
     'match_kind': rule.matchKind?.name,
@@ -1200,6 +1300,13 @@ class SqliteLedgerRepository implements LedgerRepository {
             : CaptureSourceKind.fromStorage(row['source_kind'] as String?),
         sourceId: row['source_id'] as String? ?? '',
         textContains: row['text_contains'] as String? ?? '',
+        startDate: row['start_date'] == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(row['start_date'] as int),
+        endDate: row['end_date'] == null
+            ? null
+            : DateTime.fromMillisecondsSinceEpoch(row['end_date'] as int),
+        placeContains: row['place_contains'] as String? ?? '',
         cardLast4: row['card_last4'] as String? ?? '',
         exactAmount: (row['exact_amount'] as num?)?.toDouble(),
         matchKind: row['match_kind'] == null
@@ -1305,11 +1412,110 @@ class SqliteLedgerRepository implements LedgerRepository {
   static Map<String, Object?> _tagToRow(Tag t, int index) => <String, Object?>{
     'id': t.id,
     'label': t.label,
+    'group_id': t.groupId,
+    'parent_id': t.parentId,
+    'icon_code': t.iconCode,
+    'archived': t.archived ? 1 : 0,
+    'aliases': t.aliases.isEmpty ? null : jsonEncode(t.aliases),
+    'merged_into_id': t.mergedIntoId,
     'sort_order': index,
   };
 
-  static Tag _tagFromRow(Map<String, Object?> row) =>
-      Tag(id: row['id'] as String, label: row['label'] as String);
+  static Tag _tagFromRow(Map<String, Object?> row) => Tag(
+    id: row['id'] as String,
+    label: row['label'] as String,
+    groupId: row['group_id'] as String,
+    parentId: row['parent_id'] as String?,
+    iconCode: row['icon_code'] as String?,
+    archived: row['archived'] == 1,
+    aliases: _decodeStringList(row['aliases']),
+    mergedIntoId: row['merged_into_id'] as String?,
+    sortOrder: row['sort_order'] as int,
+  );
+
+  /// 把维度模型映射到 SQLite 行；列表下标就是当前显示顺序。
+  static Map<String, Object?> _tagGroupToRow(TagGroup group, int index) =>
+      <String, Object?>{
+        'id': group.id,
+        'name': group.name,
+        'type': group.type.name,
+        'selection_mode': group.selectionMode.name,
+        'icon_code': group.iconCode,
+        'sort_order': index,
+      };
+
+  /// 从 SQLite 行恢复维度，未知模式安全回退多选。
+  static TagGroup _tagGroupFromRow(Map<String, Object?> row) => TagGroup(
+    id: row['id'] as String,
+    name: row['name'] as String,
+    type:
+        TagGroupType.values.where((v) => v.name == row['type']).firstOrNull ??
+        TagGroupType.custom,
+    selectionMode:
+        TagSelectionMode.values
+            .where((v) => v.name == row['selection_mode'])
+            .firstOrNull ??
+        TagSelectionMode.multiple,
+    iconCode: row['icon_code'] as String?,
+    sortOrder: row['sort_order'] as int,
+  );
+
+  /// 把项目映射为数据库行；日期以毫秒保存，预算使用账本本位币。
+  static Map<String, Object?> _projectToRow(Project project, int index) =>
+      <String, Object?>{
+        'id': project.id,
+        'book_id': project.bookId,
+        'tag_id': project.tagId,
+        'name': project.name,
+        'start_date': project.startDate?.millisecondsSinceEpoch,
+        'end_date': project.endDate?.millisecondsSinceEpoch,
+        'budget': project.budget,
+        'status': project.status.name,
+        'note': project.note,
+        'sort_order': index,
+      };
+
+  /// 从数据库行恢复项目元数据。
+  static Project _projectFromRow(Map<String, Object?> row) => Project(
+    id: row['id'] as String,
+    bookId: row['book_id'] as String,
+    tagId: row['tag_id'] as String,
+    name: row['name'] as String,
+    startDate: row['start_date'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(row['start_date'] as int),
+    endDate: row['end_date'] == null
+        ? null
+        : DateTime.fromMillisecondsSinceEpoch(row['end_date'] as int),
+    budget: (row['budget'] as num?)?.toDouble(),
+    status:
+        ProjectStatus.values
+            .where((value) => value.name == row['status'])
+            .firstOrNull ??
+        ProjectStatus.active,
+    note: row['note'] as String? ?? '',
+  );
+
+  /// 模板仅保存标签 id，不复制标签名或维度信息。
+  static Map<String, Object?> _tagTemplateToRow(
+    TagTemplate template,
+    int index,
+  ) => <String, Object?>{
+    'id': template.id,
+    'book_id': template.bookId,
+    'name': template.name,
+    'tag_ids': jsonEncode(template.tagIds),
+    'sort_order': index,
+  };
+
+  /// 从数据库行恢复模板，标签参照在控制器加载后校验。
+  static TagTemplate _tagTemplateFromRow(Map<String, Object?> row) =>
+      TagTemplate(
+        id: row['id'] as String,
+        bookId: row['book_id'] as String,
+        name: row['name'] as String,
+        tagIds: _decodeStringList(row['tag_ids']),
+      );
 
   static Map<String, Object?> _attachmentToRow(Attachment a, int index) =>
       <String, Object?>{

@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 23;
+  static const int schemaVersion = 25;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -43,6 +43,9 @@ class AppDatabase {
       batch.execute(statement);
     }
     await batch.commit(noResult: true);
+    for (final group in _defaultTagGroupRows) {
+      await db.insert('tag_groups', group);
+    }
   }
 
   /// 版本迁移注册表：键 N 表示「升到 vN」的迁移段（v(N-1) → vN）。[_onUpgrade]
@@ -76,6 +79,8 @@ class AppDatabase {
         21: _migrateToV21,
         22: _migrateToV22,
         23: _migrateToV23,
+        24: _migrateToV24,
+        25: _migrateToV25,
       };
 
   /// 只读暴露迁移注册表，供迁移矩阵测试把库推进到任意中间版本。生产代码勿用。
@@ -469,6 +474,140 @@ class AppDatabase {
     }
   }
 
+  /// v23 → v24：创建维度表并扩展标签字段。只改标签行，不碰交易 tag_ids；
+  /// 因此每笔历史交易继续引用原 id。仅识别明确的中文维度前缀。
+  static Future<void> _migrateToV24(Database db) async {
+    await db.execute(_tagGroupsTable);
+    for (final group in _defaultTagGroupRows) {
+      await db.insert('tag_groups', group);
+    }
+    await db.execute(
+      "ALTER TABLE tags ADD COLUMN group_id TEXT NOT NULL DEFAULT 'custom'",
+    );
+    await db.execute('ALTER TABLE tags ADD COLUMN parent_id TEXT');
+    await db.execute('ALTER TABLE tags ADD COLUMN icon_code TEXT');
+    await db.execute(
+      'ALTER TABLE tags ADD COLUMN archived INTEGER NOT NULL DEFAULT 0',
+    );
+    for (final pair in <(String, String)>[
+      ('项目', 'project'),
+      ('场景', 'scene'),
+      ('用途', 'purpose'),
+      ('对象', 'person'),
+      ('地点', 'place'),
+    ]) {
+      await db.rawUpdate(
+        "UPDATE tags SET group_id = ?, label = trim(substr(label, instr(label, ':') + 1)) "
+        "WHERE label LIKE ? AND length(trim(substr(label, instr(label, ':') + 1))) > 0",
+        <Object?>[pair.$2, '${pair.$1}:%'],
+      );
+    }
+  }
+
+  /// 当前库与迁移共用同一维度结构，避免新装与升级后 schema 漂移。
+  static const String _tagGroupsTable = '''
+    CREATE TABLE tag_groups (
+      id TEXT PRIMARY KEY,
+      name TEXT NOT NULL,
+      type TEXT NOT NULL,
+      selection_mode TEXT NOT NULL,
+      icon_code TEXT,
+      sort_order INTEGER NOT NULL
+    )
+  ''';
+
+  /// 系统维度的稳定 id 与顺序；首次建库和升级都写入相同的行。
+  static const List<Map<String, Object?>> _defaultTagGroupRows =
+      <Map<String, Object?>>[
+        {
+          'id': 'project',
+          'name': '项目',
+          'type': 'system',
+          'selection_mode': 'single',
+          'sort_order': 0,
+        },
+        {
+          'id': 'scene',
+          'name': '场景',
+          'type': 'system',
+          'selection_mode': 'single',
+          'sort_order': 1,
+        },
+        {
+          'id': 'purpose',
+          'name': '用途',
+          'type': 'system',
+          'selection_mode': 'single',
+          'sort_order': 2,
+        },
+        {
+          'id': 'person',
+          'name': '对象',
+          'type': 'system',
+          'selection_mode': 'multiple',
+          'sort_order': 3,
+        },
+        {
+          'id': 'place',
+          'name': '地点',
+          'type': 'system',
+          'selection_mode': 'single',
+          'sort_order': 4,
+        },
+        {
+          'id': 'custom',
+          'name': '自定义',
+          'type': 'system',
+          'selection_mode': 'multiple',
+          'sort_order': 5,
+        },
+      ];
+
+  /// v24 → v25：项目、标签模板、别名/合并关系及自动采集的日期地点条件。
+  /// 旧交易和标签 id 不变；项目回填由控制器按真实交易所属账本完成。
+  static Future<void> _migrateToV25(Database db) async {
+    await db.execute(_projectsTable);
+    await db.execute(_tagTemplatesTable);
+    await db.execute('ALTER TABLE tags ADD COLUMN aliases TEXT');
+    await db.execute('ALTER TABLE tags ADD COLUMN merged_into_id TEXT');
+    await db.execute(
+      'ALTER TABLE auto_capture_rules ADD COLUMN start_date INTEGER',
+    );
+    await db.execute(
+      'ALTER TABLE auto_capture_rules ADD COLUMN end_date INTEGER',
+    );
+    await db.execute(
+      "ALTER TABLE auto_capture_rules ADD COLUMN place_contains TEXT NOT NULL DEFAULT ''",
+    );
+  }
+
+  /// 项目元数据独立于标签；tag_id 连接现有交易侧关联。
+  static const String _projectsTable = '''
+    CREATE TABLE projects (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      tag_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      start_date INTEGER,
+      end_date INTEGER,
+      budget REAL,
+      status TEXT NOT NULL,
+      note TEXT NOT NULL,
+      sort_order INTEGER NOT NULL
+    )
+  ''';
+
+  /// 模板只存名称和标签 id 数组；标签改名无需重写模板。
+  static const String _tagTemplatesTable = '''
+    CREATE TABLE tag_templates (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      tag_ids TEXT NOT NULL,
+      sort_order INTEGER NOT NULL
+    )
+  ''';
+
   static Future<bool> _tableExists(Database db, String name) async {
     final rows = await db.rawQuery(
       "SELECT name FROM sqlite_master WHERE type='table' AND name = ?",
@@ -808,6 +947,32 @@ class AppDatabase {
     )
   ''';
 
+  /// 当前自动采集规则结构；历史 v19 建表语句必须保持不变。
+  static const String _autoCaptureRulesTableCurrent = '''
+    CREATE TABLE IF NOT EXISTS auto_capture_rules (
+      id TEXT PRIMARY KEY,
+      book_id TEXT NOT NULL,
+      name TEXT NOT NULL,
+      priority INTEGER NOT NULL,
+      enabled INTEGER NOT NULL,
+      source_kind TEXT,
+      source_id TEXT NOT NULL,
+      text_contains TEXT NOT NULL,
+      card_last4 TEXT NOT NULL,
+      exact_amount REAL,
+      match_kind TEXT,
+      set_kind TEXT,
+      set_account_id TEXT,
+      set_to_account_id TEXT,
+      set_category_id TEXT,
+      set_tag_ids TEXT,
+      set_merchant TEXT NOT NULL,
+      start_date INTEGER,
+      end_date INTEGER,
+      place_contains TEXT NOT NULL DEFAULT ''
+    )
+  ''';
+
   static const String _autoCaptureRulesBookIndex =
       'CREATE INDEX IF NOT EXISTS idx_auto_capture_rules_book_priority '
       'ON auto_capture_rules (book_id, priority DESC)';
@@ -912,9 +1077,18 @@ class AppDatabase {
     CREATE TABLE tags (
       id TEXT PRIMARY KEY,
       label TEXT NOT NULL,
+      group_id TEXT NOT NULL DEFAULT 'custom',
+      parent_id TEXT,
+      icon_code TEXT,
+      archived INTEGER NOT NULL DEFAULT 0,
+      aliases TEXT,
+      merged_into_id TEXT,
       sort_order INTEGER NOT NULL
     )
     ''',
+    _tagGroupsTable,
+    _projectsTable,
+    _tagTemplatesTable,
     '''
     CREATE TABLE attachments (
       id TEXT PRIMARY KEY,
@@ -940,7 +1114,7 @@ class AppDatabase {
     _captureEventsTableCurrent,
     _captureEventsBookStatusIndex,
     _captureEventsFingerprintIndex,
-    _autoCaptureRulesTable,
+    _autoCaptureRulesTableCurrent,
     _autoCaptureRulesBookIndex,
   ];
 }

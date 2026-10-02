@@ -16,6 +16,7 @@ import '../app/feedback.dart';
 import '../app/model_lookup.dart';
 import '../app/ledger_math.dart';
 import '../app/models.dart';
+import '../app/tag_group_labels.dart';
 import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
@@ -964,17 +965,47 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                           ),
                           onTap: _pickTime,
                         ),
+                        for (final group in VeriFinScope.of(context).tagGroups)
+                          if (group.id != 'custom' ||
+                              _tagIds.any(
+                                (id) =>
+                                    VeriFinScope.of(
+                                      context,
+                                    ).tagById(id)?.groupId ==
+                                    group.id,
+                              ))
+                            _EntryMetadataChip(
+                              chipKey: Key('entry_metadata_tag_${group.id}'),
+                              icon: Icons.sell_outlined,
+                              label: Text(() {
+                                final selected = _tagIds
+                                    .map(VeriFinScope.of(context).tagById)
+                                    .whereType<Tag>()
+                                    .where((tag) => tag.groupId == group.id)
+                                    .map((tag) => tag.label)
+                                    .join('、');
+                                final name = tagGroupDisplayName(
+                                  group,
+                                  AppLocalizations.of(context),
+                                );
+                                return selected.isEmpty
+                                    ? name
+                                    : '$name  $selected';
+                              }()),
+                              selected: _tagIds.any(
+                                (id) =>
+                                    VeriFinScope.of(
+                                      context,
+                                    ).tagById(id)?.groupId ==
+                                    group.id,
+                              ),
+                              onTap: () => _pickTags(groupId: group.id),
+                            ),
                         _EntryMetadataChip(
                           chipKey: const Key('entry_metadata_tags'),
-                          icon: Icons.sell_outlined,
-                          label: Text(
-                            _tagIds.isEmpty
-                                ? AppLocalizations.of(context).tagLabel
-                                : AppLocalizations.of(
-                                    context,
-                                  ).entryTagCount(_tagIds.length),
-                          ),
-                          selected: _tagIds.isNotEmpty,
+                          icon: Icons.add,
+                          label: Text(AppLocalizations.of(context).tagLabel),
+                          selected: false,
                           onTap: _pickTags,
                         ),
                         if (_type == EntryType.expense)
@@ -1715,11 +1746,13 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     setState(() => _pendingAttachments.add(dataUrl));
   }
 
-  Future<void> _pickTags() async {
+  /// 打开全部或指定维度的标签选择器；返回后更新交易草稿。
+  Future<void> _pickTags({String? groupId}) async {
     final result = await pickEntryTags(
       context: context,
       selectedIds: _tagIds,
       extraTags: widget.draftExtraTags ?? const <Tag>[],
+      groupId: groupId,
     );
     if (!mounted || result == null) {
       return;

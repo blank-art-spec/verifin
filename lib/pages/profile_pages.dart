@@ -25,6 +25,7 @@ import 'reminder_settings_page.dart';
 import 'report_analysis_page.dart';
 import 'settings_page.dart';
 import 'tag_management_page.dart';
+import 'project_pages.dart';
 import 'widget_gallery_page.dart';
 
 // 「我的」页由多个子页面组成；各子页面拆到独立文件，这里作为聚合入口统一导出，
@@ -204,6 +205,19 @@ class ProfilePage extends StatelessWidget {
                 onTap: () => Navigator.of(context).push<void>(
                   MaterialPageRoute<void>(
                     builder: (context) => const TagManagementPage(),
+                  ),
+                ),
+              ),
+              _FeatureTileData(
+                icon: Icons.flag_outlined,
+                color: veriRoyal,
+                label: AppLocalizations.of(context).projectsTitle,
+                subtitle: AppLocalizations.of(
+                  context,
+                ).countItems(controller.projects.length),
+                onTap: () => Navigator.of(context).push<void>(
+                  MaterialPageRoute<void>(
+                    builder: (context) => const ProjectManagementPage(),
                   ),
                 ),
               ),

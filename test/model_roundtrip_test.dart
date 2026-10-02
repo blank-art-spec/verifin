@@ -157,7 +157,37 @@ void main() {
     iconCode: 'salary',
   );
 
-  const tag = Tag(id: 'tag-1', label: '出差');
+  const tag = Tag(
+    id: 'tag-1',
+    label: '出差',
+    groupId: 'project',
+    iconCode: 'travel',
+    archived: true,
+    aliases: <String>['旅行'],
+  );
+  final project = Project(
+    id: 'project-1',
+    bookId: 'book-x',
+    tagId: 'tag-1',
+    name: '出差',
+    startDate: DateTime(2026, 10, 1),
+    endDate: DateTime(2026, 10, 7),
+    budget: 2500,
+    status: ProjectStatus.completed,
+    note: '拜访客户',
+  );
+  const tagTemplate = TagTemplate(
+    id: 'template-1',
+    bookId: 'book-x',
+    name: '出差',
+    tagIds: <String>['tag-1'],
+  );
+  const tagGroup = TagGroup(
+    id: 'custom-trip',
+    name: '旅伴',
+    selectionMode: TagSelectionMode.single,
+    sortOrder: 6,
+  );
 
   const attachment = Attachment(
     id: 'att-1',
@@ -341,6 +371,28 @@ void main() {
     test('Tag', () {
       final restored = Tag.fromJson(jsonRoundTrip(tag.toJson()));
       expect(restored.toJson(), tag.toJson());
+      expect(
+        Tag.fromJson(<String, Object?>{
+          'id': 'legacy',
+          'label': '场景:返乡途中',
+        }).groupId,
+        'scene',
+      );
+      expect(
+        TagGroup.fromJson(jsonRoundTrip(tagGroup.toJson())).toJson(),
+        tagGroup.toJson(),
+      );
+    });
+
+    test('Project 与 TagTemplate', () {
+      expect(
+        Project.fromJson(jsonRoundTrip(project.toJson())).toJson(),
+        project.toJson(),
+      );
+      expect(
+        TagTemplate.fromJson(jsonRoundTrip(tagTemplate.toJson())).toJson(),
+        tagTemplate.toJson(),
+      );
     });
 
     test('Attachment', () {
@@ -436,6 +488,9 @@ void main() {
       await repo.saveCreditAccounts(<CreditAccount>[creditAccount]);
       await repo.saveCategories(<Category>[categoryChild, categoryRoot]);
       await repo.saveTags(<Tag>[tag]);
+      await repo.saveTagGroups(<TagGroup>[...defaultTagGroups, tagGroup]);
+      await repo.saveProjects(<Project>[project]);
+      await repo.saveTagTemplates(<TagTemplate>[tagTemplate]);
       await repo.saveAttachments(<Attachment>[attachment]);
       await repo.saveRecurringRules(<RecurringRule>[rule]);
       await repo.saveExchangeRates(<ExchangeRate>[exchangeRate]);
@@ -476,6 +531,12 @@ void main() {
         categoryRoot.toJson(),
       );
       expect((await repo.loadTags()).single.toJson(), tag.toJson());
+      expect((await repo.loadTagGroups()).last.toJson(), tagGroup.toJson());
+      expect((await repo.loadProjects()).single.toJson(), project.toJson());
+      expect(
+        (await repo.loadTagTemplates()).single.toJson(),
+        tagTemplate.toJson(),
+      );
       expect(
         (await repo.loadAttachments()).single.toJson(),
         attachment.toJson(),

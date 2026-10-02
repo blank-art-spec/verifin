@@ -10,5 +10,6 @@ export 'models/credit_account.dart';
 export 'models/currency.dart';
 export 'models/ledger_book.dart';
 export 'models/ledger_entry.dart';
+export 'models/tag.dart';
 export 'models/preferences.dart';
 export 'models/user_profile.dart';

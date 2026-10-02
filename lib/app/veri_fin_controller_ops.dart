@@ -110,6 +110,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         rule.sourceKind != null ||
         rule.sourceId.trim().isNotEmpty ||
         rule.textContains.trim().isNotEmpty ||
+        rule.placeContains.trim().isNotEmpty ||
+        rule.startDate != null ||
+        rule.endDate != null ||
         rule.cardLast4.trim().isNotEmpty ||
         rule.exactAmount != null ||
         rule.matchKind != null;
@@ -153,6 +156,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         !hasAction ||
         !referencesExist ||
         !categoryTypeMatches ||
+        (rule.startDate != null &&
+            rule.endDate != null &&
+            rule.startDate!.isAfter(rule.endDate!)) ||
         (rule.setAccountId != null &&
             rule.setAccountId == rule.setToAccountId) ||
         rule.exactAmount != null &&
@@ -165,6 +171,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       name: rule.name.trim(),
       sourceId: rule.sourceId.trim(),
       textContains: rule.textContains.trim(),
+      placeContains: rule.placeContains.trim(),
       cardLast4: rule.cardLast4.replaceAll(RegExp(r'\D'), ''),
       setMerchant: rule.setMerchant.trim(),
     );
@@ -493,6 +500,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
               .toList(),
           categories: _categories,
           tags: _tags,
+          tagGroups: _tagGroups,
           entries: nextEntries
               .where((entry) => entry.bookId == book.id)
               .toList(),
@@ -2187,11 +2195,29 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   /// 全部标签（按创建/排序顺序）。标签与账本无关，全局共享。
   List<Tag> get tags => List<Tag>.unmodifiable(_tags);
 
-  Tag? tagById(String id) => _tags.where((tag) => tag.id == id).firstOrNull;
+  /// 全部标签维度，系统预置和用户自建维度共享一个有序列表。
+  List<TagGroup> get tagGroups => List<TagGroup>.unmodifiable(_tagGroups);
+
+  /// 当前账本的项目；项目元数据与全局标签字典分开保存。
+  List<Project> get projects => List<Project>.unmodifiable(
+    _projects.where((project) => project.bookId == _activeBookId),
+  );
+
+  /// 当前账本可一键套用的标签模板。
+  List<TagTemplate> get tagTemplates => List<TagTemplate>.unmodifiable(
+    _tagTemplates.where((template) => template.bookId == _activeBookId),
+  );
+
+  /// 解析历史已合并标签的最终目标；遇到损坏的环时回退原标签。
+  Tag? tagById(String id) {
+    return canonicalTagOf(id, _tags);
+  }
 
   /// 某标签被多少笔交易使用（当前账本无关，统计全部交易）。
   int tagUsageCount(String tagId) {
-    return _entries.where((entry) => entry.tagIds.contains(tagId)).length;
+    return _entries
+        .where((entry) => entry.tagIds.any((id) => tagById(id)?.id == tagId))
+        .length;
   }
 
   /// 某交易的图片附件（按加入顺序）。
@@ -4243,6 +4269,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _entries.removeWhere((entry) => importedById.containsKey(entry.id));
     _entries.addAll(importedById.values);
     _entries.sort(_compareEntriesLatestFirst);
+    _seedLegacyProjects();
     // 导入会同时写账户/分类/交易与核准证据，必须单事务保存，不能留下半套数据。
     _persistAllLedgerData();
     notifyListeners();
@@ -4431,6 +4458,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     // 导入数据里的旧式单标量退款（如一木账单的「退款」列）迁成关联退款条目、
     // 并重算净额缓存，使余额/统计当场即正确（不必等下次载入自愈）。
     _syncRefundData();
+    _seedLegacyProjects();
     // 交易与其来源证据、候选账户/分类/标签/汇率是一份导入提交，原子整替保存。
     _persistAllLedgerData();
     notifyListeners();
@@ -4978,6 +5006,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     );
     _captureEvents.removeWhere((event) => event.bookId == bookId);
     _autoCaptureRules.removeWhere((rule) => rule.bookId == bookId);
+    _projects.removeWhere((project) => project.bookId == bookId);
+    _tagTemplates.removeWhere((template) => template.bookId == bookId);
     _collapsedAssetSections.removeWhere((key) => key.startsWith('$bookId:'));
     _assetAccountOrders.removeWhere((key, _) => key.startsWith('$bookId:'));
     _assetSectionOrders.removeWhere((key, _) => key.startsWith('$bookId:'));
@@ -6203,34 +6233,389 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   // ---- 标签 ----
 
   /// 新增标签。名称去重（忽略首尾空白，区分大小写），已存在则返回其 id。
-  String? addTag(String label) {
-    final trimmed = label.trim();
+  String? addTag(String label, {String? groupId}) {
+    final parsed = parseLegacyTagLabel(label.trim());
+    final targetGroup = groupId ?? parsed.groupId;
+    final trimmed = groupId == null ? parsed.label : label.trim();
     if (trimmed.isEmpty) {
       return null;
     }
-    final existing = _tags.where((tag) => tag.label == trimmed).firstOrNull;
+    if (!_tagGroups.any((group) => group.id == targetGroup)) return null;
+    final existing = _tags
+        .where(
+          (tag) =>
+              tag.groupId == targetGroup &&
+              (tag.label == trimmed || tag.aliases.contains(trimmed)),
+        )
+        .firstOrNull;
     if (existing != null) {
-      return existing.id;
+      return tagById(existing.id)?.id;
     }
-    final tag = Tag(id: _generateId('tag'), label: trimmed);
+    final tag = Tag(
+      id: _generateId('tag'),
+      groupId: targetGroup,
+      label: trimmed,
+    );
     _tags.add(tag);
-    _persistTags();
+    if (targetGroup == 'project' && _seedLegacyProjects()) {
+      _persistAllLedgerData();
+    } else {
+      _persistTags();
+    }
     notifyListeners();
     return tag.id;
   }
 
-  void renameTag(String tagId, String label) {
+  /// 修改标签名称；[tagId] 是稳定关联键，[label] 去除首尾空白后保存。
+  /// 项目标签会同步项目名称；数据库失败时保留原内存状态并返回 false。
+  Future<bool> renameTag(String tagId, String label) async {
     final trimmed = label.trim();
     if (trimmed.isEmpty) {
-      return;
+      return false;
     }
     final index = _tags.indexWhere((tag) => tag.id == tagId);
-    if (index == -1) {
-      return;
+    if (index == -1 || _tags[index].mergedIntoId != null) {
+      return false;
     }
-    _tags[index] = _tags[index].copyWith(label: trimmed);
-    _persistTags();
+    if (_tags.any(
+      (tag) =>
+          tag.id != tagId &&
+          tag.groupId == _tags[index].groupId &&
+          (tag.label == trimmed || tag.aliases.contains(trimmed)),
+    )) {
+      return false;
+    }
+    final nextTags = List<Tag>.of(_tags);
+    nextTags[index] = nextTags[index].copyWith(label: trimmed);
+    final isProject = nextTags[index].groupId == 'project';
+    final nextProjects = <Project>[
+      for (final project in _projects)
+        project.tagId == tagId ? project.copyWith(name: trimmed) : project,
+    ];
+    final saved = await _runTrackedWrite(
+      () => isProject
+          ? _repository.replaceAllLedgerData(
+              _ledgerDataSnapshot(tags: nextTags, projects: nextProjects),
+            )
+          : _repository.saveTags(nextTags),
+    );
+    if (!saved) {
+      return false;
+    }
+    _tags[index] = nextTags[index];
+    if (isProject) {
+      _projects
+        ..clear()
+        ..addAll(nextProjects);
+    }
     notifyListeners();
+    return true;
+  }
+
+  /// 新建自定义维度并持久化；同名维度返回已有 id。
+  Future<String?> addTagGroup(
+    String name, {
+    TagSelectionMode selectionMode = TagSelectionMode.multiple,
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty) {
+      return null;
+    }
+    final existing = _tagGroups
+        .where((group) => group.name == trimmed)
+        .firstOrNull;
+    if (existing != null) {
+      return existing.id;
+    }
+    final group = TagGroup(
+      id: _generateId('tag_group'),
+      name: trimmed,
+      selectionMode: selectionMode,
+      sortOrder: _tagGroups.length,
+    );
+    final next = <TagGroup>[..._tagGroups, group];
+    if (!await _runTrackedWrite(() => _repository.saveTagGroups(next))) {
+      return null;
+    }
+    _tagGroups.add(group);
+    notifyListeners();
+    return group.id;
+  }
+
+  /// 更新维度的单多选约束；不改历史交易，新选标签时按新约束执行。
+  Future<bool> setTagGroupSelectionMode(
+    String groupId,
+    TagSelectionMode mode,
+  ) async {
+    final index = _tagGroups.indexWhere((group) => group.id == groupId);
+    if (index < 0) {
+      return false;
+    }
+    final next = List<TagGroup>.of(_tagGroups);
+    next[index] = next[index].copyWith(selectionMode: mode);
+    if (!await _runTrackedWrite(() => _repository.saveTagGroups(next))) {
+      return false;
+    }
+    _tagGroups[index] = next[index];
+    notifyListeners();
+    return true;
+  }
+
+  /// 将旧项目标签补成独立项目实体；按交易所属账本归属，空标签放当前账本。
+  /// 返回是否新增项目，调用方随后负责落库。
+  bool _seedLegacyProjects() {
+    var changed = false;
+    for (final tag in _tags.where(
+      (item) => item.groupId == 'project' && item.mergedIntoId == null,
+    )) {
+      final bookIds = _entries
+          .where((entry) => entry.tagIds.contains(tag.id))
+          .map((entry) => entry.bookId)
+          .toSet();
+      if (bookIds.isEmpty) bookIds.add(_activeBookId);
+      for (final bookId in bookIds) {
+        if (!_ledgerBooks.any((book) => book.id == bookId) ||
+            _projects.any(
+              (project) => project.bookId == bookId && project.tagId == tag.id,
+            )) {
+          continue;
+        }
+        _projects.add(
+          Project(
+            id: 'project:$bookId:${tag.id}',
+            bookId: bookId,
+            tagId: tag.id,
+            name: tag.label,
+          ),
+        );
+        changed = true;
+      }
+    }
+    return changed;
+  }
+
+  /// 新建或编辑当前账本项目，原子保存项目元数据及其标签。
+  /// [original] 为空时新建；[name] 是项目名称；起止日期限定活动周期；
+  /// [budget] 是当前账本本位币预算，[status] 与 [note] 控制状态和备注。
+  /// 返回保存后的项目；校验或落库失败时返回 null 且不修改内存。
+  Future<Project?> saveProject({
+    Project? original,
+    required String name,
+    DateTime? startDate,
+    DateTime? endDate,
+    double? budget,
+    ProjectStatus status = ProjectStatus.active,
+    String note = '',
+  }) async {
+    final trimmed = name.trim();
+    if (trimmed.isEmpty ||
+        (budget != null && (!budget.isFinite || budget < 0)) ||
+        (startDate != null && endDate != null && startDate.isAfter(endDate)) ||
+        (original != null &&
+            (original.bookId != _activeBookId ||
+                !_projects.any((item) => item.id == original.id))) ||
+        _projects.any(
+          (item) =>
+              item.bookId == _activeBookId &&
+              item.id != original?.id &&
+              item.name == trimmed,
+        )) {
+      return null;
+    }
+    final nextTags = List<Tag>.of(_tags);
+    final nextProjects = List<Project>.of(_projects);
+    final tagId = original?.tagId ?? _generateId('tag');
+    final tagIndex = nextTags.indexWhere((tag) => tag.id == tagId);
+    final archived = status == ProjectStatus.archived;
+    if (tagIndex == -1) {
+      nextTags.add(
+        Tag(id: tagId, groupId: 'project', label: trimmed, archived: archived),
+      );
+    } else {
+      nextTags[tagIndex] = nextTags[tagIndex].copyWith(
+        label: trimmed,
+        archived: archived,
+      );
+    }
+    final project = Project(
+      id: original?.id ?? _generateId('project'),
+      bookId: _activeBookId,
+      tagId: tagId,
+      name: trimmed,
+      startDate: startDate,
+      endDate: endDate,
+      budget: budget,
+      status: status,
+      note: note.trim(),
+    );
+    final projectIndex = nextProjects.indexWhere(
+      (item) => item.id == project.id,
+    );
+    if (projectIndex == -1) {
+      nextProjects.add(project);
+    } else {
+      nextProjects[projectIndex] = project;
+    }
+    if (!await _runTrackedWrite(
+      () => _repository.replaceAllLedgerData(
+        _ledgerDataSnapshot(tags: nextTags, projects: nextProjects),
+      ),
+    )) {
+      return null;
+    }
+    _tags
+      ..clear()
+      ..addAll(nextTags);
+    _projects
+      ..clear()
+      ..addAll(nextProjects);
+    notifyListeners();
+    return project;
+  }
+
+  /// 计算 [project] 在所属账本的本位币净支出；已到账退款经交易净额扣除。
+  double projectSpent(Project project) => _entries
+      .where(
+        (entry) =>
+            entry.bookId == project.bookId &&
+            entry.type == EntryType.expense &&
+            entry.tagIds.any((id) => tagById(id)?.id == project.tagId),
+      )
+      .fold<double>(0, (sum, entry) => sum + entry.netAmount);
+
+  /// 把 [incomingIds] 加到 [currentIds]，返回符合维度约束的标签 id。
+  /// 单选维度替换旧值，多选维度追加并去重；已归档标签不进入新选择。
+  List<String> resolveTagSelection(
+    List<String> currentIds,
+    List<String> incomingIds,
+  ) {
+    final result = <String>[];
+    for (final id in <String>[...currentIds, ...incomingIds]) {
+      final tag = tagById(id);
+      if (tag == null || tag.archived) continue;
+      final mode = _tagGroups
+          .where((group) => group.id == tag.groupId)
+          .firstOrNull
+          ?.selectionMode;
+      if (mode == TagSelectionMode.single) {
+        result.removeWhere(
+          (existing) => tagById(existing)?.groupId == tag.groupId,
+        );
+      }
+      if (!result.contains(tag.id)) result.add(tag.id);
+    }
+    return result;
+  }
+
+  /// 以 [name] 保存当前账本的 [tagIds] 组合；空名称或无有效标签返回 null。
+  Future<TagTemplate?> saveTagTemplate(String name, List<String> tagIds) async {
+    final trimmed = name.trim();
+    final normalized = resolveTagSelection(const <String>[], tagIds);
+    if (trimmed.isEmpty || normalized.isEmpty) return null;
+    final template = TagTemplate(
+      id: _generateId('tag_template'),
+      bookId: _activeBookId,
+      name: trimmed,
+      tagIds: normalized,
+    );
+    final next = <TagTemplate>[..._tagTemplates, template];
+    if (!await _runTrackedWrite(() => _repository.saveTagTemplates(next))) {
+      return null;
+    }
+    _tagTemplates.add(template);
+    notifyListeners();
+    return template;
+  }
+
+  /// 删除当前账本中 id 为 [id] 的模板；交易和标签均不受影响。
+  Future<bool> deleteTagTemplate(String id) async {
+    final next = _tagTemplates
+        .where((item) => !(item.id == id && item.bookId == _activeBookId))
+        .toList();
+    if (next.length == _tagTemplates.length) return false;
+    if (!await _runTrackedWrite(() => _repository.saveTagTemplates(next))) {
+      return false;
+    }
+    _tagTemplates
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return true;
+  }
+
+  /// 将 id 为 [id] 的标签设置为 [archived]；只影响新选择，历史关联不变。
+  Future<bool> setTagArchived(String id, bool archived) async {
+    final index = _tags.indexWhere(
+      (tag) => tag.id == id && tag.mergedIntoId == null,
+    );
+    if (index < 0) return false;
+    final next = List<Tag>.of(_tags);
+    next[index] = next[index].copyWith(archived: archived);
+    if (!await _runTrackedWrite(() => _repository.saveTags(next))) return false;
+    _tags[index] = next[index];
+    notifyListeners();
+    return true;
+  }
+
+  /// 给 id 为 [id] 的标签添加 [alias]；同维度其它标签的名称或别名不可重复。
+  Future<bool> addTagAlias(String id, String alias) async {
+    final trimmed = alias.trim();
+    final index = _tags.indexWhere(
+      (tag) => tag.id == id && tag.mergedIntoId == null,
+    );
+    if (index < 0 || trimmed.isEmpty) return false;
+    final source = _tags[index];
+    if (_tags.any(
+      (tag) =>
+          tag.groupId == source.groupId &&
+          tag.id != id &&
+          (tag.label == trimmed || tag.aliases.contains(trimmed)),
+    )) {
+      return false;
+    }
+    final next = List<Tag>.of(_tags);
+    next[index] = source.copyWith(
+      aliases: <String>{...source.aliases, trimmed}.toList(),
+    );
+    if (!await _runTrackedWrite(() => _repository.saveTags(next))) return false;
+    _tags[index] = next[index];
+    notifyListeners();
+    return true;
+  }
+
+  /// 将 [sourceId] 合并到同维度 [targetId]；旧交易的来源 id 保持不变。
+  /// 新展示与统计沿合并关系解析目标；项目实体对应的标签不参与合并。
+  Future<bool> mergeTag(String sourceId, String targetId) async {
+    final sourceIndex = _tags.indexWhere(
+      (tag) => tag.id == sourceId && tag.mergedIntoId == null,
+    );
+    final targetIndex = _tags.indexWhere(
+      (tag) => tag.id == targetId && tag.mergedIntoId == null,
+    );
+    if (sourceIndex < 0 ||
+        targetIndex < 0 ||
+        sourceId == targetId ||
+        _tags[sourceIndex].groupId != _tags[targetIndex].groupId ||
+        _tags[sourceIndex].groupId == 'project') {
+      return false;
+    }
+    final source = _tags[sourceIndex];
+    final target = _tags[targetIndex];
+    final next = List<Tag>.of(_tags);
+    next[sourceIndex] = source.copyWith(archived: true, mergedIntoId: targetId);
+    next[targetIndex] = target.copyWith(
+      aliases: <String>{
+        ...target.aliases,
+        source.label,
+        ...source.aliases,
+      }.toList(),
+    );
+    if (!await _runTrackedWrite(() => _repository.saveTags(next))) return false;
+    _tags
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return true;
   }
 
   void reorderTags(int oldIndex, int newIndex) {
@@ -6272,10 +6657,22 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   /// 删除标签，并从所有交易的 tagIds 中移除该标签的引用。
   Future<bool> deleteTag(String tagId) async {
     final index = _tags.indexWhere((tag) => tag.id == tagId);
-    if (index == -1) {
+    if (index == -1 || _tags.any((tag) => tag.mergedIntoId == tagId)) {
       return false;
     }
     final nextTags = List<Tag>.of(_tags)..removeAt(index);
+    final nextProjects = _projects
+        .where((project) => project.tagId != tagId)
+        .toList();
+    final nextTemplates = <TagTemplate>[
+      for (final template in _tagTemplates)
+        TagTemplate(
+          id: template.id,
+          bookId: template.bookId,
+          name: template.name,
+          tagIds: template.tagIds.where((id) => id != tagId).toList(),
+        ),
+    ];
     final nextEntries = <LedgerEntry>[
       for (final entry in _entries)
         if (entry.tagIds.contains(tagId))
@@ -6287,7 +6684,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     ];
     final saved = await _runTrackedWrite(
       () => _repository.replaceAllLedgerData(
-        _ledgerDataSnapshot(tags: nextTags, entries: nextEntries),
+        _ledgerDataSnapshot(
+          tags: nextTags,
+          entries: nextEntries,
+          projects: nextProjects,
+          tagTemplates: nextTemplates,
+        ),
       ),
     );
     if (!saved) {
@@ -6299,6 +6701,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _entries
       ..clear()
       ..addAll(nextEntries);
+    _projects
+      ..clear()
+      ..addAll(nextProjects);
+    _tagTemplates
+      ..clear()
+      ..addAll(nextTemplates);
     await _sanitizeAutoCaptureReferences(removedTagIds: <String>{tagId});
     notifyListeners();
     return true;
@@ -6515,6 +6923,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       ..clear()
       ..addAll(_seedCategories);
     _tags.clear();
+    _tagGroups
+      ..clear()
+      ..addAll(defaultTagGroups);
+    _projects.clear();
+    _tagTemplates.clear();
     _attachments.clear();
     _recurringRules.clear();
     _exchangeRates.clear();
@@ -6568,6 +6981,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             .toList(),
         'categories': _categories.map((category) => category.toJson()).toList(),
         'tags': _tags.map((tag) => tag.toJson()).toList(),
+        'tagGroups': _tagGroups.map((group) => group.toJson()).toList(),
+        'projects': _projects.map((project) => project.toJson()).toList(),
+        'tagTemplates': _tagTemplates
+            .map((template) => template.toJson())
+            .toList(),
         'attachments': _attachments.map((a) => a.toJson()).toList(),
         'recurringRules': _recurringRules.map((r) => r.toJson()).toList(),
         'exchangeRates': _exchangeRates.map((rate) => rate.toJson()).toList(),
@@ -6732,6 +7150,66 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       ...(importedCategories.isEmpty ? _seedCategories : importedCategories),
     ];
     final nextTags = _decodeModelList<Tag>(data['tags'], Tag.fromJson);
+    final importedTagGroups = _decodeModelList<TagGroup>(
+      data['tagGroups'],
+      TagGroup.fromJson,
+    );
+    final nextTagGroups = <TagGroup>[
+      for (final builtIn in defaultTagGroups)
+        importedTagGroups
+                .where((group) => group.id == builtIn.id)
+                .firstOrNull ??
+            builtIn,
+      ...importedTagGroups.where(
+        (group) => !defaultTagGroups.any((builtIn) => builtIn.id == group.id),
+      ),
+    ];
+    final nextProjects = _decodeModelList<Project>(
+      data['projects'],
+      Project.fromJson,
+    );
+    final nextTagTemplates = _decodeModelList<TagTemplate>(
+      data['tagTemplates'],
+      TagTemplate.fromJson,
+    );
+    for (final tag in nextTags) {
+      if (!nextTagGroups.any((group) => group.id == tag.groupId)) {
+        throw const FormatException('备份标签引用了不存在的维度');
+      }
+      final seen = <String>{};
+      var current = tag;
+      while (current.mergedIntoId != null) {
+        if (!seen.add(current.id)) {
+          throw const FormatException('备份标签合并关系存在循环');
+        }
+        final target = nextTags
+            .where((item) => item.id == current.mergedIntoId)
+            .firstOrNull;
+        if (target == null || target.groupId != tag.groupId) {
+          throw const FormatException('备份标签合并关系不合法');
+        }
+        current = target;
+      }
+    }
+    for (final project in nextProjects) {
+      if (!nextLedgerBooks.any((book) => book.id == project.bookId) ||
+          !nextTags.any(
+            (tag) => tag.id == project.tagId && tag.groupId == 'project',
+          ) ||
+          (project.budget != null &&
+              (!project.budget!.isFinite || project.budget! < 0)) ||
+          (project.startDate != null &&
+              project.endDate != null &&
+              project.startDate!.isAfter(project.endDate!))) {
+        throw const FormatException('备份项目关联或预算不合法');
+      }
+    }
+    for (final template in nextTagTemplates) {
+      if (!nextLedgerBooks.any((book) => book.id == template.bookId) ||
+          !template.tagIds.every((id) => nextTags.any((tag) => tag.id == id))) {
+        throw const FormatException('备份标签模板引用不合法');
+      }
+    }
     final nextAttachments = _decodeModelList<Attachment>(
       data['attachments'],
       Attachment.fromJson,
@@ -6903,6 +7381,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _tags
       ..clear()
       ..addAll(nextTags);
+    _tagGroups
+      ..clear()
+      ..addAll(nextTagGroups);
+    _projects
+      ..clear()
+      ..addAll(nextProjects);
+    _tagTemplates
+      ..clear()
+      ..addAll(nextTagTemplates);
     _attachments
       ..clear()
       ..addAll(nextAttachments);
@@ -6968,6 +7455,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _healCategoryData();
     // 退款自愈：把导入数据里的旧标量退款迁成关联退款条目并重算净额缓存。
     _syncRefundData();
+    _seedLegacyProjects();
     _persistAllLedgerData();
     _store.write(_activeBookKey, _activeBookId);
     _store.write(_profileKey, jsonEncode(_profile.toJson()));

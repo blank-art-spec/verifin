@@ -50,6 +50,9 @@ const Set<String> _knownBackupDataKeys = <String>{
   'creditAccounts',
   'categories',
   'tags',
+  'tagGroups',
+  'projects',
+  'tagTemplates',
   'attachments',
   'recurringRules',
   'exchangeRates',
@@ -196,6 +199,9 @@ class VeriFinController extends ChangeNotifier
       systemIsEnglish: systemIsEnglish,
     );
     await controller._loadFromRepository();
+    if (controller._seedLegacyProjects()) {
+      await repository.saveProjects(List<Project>.of(controller._projects));
+    }
     controller._syncAmountFormatContext();
     return controller;
   }

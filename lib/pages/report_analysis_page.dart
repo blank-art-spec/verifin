@@ -36,6 +36,31 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
   String? _selectedCreditAccountId;
   EntryType _dimension = EntryType.expense;
   _ReportGrouping _grouping = _ReportGrouping.topCategory;
+  List<String> _selectedTagIds = <String>[];
+  String? _selectedCategoryId;
+
+  /// 选择多个维度标签；关闭弹层时保持当前交叉筛选。
+  Future<void> _pickDimensionTags() async {
+    final result = await pickEntryTags(
+      context: context,
+      selectedIds: _selectedTagIds,
+    );
+    if (!mounted || result == null) return;
+    setState(() => _selectedTagIds = result);
+  }
+
+  /// 选择用于交叉筛选的分类，包含其全部后代分类。
+  Future<void> _pickFilterCategory() async {
+    final controller = VeriFinScope.of(context);
+    final result = await showCategoryPickerSheet(
+      context,
+      categories: controller.categoriesForType(_dimension),
+      selectedId: _selectedCategoryId ?? '',
+      title: AppLocalizations.of(context).tagReportCategoryFilter,
+    );
+    if (!mounted || result == null) return;
+    setState(() => _selectedCategoryId = result);
+  }
 
   /// 选择任意闭区间；取消时保持原范围与模式不变。
   Future<void> _pickCustomRange(ReportRange currentRange) async {
@@ -293,11 +318,18 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
         ? ReportRangeMode.month
         : _rangeMode;
     final range = _resolvedRange(controller, selectedCredit);
-    final entries = _entriesForRange(
+    final rangeEntries = _entriesForRange(
       controller,
       range,
       selectedCredit,
       useBillingCycleRules: effectiveMode == ReportRangeMode.billingCycle,
+    );
+    final entries = filterEntriesByTagDimensions(
+      rangeEntries,
+      controller.tags,
+      _selectedTagIds,
+      categories: controller.categories,
+      categoryId: _selectedCategoryId,
     );
     final categories = controller.categories;
     final summary = reportSummary(entries);
@@ -383,6 +415,35 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
                   nextTooltip: l10n.nextRange,
                 ),
               ],
+              const SizedBox(height: 8),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  FilterPill(
+                    icon: Icons.label_outline,
+                    label: _selectedTagIds.isEmpty
+                        ? l10n.tagReportDimensionFilter
+                        : l10n.entryTagCount(_selectedTagIds.length),
+                    onTap: _pickDimensionTags,
+                  ),
+                  FilterPill(
+                    icon: Icons.category_outlined,
+                    label: _selectedCategoryId == null
+                        ? l10n.tagReportCategoryFilter
+                        : controller.categoryPathLabel(_selectedCategoryId!),
+                    onTap: _pickFilterCategory,
+                  ),
+                  if (_selectedTagIds.isNotEmpty || _selectedCategoryId != null)
+                    TextButton(
+                      onPressed: () => setState(() {
+                        _selectedTagIds = <String>[];
+                        _selectedCategoryId = null;
+                      }),
+                      child: Text(l10n.commonClear),
+                    ),
+                ],
+              ),
               const SizedBox(height: 10),
               _SummaryCard(summary: summary),
               if (effectiveMode == ReportRangeMode.month) ...<Widget>[
@@ -407,7 +468,10 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
               const SizedBox(height: 10),
               _DimensionToggle(
                 dimension: _dimension,
-                onChanged: (value) => setState(() => _dimension = value),
+                onChanged: (value) => setState(() {
+                  _dimension = value;
+                  _selectedCategoryId = null;
+                }),
               ),
               const SizedBox(height: 10),
               _TrendCard(

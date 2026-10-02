@@ -137,6 +137,12 @@ void main() {
       250,
       scrollable: scrollable,
     );
+    await tester.ensureVisible(
+      find.byKey(const Key('report_grouping_selector')),
+    );
+    await tester.pumpAndSettle();
+    await tester.drag(scrollable, const Offset(0, -180));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('report_grouping_selector')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('子分类').last);
@@ -323,15 +329,21 @@ void main() {
     final quarter = ((now.month - 1) ~/ 3) + 1;
     expect(find.textContaining('${now.year}年第$quarter季度'), findsWidgets);
 
-    final scrollable = find.byType(Scrollable).first;
+    final groupingSelector = find.byKey(const Key('report_grouping_selector'));
+    // 统计页嵌在根导航中，滚动该筛选器所属的 ListView。
+    final scrollable = find
+        .ancestor(of: groupingSelector, matching: find.byType(Scrollable))
+        .first;
     await tester.scrollUntilVisible(
-      find.byKey(const Key('report_grouping_selector')),
+      groupingSelector,
       250,
       scrollable: scrollable,
     );
+    await tester.drag(scrollable, const Offset(0, -180));
+    await tester.pumpAndSettle();
 
     // 账户维度展示实际账户名及排行标题。
-    await tester.tap(find.byKey(const Key('report_grouping_selector')));
+    await tester.tap(groupingSelector);
     await tester.pumpAndSettle();
     await tester.tap(find.text('账户').last);
     await tester.pumpAndSettle();
@@ -339,7 +351,11 @@ void main() {
     expect(find.text('日常现金'), findsOneWidget);
 
     // 商户维度只读取结构化证据，并显示识别出的商户。
-    await tester.tap(find.byKey(const Key('report_grouping_selector')));
+    await tester.ensureVisible(groupingSelector);
+    await tester.pumpAndSettle();
+    await tester.drag(scrollable, const Offset(0, -180));
+    await tester.pumpAndSettle();
+    await tester.tap(groupingSelector);
     await tester.pumpAndSettle();
     await tester.tap(find.text('商户').last);
     await tester.pumpAndSettle();

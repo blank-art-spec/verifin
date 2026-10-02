@@ -50,6 +50,9 @@ mixin _ControllerState on ChangeNotifier {
   final List<CreditAccount> _creditAccounts = <CreditAccount>[];
   final List<Category> _categories = <Category>[];
   final List<Tag> _tags = <Tag>[];
+  final List<TagGroup> _tagGroups = <TagGroup>[];
+  final List<Project> _projects = <Project>[];
+  final List<TagTemplate> _tagTemplates = <TagTemplate>[];
   final List<ExchangeRate> _exchangeRates = <ExchangeRate>[];
   final List<BalanceAnchor> _balanceAnchors = <BalanceAnchor>[];
   final List<BillingStatement> _billingStatements = <BillingStatement>[];
@@ -393,6 +396,15 @@ mixin _ControllerState on ChangeNotifier {
     _tags
       ..clear()
       ..addAll(await _repository.loadTags());
+    _tagGroups
+      ..clear()
+      ..addAll(await _repository.loadTagGroups());
+    _projects
+      ..clear()
+      ..addAll(await _repository.loadProjects());
+    _tagTemplates
+      ..clear()
+      ..addAll(await _repository.loadTagTemplates());
     _attachments
       ..clear()
       ..addAll(await _repository.loadAttachments());
@@ -959,6 +971,9 @@ mixin _ControllerState on ChangeNotifier {
     List<CreditAccount>? creditAccounts,
     List<Category>? categories,
     List<Tag>? tags,
+    List<TagGroup>? tagGroups,
+    List<Project>? projects,
+    List<TagTemplate>? tagTemplates,
     List<Attachment>? attachments,
     List<LedgerEntry>? entries,
     List<RecurringRule>? recurringRules,
@@ -977,6 +992,9 @@ mixin _ControllerState on ChangeNotifier {
       creditAccounts: creditAccounts ?? List<CreditAccount>.of(_creditAccounts),
       categories: categories ?? List<Category>.of(_categories),
       tags: tags ?? List<Tag>.of(_tags),
+      tagGroups: tagGroups ?? List<TagGroup>.of(_tagGroups),
+      projects: projects ?? List<Project>.of(_projects),
+      tagTemplates: tagTemplates ?? List<TagTemplate>.of(_tagTemplates),
       attachments: attachments ?? List<Attachment>.of(_attachments),
       entries: entries ?? List<LedgerEntry>.of(_entries),
       recurringRules: recurringRules ?? List<RecurringRule>.of(_recurringRules),

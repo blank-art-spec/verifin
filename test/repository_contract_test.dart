@@ -72,6 +72,8 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       expect(await repo.loadAccountGroups(), isEmpty);
       expect(await repo.loadCategories(), isEmpty);
       expect(await repo.loadTags(), isEmpty);
+      expect(await repo.loadProjects(), isEmpty);
+      expect(await repo.loadTagTemplates(), isEmpty);
       expect(await repo.loadAttachments(), isEmpty);
       expect(await repo.loadRecurringRules(), isEmpty);
       expect(await repo.loadExchangeRates(), isEmpty);
@@ -148,7 +150,32 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
           parentId: 'cat-1',
         ),
       ];
-      const tags = <Tag>[Tag(id: 'tag-1', label: '出差')];
+      const tags = <Tag>[
+        Tag(
+          id: 'tag-1',
+          groupId: 'project',
+          label: '出差',
+          aliases: <String>['旅行'],
+        ),
+      ];
+      final projects = <Project>[
+        Project(
+          id: 'project-1',
+          bookId: 'default',
+          tagId: 'tag-1',
+          name: '出差',
+          budget: 2500,
+          startDate: DateTime(2026, 2, 1),
+        ),
+      ];
+      const tagTemplates = <TagTemplate>[
+        TagTemplate(
+          id: 'template-1',
+          bookId: 'default',
+          name: '出差',
+          tagIds: <String>['tag-1'],
+        ),
+      ];
       const attachments = <Attachment>[
         Attachment(
           id: 'att-1',
@@ -208,6 +235,7 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
           name: '测试规则',
           priority: 10,
           textContains: '测试商户',
+          placeContains: '深圳',
           setKind: CaptureTransactionKind.expense,
           setAccountId: 'acc-1',
         ),
@@ -222,6 +250,8 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       await repo.saveAccountGroups(groups);
       await repo.saveCategories(categories);
       await repo.saveTags(tags);
+      await repo.saveProjects(projects);
+      await repo.saveTagTemplates(tagTemplates);
       await repo.saveAttachments(attachments);
       await repo.saveRecurringRules(rules);
       await repo.saveExchangeRates(rates);
@@ -238,6 +268,8 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       expect(_jsonOf(await repo.loadAccountGroups()), _jsonOf(groups));
       expect(_jsonOf(await repo.loadCategories()), _jsonOf(categories));
       expect(_jsonOf(await repo.loadTags()), _jsonOf(tags));
+      expect(_jsonOf(await repo.loadProjects()), _jsonOf(projects));
+      expect(_jsonOf(await repo.loadTagTemplates()), _jsonOf(tagTemplates));
       expect(_jsonOf(await repo.loadAttachments()), _jsonOf(attachments));
       expect(_jsonOf(await repo.loadRecurringRules()), _jsonOf(rules));
       expect(_jsonOf(await repo.loadExchangeRates()), _jsonOf(rates));
@@ -258,6 +290,23 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       await repo.saveTags(const <Tag>[Tag(id: 't1', label: '一')]);
       await repo.saveTags(const <Tag>[Tag(id: 't2', label: '二')]);
       expect((await repo.loadTags()).map((t) => t.id).toList(), <String>['t2']);
+      await repo.saveProjects(const <Project>[
+        Project(id: 'p1', bookId: 'default', tagId: 't2', name: '旧项目'),
+      ]);
+      await repo.saveProjects(const <Project>[
+        Project(id: 'p2', bookId: 'default', tagId: 't2', name: '新项目'),
+      ]);
+      expect((await repo.loadProjects()).single.id, 'p2');
+      await repo.saveTagTemplates(const <TagTemplate>[
+        TagTemplate(
+          id: 'temp1',
+          bookId: 'default',
+          name: '旧模板',
+          tagIds: <String>['t2'],
+        ),
+      ]);
+      await repo.saveTagTemplates(const <TagTemplate>[]);
+      expect(await repo.loadTagTemplates(), isEmpty);
     });
 
     test('并发 save 仍按调用顺序保持整表覆盖语义', () async {

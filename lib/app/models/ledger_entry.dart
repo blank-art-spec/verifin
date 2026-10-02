@@ -774,26 +774,3 @@ class Attachment {
     );
   }
 }
-
-/// 标签：与交易多对多关联，用于跨分类的横向归类与统计。
-class Tag {
-  const Tag({required this.id, required this.label});
-
-  final String id;
-  final String label;
-
-  Tag copyWith({String? id, String? label}) {
-    return Tag(id: id ?? this.id, label: label ?? this.label);
-  }
-
-  Map<String, Object?> toJson() {
-    return <String, Object?>{'id': id, 'label': label};
-  }
-
-  static Tag fromJson(Map<String, Object?> json) {
-    return Tag(
-      id: json['id'] as String,
-      label: json['label'] as String? ?? '未命名标签',
-    );
-  }
-}

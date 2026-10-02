@@ -126,12 +126,14 @@ class TransactionsPage extends StatefulWidget {
     this.initialDate,
     this.accountId,
     this.initialCategoryId,
+    this.initialTagId,
     this.title,
   });
 
   final DateTime? initialDate;
   final String? accountId;
   final String? initialCategoryId;
+  final String? initialTagId;
   final String? title;
 
   @override
@@ -157,7 +159,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
   Timer? _queryDebounceTimer;
   String? _selectedAccountId;
   String? _selectedCategoryId;
-  String? _selectedTagId;
+  late String? _selectedTagId = widget.initialTagId;
   ReimbursementFilter _reimbursementFilter = ReimbursementFilter.all;
   bool _selectionMode = false;
   final Set<String> _selectedIds = <String>{};
@@ -712,7 +714,8 @@ class _TransactionsPageState extends State<TransactionsPage> {
       if (entry.tagIds.isEmpty) {
         return false;
       }
-    } else if (tagFilter != null && !entry.tagIds.contains(tagFilter)) {
+    } else if (tagFilter != null &&
+        !entry.tagIds.any((id) => controller.tagById(id)?.id == tagFilter)) {
       return false;
     }
     // 报销状态：全部 / 待报销（未完全冲抵）/ 已报销（已有回款冲抵）。
@@ -903,7 +906,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
       _allFilterValue,
       _noTagFilterValue,
       _hasTagFilterValue,
-      for (final tag in controller.tags) tag.id,
+      for (final tag in controller.tags.where(
+        (tag) => tag.mergedIntoId == null,
+      ))
+        tag.id,
     ];
     final selected = await showOptionSheet<String>(
       context: context,

@@ -56,6 +56,8 @@ void main() {
     );
     await tester.pumpAndSettle();
 
+    await tester.ensureVisible(find.text('旅行'));
+    await tester.pumpAndSettle();
     await tester.tap(find.text('旅行'));
     await tester.pumpAndSettle();
     expect(find.text('重命名'), findsOneWidget);
