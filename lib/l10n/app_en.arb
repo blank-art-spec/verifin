@@ -2284,7 +2284,7 @@
   "autoCaptureRetry": "Parse again",
   "autoCaptureIgnore": "Ignore",
   "autoCaptureMisidentified": "Mark incorrect",
-  "autoCaptureNeedsMoreInfo": "Amount or type is missing. Add a rule and parse again.",
+  "autoCaptureNeedsMoreInfo": "Could not create an entry draft. Check the notification or update a rule, then retry.",
   "autoCaptureConfirmRefundTitle": "Create this refund?",
   "autoCaptureConfirmRefundMessage": "This event will be linked to the one matching expense and saved as a settled refund. Confirm the amount, account, and merchant are correct.",
   "autoCaptureRuleCreateTitle": "New capture rule",

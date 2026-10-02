@@ -419,7 +419,9 @@ class _AutoCapturePageState extends State<AutoCapturePage>
                           ? () => _undoEvent(event)
                           : null,
                       onMisidentified: () => _markMisidentified(event),
-                      onRetry: () => controller.retryCaptureEvent(event.id),
+                      onRetry: event.status.canRetry
+                          ? () => controller.retryCaptureEvent(event.id)
+                          : null,
                     ),
                   ),
                 ),
@@ -431,9 +433,21 @@ class _AutoCapturePageState extends State<AutoCapturePage>
   }
 
   /// 用标准记账页复核事件；保存时来源证据与交易一起落库，返回后再更新事件状态。
+  ///
+  /// [event] 是卡片构建时的解析快照。若金额或类型仍为空，先仅针对这条原文
+  /// 重跑本地解析，再读取最新候选；重跑不会自动入账，已有交易关联也不会被清除。
   Future<void> _reviewEvent(CaptureEvent event) async {
     final controller = VeriFinScope.of(context);
-    if (event.kind == CaptureTransactionKind.refund) {
+    var reviewEvent = event;
+    if (event.parsedAmount == null || event.kind.entryType == null) {
+      await controller.retryCaptureEvent(event.id);
+      if (!mounted) return;
+      reviewEvent = controller.captureEvents.firstWhere(
+        (item) => item.id == event.id,
+        orElse: () => event,
+      );
+    }
+    if (reviewEvent.kind == CaptureTransactionKind.refund) {
       final l10n = AppLocalizations.of(context);
       final confirmed = await showConfirmDialog(
         context,
@@ -442,7 +456,7 @@ class _AutoCapturePageState extends State<AutoCapturePage>
         confirmLabel: l10n.commonConfirm,
       );
       if (!confirmed || !mounted) return;
-      final entry = await controller.confirmParsedCaptureEvent(event.id);
+      final entry = await controller.confirmParsedCaptureEvent(reviewEvent.id);
       if (!mounted || entry != null) return;
       unawaited(
         VeriFeedbackHost.of(context).showMessage(
@@ -452,8 +466,8 @@ class _AutoCapturePageState extends State<AutoCapturePage>
       );
       return;
     }
-    final draft = controller.captureEntryDraft(event.id);
-    final source = controller.captureSourceRecord(event.id);
+    final draft = controller.captureEntryDraft(reviewEvent.id);
+    final source = controller.captureSourceRecord(reviewEvent.id);
     if (draft == null || source == null) {
       unawaited(
         VeriFeedbackHost.of(context).showMessage(
@@ -474,7 +488,7 @@ class _AutoCapturePageState extends State<AutoCapturePage>
     );
     if (!mounted || entry == null) return;
     await controller.markCaptureEventConfirmed(
-      eventId: event.id,
+      eventId: reviewEvent.id,
       entryId: entry.id,
     );
   }
@@ -852,12 +866,18 @@ class _AutoCaptureStatsCard extends StatelessWidget {
 }
 
 class _CaptureEventCard extends StatelessWidget {
+  /// 展示一条采集事件及其可用操作。
+  ///
+  /// [event] 提供原文和解析候选；[onReview] 用于复核或查看已入账交易，
+  /// [onIgnore] 与 [onMisidentified] 记录用户决策。[onMerge]、[onUndo] 和
+  /// [onRetry] 只在对应状态允许时传入；其中 [onRetry] 为 null 时隐藏重试入口，
+  /// 防止已落账事件被重新解析并清除关联。
   const _CaptureEventCard({
     required this.event,
     required this.onReview,
     required this.onIgnore,
     required this.onMisidentified,
-    required this.onRetry,
+    this.onRetry,
     this.onMerge,
     this.onUndo,
   });
@@ -868,7 +888,7 @@ class _CaptureEventCard extends StatelessWidget {
   final VoidCallback onIgnore;
   final VoidCallback? onUndo;
   final VoidCallback onMisidentified;
-  final VoidCallback onRetry;
+  final VoidCallback? onRetry;
 
   @override
   Widget build(BuildContext context) {
@@ -947,10 +967,11 @@ class _CaptureEventCard extends StatelessWidget {
                   onPressed: onUndo,
                   child: Text(l10n.autoCaptureUndo),
                 ),
-              TextButton(
-                onPressed: onRetry,
-                child: Text(l10n.autoCaptureRetry),
-              ),
+              if (onRetry != null)
+                TextButton(
+                  onPressed: onRetry,
+                  child: Text(l10n.autoCaptureRetry),
+                ),
               TextButton(
                 onPressed: onIgnore,
                 child: Text(l10n.autoCaptureIgnore),

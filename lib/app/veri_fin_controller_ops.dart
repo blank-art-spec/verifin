@@ -777,10 +777,18 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         status: CaptureStatus.misidentified,
       );
 
-  /// 重新解析事件。规则调整后可调用；会清除旧候选和失败信息，但保留原文与幂等指纹。
+  /// 只重新解析指定的未落账事件，并保留原文与幂等指纹。
+  ///
+  /// [eventId] 是当前账本的事件 id。重试只刷新该事件的候选，不执行 AI、自动合并
+  /// 或自动入账，避免用户点“复核记账”时在背后写入交易；已确认、已自动入账、
+  /// 已合并、已忽略及误识别事件一律拒绝重试。
   Future<bool> retryCaptureEvent(String eventId) async {
     final index = _captureEvents.indexWhere(
-      (event) => event.id == eventId && event.bookId == _activeBookId,
+      (event) =>
+          event.id == eventId &&
+          event.bookId == _activeBookId &&
+          event.status.canRetry &&
+          event.linkedEntryId == null,
     );
     if (index == -1) return false;
     final next = List<CaptureEvent>.of(_captureEvents);
@@ -810,7 +818,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       ..clear()
       ..addAll(next);
     notifyListeners();
-    return (await processPendingCaptureEvents()) > 0;
+    return (await processPendingCaptureEvents(
+          allowAutomaticActions: false,
+          eventIds: <String>{eventId},
+        )) >
+        0;
   }
 
   /// 批量重跑当前账本最近的未落账原始事件。

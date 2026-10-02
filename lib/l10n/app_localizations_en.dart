@@ -5827,7 +5827,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get autoCaptureNeedsMoreInfo =>
-      'Amount or type is missing. Add a rule and parse again.';
+      'Could not create an entry draft. Check the notification or update a rule, then retry.';
 
   @override
   String get autoCaptureConfirmRefundTitle => 'Create this refund?';

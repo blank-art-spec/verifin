@@ -3419,7 +3419,7 @@
   "autoCaptureRetry": "重新解析",
   "autoCaptureIgnore": "忽略",
   "autoCaptureMisidentified": "标记误识别",
-  "autoCaptureNeedsMoreInfo": "金额或类型信息不足，请先添加规则后重新解析",
+  "autoCaptureNeedsMoreInfo": "暂不能生成记账草稿，请检查通知原文或补充规则后重试",
   "autoCaptureConfirmRefundTitle": "确认创建退款？",
   "autoCaptureConfirmRefundMessage": "将把这条事件关联到唯一匹配的原支出并创建已到账退款。请确认金额、账户和商户均正确。",
   "autoCaptureRuleCreateTitle": "新增自动识别规则",

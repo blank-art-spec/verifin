@@ -5655,7 +5655,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCaptureMisidentified => '标记误识别';
 
   @override
-  String get autoCaptureNeedsMoreInfo => '金额或类型信息不足，请先添加规则后重新解析';
+  String get autoCaptureNeedsMoreInfo => '暂不能生成记账草稿，请检查通知原文或补充规则后重试';
 
   @override
   String get autoCaptureConfirmRefundTitle => '确认创建退款？';

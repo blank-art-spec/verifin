@@ -110,6 +110,16 @@ enum CaptureStatus {
       this == CaptureStatus.pendingReview ||
       this == CaptureStatus.duplicateSuspected ||
       this == CaptureStatus.failed;
+
+  /// 是否允许用户重新解析当前原始事件。
+  ///
+  /// 仅未落账、未被用户忽略的候选可重试；已经生成或关联正式交易的事件不能清除
+  /// 关联，否则同一通知可能再次形成交易。返回 true 表示保留原文并刷新解析缓存是安全的。
+  bool get canRetry =>
+      this == CaptureStatus.raw ||
+      this == CaptureStatus.pendingReview ||
+      this == CaptureStatus.duplicateSuspected ||
+      this == CaptureStatus.failed;
 }
 
 /// 一条持久化的原始采集事件及其当前解析快照。

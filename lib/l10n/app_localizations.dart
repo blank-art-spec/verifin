@@ -10194,7 +10194,7 @@ abstract class AppLocalizations {
   /// No description provided for @autoCaptureNeedsMoreInfo.
   ///
   /// In zh, this message translates to:
-  /// **'金额或类型信息不足，请先添加规则后重新解析'**
+  /// **'暂不能生成记账草稿，请检查通知原文或补充规则后重试'**
   String get autoCaptureNeedsMoreInfo;
 
   /// No description provided for @autoCaptureConfirmRefundTitle.

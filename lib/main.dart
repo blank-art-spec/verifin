@@ -185,6 +185,8 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   Timer? _widgetRefreshTimer;
   bool _notificationSyncing = false;
   bool _notificationSyncQueued = false;
+  bool _autoCaptureDraining = false;
+  bool _autoCaptureDrainQueued = false;
 
   @override
   void initState() {
@@ -293,15 +295,34 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     }
   }
 
-  /// 拉取原生持久队列并交给 Controller。只有确认 SQLite 已保存后才向原生回执删除；
-  /// 若进程在落库前退出，下一次启动仍会读到同一原文，并由稳定指纹幂等去重。
+  /// 恢复尚未解析的本地事件，再拉取原生持久队列交给 Controller。
+  ///
+  /// 原文先落 SQLite 后解析；若进程恰好在两步之间退出，冷启动时原生队列可能
+  /// 已确认删除，所以每次进入本流程都补跑本地原始事件。补跑只刷新候选，不自动
+  /// 入账。并发通知只登记一次下一轮拉取，避免两轮解析覆盖彼此的内存快照。
+  /// 原生队列仍须确认 SQLite 已保存后才回执删除，保留现有幂等保障。
   Future<void> _drainAutoCaptureQueue() async {
-    await AppAutoCaptureBridge.drainQueue(
-      ingest: (inputs) async {
-        await _controller.ingestCaptureInputs(inputs);
-      },
-      isStored: _controller.captureInputIsStored,
-    );
+    if (_autoCaptureDraining) {
+      _autoCaptureDrainQueued = true;
+      return;
+    }
+    _autoCaptureDraining = true;
+    try {
+      do {
+        _autoCaptureDrainQueued = false;
+        await _controller.processPendingCaptureEvents(
+          allowAutomaticActions: false,
+        );
+        await AppAutoCaptureBridge.drainQueue(
+          ingest: (inputs) async {
+            await _controller.ingestCaptureInputs(inputs);
+          },
+          isStored: _controller.captureInputIsStored,
+        );
+      } while (_autoCaptureDrainQueued);
+    } finally {
+      _autoCaptureDraining = false;
+    }
   }
 
   Future<void> _postDueRecurringAndRefresh() async {

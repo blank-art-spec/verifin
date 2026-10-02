@@ -47,6 +47,99 @@ void main() {
     expect(unchanged, hasLength(1));
   });
 
+  test('单条重新解析只刷新指定候选，不顺带自动入账或重启已忽略事件', () async {
+    final store = LocalKeyValueStore();
+    final repository = InMemoryLedgerRepository();
+    final initial = await VeriFinController.create(
+      store,
+      repository: repository,
+    );
+    final account = Account(
+      id: 'retry-account',
+      bookId: initial.activeBook.id,
+      name: '重试账户',
+      type: AccountType.cash,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'asset:payment_001',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+    );
+    expect(await initial.addAccountDraft(account), isTrue);
+    final category = initial.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    expect(
+      await initial.saveAutoCaptureRule(
+        AutoCaptureRule(
+          id: 'retry-rule',
+          bookId: initial.activeBook.id,
+          name: '单条重试规则',
+          priority: 100,
+          textContains: '重试商户',
+          setKind: CaptureTransactionKind.expense,
+          setAccountId: account.id,
+          setCategoryId: category.id,
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      await initial.saveAutoCaptureSettingsDraft(
+        initial.autoCaptureSettings.copyWith(autoPostHighConfidence: true),
+      ),
+      isTrue,
+    );
+    final bookId = initial.activeBook.id;
+    initial.dispose();
+    final rawEvents = <CaptureEvent>[
+      for (var index = 0; index < 3; index++)
+        captureEventFromInput(
+          id: 'retry-$index',
+          bookId: bookId,
+          input: RawCaptureInput(
+            sourceKind: CaptureSourceKind.notification,
+            sourceId: 'com.example.bank',
+            sourceEventId: 'retry-$index',
+            rawText: '消费${index + 1}.00元，商户重试商户',
+            receivedAt: DateTime(2026, 10, 2, 12, index),
+          ),
+        ),
+    ];
+    await repository.saveCaptureEvents(<CaptureEvent>[
+      rawEvents[0],
+      rawEvents[1],
+      rawEvents[2].copyWith(status: CaptureStatus.ignored),
+    ]);
+    final controller = await VeriFinController.create(
+      store,
+      repository: repository,
+    );
+    final originalEntryCount = controller.entries.length;
+
+    expect(await controller.retryCaptureEvent(rawEvents[0].id), isTrue);
+    expect(controller.entries, hasLength(originalEntryCount));
+    expect(
+      controller.captureEvents
+          .firstWhere((event) => event.id == rawEvents[0].id)
+          .parsedAmount,
+      1.00,
+    );
+    final untouched = controller.captureEvents.firstWhere(
+      (event) => event.id == rawEvents[1].id,
+    );
+    expect(untouched.parsedAmount, isNull);
+    expect(untouched.status, CaptureStatus.raw);
+    expect(await controller.retryCaptureEvent(rawEvents[2].id), isFalse);
+    expect(
+      controller.captureEvents
+          .firstWhere((event) => event.id == rawEvents[2].id)
+          .status,
+      CaptureStatus.ignored,
+    );
+  });
+
   test('批量回放只更新未落账事件的候选，不触发自动入账或撤销忽略', () async {
     final controller = await makeController();
     final account = Account(
@@ -169,6 +262,48 @@ void main() {
     expect(parsed.kind, CaptureTransactionKind.expense);
     expect(parsed.accountCandidateId, isNull);
     expect(parsed.confidence, isNot(CaptureConfidence.high));
+  });
+
+  test('掌上生活消费提醒提取实际消费金额，忽略后续促销价格', () async {
+    final controller = await makeController();
+    final context = CaptureParseContext(
+      book: controller.activeBook,
+      accounts: controller.accounts,
+      creditAccounts: controller.creditAccounts,
+      categories: controller.categories,
+      tags: controller.tags,
+      entries: controller.entries,
+      rules: const <AutoCaptureRule>[],
+    );
+    final notifications = <(String, double)>[
+      (
+        '交易提醒\n您在财付通-遂小狮有一笔2.30人民币的消费已成功，'
+            '点击查看详情【金秋19.9元起看电影，更多优惠】',
+        2.30,
+      ),
+      ('交易提醒\n您在支付宝-上海拉扎斯信息科技有限公司有一笔13.00人民币的消费已成功，点击查看详情', 13.00),
+    ];
+
+    for (var index = 0; index < notifications.length; index++) {
+      final (rawText, expectedAmount) = notifications[index];
+      final parsed = parseCaptureEvent(
+        captureEventFromInput(
+          id: 'cmb-notice-$index',
+          bookId: controller.activeBook.id,
+          input: RawCaptureInput(
+            sourceKind: CaptureSourceKind.notification,
+            sourceId: 'cmb-life',
+            sourceLabel: '掌上生活',
+            sourceEventId: 'cmb-notice-$index',
+            rawText: rawText,
+            receivedAt: DateTime(2026, 10, 2, 18, 5),
+          ),
+        ),
+        context,
+      );
+      expect(parsed.parsedAmount, expectedAmount);
+      expect(parsed.kind, CaptureTransactionKind.expense);
+    }
   });
 
   test('本地规则可把完整通知高置信度入账，多来源事件合并为同一交易', () async {
