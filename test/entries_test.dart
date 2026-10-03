@@ -684,11 +684,11 @@ void main() {
 
     // 记账表单在「更多信息」中打开标签选择器，勾选「必要」，完成。
     await tester.scrollUntilVisible(
-      find.byKey(const Key('entry_metadata_tags')),
+      find.byKey(const Key('entry_metadata_tag_custom')),
       200,
       scrollable: find.byType(Scrollable).first,
     );
-    await tester.tap(find.byKey(const Key('entry_metadata_tags')));
+    await tester.tap(find.byKey(const Key('entry_metadata_tag_custom')));
     await tester.pumpAndSettle();
     await tester.tap(find.text('必要'));
     await tester.pumpAndSettle();

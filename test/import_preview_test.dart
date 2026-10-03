@@ -649,11 +649,11 @@ void main() {
       await tester.pumpAndSettle();
       // 标签入口在「更多信息」中；打开现有选择器后，临时标签仍按名称展示。
       await tester.scrollUntilVisible(
-        find.byKey(const Key('entry_metadata_tags')),
+        find.byKey(const Key('entry_metadata_tag_custom')),
         200,
         scrollable: find.byType(Scrollable).first,
       );
-      await tester.tap(find.byKey(const Key('entry_metadata_tags')));
+      await tester.tap(find.byKey(const Key('entry_metadata_tag_custom')));
       await tester.pumpAndSettle();
       expect(find.text('代购'), findsOneWidget);
     });

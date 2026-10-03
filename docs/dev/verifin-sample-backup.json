@@ -702,7 +702,7 @@
       }
     ],
     "tags": [
-      { "id": "tag_work_meal", "groupId": "scene", "label": "工作餐", "sortOrder": 0, "archived": false },
+      { "id": "tag_work_meal", "groupId": "scene", "label": "场景:工作餐", "sortOrder": 0, "archived": false },
       { "id": "tag_reimbursable", "groupId": "purpose", "label": "可报销", "sortOrder": 1, "archived": false }
     ],
     "tagGroups": [

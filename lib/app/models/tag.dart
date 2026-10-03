@@ -98,6 +98,14 @@ const List<TagGroup> defaultTagGroups = <TagGroup>[
   TagGroup(id: 'custom', name: '自定义', type: TagGroupType.system, sortOrder: 5),
 ];
 
+/// 旧数据出现「项目类型:…」时才创建此自定义维度，不占用新用户的默认入口。
+const TagGroup legacyProjectTypeGroup = TagGroup(
+  id: 'project_type',
+  name: '项目类型',
+  selectionMode: TagSelectionMode.single,
+  sortOrder: 6,
+);
+
 /// 将旧式「维度:值」标签拆开。未知前缀和普通标签保持原文，避免误改用户数据。
 ({String groupId, String label}) parseLegacyTagLabel(String label) {
   final separator = label.indexOf(':');
@@ -107,6 +115,7 @@ const List<TagGroup> defaultTagGroups = <TagGroup>[
   final prefix = label.substring(0, separator).trim();
   const groups = <String, String>{
     '项目': 'project',
+    '项目类型': 'project_type',
     '场景': 'scene',
     '用途': 'purpose',
     '对象': 'person',
@@ -121,6 +130,7 @@ const List<TagGroup> defaultTagGroups = <TagGroup>[
 /// 自定义维度需使用完整 JSON 备份迁移，CSV 仅保留标签原文。
 String tagPortableLabel(Tag tag) => switch (tag.groupId) {
   'project' => '项目:${tag.label}',
+  'project_type' => '项目类型:${tag.label}',
   'scene' => '场景:${tag.label}',
   'purpose' => '用途:${tag.label}',
   'person' => '对象:${tag.label}',
@@ -206,10 +216,24 @@ class Tag {
   static Tag fromJson(Map<String, Object?> json) {
     final rawLabel = json['label'] as String? ?? '未命名标签';
     final legacy = parseLegacyTagLabel(rawLabel);
+    final explicitGroupId = json['groupId'] as String?;
+    // 新备份为了兼容旧版，也把内置维度写成「维度:名称」。同组前缀在新版
+    // 读取时需去掉；旧版曾保存为 custom 的「项目类型」也升级为独立维度。
+    final migrateProjectType =
+        legacy.groupId == 'project_type' && explicitGroupId == 'custom';
+    final groupId = migrateProjectType
+        ? 'project_type'
+        : explicitGroupId ?? legacy.groupId;
+    final label =
+        explicitGroupId == null ||
+            explicitGroupId == legacy.groupId ||
+            migrateProjectType
+        ? legacy.label
+        : rawLabel;
     return Tag(
       id: json['id'] as String,
-      groupId: json['groupId'] as String? ?? legacy.groupId,
-      label: json['groupId'] == null ? legacy.label : rawLabel,
+      groupId: groupId,
+      label: label,
       parentId: json['parentId'] as String?,
       iconCode: json['iconCode'] as String?,
       sortOrder: (json['sortOrder'] as num?)?.toInt() ?? 0,

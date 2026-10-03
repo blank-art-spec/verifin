@@ -132,7 +132,9 @@ void main() {
     expect(find.text('更多信息'), findsOneWidget);
     expect(find.byKey(const Key('entry_metadata_date')), findsOneWidget);
     expect(find.byKey(const Key('entry_metadata_time')), findsOneWidget);
-    expect(find.byKey(const Key('entry_metadata_tags')), findsOneWidget);
+    expect(find.byKey(const Key('entry_metadata_tags')), findsNothing);
+    expect(find.byKey(const Key('entry_metadata_tag_custom')), findsOneWidget);
+    expect(find.byKey(const Key('entry_metadata_templates')), findsOneWidget);
     expect(
       find.byKey(const Key('entry_metadata_reimbursable')),
       findsOneWidget,
@@ -140,9 +142,26 @@ void main() {
     expect(find.byKey(const Key('entry_metadata_attachments')), findsOneWidget);
     expect(find.byKey(const Key('entry_currency_button')), findsOneWidget);
 
-    await tester.tap(find.byKey(const Key('entry_metadata_tags')));
+    await tester.tap(find.byKey(const Key('entry_metadata_tag_custom')));
     await tester.pumpAndSettle();
     expect(find.byType(TagSelectorSheet), findsOneWidget);
+    expect(
+      tester
+          .widget<TagSelectorSheet>(find.byType(TagSelectorSheet))
+          .groups
+          .single
+          .id,
+      'custom',
+    );
+    await tester.tap(find.widgetWithText(TextButton, '完成'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('entry_metadata_templates')));
+    await tester.pumpAndSettle();
+    final templateSheet = tester.widget<TagSelectorSheet>(
+      find.byType(TagSelectorSheet),
+    );
+    expect(templateSheet.templatesOnly, isTrue);
+    expect(templateSheet.groups, isEmpty);
   });
 
   testWidgets('紧凑附件条展示多张图片和小型删除按钮', (tester) async {

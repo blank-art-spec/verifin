@@ -1667,12 +1667,14 @@ enum AccountDeleteAction { hide, delete }
 
 /// 打开按维度分组的标签弹窗，返回全部选定的标签 id（取消返回 null）。
 /// [groupId] 非空时仅展示这一维度，其他维度的已选 id 原样保留。
+/// [templatesOnly] 为 true 时只显示标签模板，供记账页独立的模板入口使用。
 /// 新建标签直接写入 controller（标签全局共享，即时生效）。
 Future<List<String>?> pickEntryTags({
   required BuildContext context,
   required List<String> selectedIds,
   List<Tag> extraTags = const <Tag>[],
   String? groupId,
+  bool templatesOnly = false,
 }) {
   final controller = VeriFinScope.of(context);
   // 合并 controller 已落库标签与临时标签（导入草稿待新建、尚未落库），临时标签
@@ -1697,7 +1699,9 @@ Future<List<String>?> pickEntryTags({
         ),
         child: TagSelectorSheet(
           tags: tags,
-          groups: groupId == null
+          groups: templatesOnly
+              ? const <TagGroup>[]
+              : groupId == null
               ? controller.tagGroups
               : controller.tagGroups
                     .where((group) => group.id == groupId)
@@ -1710,6 +1714,7 @@ Future<List<String>?> pickEntryTags({
               ? controller.tagTemplates
               : const <TagTemplate>[],
           onApplyTemplate: controller.resolveTagSelection,
+          templatesOnly: templatesOnly,
           onSaveTemplate: groupId == null
               ? (ids) async {
                   final name = await showTextInputDialog(

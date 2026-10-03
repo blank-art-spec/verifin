@@ -119,7 +119,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `CalendarPreview` | Widget | `common_widgets.dart` | 月历预览（内建月份切换 + 日收支）；必传 `currencyCode`；单币种账本隐藏单位时右下角不再显示轻量单位提示，并**连同前置 6dp 间距整块不构建**（`if (!textCurrencyUnitHidden)`，见维护约定），多币种账本照常显示 |
 | `EntryTagField` | Widget | `common_widgets.dart` | 记账表单标签行 |
 | `AttachmentsEditor` | Widget | `attachments_editor.dart` | 多图片附件横向缩略图、全屏查看和逐张删除；默认自带标题与拍照/相册添加入口，记账页的轻量元数据布局通过 `showHeader:false` / `showAddButton:false` 只复用缩略图条，添加入口由页面标签触发 |
-| `TagSelectorSheet` / `pickEntryTags` | Widget / Sheet 函数 | `entry_sheets.dart` / `sheets.dart` | 交易按维度选标签、即时在指定维度创建；单选维度只保留一个，多选维度可同时勾选。`groupId` 可将弹窗聚焦到某一维度；支持保存、套用和删除当前账本标签模板 |
+| `TagSelectorSheet` / `pickEntryTags` | Widget / Sheet 函数 | `entry_sheets.dart` / `sheets.dart` | 交易按维度选标签、即时在指定维度创建；单选维度只保留一个，多选维度可同时勾选。`groupId` 聚焦一个维度，`templatesOnly` 供独立模板入口使用；支持保存、套用和删除当前账本标签模板 |
 | `ProjectManagementPage` / `ProjectDetailPage` / `ProjectEditorPage` | 页面 | `project_pages.dart` | 项目元数据、预算进度、分类构成和关联交易入口；保存由 Controller 原子写项目及关联标签 |
 | `tagGroupDisplayName` | 纯展示函数 | `tag_group_labels.dart` | 系统维度按当前语言显示；自定义维度保留用户名称 |
 | `RefundSection` / `showRefundSheet` | Widget / Sheet 函数 | `refund_editor.dart` | 支出详情页的受控「退款」草稿区（列退款明细+净支出+添加）/ 添加·编辑退款弹窗（金额截剩余可退、到账账户、已到账开关+到账日期、发起日期、备注、删除）；Sheet 保存只回传父交易草稿，交易页最终与本体、附件原子保存。待退款清单独立编辑时由调用方在 Sheet 确认后提交 |

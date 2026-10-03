@@ -148,10 +148,53 @@ void main() {
       '项目:国庆返乡',
     );
     expect(parseLegacyTagLabel('项目:国庆返乡').groupId, 'project');
+    expect(parseLegacyTagLabel('项目类型:旅行').groupId, 'project_type');
+    expect(
+      tagPortableLabel(
+        const Tag(id: 'kind', groupId: 'project_type', label: '旅行'),
+      ),
+      '项目类型:旅行',
+    );
     expect(
       tagPortableLabel(const Tag(id: 'c', groupId: 'custom', label: '项目类型:旅行')),
       '项目类型:旅行',
     );
+  });
+
+  test('新备份保留旧版可读前缀，新版恢复仍保留独立项目类型维度', () async {
+    final source = await makeController();
+    final kindId = source.addTag('项目类型:旅行')!;
+    final projectId = source.addTag('项目:国庆返乡')!;
+    source.addEntry(
+      LedgerEntry(
+        id: 'portable-dimension-entry',
+        bookId: source.activeBook.id,
+        type: EntryType.expense,
+        amount: 12,
+        categoryId: 'dining',
+        accountId: 'cash',
+        note: '',
+        occurredAt: DateTime(2026, 10, 3),
+        tagIds: <String>[kindId, projectId],
+      ),
+    );
+    final root = jsonDecode(source.exportDataJson()) as Map<String, dynamic>;
+    final data = root['data'] as Map<String, dynamic>;
+    final tags = (data['tags'] as List).cast<Map<String, dynamic>>();
+    expect(tags.singleWhere((tag) => tag['id'] == kindId)['label'], '项目类型:旅行');
+    expect(
+      tags.singleWhere((tag) => tag['id'] == projectId)['label'],
+      '项目:国庆返乡',
+    );
+    source.dispose();
+
+    final target = await makeController();
+    target.importDataJson(jsonEncode(root));
+    expect(target.tagById(kindId)?.groupId, 'project_type');
+    expect(target.tagById(kindId)?.label, '旅行');
+    expect(target.tagById(projectId)?.label, '国庆返乡');
+    expect(target.entries.single.tagIds, <String>[kindId, projectId]);
+    target.dispose();
   });
 
   test('旧版 JSON 备份的前缀标签转换后仍被原交易引用', () async {

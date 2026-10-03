@@ -6252,7 +6252,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     if (trimmed.isEmpty) {
       return null;
     }
-    if (!_tagGroups.any((group) => group.id == targetGroup)) return null;
+    final createLegacyGroup =
+        targetGroup == legacyProjectTypeGroup.id &&
+        !_tagGroups.any((group) => group.id == targetGroup);
+    if (!createLegacyGroup &&
+        !_tagGroups.any((group) => group.id == targetGroup)) {
+      return null;
+    }
     final existing = _tags
         .where(
           (tag) =>
@@ -6269,7 +6275,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       label: trimmed,
     );
     _tags.add(tag);
-    if (targetGroup == 'project' && _seedLegacyProjects()) {
+    if (createLegacyGroup) {
+      _tagGroups.add(legacyProjectTypeGroup);
+      _persistAllLedgerData();
+    } else if (targetGroup == 'project' && _seedLegacyProjects()) {
       _persistAllLedgerData();
     } else {
       _persistTags();
@@ -6992,7 +7001,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             .map((creditAccount) => creditAccount.toJson())
             .toList(),
         'categories': _categories.map((category) => category.toJson()).toList(),
-        'tags': _tags.map((tag) => tag.toJson()).toList(),
+        // 标签在 JSON 备份中保留旧版可识别的前缀；新版依据 groupId 还原
+        // 干净的维度名称，旧版忽略新增字段时仍能读懂项目/场景等标签。
+        'tags': _tags
+            .map(
+              (tag) => <String, Object?>{
+                ...tag.toJson(),
+                'label': tagPortableLabel(tag),
+              },
+            )
+            .toList(),
         'tagGroups': _tagGroups.map((group) => group.toJson()).toList(),
         'projects': _projects.map((project) => project.toJson()).toList(),
         'tagTemplates': _tagTemplates
@@ -7176,6 +7194,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         (group) => !defaultTagGroups.any((builtIn) => builtIn.id == group.id),
       ),
     ];
+    // 老备份中的「项目类型:…」不是具体项目，而是用户自己的维度。
+    // 只有确实引用该维度时才补建，避免给其他账本凭空增加入口。
+    if (nextTags.any((tag) => tag.groupId == 'project_type') &&
+        !nextTagGroups.any((group) => group.id == 'project_type')) {
+      nextTagGroups.add(legacyProjectTypeGroup);
+    }
     final nextProjects = _decodeModelList<Project>(
       data['projects'],
       Project.fromJson,

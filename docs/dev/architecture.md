@@ -13,7 +13,7 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 | Controller | `veri_fin_controller.dart`、`veri_fin_controller_state.dart`、`veri_fin_controller_ops.dart` |
 | SQLite 与持久化 | `lib/data/`；[技术决策](tech-decisions.md)、repository contract 与 migration matrix 测试 |
 | 模型 | `lib/app/models/`，`models.dart` 稳定导出；信用主体在 `credit_account.dart`，具体币种子账户仍是 `Account`；JSON/SQLite 映射须同步 |
-| 结构化标签与项目 | `lib/app/models/tag.dart` 定义维度、标签、项目及模板；`pages/tag_management_page.dart`、`pages/project_pages.dart` 管理，`app/entry_sheets.dart` 选择和套用模板；SQLite v24/v25 迁移旧标签并保存项目元数据 |
+| 结构化标签与项目 | `lib/app/models/tag.dart` 定义维度、标签、项目及模板；`pages/tag_management_page.dart`、`pages/project_pages.dart` 管理，`app/entry_sheets.dart` 选择和套用模板；SQLite v24–v26 迁移旧标签并保存项目元数据，v26 将存量「项目类型:…」迁入独立维度 |
 | 页面与弹窗 | `lib/pages/`、`pages/sheets.dart`、`app/entry_sheets.dart`；[组件目录](components.md) |
 | 共享绘制、菜单、图表 | `common_widgets.dart`、`chart_painters.dart`、`root_navigation.dart`、`veri_bottom_bar.dart`；[统一设计](../design-system.md) |
 | 多币种、预算、退款 | [多币种](multi-currency-design.md)、[单期预算](category-budget-override-design.md)、[退款](refund-design.md) |

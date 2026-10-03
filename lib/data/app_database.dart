@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 25;
+  static const int schemaVersion = 26;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -81,6 +81,7 @@ class AppDatabase {
         23: _migrateToV23,
         24: _migrateToV24,
         25: _migrateToV25,
+        26: _migrateToV26,
       };
 
   /// 只读暴露迁移注册表，供迁移矩阵测试把库推进到任意中间版本。生产代码勿用。
@@ -578,6 +579,36 @@ class AppDatabase {
     );
     await db.execute(
       "ALTER TABLE auto_capture_rules ADD COLUMN place_contains TEXT NOT NULL DEFAULT ''",
+    );
+  }
+
+  /// v25 → v26：把早期保留为自定义文本的「项目类型:名称」迁入专属维度。
+  /// 仅存在该前缀时创建维度；交易仍以原 tag id 关联，金额和其他表不变。
+  /// [db] 是 sqflite 当前升级事务内的连接，迁移失败会整体回滚。
+  static Future<void> _migrateToV26(Database db) async {
+    if (!await _tableExists(db, 'tags') ||
+        !await _tableExists(db, 'tag_groups')) {
+      return;
+    }
+    final matches = await db.rawQuery(
+      "SELECT id FROM tags WHERE group_id = 'custom' "
+      "AND label LIKE '项目类型:%' "
+      "AND length(trim(substr(label, instr(label, ':') + 1))) > 0 "
+      'LIMIT 1',
+    );
+    if (matches.isEmpty) return;
+    await db.insert('tag_groups', <String, Object?>{
+      'id': 'project_type',
+      'name': '项目类型',
+      'type': 'custom',
+      'selection_mode': 'single',
+      'sort_order': 6,
+    }, conflictAlgorithm: ConflictAlgorithm.ignore);
+    await db.rawUpdate(
+      "UPDATE tags SET group_id = 'project_type', "
+      "label = trim(substr(label, instr(label, ':') + 1)) "
+      "WHERE group_id = 'custom' AND label LIKE '项目类型:%' "
+      "AND length(trim(substr(label, instr(label, ':') + 1))) > 0",
     );
   }
 

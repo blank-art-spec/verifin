@@ -966,47 +966,41 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                           onTap: _pickTime,
                         ),
                         for (final group in VeriFinScope.of(context).tagGroups)
-                          if (group.id != 'custom' ||
-                              _tagIds.any(
-                                (id) =>
-                                    VeriFinScope.of(
-                                      context,
-                                    ).tagById(id)?.groupId ==
-                                    group.id,
-                              ))
-                            _EntryMetadataChip(
-                              chipKey: Key('entry_metadata_tag_${group.id}'),
-                              icon: Icons.sell_outlined,
-                              label: Text(() {
-                                final selected = _tagIds
-                                    .map(VeriFinScope.of(context).tagById)
-                                    .whereType<Tag>()
-                                    .where((tag) => tag.groupId == group.id)
-                                    .map((tag) => tag.label)
-                                    .join('、');
-                                final name = tagGroupDisplayName(
-                                  group,
-                                  AppLocalizations.of(context),
-                                );
-                                return selected.isEmpty
-                                    ? name
-                                    : '$name  $selected';
-                              }()),
-                              selected: _tagIds.any(
-                                (id) =>
-                                    VeriFinScope.of(
-                                      context,
-                                    ).tagById(id)?.groupId ==
-                                    group.id,
-                              ),
-                              onTap: () => _pickTags(groupId: group.id),
+                          _EntryMetadataChip(
+                            chipKey: Key('entry_metadata_tag_${group.id}'),
+                            icon: Icons.sell_outlined,
+                            label: Text(() {
+                              final selected = _tagIds
+                                  .map(VeriFinScope.of(context).tagById)
+                                  .whereType<Tag>()
+                                  .where((tag) => tag.groupId == group.id)
+                                  .map((tag) => tag.label)
+                                  .join('、');
+                              final name = tagGroupDisplayName(
+                                group,
+                                AppLocalizations.of(context),
+                              );
+                              return selected.isEmpty
+                                  ? name
+                                  : '$name  $selected';
+                            }()),
+                            selected: _tagIds.any(
+                              (id) =>
+                                  VeriFinScope.of(
+                                    context,
+                                  ).tagById(id)?.groupId ==
+                                  group.id,
                             ),
+                            onTap: () => _pickTags(groupId: group.id),
+                          ),
                         _EntryMetadataChip(
-                          chipKey: const Key('entry_metadata_tags'),
-                          icon: Icons.add,
-                          label: Text(AppLocalizations.of(context).tagLabel),
+                          chipKey: const Key('entry_metadata_templates'),
+                          icon: Icons.bookmark_outline,
+                          label: Text(
+                            AppLocalizations.of(context).tagTemplatesTitle,
+                          ),
                           selected: false,
-                          onTap: _pickTags,
+                          onTap: () => _pickTags(templatesOnly: true),
                         ),
                         if (_type == EntryType.expense)
                           _EntryMetadataChip(
@@ -1746,13 +1740,15 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     setState(() => _pendingAttachments.add(dataUrl));
   }
 
-  /// 打开全部或指定维度的标签选择器；返回后更新交易草稿。
-  Future<void> _pickTags({String? groupId}) async {
+  /// 打开指定维度或模板选择器；返回后更新交易草稿。
+  /// [groupId] 指定维度，[templatesOnly] 为 true 时只显示模板入口。
+  Future<void> _pickTags({String? groupId, bool templatesOnly = false}) async {
     final result = await pickEntryTags(
       context: context,
       selectedIds: _tagIds,
       extraTags: widget.draftExtraTags ?? const <Tag>[],
       groupId: groupId,
+      templatesOnly: templatesOnly,
     );
     if (!mounted || result == null) {
       return;

@@ -772,12 +772,16 @@ class TagSelectorSheet extends StatefulWidget {
     this.onSaveTemplate,
     this.onDeleteTemplate,
     this.onApplyTemplate,
+    this.templatesOnly = false,
   });
 
   final List<Tag> tags;
   final List<TagGroup> groups;
   final List<String> selectedIds;
   final List<TagTemplate> templates;
+
+  /// 只显示模板操作时，标题和维度列表改为模板专用入口。
+  final bool templatesOnly;
 
   /// 新建标签：由调用方弹出输入框、创建标签，并返回新标签（重名返回已有，取消返回 null）。
   final Future<Tag?> Function(String groupId) onCreateTag;
@@ -864,7 +868,9 @@ class _TagSelectorSheetState extends State<TagSelectorSheet> {
           Row(
             children: <Widget>[
               Text(
-                AppLocalizations.of(context).tagPickerTitle,
+                widget.templatesOnly
+                    ? AppLocalizations.of(context).tagTemplatesTitle
+                    : AppLocalizations.of(context).tagPickerTitle,
                 style: Theme.of(
                   context,
                 ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),

@@ -248,7 +248,7 @@ void main() {
     });
   }
 
-  test('v23 前缀标签迁移保留交易 tagIds 和未知前缀原文', () async {
+  test('v23 前缀标签迁移保留交易关联，并补建项目类型维度', () async {
     final path = '${tempDir.path}/v23_tag_dimensions.db';
     final raw = await databaseFactoryFfi.openDatabase(path);
     for (final statement in _schemaV1) {
@@ -268,6 +268,11 @@ void main() {
       'label': '项目类型:旅行',
       'sort_order': 1,
     });
+    await raw.insert('tags', <String, Object?>{
+      'id': 'merchant-like',
+      'label': '商户:示例',
+      'sort_order': 2,
+    });
     await raw.rawUpdate(
       "UPDATE entries SET tag_ids = ? WHERE id = 'e1'",
       <Object?>['["trip","kind"]'],
@@ -280,8 +285,13 @@ void main() {
     final tags = await repo.loadTags();
     expect(tags.singleWhere((tag) => tag.id == 'trip').groupId, 'project');
     expect(tags.singleWhere((tag) => tag.id == 'trip').label, '2026国庆返乡');
-    expect(tags.singleWhere((tag) => tag.id == 'kind').groupId, 'custom');
-    expect(tags.singleWhere((tag) => tag.id == 'kind').label, '项目类型:旅行');
+    expect(tags.singleWhere((tag) => tag.id == 'kind').groupId, 'project_type');
+    expect(tags.singleWhere((tag) => tag.id == 'kind').label, '旅行');
+    expect(
+      tags.singleWhere((tag) => tag.id == 'merchant-like').groupId,
+      'custom',
+    );
+    expect(tags.singleWhere((tag) => tag.id == 'merchant-like').label, '商户:示例');
     expect(
       (await repo.loadEntries())
           .singleWhere((entry) => entry.id == 'e1')
@@ -290,7 +300,7 @@ void main() {
     );
     expect(
       (await repo.loadTagGroups()).map((group) => group.id),
-      contains('project'),
+      containsAll(<String>['project', 'project_type']),
     );
     await app.close();
   });
