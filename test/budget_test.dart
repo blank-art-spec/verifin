@@ -369,7 +369,8 @@ void main() {
     );
 
     // 支出 150、预算 100：剩余应显示 -50（负数），而不再夹到 0。
-    expect(find.text('-50'), findsOneWidget);
+    // 首页可能在预算卡与概览指标同时展示同一个剩余额度；只要求至少可见一处。
+    expect(find.text('-50'), findsWidgets);
   });
 
   test('category budget rolls up sub-category spending into parent', () async {

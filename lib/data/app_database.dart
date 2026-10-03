@@ -16,18 +16,29 @@ class AppDatabase {
   static const String defaultDatabaseName = 'verifin.db';
   static const int schemaVersion = 23;
 
-  /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
-  /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
+  /// 打开（或创建）数据库，恢复包可兼容第六批次升级后的 v24/v25 结构。
+  ///
+  /// [factory] 为测试注入的 SQLite 工厂，[path] 为测试数据库路径；真实平台留空
+  /// 时使用 Android 的正式数据库。先探测现有版本，再按旧版所需的最低 v23 打开；
+  /// 若手机已经是 v24/v25，则保持原版本号及所有新增表列，避免降级破坏账本。
   static Future<AppDatabase> open({
     DatabaseFactory? factory,
     String? path,
   }) async {
     final resolvedFactory = factory ?? await resolveDatabaseFactory();
     final resolvedPath = path ?? await resolveDatabasePath(defaultDatabaseName);
+    final probe = await resolvedFactory.openDatabase(resolvedPath);
+    final existingVersion = await probe.getVersion();
+    await probe.close();
+    if (existingVersion > 25) {
+      throw StateError('恢复包不支持高于 v25 的数据库版本：$existingVersion');
+    }
     final database = await resolvedFactory.openDatabase(
       resolvedPath,
       options: OpenDatabaseOptions(
-        version: schemaVersion,
+        version: existingVersion > schemaVersion
+            ? existingVersion
+            : schemaVersion,
         onCreate: _onCreate,
         onUpgrade: _onUpgrade,
       ),

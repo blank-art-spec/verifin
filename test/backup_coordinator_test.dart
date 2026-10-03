@@ -27,7 +27,7 @@ void main() {
         .toList();
   }
 
-  test('onOpen 频率在打开时写入自动备份并记录时间', () async {
+  test('恢复包即使设置 onOpen 也不自动备份或清理旧备份', () async {
     final dir = makeTempDir();
     final controller = await makeController();
     controller.setBackupDirectory(dir.path, 'temp');
@@ -35,8 +35,8 @@ void main() {
 
     await BackupCoordinator.maybeBackupOnOpen(controller);
 
-    expect(autoBackupsIn(dir), hasLength(1));
-    expect(controller.backupSettings.lastBackupAt, isNotNull);
+    expect(autoBackupsIn(dir), isEmpty);
+    expect(controller.backupSettings.lastBackupAt, isNull);
   });
 
   test('manual 频率不产生自动备份', () async {
@@ -51,7 +51,7 @@ void main() {
     expect(controller.backupSettings.lastBackupAt, isNull);
   });
 
-  test('onEntry 频率仅记账事件触发，打开事件不触发', () async {
+  test('恢复包即使设置 onEntry 也不在记账后自动备份', () async {
     final dir = makeTempDir();
     final controller = await makeController();
     controller.setBackupDirectory(dir.path, 'temp');
@@ -61,7 +61,8 @@ void main() {
     expect(autoBackupsIn(dir), isEmpty);
 
     await BackupCoordinator.maybeBackupAfterEntry(controller);
-    expect(autoBackupsIn(dir), hasLength(1));
+    expect(autoBackupsIn(dir), isEmpty);
+    expect(controller.backupSettings.lastBackupAt, isNull);
   });
 
   test('未选目录时不产生备份', () async {

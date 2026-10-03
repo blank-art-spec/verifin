@@ -4,6 +4,7 @@ import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
 
 import 'app/app_theme.dart';
+import 'app/app_version.dart';
 import 'app/backup/backup_coordinator.dart';
 import 'app/feedback.dart';
 import 'app/home_widget_service.dart';
@@ -67,7 +68,9 @@ Future<void> main() async {
           return;
         }
         // 打开应用时补记到期的周期交易。
-        await controller.applyDueRecurring(DateTime.now());
+        if (!isEmergencyRecoveryBuild) {
+          await controller.applyDueRecurring(DateTime.now());
+        }
         runApp(VeriFinApp(controller: controller));
       },
       (error, stack) {
@@ -190,14 +193,17 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
-    // 记账后自动备份挂钩；应用打开时按配置尝试一次自动备份。
-    _controller.onEntryAdded = _handleEntryAdded;
-    _controller.onWidgetProjectionInvalidated = _scheduleWidgetRefresh;
     // 落库失败时弹出「保存失败」提示，避免用户以为已保存。
     _controller.onPersistError = _handlePersistError;
     // 应用锁开关变化时同步 FLAG_SECURE；开屏按当前状态对齐一次。
     _controller.onAppLockChanged = _handleAppLockChanged;
     AppSecurityBridge.setSecureFlag(_controller.appLockEnabled);
+    // 恢复包只让用户打开账本并主动备份；自动补记、后台采集、提醒、小组件和
+    // 自动备份可能在备份前写库或清理旧备份，故恢复模式跳过这些启动副作用。
+    if (isEmergencyRecoveryBuild) return;
+    // 记账后自动备份挂钩；应用打开时按配置尝试一次自动备份。
+    _controller.onEntryAdded = _handleEntryAdded;
+    _controller.onWidgetProjectionInvalidated = _scheduleWidgetRefresh;
     // 记账提醒：配置变化时重排本地通知，开屏按当前配置对齐一次。
     _controller.onReminderChanged = _handleReminderChanged;
     unawaited(_syncNotifications());
@@ -304,6 +310,8 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     );
   }
 
+  /// 热恢复时补记周期交易，并在普通版本同步备份和桌面小组件。
+  /// 恢复包会在生命周期入口跳过此方法，避免用户备份前自动改写账本。
   Future<void> _postDueRecurringAndRefresh() async {
     await _controller.applyDueRecurring(DateTime.now());
     await BackupCoordinator.maybeBackupOnOpen(_controller);
@@ -312,6 +320,13 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
 
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (isEmergencyRecoveryBuild) {
+      if (state == AppLifecycleState.paused ||
+          state == AppLifecycleState.hidden) {
+        unawaited(_controller.flushPendingWrites());
+      }
+      return;
+    }
     if (state == AppLifecycleState.resumed) {
       // 顺序约束：先补记到期的周期交易，再备份 / 推送小组件——顺序颠倒会把
       // 补记前的旧数据备份出去、推到桌面小组件上。

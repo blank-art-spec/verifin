@@ -1,3 +1,4 @@
+import '../app_version.dart';
 import '../veri_fin_controller.dart';
 import 'backup_service.dart';
 import 'webdav_client.dart';
@@ -20,10 +21,13 @@ class BackupCoordinator {
     return _maybeRun(controller, afterEntry: true);
   }
 
+  /// 根据 [controller] 的备份配置决定是否执行自动备份；[afterEntry] 表示新增交易
+  /// 触发。紧急恢复包一律跳过，避免旧版备份覆盖或清理包含第六批次元数据的文件。
   static Future<void> _maybeRun(
     VeriFinController controller, {
     required bool afterEntry,
   }) async {
+    if (isEmergencyRecoveryBuild) return;
     final settings = controller.backupSettings;
     final webdav = controller.webdavConfig;
     final now = DateTime.now();
