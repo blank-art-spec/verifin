@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Veri Fin Emergency Backup</string>
+    <string name="title">Emergency ledger export</string>
+    <string name="description">This temporary version exports the on-device ledger database. Choose a folder and keep the exported file private: it contains transactions, attachments, and captured events.</string>
+    <string name="export_button">Choose location and export</string>
+    <string name="status_ready">No export yet. Installing this update keeps the existing app data.</string>
+    <string name="status_selecting">Choose a location in the system file picker.</string>
+    <string name="status_cancelled">Cancelled. Existing data was not changed.</string>
+    <string name="status_working">Creating and checking the ledger snapshot. Keep the app open.</string>
+    <string name="status_missing">The original ledger database was not found. No empty backup was created. Do not uninstall the app or clear its data.</string>
+    <string name="status_success">Export complete and file verified (%1$s, database version %2$d). Keep this .db file safe.</string>
+    <string name="status_failure">Export failed: %1$s. The original ledger was not changed. Try another location.</string>
+    <string name="error_unknown">Unknown error</string>
+    <string name="error_integrity">Database integrity check failed</string>
+    <string name="error_mismatch">Exported file differs from the snapshot</string>
+    <string name="error_open_output">Cannot open the selected save location</string>
+    <string name="error_open_input">Cannot reopen the exported file for verification</string>
+    <string name="error_empty">Ledger snapshot is empty</string>
+</resources>

@@ -1,0 +1,19 @@
+<resources>
+    <string name="app_name">Veri Fin 应急备份</string>
+    <string name="title">应急导出账本</string>
+    <string name="description">这个临时版本只用于抢救本机账本数据。请选择手机文件夹，保存原始数据库文件。导出完成后，请妥善保管文件；其中包含交易、附件和自动采集记录等隐私数据。</string>
+    <string name="export_button">选择位置并导出</string>
+    <string name="status_ready">尚未导出。安装更新不会清空原应用数据。</string>
+    <string name="status_selecting">请在系统文件选择器中指定保存位置。</string>
+    <string name="status_cancelled">已取消；原有数据没有改变。</string>
+    <string name="status_working">正在制作账本快照并核验，请不要关闭应用。</string>
+    <string name="status_missing">未找到原始账本数据库，未生成空备份。请不要卸载应用或清除数据。</string>
+    <string name="status_success">导出成功，已重新读取并核对文件（%1$s，数据库版本 %2$d）。请保管好这个 .db 文件。</string>
+    <string name="status_failure">导出失败：%1$s。原有账本没有被修改，请换个保存位置重试。</string>
+    <string name="error_unknown">未知错误</string>
+    <string name="error_integrity">数据库完整性检查未通过</string>
+    <string name="error_mismatch">保存的文件与账本快照不一致</string>
+    <string name="error_open_output">无法打开选定的保存位置</string>
+    <string name="error_open_input">无法重新读取导出文件进行核验</string>
+    <string name="error_empty">账本快照为空</string>
+</resources>
