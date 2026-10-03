@@ -75,10 +75,10 @@ jobs:
 
       - name: Build release APK (github flavor)
         # GitHub 自分发包：github flavor，保留应用内一键自更新（REQUEST_INSTALL_PACKAGES）。
-        # --target-platform 只限制 Flutter 引擎；--split-per-abi 才会排除插件里的
-        # x86_64/32 位 OCR 原生库。固定内部版本号，避免分包默认 +2000 后
-        # Play/GitHub 两渠道的更新顺序失衡。极老的 32 位机型不受支持。
-        run: flutter build apk --release --target-platform android-arm64 --split-per-abi -P force-version-code-ignoring-abi=true --flavor github --dart-define=UNIFIED_DESIGN_PREVIEW=true
+        # Flutter 主程序面向 arm64；插件可能仍携带其他 ABI 的原生库。
+        # 1.19.3 的 --split-per-abi 试包在用户手机出现启动白屏，恢复此前构建方式，
+        # 真机冷启动定位前不再次启用分包。缺少 32 位 Flutter 引擎的设备不能安装。
+        run: flutter build apk --release --target-platform android-arm64 --flavor github --dart-define=UNIFIED_DESIGN_PREVIEW=true
 
       - name: Build release App Bundle (play flavor)
         # Google Play 上架用 AAB：play flavor 移除 REQUEST_INSTALL_PACKAGES（Play 政策禁止
@@ -92,7 +92,7 @@ jobs:
           mkdir -p release-artifacts
           short_sha="${GITHUB_SHA::7}"
           version_name="${GITHUB_REF_NAME}"
-          cp build/app/outputs/flutter-apk/app-arm64-v8a-github-release.apk "release-artifacts/verifin-${version_name}-arm64-${short_sha}.apk"
+          cp build/app/outputs/flutter-apk/app-github-release.apk "release-artifacts/verifin-${version_name}-arm64-${short_sha}.apk"
           cp build/app/outputs/bundle/playRelease/app-play-release.aab "release-artifacts/verifin-${version_name}-${short_sha}.aab"
 
       - name: Upload release artifacts
