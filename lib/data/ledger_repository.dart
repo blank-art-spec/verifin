@@ -134,11 +134,12 @@ abstract interface class LedgerRepository {
   Future<List<Attachment>> loadAttachments();
   Future<void> saveAttachments(List<Attachment> attachments);
 
-  /// Replaces entries, attachments and optional exchange rates in one transaction.
+  /// Replaces entries, attachments, optional exchange rates and capture events in one transaction.
   Future<void> saveEntryAggregate({
     required List<LedgerEntry> entries,
     required List<Attachment> attachments,
     List<ExchangeRate>? exchangeRates,
+    List<CaptureEvent>? captureEvents,
   });
 
   Future<List<RecurringRule>> loadRecurringRules();
@@ -571,17 +572,24 @@ class SqliteLedgerRepository implements LedgerRepository {
     required List<LedgerEntry> entries,
     required List<Attachment> attachments,
     List<ExchangeRate>? exchangeRates,
+    List<CaptureEvent>? captureEvents,
   }) {
     final entrySnapshot = List<LedgerEntry>.of(entries);
     final attachmentSnapshot = List<Attachment>.of(attachments);
     final rateSnapshot = exchangeRates == null
         ? null
         : List<ExchangeRate>.of(exchangeRates);
+    final eventSnapshot = captureEvents == null
+        ? null
+        : List<CaptureEvent>.of(captureEvents);
     return _enqueueWrite(() async {
       // entries 行映射昂贵且随行数增长：同一份行映射同时供差分与事务后的基线快照复用。
       final entryRows = entrySnapshot.map(_entryToRow).toList(growable: false);
       final rateRows = rateSnapshot
           ?.map(_exchangeRateToRow)
+          .toList(growable: false);
+      final eventRows = eventSnapshot
+          ?.map(_captureEventToRow)
           .toList(growable: false);
       final entryDiff = _diffRows(_rowSnapshots['entries'], _byId(entryRows));
       await _db.transaction((txn) async {
@@ -591,11 +599,19 @@ class SqliteLedgerRepository implements LedgerRepository {
           'attachments',
           _indexed(attachmentSnapshot, _attachmentToRow),
         );
+        if (eventRows != null) {
+          await _applyRowDiffInTxn(
+            txn,
+            'capture_events',
+            _diffRows(_rowSnapshots['capture_events'], _byId(eventRows)),
+          );
+        }
         if (rateRows != null) {
           await _replaceInTxn(txn, 'exchange_rates', rateRows);
         }
       });
       _seedSnapshot('entries', entryRows);
+      if (eventRows != null) _seedSnapshot('capture_events', eventRows);
       if (rateRows != null) {
         _seedSnapshot('exchange_rates', rateRows);
       }

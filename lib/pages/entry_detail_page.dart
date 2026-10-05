@@ -31,6 +31,7 @@ class EntryDetailPage extends StatefulWidget {
     this.initialAccountId,
     this.initialDraft,
     this.initialSourceRecords = const <EntrySourceRecord>[],
+    this.captureEventId,
   }) : draftEntry = null,
        draftExtraAccounts = null,
        draftExtraCategories = null,
@@ -53,6 +54,7 @@ class EntryDetailPage extends StatefulWidget {
        initialAmount = entry.amount,
        initialAccountId = null,
        initialDraft = null,
+       captureEventId = null,
        initialSourceRecords = const <EntrySourceRecord>[];
 
   final double initialAmount;
@@ -64,6 +66,9 @@ class EntryDetailPage extends StatefulWidget {
   /// 新建交易随草稿带入的外部来源证据。自动采集确认页使用它把原始事件与正式交易
   /// 一次落库；普通手工/AI 记账保持空列表。
   final List<EntrySourceRecord> initialSourceRecords;
+
+  /// 复核保存时与交易一起原子提交的本机采集事件。
+  final String? captureEventId;
 
   /// 草稿编辑模式下要编辑的交易；非空即进入「返回草稿不落库」模式。
   final LedgerEntry? draftEntry;
@@ -1904,6 +1909,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     final result = await controller.saveEntryAggregateDraftResult(
       entry: draft,
       isNew: true,
+      captureEventId: widget.captureEventId,
       attachments: attachments,
       rememberRateCurrencyCode: _rememberRate ? draft.currencyCode : null,
       rememberRateToBase: _rememberRate

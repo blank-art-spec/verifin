@@ -432,7 +432,7 @@ class _AutoCapturePageState extends State<AutoCapturePage>
     );
   }
 
-  /// 用标准记账页复核事件；保存时来源证据与交易一起落库，返回后再更新事件状态。
+  /// 用标准记账页复核事件；交易、来源证据与已确认状态一起原子落库。
   ///
   /// [event] 是卡片构建时的解析快照。若金额或类型仍为空，先仅针对这条原文
   /// 重跑本地解析，再读取最新候选；重跑不会自动入账，已有交易关联也不会被清除。
@@ -477,19 +477,15 @@ class _AutoCapturePageState extends State<AutoCapturePage>
       );
       return;
     }
-    final entry = await Navigator.of(context).push<LedgerEntry>(
+    await Navigator.of(context).push<LedgerEntry>(
       MaterialPageRoute<LedgerEntry>(
         builder: (_) => EntryDetailPage(
           initialAmount: draft.amount,
           initialDraft: draft,
           initialSourceRecords: <EntrySourceRecord>[source],
+          captureEventId: reviewEvent.id,
         ),
       ),
-    );
-    if (!mounted || entry == null) return;
-    await controller.markCaptureEventConfirmed(
-      eventId: reviewEvent.id,
-      entryId: entry.id,
     );
   }
 

@@ -4,6 +4,7 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:verifin/app/models.dart';
+import 'package:verifin/app/auto_capture/capture_parser.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/data/app_database.dart';
 import 'package:verifin/data/ledger_repository.dart';
@@ -58,6 +59,82 @@ void main() {
       repository: repo,
     );
     expect(reloaded.entries.single.id, '1');
+  });
+
+  test('SQLite 复核状态写失败会回滚交易附件，重试后冷启动仍已确认', () async {
+    final repo = await openRepo();
+    final store = LocalKeyValueStore();
+    var controller = await VeriFinController.create(store, repository: repo);
+    final event = captureEventFromInput(
+      id: 'sqlite-review',
+      bookId: controller.activeBook.id,
+      input: RawCaptureInput(
+        sourceKind: CaptureSourceKind.notification,
+        sourceId: 'cmb-life',
+        sourceEventId: 'sqlite-review',
+        rawText: '消费10.00元',
+        receivedAt: DateTime(2026, 10, 2),
+      ),
+    ).copyWith(status: CaptureStatus.pendingReview);
+    final reviewedEntry = entry('1').copyWith(
+      bookId: controller.activeBook.id,
+      accountId: '',
+      clearAccountAmount: true,
+      categoryId: controller.categories
+          .firstWhere((category) => category.type == EntryType.expense)
+          .id,
+    );
+    await repo.saveCaptureEvents([event]);
+    controller.dispose();
+    controller = await VeriFinController.create(store, repository: repo);
+    final db = opened.last.db;
+    await db.execute(
+      "CREATE TRIGGER reject_review BEFORE INSERT ON capture_events BEGIN SELECT RAISE(ABORT, 'injected review failure'); END",
+    );
+    const attachment = Attachment(
+      id: 'review-photo',
+      entryId: '1',
+      dataUrl: 'data:image/jpeg;base64,TkVX',
+    );
+    final failed = await controller.saveEntryAggregateDraftResult(
+      entry: reviewedEntry,
+      isNew: true,
+      captureEventId: event.id,
+      attachments: [attachment],
+    );
+    expect(failed, isA<EntrySavePersistenceFailure>());
+    expect(controller.entries, isEmpty);
+    expect(await repo.loadEntries(), isEmpty);
+    expect(await repo.loadAttachments(), isEmpty);
+    expect(
+      (await repo.loadCaptureEvents()).single.status,
+      CaptureStatus.pendingReview,
+    );
+    await db.execute('DROP TRIGGER reject_review');
+    expect(
+      (await controller.saveEntryAggregateDraftResult(
+        entry: reviewedEntry,
+        isNew: true,
+        captureEventId: event.id,
+        attachments: [attachment],
+      )).isSuccess,
+      isTrue,
+    );
+    controller.dispose();
+    final reloaded = await VeriFinController.create(
+      store,
+      repository: SqliteLedgerRepository(opened.last),
+    );
+    expect(reloaded.entries.single.id, reviewedEntry.id);
+    expect(reloaded.captureEvents.single.status, CaptureStatus.confirmed);
+    expect(reloaded.captureEvents.single.linkedEntryId, reviewedEntry.id);
+    expect(
+      reloaded.entries.single.sourceRecords.single.fingerprint,
+      event.fingerprint,
+    );
+    expect(reloaded.attachmentsForEntry(reviewedEntry.id), hasLength(1));
+    expect(await reloaded.replayRecentCaptureEvents(), 0);
+    reloaded.dispose();
   });
 
   test('退款关联条目（refund_of/settled_at）写入 SQLite 并被新控制器读回', () async {

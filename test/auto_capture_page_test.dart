@@ -83,6 +83,12 @@ void main() {
 
     expect(controller.captureEvents.single.parsedAmount, 2.30);
     expect(find.byType(EntryDetailPage), findsOneWidget);
+    expect(
+      tester
+          .widget<EntryDetailPage>(find.byType(EntryDetailPage))
+          .captureEventId,
+      'cmb-unprocessed',
+    );
   });
 
   testWidgets('冷启动会补解析已落库但尚未处理的通知', (tester) async {

@@ -199,6 +199,7 @@ class VeriFinController extends ChangeNotifier
       systemIsEnglish: systemIsEnglish,
     );
     await controller._loadFromRepository();
+    await controller._restoreCaptureLinksFromSources();
     if (controller._seedLegacyProjects()) {
       await repository.saveProjects(List<Project>.of(controller._projects));
     }

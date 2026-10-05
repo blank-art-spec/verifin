@@ -43,6 +43,20 @@ mixin _ControllerState on ChangeNotifier {
 
   final List<LedgerEntry> _entries = <LedgerEntry>[];
   final List<CaptureEvent> _captureEvents = <CaptureEvent>[];
+  Future<void> _captureMutationTail = Future<void>.value();
+
+  /// 串行化采集与交易草稿的读快照、写库和内存提交；AI 请求不占用队列。
+  Future<T> _enqueueCaptureMutation<T>(Future<T> Function() operation) {
+    final result = _captureMutationTail.then((_) => operation());
+    _captureMutationTail = result.then<void>(
+      (_) {},
+      onError: (Object error, StackTrace stackTrace) {
+        // 原错误由调用方接收；失败不能阻塞之后的复核保存。
+      },
+    );
+    return result;
+  }
+
   final List<AutoCaptureRule> _autoCaptureRules = <AutoCaptureRule>[];
   final List<LedgerBook> _ledgerBooks = <LedgerBook>[];
   final List<Account> _accounts = <Account>[];

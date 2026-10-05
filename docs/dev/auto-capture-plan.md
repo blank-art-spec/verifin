@@ -40,6 +40,8 @@ CaptureEvent（SQLite 原始事件 + 可重跑解析快照）
 
 原文先于解析快照落库。若进程在两步之间退出，冷启动和回前台会补解析尚未处理的本地原文，补跑只更新候选，不自动入账；点“复核记账”时也会先刷新缺少金额或类型的当前事件。手动“重新解析”只处理所选未落账事件，不触发 AI、自动合并或自动入账，已确认、已忽略等事件不能重试。
 
+复核页保存通过 `saveEntryAggregateDraftResult(captureEventId: ...)` 将交易、来源证据、附件、可选汇率和事件已确认状态放入同一事务，成功后才退出页面。Controller 串行化采集写命令与交易草稿的快照读取、落库及内存提交；AI 等待不占用此队列，提交解析结果时再次核对原事件是否已改变，并以最新交易做去重。只刷新候选时不写交易表。冷启动发现未落账状态的事件已有唯一同账本来源指纹对应交易时恢复已确认关联；忽略、误识别和正常自动入账状态不受影响。
+
 - `capture_events`：来源类型/App 或短信号码、来源事件号、原文、收到时间、解析金额/币种/商户/卡尾号、账户/分类/标签候选、类型、置信度、处理状态、关联交易、命中规则与是否经 AI 补充。
 - `auto_capture_rules`：账本内确定性条件和动作，按优先级执行。
 
@@ -78,6 +80,14 @@ CaptureEvent（SQLite 原始事件 + 可重跑解析快照）
 撤销自动入账会删除对应正式交易并把事件退回待确认；删除正式交易也会清掉事件中的悬空关联。标记误识别保留原文和状态，供用户后续据此修正规则。
 
 ## 原生与生命周期验收
+
+复核保存专项使用独立 diagnostic 应用和 `capture_review_integration_test.db`，不读写正式应用数据。第一阶段必须带 `--no-uninstall`，否则 Flutter 测试工具会自动卸载诊断包并删除测试数据库。在真实页面点击复核与保存后，强停诊断应用再运行第二阶段，从新进程读取已确认状态，检查同一输入和候选回放均不会重复记账；第二阶段结束删除专项测试数据库并由测试工具清理本任务诊断包。运行前确认诊断包中没有需要保留的用户数据。
+
+```bash
+flutter test integration_test/capture_review_test.dart -d <device-id> --flavor diagnostic --dart-define=UNIFIED_DESIGN_PREVIEW=true --no-uninstall
+adb -s <device-id> shell am force-stop top.talyra42.verifin.graphicsdiagnostic
+flutter test integration_test/capture_review_test.dart -d <device-id> --flavor diagnostic --dart-define=UNIFIED_DESIGN_PREVIEW=true --dart-define=CAPTURE_REVIEW_PHASE=reopen
+```
 
 正式完成必须用 CI release APK 真机覆盖：
 
