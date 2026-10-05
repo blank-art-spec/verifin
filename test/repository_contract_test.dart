@@ -348,6 +348,20 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       await repo.saveEntryAggregate(
         entries: nextEntries,
         attachments: nextAttachments,
+        captureEvents: <CaptureEvent>[
+          CaptureEvent(
+            id: 'review-event',
+            bookId: 'default',
+            sourceKind: CaptureSourceKind.notification,
+            sourceId: 'cmb-life',
+            sourceEventId: 'review-event',
+            rawText: '消费10元',
+            receivedAt: DateTime(2026, 2, 1),
+            fingerprint: 'review-fingerprint',
+            status: CaptureStatus.confirmed,
+            linkedEntryId: 'new',
+          ),
+        ],
         exchangeRates: <ExchangeRate>[
           ExchangeRate(
             id: 'rate-aggregate',
@@ -366,6 +380,19 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
       expect(_jsonOf(await repo.loadEntries()), _jsonOf(nextEntries));
       expect(_jsonOf(await repo.loadAttachments()), _jsonOf(nextAttachments));
       expect((await repo.loadExchangeRates()).single.currencyCode, 'EUR');
+      expect(
+        (await repo.loadCaptureEvents()).single.status,
+        CaptureStatus.confirmed,
+      );
+      expect((await repo.loadCaptureEvents()).single.linkedEntryId, 'new');
+      await repo.saveEntryAggregate(
+        entries: nextEntries,
+        attachments: nextAttachments,
+      );
+      expect(
+        (await repo.loadCaptureEvents()).single.status,
+        CaptureStatus.confirmed,
+      );
     });
 
     test('自动采集联合保存保持交易、事件与规则一致', () async {

@@ -174,7 +174,11 @@ class InMemoryLedgerRepository implements LedgerRepository {
     required List<LedgerEntry> entries,
     required List<Attachment> attachments,
     List<ExchangeRate>? exchangeRates,
+    List<CaptureEvent>? captureEvents,
   }) async {
+    if (captureEvents != null) {
+      _captureEvents = List<CaptureEvent>.of(captureEvents);
+    }
     _entries = List<LedgerEntry>.of(entries);
     _attachments = List<Attachment>.of(attachments);
     if (exchangeRates != null) {

@@ -228,6 +228,24 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     Set<String> removedCategoryIds = const <String>{},
     Set<String> removedTagIds = const <String>{},
     Map<String, String> categoryRemap = const <String, String>{},
+  }) => _enqueueCaptureMutation(
+    () => _sanitizeAutoCaptureReferencesNow(
+      removedBookIds: removedBookIds,
+      removedEntryIds: removedEntryIds,
+      removedAccountIds: removedAccountIds,
+      removedCategoryIds: removedCategoryIds,
+      removedTagIds: removedTagIds,
+      categoryRemap: categoryRemap,
+    ),
+  );
+
+  Future<bool> _sanitizeAutoCaptureReferencesNow({
+    Set<String> removedBookIds = const <String>{},
+    Set<String> removedEntryIds = const <String>{},
+    Set<String> removedAccountIds = const <String>{},
+    Set<String> removedCategoryIds = const <String>{},
+    Set<String> removedTagIds = const <String>{},
+    Map<String, String> categoryRemap = const <String, String>{},
   }) async {
     var eventChanged = false;
     final nextEvents = <CaptureEvent>[];
@@ -345,7 +363,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   ///
   /// 备份恢复会整体替换账目表，但原始事件与规则按隐私约定保持设备本地；因此恢复后
   /// 必须重新核对它们的账户、分类、标签与交易关联。
-  Future<bool> _healAutoCaptureReferences() {
+  Future<bool> _healAutoCaptureReferences() async {
+    if (!await _restoreCaptureLinksFromSources()) return false;
     final bookIds = _ledgerBooks.map((book) => book.id).toSet();
     final entryIds = _entries.map((entry) => entry.id).toSet();
     final accountIds = _accounts.map((account) => account.id).toSet();
@@ -390,11 +409,59 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     );
   }
 
+  /// 旧版分步保存若留下“交易已存在、事件仍待确认”，按唯一来源指纹恢复关联。
+  Future<bool> _restoreCaptureLinksFromSources() => _enqueueCaptureMutation(
+    () async {
+      final next = List<CaptureEvent>.of(_captureEvents);
+      final sourceEntries = <(String, String), Set<String>>{};
+      for (final entry in _entries) {
+        for (final record in entry.sourceRecords) {
+          if (record.fingerprint.isEmpty) continue;
+          sourceEntries
+              .putIfAbsent((entry.bookId, record.fingerprint), () => <String>{})
+              .add(entry.id);
+        }
+      }
+      var changed = false;
+      for (var i = 0; i < next.length; i++) {
+        final event = next[i];
+        if (!event.status.canRetry) continue;
+        final matches = sourceEntries[(event.bookId, event.fingerprint)];
+        if (matches == null || matches.length != 1) continue;
+        next[i] = event.copyWith(
+          status: CaptureStatus.confirmed,
+          linkedEntryId: matches.single,
+          clearDuplicateEntryId: true,
+        );
+        changed = true;
+      }
+      if (!changed) return true;
+      try {
+        await _repository.saveCaptureEvents(next);
+      } catch (error, stackTrace) {
+        _handlePersistError(error, stackTrace);
+        return false;
+      }
+      _captureEvents
+        ..clear()
+        ..addAll(next);
+      return true;
+    },
+  );
+
   /// 将原生通知/短信队列写入 SQLite 原始事件表。
   ///
   /// [inputs] 中空文本会跳过；相同 sourceEventId 或稳定 fingerprint 只保留一条。
   /// 方法先完成原文落库，再调用解析流程，保证解析崩溃/网络失败也不会丢原始证据。
   Future<int> ingestCaptureInputs(List<RawCaptureInput> inputs) async {
+    final added = await _enqueueCaptureMutation(
+      () => _ingestCaptureInputs(inputs),
+    );
+    if (added > 0) await processPendingCaptureEvents();
+    return added;
+  }
+
+  Future<int> _ingestCaptureInputs(List<RawCaptureInput> inputs) async {
     final next = List<CaptureEvent>.of(_captureEvents);
     var added = 0;
     for (final input in inputs) {
@@ -427,7 +494,6 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       ..clear()
       ..addAll(next);
     notifyListeners();
-    await processPendingCaptureEvents();
     return added;
   }
 
@@ -466,10 +532,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     bool allowAutomaticActions = true,
     Set<String>? eventIds,
   }) async {
-    var nextEntries = List<LedgerEntry>.of(_entries);
+    final originalById = <String, CaptureEvent>{
+      for (final event in _captureEvents) event.id: event,
+    };
     final nextEvents = List<CaptureEvent>.of(_captureEvents);
     var processed = 0;
-    var createdEntries = 0;
+
     for (var i = 0; i < nextEvents.length; i++) {
       final original = nextEvents[i];
       if (original.status != CaptureStatus.raw ||
@@ -501,9 +569,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           categories: _categories,
           tags: _tags,
           tagGroups: _tagGroups,
-          entries: nextEntries
-              .where((entry) => entry.bookId == book.id)
-              .toList(),
+          entries: _entries.where((entry) => entry.bookId == book.id).toList(),
           rules: _autoCaptureRules,
         );
         var parsed = parseCaptureEvent(original, parseContext);
@@ -564,66 +630,6 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           }
         }
 
-        final duplicate = findCaptureDuplicate(parsed, nextEntries);
-        if (allowAutomaticActions && duplicate?.safeToMerge == true) {
-          final entryIndex = nextEntries.indexWhere(
-            (entry) => entry.id == duplicate!.entryId,
-          );
-          if (entryIndex != -1) {
-            final record = sourceRecordForCapture(parsed);
-            final current = nextEntries[entryIndex];
-            if (!current.sourceRecords.any(
-              (source) => source.fingerprint == record.fingerprint,
-            )) {
-              nextEntries[entryIndex] = appendEntryAudit(
-                before: current,
-                after: current.copyWith(
-                  sourceRecords: <EntrySourceRecord>[
-                    ...current.sourceRecords,
-                    record,
-                  ],
-                ),
-                actor: EntryAuditActor.autoCapture,
-                reason: EntryAuditReason.reconciled,
-                at: DateTime.now(),
-                sourceId: parsed.sourceId,
-              );
-            }
-            parsed = parsed.copyWith(
-              status: CaptureStatus.merged,
-              linkedEntryId: current.id,
-              duplicateEntryId: current.id,
-            );
-          }
-        } else if (duplicate != null && duplicate.score >= 0.65) {
-          parsed = parsed.copyWith(
-            status: CaptureStatus.duplicateSuspected,
-            duplicateEntryId: duplicate.entryId,
-          );
-        } else if (allowAutomaticActions &&
-            _autoCaptureSettings.autoPostHighConfidence &&
-            parsed.confidence == CaptureConfidence.high) {
-          final entry = _buildAutomaticCaptureEntry(parsed, nextEntries, book);
-          if (entry != null) {
-            nextEntries.add(
-              appendEntryAudit(
-                before: null,
-                after: entry,
-                actor: EntryAuditActor.autoCapture,
-                reason: EntryAuditReason.created,
-                at: DateTime.now(),
-                sourceId: parsed.sourceId,
-              ),
-            );
-            nextEntries = _entriesWithSyncedRefundCache(nextEntries)
-              ..sort(_compareEntriesLatestFirst);
-            parsed = parsed.copyWith(
-              status: CaptureStatus.autoPosted,
-              linkedEntryId: entry.id,
-            );
-            createdEntries++;
-          }
-        }
         if (parsed.status == CaptureStatus.pendingReview &&
             parsed.confidence == CaptureConfidence.low) {
           // 低置信度只保留原始事件，不混入待确认数字；processedAt 防止每次回前台重跑。
@@ -646,24 +652,121 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       }
     }
     if (processed == 0) return 0;
-    try {
-      await _repository.saveCaptureProcessing(
-        entries: nextEntries,
-        captureEvents: nextEvents,
-      );
-    } catch (error, stackTrace) {
-      _handlePersistError(error, stackTrace);
-      return 0;
-    }
-    _entries
-      ..clear()
-      ..addAll(nextEntries);
-    _captureEvents
-      ..clear()
-      ..addAll(nextEvents);
-    notifyListeners();
-    if (createdEntries > 0) onEntryAdded?.call();
-    return processed;
+    return _enqueueCaptureMutation(() async {
+      var nextEntries = List<LedgerEntry>.of(_entries);
+      final currentEvents = List<CaptureEvent>.of(_captureEvents);
+      var committed = 0;
+      var createdEntries = 0;
+      var entriesChanged = false;
+      for (var parsed in nextEvents) {
+        final original = originalById[parsed.id];
+        if (identical(parsed, original)) continue;
+        final index = currentEvents.indexWhere(
+          (event) => event.id == parsed.id,
+        );
+        // AI/后台解析期间用户可能已复核、忽略或重试。旧结果必须丢弃。
+        if (index == -1 || !identical(currentEvents[index], original)) continue;
+        final book = _ledgerBooks
+            .where((item) => item.id == parsed.bookId)
+            .firstOrNull;
+        if (book == null) continue;
+        if (parsed.status != CaptureStatus.failed) {
+          final duplicate = findCaptureDuplicate(parsed, nextEntries);
+          if (allowAutomaticActions && duplicate?.safeToMerge == true) {
+            final entryIndex = nextEntries.indexWhere(
+              (entry) => entry.id == duplicate!.entryId,
+            );
+            if (entryIndex != -1) {
+              final record = sourceRecordForCapture(parsed);
+              final current = nextEntries[entryIndex];
+              if (!current.sourceRecords.any(
+                (source) => source.fingerprint == record.fingerprint,
+              )) {
+                entriesChanged = true;
+                nextEntries[entryIndex] = appendEntryAudit(
+                  before: current,
+                  after: current.copyWith(
+                    sourceRecords: <EntrySourceRecord>[
+                      ...current.sourceRecords,
+                      record,
+                    ],
+                  ),
+                  actor: EntryAuditActor.autoCapture,
+                  reason: EntryAuditReason.reconciled,
+                  at: DateTime.now(),
+                  sourceId: parsed.sourceId,
+                );
+              }
+              parsed = parsed.copyWith(
+                status: CaptureStatus.merged,
+                linkedEntryId: current.id,
+                duplicateEntryId: current.id,
+              );
+            }
+          } else if (duplicate != null && duplicate.score >= 0.65) {
+            parsed = parsed.copyWith(
+              status: CaptureStatus.duplicateSuspected,
+              duplicateEntryId: duplicate.entryId,
+            );
+          } else if (allowAutomaticActions &&
+              _autoCaptureSettings.autoPostHighConfidence &&
+              parsed.confidence == CaptureConfidence.high) {
+            final entry = _buildAutomaticCaptureEntry(
+              parsed,
+              nextEntries,
+              book,
+            );
+            if (entry != null) {
+              nextEntries.add(
+                appendEntryAudit(
+                  before: null,
+                  after: entry,
+                  actor: EntryAuditActor.autoCapture,
+                  reason: EntryAuditReason.created,
+                  at: DateTime.now(),
+                  sourceId: parsed.sourceId,
+                ),
+              );
+              nextEntries = _entriesWithSyncedRefundCache(nextEntries)
+                ..sort(_compareEntriesLatestFirst);
+              parsed = parsed.copyWith(
+                status: CaptureStatus.autoPosted,
+                linkedEntryId: entry.id,
+              );
+              createdEntries++;
+              entriesChanged = true;
+            }
+          }
+        }
+        currentEvents[index] = parsed;
+        committed++;
+      }
+      if (committed == 0) return 0;
+      try {
+        if (entriesChanged) {
+          await _repository.saveCaptureProcessing(
+            entries: nextEntries,
+            captureEvents: currentEvents,
+          );
+        } else {
+          await _repository.saveCaptureEvents(currentEvents);
+        }
+      } catch (error, stackTrace) {
+        _handlePersistError(error, stackTrace);
+        return 0;
+      }
+      if (entriesChanged) {
+        _entries
+          ..clear()
+          ..addAll(nextEntries);
+      }
+      _captureEvents
+        ..clear()
+        ..addAll(currentEvents);
+      notifyListeners();
+      if (createdEntries > 0) onEntryAdded?.call();
+      return committed;
+    });
   }
 
   /// 把待确认事件转换为标准记账页草稿。退款仍需关联原支出，因此返回 null，改走合并入口。
@@ -710,7 +813,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   ///
   /// 主要用于标准记账页不能表达的关联退款；仍复用 [_buildAutomaticCaptureEntry] 的
   /// 唯一原支出、账户、汇率与类型校验。交易与事件状态在同一事务提交，失败返回 null。
-  Future<LedgerEntry?> confirmParsedCaptureEvent(String eventId) async {
+  Future<LedgerEntry?> confirmParsedCaptureEvent(String eventId) =>
+      _enqueueCaptureMutation(() => _confirmParsedCaptureEvent(eventId));
+
+  Future<LedgerEntry?> _confirmParsedCaptureEvent(String eventId) async {
     final eventIndex = _captureEvents.indexWhere(
       (event) =>
           event.id == eventId &&
@@ -783,6 +889,18 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   /// 或自动入账，避免用户点“复核记账”时在背后写入交易；已确认、已自动入账、
   /// 已合并、已忽略及误识别事件一律拒绝重试。
   Future<bool> retryCaptureEvent(String eventId) async {
+    final reset = await _enqueueCaptureMutation(
+      () => _retryCaptureEvent(eventId),
+    );
+    if (!reset) return false;
+    return (await processPendingCaptureEvents(
+          allowAutomaticActions: false,
+          eventIds: <String>{eventId},
+        )) >
+        0;
+  }
+
+  Future<bool> _retryCaptureEvent(String eventId) async {
     final index = _captureEvents.indexWhere(
       (event) =>
           event.id == eventId &&
@@ -805,6 +923,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       clearLinkedEntryId: true,
       clearDuplicateEntryId: true,
       appliedRuleIds: const <String>[],
+      aiAssisted: false,
       failureReason: '',
       clearProcessedAt: true,
     );
@@ -818,11 +937,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       ..clear()
       ..addAll(next);
     notifyListeners();
-    return (await processPendingCaptureEvents(
-          allowAutomaticActions: false,
-          eventIds: <String>{eventId},
-        )) >
-        0;
+    return true;
   }
 
   /// 批量重跑当前账本最近的未落账原始事件。
@@ -845,46 +960,22 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         .map((event) => event.id)
         .toSet();
     if (candidates.isEmpty) return 0;
-    final next = <CaptureEvent>[
-      for (final event in _captureEvents)
-        if (candidates.contains(event.id))
-          event.copyWith(
-            status: CaptureStatus.raw,
-            clearParsedAmount: true,
-            kind: CaptureTransactionKind.unknown,
-            clearAccountCandidateId: true,
-            clearToAccountCandidateId: true,
-            clearCategoryCandidateId: true,
-            tagCandidateIds: const <String>[],
-            confidence: CaptureConfidence.low,
-            confidenceScore: 0,
-            clearDuplicateEntryId: true,
-            appliedRuleIds: const <String>[],
-            aiAssisted: false,
-            failureReason: '',
-            clearProcessedAt: true,
-          )
-        else
-          event,
-    ];
-    try {
-      await _repository.saveCaptureEvents(next);
-    } catch (error, stackTrace) {
-      _handlePersistError(error, stackTrace);
-      return 0;
+    var processed = 0;
+    for (final id in candidates) {
+      if (await retryCaptureEvent(id)) processed++;
     }
-    _captureEvents
-      ..clear()
-      ..addAll(next);
-    notifyListeners();
-    return processPendingCaptureEvents(
-      allowAutomaticActions: false,
-      eventIds: candidates,
-    );
+    return processed;
   }
 
   /// 用户明确把事件合并到已有交易：追加来源证据并原子更新事件状态。
   Future<bool> mergeCaptureEventIntoEntry({
+    required String eventId,
+    required String entryId,
+  }) => _enqueueCaptureMutation(
+    () => _mergeCaptureEventIntoEntry(eventId: eventId, entryId: entryId),
+  );
+
+  Future<bool> _mergeCaptureEventIntoEntry({
     required String eventId,
     required String entryId,
   }) async {
@@ -938,7 +1029,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   }
 
   /// 撤销一笔由自动采集直接生成的交易，并把事件退回待确认。
-  Future<bool> undoAutoCapturedEntry(String eventId) async {
+  Future<bool> undoAutoCapturedEntry(String eventId) =>
+      _enqueueCaptureMutation(() => _undoAutoCapturedEntry(eventId));
+
+  Future<bool> _undoAutoCapturedEntry(String eventId) async {
     final eventIndex = _captureEvents.indexWhere(
       (event) =>
           event.id == eventId &&
@@ -979,6 +1073,18 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
 
   /// 仅更新事件状态/关联，不改正式交易。
   Future<bool> _updateCaptureStatus({
+    required String eventId,
+    required CaptureStatus status,
+    String? linkedEntryId,
+  }) => _enqueueCaptureMutation(
+    () => _updateCaptureStatusNow(
+      eventId: eventId,
+      status: status,
+      linkedEntryId: linkedEntryId,
+    ),
+  );
+
+  Future<bool> _updateCaptureStatusNow({
     required String eventId,
     required CaptureStatus status,
     String? linkedEntryId,
@@ -3895,7 +4001,59 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     String? rememberRateCurrencyCode,
     double? rememberRateToBase,
     DateTime? rememberRateEffectiveDate,
+    String? captureEventId,
+  }) => _enqueueCaptureMutation(
+    () => _saveEntryAggregateDraftResult(
+      entry: entry,
+      isNew: isNew,
+      refunds: refunds,
+      attachments: attachments,
+      rememberRateCurrencyCode: rememberRateCurrencyCode,
+      rememberRateToBase: rememberRateToBase,
+      rememberRateEffectiveDate: rememberRateEffectiveDate,
+      captureEventId: captureEventId,
+    ),
+  );
+
+  Future<EntrySaveResult> _saveEntryAggregateDraftResult({
+    required LedgerEntry entry,
+    required bool isNew,
+    List<LedgerEntry> refunds = const <LedgerEntry>[],
+    List<Attachment> attachments = const <Attachment>[],
+    String? rememberRateCurrencyCode,
+    double? rememberRateToBase,
+    DateTime? rememberRateEffectiveDate,
+    String? captureEventId,
   }) async {
+    List<CaptureEvent>? nextCaptureEvents;
+    if (captureEventId != null) {
+      final index = _captureEvents.indexWhere(
+        (event) => event.id == captureEventId && event.bookId == entry.bookId,
+      );
+      if (!isNew ||
+          index == -1 ||
+          !_captureEvents[index].status.canRetry ||
+          _captureEvents[index].linkedEntryId != null) {
+        return const EntrySaveValidationFailure(EntryValidationCode.staleDraft);
+      }
+      final event = _captureEvents[index];
+      final source = sourceRecordForCapture(event);
+      entry = entry.copyWith(
+        sourceRecords: <EntrySourceRecord>[
+          ...entry.sourceRecords,
+          if (!entry.sourceRecords.any(
+            (record) => record.fingerprint == source.fingerprint,
+          ))
+            source,
+        ],
+      );
+      nextCaptureEvents = List<CaptureEvent>.of(_captureEvents);
+      nextCaptureEvents[index] = event.copyWith(
+        status: CaptureStatus.confirmed,
+        linkedEntryId: entry.id,
+        clearDuplicateEntryId: true,
+      );
+    }
     final currentIndex = _entries.indexWhere((item) => item.id == entry.id);
     if ((isNew && currentIndex != -1) || (!isNew && currentIndex == -1)) {
       return const EntrySaveValidationFailure(EntryValidationCode.staleDraft);
@@ -4096,12 +4254,18 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         entries: nextEntries,
         attachments: nextAttachments,
         exchangeRates: nextRates,
+        captureEvents: nextCaptureEvents,
       );
     } catch (error, stackTrace) {
       _handlePersistError(error, stackTrace);
       return const EntrySavePersistenceFailure();
     }
 
+    if (nextCaptureEvents != null) {
+      _captureEvents
+        ..clear()
+        ..addAll(nextCaptureEvents);
+    }
     _entries
       ..clear()
       ..addAll(nextEntries);
