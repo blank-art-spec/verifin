@@ -832,6 +832,23 @@ String _trendSeriesValueText(HomeTrendSeries series, double value) {
   }
 }
 
+/// 按当前字体、语言和系统缩放测量内容，让布局由实际文字长度决定。
+double _homeTrendTextWidth(BuildContext context, String text, TextStyle style) {
+  final painter = TextPainter(
+    text: TextSpan(
+      text: text,
+      style: DefaultTextStyle.of(context).style.merge(style),
+    ),
+    textDirection: Directionality.of(context),
+    textScaler: MediaQuery.textScalerOf(context),
+    locale: Localizations.localeOf(context),
+    maxLines: 1,
+  )..layout();
+  final width = painter.width;
+  painter.dispose();
+  return width;
+}
+
 class HomeTrendPanel extends StatelessWidget {
   const HomeTrendPanel({
     super.key,
@@ -883,6 +900,27 @@ class HomeTrendPanel extends StatelessWidget {
         ? mutedColor
         : _trendSeriesColor(config.series, Theme.of(context).brightness);
     final seriesLabel = homeTrendSeriesLabel(l10n, config.series);
+    final bigText = formatHomeMetric(config.big, bigValue);
+    final bigLabel = homeMetricLabel(l10n, config.big);
+    final pillLabel = homeMetricLabel(l10n, config.pill);
+    final pillText = formatHomeMetric(config.pill, pillValue);
+    final labelStyle = Theme.of(context).textTheme.labelSmall!.copyWith(
+      color: mutedColor,
+      fontWeight: FontWeight.w700,
+    );
+    final bigStyle =
+        (veriUnifiedDesignPreview
+                ? Theme.of(context).textTheme.displayMedium!
+                : Theme.of(context).textTheme.displaySmall!)
+            .copyWith(color: bigColor, fontWeight: FontWeight.w800);
+    final pillStyle = Theme.of(context).textTheme.labelSmall!.copyWith(
+      color: pillColor,
+      fontWeight: FontWeight.w800,
+    );
+    final tileStyle = Theme.of(
+      context,
+    ).textTheme.titleSmall!.copyWith(fontWeight: FontWeight.w800);
+    final metrics = [config.card1, config.card2, config.card3];
 
     return VeriCard(
       compact: veriUnifiedDesignPreview,
@@ -913,8 +951,6 @@ class HomeTrendPanel extends StatelessWidget {
                       if (!veriUnifiedDesignPreview) const SizedBox(height: 2),
                       Text(
                         title,
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
                         style: Theme.of(context).textTheme.titleMedium
                             ?.copyWith(fontWeight: FontWeight.w800),
                       ),
@@ -922,117 +958,171 @@ class HomeTrendPanel extends StatelessWidget {
                   ),
                 ),
                 if (veriUnifiedDesignPreview)
-                  Text(
-                    window.label,
-                    style: Theme.of(
-                      context,
-                    ).textTheme.bodySmall?.copyWith(color: mutedColor),
+                  Flexible(
+                    child: Text(
+                      window.label,
+                      textAlign: TextAlign.right,
+                      style: Theme.of(
+                        context,
+                      ).textTheme.bodySmall?.copyWith(color: mutedColor),
+                    ),
                   )
                 else
-                  MoneyUnitLabel(currencyCode: currencyCode),
+                  Flexible(child: MoneyUnitLabel(currencyCode: currencyCode)),
                 const SizedBox(width: 8),
                 const _CircleArrow(),
               ],
             ),
             const SizedBox(height: 10),
-            Row(
-              key: const Key('home_primary_metrics'),
-              crossAxisAlignment: CrossAxisAlignment.end,
-              children: <Widget>[
-                Expanded(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: <Widget>[
-                      Text(
-                        homeMetricLabel(l10n, config.big),
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: mutedColor,
-                          fontWeight: FontWeight.w700,
-                        ),
-                      ),
-                      const SizedBox(height: 2),
-                      Text(
-                        formatHomeMetric(config.big, bigValue),
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style:
-                            (veriUnifiedDesignPreview
-                                    ? Theme.of(context).textTheme.displayMedium
-                                    : Theme.of(context).textTheme.displaySmall)
-                                ?.copyWith(
-                                  color: bigColor,
-                                  fontWeight: FontWeight.w800,
-                                ),
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(width: 8),
-                // 摘要胶囊可收缩：大字号下英文标签比整行还宽，不能让整行溢出；
-                // 收缩后仍靠右对齐，常规字号下观感与原来一致。
-                Flexible(
-                  child: Align(
-                    alignment: Alignment.centerRight,
-                    child: Container(
-                      key: const Key('home_summary_pill'),
-                      padding: const EdgeInsets.symmetric(
-                        horizontal: 8,
-                        vertical: 5,
-                      ),
-                      decoration: BoxDecoration(
-                        color: pillColor.withValues(
-                          alpha: isDark ? 0.16 : 0.10,
-                        ),
-                        borderRadius: BorderRadius.circular(999),
-                      ),
-                      child: Text(
-                        '${homeMetricLabel(l10n, config.pill)} '
-                        '${formatHomeMetric(config.pill, pillValue)}',
-                        maxLines: 1,
-                        overflow: TextOverflow.ellipsis,
-                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                          color: pillColor,
-                          fontWeight: FontWeight.w800,
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final primary = Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: <Widget>[
+                    Text(bigLabel, style: labelStyle),
+                    const SizedBox(height: 2),
+                    SizedBox(
+                      width: double.infinity,
+                      child: FittedBox(
+                        fit: BoxFit.scaleDown,
+                        alignment: Alignment.centerLeft,
+                        child: Text(
+                          bigText,
+                          key: const Key('home_primary_amount'),
+                          maxLines: 1,
+                          softWrap: false,
+                          style: bigStyle,
                         ),
                       ),
                     ),
+                  ],
+                );
+                final pill = ConstrainedBox(
+                  constraints: BoxConstraints(maxWidth: constraints.maxWidth),
+                  child: Container(
+                    key: const Key('home_summary_pill'),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 8,
+                      vertical: 5,
+                    ),
+                    decoration: BoxDecoration(
+                      color: pillColor.withValues(alpha: isDark ? 0.16 : 0.10),
+                      borderRadius: BorderRadius.circular(999),
+                    ),
+                    child: Wrap(
+                      alignment: WrapAlignment.end,
+                      crossAxisAlignment: WrapCrossAlignment.center,
+                      spacing: 4,
+                      runSpacing: 2,
+                      children: [
+                        Text(pillLabel, style: pillStyle),
+                        ConstrainedBox(
+                          constraints: BoxConstraints(
+                            maxWidth: math.max(0, constraints.maxWidth - 16),
+                          ),
+                          child: FittedBox(
+                            fit: BoxFit.scaleDown,
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              pillText,
+                              key: const Key('home_summary_amount'),
+                              maxLines: 1,
+                              softWrap: false,
+                              style: pillStyle,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
                   ),
-                ),
-              ],
+                );
+                final primaryWidth = math.max(
+                  _homeTrendTextWidth(context, bigText, bigStyle),
+                  _homeTrendTextWidth(context, bigLabel, labelStyle),
+                );
+                final pillWidth =
+                    _homeTrendTextWidth(context, pillLabel, pillStyle) +
+                    _homeTrendTextWidth(context, pillText, pillStyle) +
+                    20;
+                // 先换行保留正常字号；特别长的金额再按整行宽度缩放，不省略小数。
+                if (primaryWidth + pillWidth + 8 <= constraints.maxWidth) {
+                  return Row(
+                    key: const Key('home_primary_metrics'),
+                    crossAxisAlignment: CrossAxisAlignment.end,
+                    children: [
+                      Expanded(child: primary),
+                      const SizedBox(width: 8),
+                      pill,
+                    ],
+                  );
+                }
+                return Column(
+                  key: const Key('home_primary_metrics'),
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    primary,
+                    const SizedBox(height: 6),
+                    Align(alignment: Alignment.centerRight, child: pill),
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 10),
-            Row(
-              children: <Widget>[
-                Expanded(
-                  child: _MetricTile(
-                    key: const Key('home_metric_1'),
-                    metric: config.card1,
-                    metricContext: metricContext,
-                    dark: isDark,
-                    mutedColor: mutedColor,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _MetricTile(
-                    key: const Key('home_metric_2'),
-                    metric: config.card2,
-                    metricContext: metricContext,
-                    dark: isDark,
-                    mutedColor: mutedColor,
-                  ),
-                ),
-                const SizedBox(width: 8),
-                Expanded(
-                  child: _MetricTile(
-                    key: const Key('home_metric_3'),
-                    metric: config.card3,
-                    metricContext: metricContext,
-                    dark: isDark,
-                    mutedColor: mutedColor,
-                  ),
-                ),
-              ],
+            LayoutBuilder(
+              builder: (context, constraints) {
+                final minTileWidth = metrics.fold<double>(88, (width, metric) {
+                  final text = formatHomeMetric(
+                    metric,
+                    computeHomeMetric(metric, metricContext),
+                  );
+                  return math.max(
+                    width,
+                    _homeTrendTextWidth(context, text, tileStyle) + 18,
+                  );
+                });
+                final columns =
+                    ((constraints.maxWidth + 8) / (minTileWidth + 8))
+                        .floor()
+                        .clamp(1, metrics.length);
+                return Column(
+                  children: [
+                    for (
+                      var offset = 0;
+                      offset < metrics.length;
+                      offset += columns
+                    ) ...[
+                      if (offset != 0) const SizedBox(height: 8),
+                      IntrinsicHeight(
+                        child: Row(
+                          crossAxisAlignment: CrossAxisAlignment.stretch,
+                          children: [
+                            for (
+                              var column = 0;
+                              column < columns;
+                              column++
+                            ) ...[
+                              if (column != 0) const SizedBox(width: 8),
+                              Expanded(
+                                child: offset + column < metrics.length
+                                    ? _MetricTile(
+                                        key: Key(
+                                          'home_metric_${offset + column + 1}',
+                                        ),
+                                        metric: metrics[offset + column],
+                                        metricContext: metricContext,
+                                        dark: isDark,
+                                        mutedColor: mutedColor,
+                                      )
+                                    : const SizedBox.shrink(),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ),
+                    ],
+                  ],
+                );
+              },
             ),
             const SizedBox(height: 10),
             SizedBox(
@@ -1145,13 +1235,20 @@ class _TrendMetric extends StatelessWidget {
             ),
           ),
           const SizedBox(height: 10),
-          Text(
-            value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
-            style: Theme.of(context).textTheme.titleSmall?.copyWith(
-              color: dark ? Colors.white.withValues(alpha: 0.86) : color,
-              fontWeight: FontWeight.w800,
+          SizedBox(
+            width: double.infinity,
+            child: FittedBox(
+              fit: BoxFit.scaleDown,
+              alignment: Alignment.centerLeft,
+              child: Text(
+                value,
+                maxLines: 1,
+                softWrap: false,
+                style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                  color: dark ? Colors.white.withValues(alpha: 0.86) : color,
+                  fontWeight: FontWeight.w800,
+                ),
+              ),
             ),
           ),
         ],
