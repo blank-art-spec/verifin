@@ -1501,6 +1501,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         ),
       );
 
+  /// 日期推进只刷新派生视图，不生成或保存银行正式账单。
+  void refreshCreditBillingDate() => notifyListeners();
+
   /// 计算首页信用主体账期快照；缺汇率时快照会标记 [CreditCycleOverview.missingConversion]。
   CreditCycleOverview creditCycleOverview(
     CreditAccount creditAccount, {
@@ -1839,6 +1842,17 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         statements: _billingStatements.where(
           (statement) => statement.accountId == account.id,
         ),
+        repaymentAllocations: _statementRepaymentAllocations.where(
+          (item) => item.bookId == account.bookId,
+        ),
+        internalAccountIds: {
+          account.id,
+          if (account.creditAccountId != null)
+            for (final child in _accounts)
+              if (child.bookId == account.bookId &&
+                  child.creditAccountId == account.creditAccountId)
+                child.id,
+        },
         now: now ?? DateTime.now(),
       );
 

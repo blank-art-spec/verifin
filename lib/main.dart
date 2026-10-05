@@ -183,6 +183,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   final NotificationScheduler _notifications = NotificationScheduler();
   final VeriFeedbackController _feedbackController = VeriFeedbackController();
   Timer? _widgetRefreshTimer;
+  Timer? _billingDateTimer;
   bool _notificationSyncing = false;
   bool _notificationSyncQueued = false;
   bool _autoCaptureDraining = false;
@@ -192,6 +193,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   void initState() {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
+    _scheduleBillingDateRefresh();
     // 记账后自动备份挂钩；应用打开时按配置尝试一次自动备份。
     _controller.onEntryAdded = _handleEntryAdded;
     _controller.onWidgetProjectionInvalidated = _scheduleWidgetRefresh;
@@ -221,6 +223,18 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
 
   void _handleEntryAdded() {
     BackupCoordinator.maybeBackupAfterEntry(_controller);
+  }
+
+  /// 前台跨过午夜也要切换账期；每次回前台重新对齐本地日期和时区。
+  void _scheduleBillingDateRefresh() {
+    _billingDateTimer?.cancel();
+    final now = DateTime.now();
+    final midnight = DateTime(now.year, now.month, now.day + 1);
+    _billingDateTimer = Timer(midnight.difference(now), () {
+      if (!mounted) return;
+      _controller.refreshCreditBillingDate();
+      _scheduleBillingDateRefresh();
+    });
   }
 
   /// 用户修改开关或清空全部数据时，立即把最新配置同步给 Android；
@@ -334,6 +348,8 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      _controller.refreshCreditBillingDate();
+      _scheduleBillingDateRefresh();
       // 顺序约束：先补记到期的周期交易，再备份 / 推送小组件——顺序颠倒会把
       // 补记前的旧数据备份出去、推到桌面小组件上。
       unawaited(_postDueRecurringAndRefresh());
@@ -350,6 +366,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
       unawaited(_drainAutoCaptureQueue());
     } else if (state == AppLifecycleState.paused ||
         state == AppLifecycleState.hidden) {
+      _billingDateTimer?.cancel();
       // 切后台时把挂起写入刷盘（KV 偏好 + SQLite 账目），缩小「刚改完设置 /
       // 刚记完账就被系统回收 → 丢失」的窗口。
       unawaited(_controller.flushPendingWrites());
@@ -359,6 +376,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   @override
   void dispose() {
     _widgetRefreshTimer?.cancel();
+    _billingDateTimer?.cancel();
     _controller.onWidgetProjectionInvalidated = null;
     WidgetsBinding.instance.removeObserver(this);
     if (_controller.onEntryAdded == _handleEntryAdded) {

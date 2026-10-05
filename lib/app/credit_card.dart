@@ -1,6 +1,7 @@
 // 信用类账户（信用卡 / 信用账户）的纯函数：账单日/还款日推进、额度与本期账单。
 
 import 'ledger_math.dart';
+import 'currency_math.dart';
 import 'models.dart';
 
 /// 给定还款日（每月 1–28）和当前时间，返回下一个还款日期。
@@ -112,7 +113,7 @@ class CreditCycleOverview {
   /// 本账期当前欠款 = 净消费 − 明确属于本账期的提前还款，最低为 0。
   final double currentCycleDebt;
 
-  /// 所有子账户正式账单尚未结清的金额。
+  /// 正式账单剩余，加上已到出账日但尚无正式账单的流水待还。
   final double billedOutstanding;
 
   /// 所有子账户当前负余额折算后的总欠款。
@@ -144,15 +145,42 @@ CreditCycleOverview buildCreditCycleOverview({
   convertToCreditCurrency,
 }) {
   final statementDay = creditAccount.statementDay ?? 1;
+  final entryList = entries
+      .where((item) => item.bookId == creditAccount.bookId)
+      .toList();
+  final statementList = statements
+      .where(
+        (item) =>
+            item.bookId == creditAccount.bookId &&
+            !dateOnly(item.statementDate).isAfter(dateOnly(now)),
+      )
+      .toList();
   final childAccounts = accounts
-      .where((account) => account.creditAccountId == creditAccount.id)
+      .where(
+        (account) =>
+            account.bookId == creditAccount.bookId &&
+            account.creditAccountId == creditAccount.id,
+      )
       .toList(growable: false);
   final childById = <String, Account>{
     for (final account in childAccounts) account.id: account,
   };
   final childIds = childById.keys.toSet();
+  final scheduled = <String, _ScheduledCreditDebt>{
+    if (creditAccount.statementDay != null)
+      for (final account in childAccounts)
+        account.id: _scheduledCreditDebt(
+          account: account,
+          statementDay: statementDay,
+          entries: entryList,
+          statements: statementList,
+          allocations: allocations,
+          internalAccountIds: childIds,
+          now: now,
+        ),
+  };
   final latestStatement = _latestStatementForAccounts(
-    statements: statements,
+    statements: statementList,
     accountIds: childIds,
     now: now,
   );
@@ -175,6 +203,15 @@ CreditCycleOverview buildCreditCycleOverview({
       ifAbsent: () => allocation.amount,
     );
   }
+  for (final debt in scheduled.values) {
+    for (final repayment in debt.repayments.entries) {
+      allocationByRepayment.update(
+        repayment.key,
+        (value) => value + repayment.value,
+        ifAbsent: () => repayment.value,
+      );
+    }
+  }
 
   var missing = false;
   double convert(double amount, String code, DateTime date) {
@@ -192,7 +229,7 @@ CreditCycleOverview buildCreditCycleOverview({
   var earlyRepayment = 0.0;
   final cycleStart = dateOnly(cycle.start);
   final cycleEnd = dateOnly(cycle.end);
-  for (final entry in entries) {
+  for (final entry in entryList) {
     final occurred = dateOnly(entry.occurredAt);
     final inCycle = entry.billingCycleId == null
         ? !occurred.isBefore(cycleStart) &&
@@ -233,7 +270,20 @@ CreditCycleOverview buildCreditCycleOverview({
 
   var billedOutstanding = 0.0;
   BillingStatement? dueStatement;
-  for (final statement in statements) {
+  DateTime? scheduledDueDate;
+  for (final account in childAccounts) {
+    for (final bill
+        in scheduled[account.id]?.amounts.entries ??
+            <MapEntry<DateTime, double>>[]) {
+      if (bill.value <= 0) continue;
+      billedOutstanding += convert(bill.value, account.currencyCode, bill.key);
+      final due = creditDueDate(creditAccount, bill.key);
+      if (scheduledDueDate == null || due.isBefore(scheduledDueDate)) {
+        scheduledDueDate = due;
+      }
+    }
+  }
+  for (final statement in statementList) {
     if (!childIds.contains(statement.accountId) ||
         statement.outstandingAmount <= 0) {
       continue;
@@ -260,11 +310,15 @@ CreditCycleOverview buildCreditCycleOverview({
   final currentDebt = (netSpending - earlyRepayment)
       .clamp(0.0, double.infinity)
       .toDouble();
+  var dueDate = dueStatement?.dueDate ?? scheduledDueDate;
+  if (scheduledDueDate != null &&
+      (dueDate == null || scheduledDueDate.isBefore(dueDate))) {
+    dueDate = scheduledDueDate;
+  }
   return CreditCycleOverview(
     cycle: cycle,
     nextStatementDate: nextStatement,
-    dueDate:
-        dueStatement?.dueDate ?? creditDueDate(creditAccount, nextStatement),
+    dueDate: dueDate ?? creditDueDate(creditAccount, nextStatement),
     netSpending: netSpending,
     earlyRepayment: earlyRepayment,
     currentCycleDebt: currentDebt,
@@ -303,19 +357,19 @@ BillingStatement? _latestStatementForAccounts({
 
 /// 计算尚未出账的目标出账日。
 ///
-/// [nextStatementDate] 在账单日当天会返回“今天”。如果今天的正式账单已经存在，说明
-/// 银行已经完成本期切账，当前未出账交易应归入下个月；否则仍保留今天，兼容尚未收到
-/// 银行账单的旧数据。
+/// 账单日当天按配置结转，未出账窗口推进到下月。银行确认的交易归属仍优先使用
+/// billingCycleId；日历结转本身不创建或改写正式账单。
 DateTime _nextUnbilledStatementDate({
   required int statementDay,
   required DateTime now,
   required BillingStatement? latestStatement,
 }) {
   final candidate = nextStatementDate(statementDay, now);
-  if (latestStatement == null ||
-      !dateOnly(
-        latestStatement.statementDate,
-      ).isAtSameMomentAs(dateOnly(candidate))) {
+  if (!candidate.isAtSameMomentAs(dateOnly(now)) &&
+      (latestStatement == null ||
+          !dateOnly(
+            latestStatement.statementDate,
+          ).isAtSameMomentAs(candidate))) {
     return candidate;
   }
   return DateTime(
@@ -323,6 +377,126 @@ DateTime _nextUnbilledStatementDate({
     candidate.month + 1,
     statementDay.clamp(1, 28),
   );
+}
+
+class _ScheduledCreditDebt {
+  const _ScheduledCreditDebt(this.amounts, this.repayments, this.refundIds);
+
+  final Map<DateTime, double> amounts;
+  final Map<String, double> repayments;
+  final Set<String> refundIds;
+}
+
+/// 对没有正式账单覆盖的消费按配置账单日结转。只投影流水，不落库，
+/// 不从账户总余额反推，也不把本位币或退到其他账户的钱当作该账户还款。
+_ScheduledCreditDebt _scheduledCreditDebt({
+  required Account account,
+  required int statementDay,
+  required Iterable<LedgerEntry> entries,
+  required Iterable<BillingStatement> statements,
+  required Iterable<StatementRepaymentAllocation> allocations,
+  required Set<String> internalAccountIds,
+  required DateTime now,
+}) {
+  final today = dateOnly(now);
+  final entryList = entries
+      .where((item) => item.bookId == account.bookId)
+      .toList();
+  final formal = statements
+      .where(
+        (item) => item.bookId == account.bookId && item.accountId == account.id,
+      )
+      .toList();
+  final amounts = <DateTime, double>{};
+  final refundIds = <String>{};
+  final cycleByExpense = <String, DateTime>{};
+  for (final entry in entryList) {
+    if (entry.type != EntryType.expense ||
+        entry.accountId != account.id ||
+        entry.occurredAt.isAfter(now)) {
+      continue;
+    }
+    final cycle = entry.billingCycleId == null
+        ? nextStatementDate(statementDay, entry.occurredAt)
+        : DateTime.tryParse(entry.billingCycleId!);
+    if (cycle == null || cycle.isAfter(today)) continue;
+    final covered = formal.any((statement) {
+      if (billingCycleIdFor(statement.statementDate) ==
+          billingCycleIdFor(cycle)) {
+        return true;
+      }
+      if (entry.billingCycleId != null) return false;
+      final date = dateOnly(entry.occurredAt);
+      return !date.isBefore(dateOnly(statement.periodStart)) &&
+          !date.isAfter(dateOnly(statement.periodEnd));
+    });
+    if (covered) continue;
+    cycleByExpense[entry.id] = cycle;
+    amounts.update(
+      cycle,
+      (value) => value + (entry.accountAmount ?? entry.amount),
+      ifAbsent: () => entry.accountAmount ?? entry.amount,
+    );
+  }
+  for (final refund in entryList) {
+    final cycle = cycleByExpense[refund.refundOf];
+    if (cycle == null ||
+        refund.accountId != account.id ||
+        !refund.isSettledRefund ||
+        refund.settledAt!.isAfter(now)) {
+      continue;
+    }
+    amounts[cycle] = (amounts[cycle]! - (refund.accountAmount ?? refund.amount))
+        .clamp(0.0, double.infinity)
+        .toDouble();
+    refundIds.add(refund.id);
+  }
+  final allocated = <String, double>{};
+  for (final allocation in allocations) {
+    allocated.update(
+      allocation.repaymentEntryId,
+      (value) => value + allocation.amount,
+      ifAbsent: () => allocation.amount,
+    );
+  }
+  final repayments =
+      entryList
+          .where(
+            (entry) =>
+                entry.type == EntryType.transfer &&
+                entry.toAccountId == account.id &&
+                !internalAccountIds.contains(entry.accountId) &&
+                !entry.occurredAt.isAfter(now),
+          )
+          .toList()
+        ..sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
+  final cycles = amounts.keys.toList()..sort();
+  final used = <String, double>{};
+  for (final repayment in repayments) {
+    final actual = repayment.toAccountAmount ?? repayment.amount;
+    var remaining = (actual - (allocated[repayment.id] ?? 0))
+        .clamp(0.0, actual)
+        .toDouble();
+    // 先还已结转的旧期；出账前的还款只抵其当期，不预支未来账期。
+    final repaymentCycle = nextStatementDate(
+      statementDay,
+      repayment.occurredAt,
+    );
+    for (final cycle in cycles) {
+      if (cycle.isAfter(repaymentCycle) || remaining <= 0) continue;
+      final paid = remaining.clamp(0.0, amounts[cycle]!).toDouble();
+      amounts[cycle] = amounts[cycle]! - paid;
+      remaining -= paid;
+      used.update(repayment.id, (value) => value + paid, ifAbsent: () => paid);
+    }
+  }
+  for (final cycle in cycles) {
+    amounts[cycle] = normalizeCurrencyAmount(
+      amounts[cycle]!,
+      account.currencyCode,
+    );
+  }
+  return _ScheduledCreditDebt(amounts, used, refundIds);
 }
 
 /// 构造首页使用的当前未出账窗口，正式账单的真实截止日优先于日历日猜测。
@@ -453,18 +627,29 @@ List<StatementRefundAllocation> allocateStatementRefunds({
   return allocations;
 }
 
-/// 汇总正式账单口径。
+/// 汇总正式账单与尚无正式快照的到期流水。
 ///
-/// “已出账待还”直接汇总账单剩余，不再从账户总余额猜；“当前未出账”只统计最近一期
-/// 账期结束后的消费与退款，不把还款转账混入消费。没有正式账单时退回当前账单周期估算。
+/// “已出账待还”汇总正式账单剩余和到期流水，不从账户总余额猜；“当前未出账”只统计最近一期
+/// 账期结束后的消费与退款，不把还款转账混入消费。缺少正式账单的已到期消费
+/// 按配置结转，但不伪造最近一期正式账单。
 CreditStatementOverview creditStatementOverview({
   required Account account,
   required Iterable<LedgerEntry> entries,
   required Iterable<BillingStatement> statements,
   required DateTime now,
+  Iterable<StatementRepaymentAllocation> repaymentAllocations = const [],
+  Set<String>? internalAccountIds,
 }) {
-  final entryList = entries.toList();
-  final statementList = statements.toList();
+  final entryList = entries
+      .where((item) => item.bookId == account.bookId)
+      .toList();
+  final statementList = statements
+      .where(
+        (item) =>
+            item.bookId == account.bookId &&
+            !dateOnly(item.statementDate).isAfter(dateOnly(now)),
+      )
+      .toList();
   final allocations = allocateStatementRefunds(
     entries: entryList,
     statements: statementList,
@@ -489,12 +674,28 @@ CreditStatementOverview creditStatementOverview({
         return adjusted.copyWith(status: normalizedStatementStatus(adjusted));
       }).toList()..sort((a, b) => b.statementDate.compareTo(a.statementDate));
   final latest = sorted.firstOrNull;
-  final billed = sorted.fold<double>(
+  var billed = sorted.fold<double>(
     0,
     (sum, statement) => sum + statement.outstandingAmount,
   );
   final cutoff = latest?.periodEnd;
   final statementDay = account.statementDay;
+  if (statementDay != null) {
+    final scheduled = _scheduledCreditDebt(
+      account: account,
+      statementDay: statementDay,
+      entries: entryList,
+      statements: statementList,
+      allocations: repaymentAllocations,
+      internalAccountIds: internalAccountIds ?? {account.id},
+      now: now,
+    );
+    billed += scheduled.amounts.values.fold<double>(
+      0,
+      (sum, amount) => sum + amount,
+    );
+    allocatedRefundIds.addAll(scheduled.refundIds);
+  }
   final nextStatement = statementDay == null
       ? null
       : _nextUnbilledStatementDate(
@@ -505,6 +706,13 @@ CreditStatementOverview creditStatementOverview({
   final currentCycleId = nextStatement == null
       ? null
       : billingCycleIdFor(nextStatement);
+  final currentCycle = nextStatement == null
+      ? null
+      : _currentBillingCycleFromStatement(
+          statementDay: statementDay!,
+          nextStatement: nextStatement,
+          latestStatement: latest,
+        );
   double unbilled;
   if (cutoff == null) {
     unbilled = statementDay == null
@@ -529,7 +737,10 @@ CreditStatementOverview creditStatementOverview({
         continue;
       }
       final belongsToCurrentCycle = entry.billingCycleId == null
-          ? effectDate.isAfter(cutoff)
+          ? currentCycle == null
+                ? effectDate.isAfter(cutoff)
+                : !dateOnly(effectDate).isBefore(currentCycle.start) &&
+                      !dateOnly(effectDate).isAfter(currentCycle.end)
           : entry.billingCycleId == currentCycleId;
       if (!belongsToCurrentCycle) continue;
       if (entry.type == EntryType.expense) {
