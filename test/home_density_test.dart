@@ -46,9 +46,18 @@ void main() {
     }
     final transactions = find.byType(TransactionTile);
     expect(transactions, findsNWidgets(5));
+    // 原预算卡保留完整高度；最近交易允许滚动，末项不能被底栏遮挡。
+    await tester.ensureVisible(transactions.last);
+    await tester.pumpAndSettle();
     final navTop = tester.getRect(find.byKey(const Key('main_bottom_nav'))).top;
     expect(tester.getRect(transactions.last).bottom, lessThan(navTop));
     final budget = find.byType(BudgetPanel);
+    await tester.scrollUntilVisible(
+      budget,
+      -240,
+      scrollable: firstVerticalScrollable(),
+    );
+    await tester.pumpAndSettle();
     expect(
       find.descendant(of: budget, matching: find.text('支出')),
       findsOneWidget,
@@ -76,8 +85,6 @@ void main() {
     );
     // 原预算卡保留完整圆环与原信息层级，不再为首屏目标压缩结构。
     expect(tester.getRect(budget).height, greaterThan(180));
-    await tester.drag(firstVerticalScrollable(), const Offset(0, -240));
-    await tester.pumpAndSettle();
     await tester.tap(budget);
     await tester.pumpAndSettle();
     expect(find.byType(HomeTrendPanel), findsNothing);
