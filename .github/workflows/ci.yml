@@ -32,6 +32,9 @@ jobs:
       - name: Install dependencies
         run: flutter pub get
 
+      - name: Verify lossless timezone asset
+        run: dart scripts/prepare_timezone_asset.dart --check
+
       - name: Check formatting
         # 输出实际格式差异，便于排查本地与 CI SDK 的 formatter 差异。
         run: |

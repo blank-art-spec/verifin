@@ -86,6 +86,37 @@ android {
     }
 }
 
+// Flutter 3.47.2 的默认过滤包含全部受支持 ABI，而不是本次 --target-platform。
+// 在 DSL 定稿时对齐引擎目标，避免单架构 APK 混入其他 ABI 的插件库。
+// 多架构构建仍保留所有指定 ABI；显式分包/禁用过滤时遵守调用方设置。
+androidComponents {
+    finalizeDsl { extension ->
+        val splitPerAbi = project.findProperty("split-per-abi")?.toString()?.toBoolean() ?: false
+        val disableFiltering = project.findProperty("disable-abi-filtering")?.toString()?.toBoolean() ?: false
+        val targetPlatforms = project.findProperty("target-platform")?.toString()
+        if (!splitPerAbi && !disableFiltering && targetPlatforms != null) {
+            val platformAbis = mapOf(
+                "android-arm" to "armeabi-v7a",
+                "android-arm64" to "arm64-v8a",
+                "android-x64" to "x86_64",
+            )
+            val targetAbis = targetPlatforms.split(',').map { platform ->
+                requireNotNull(platformAbis[platform.trim()]) {
+                    "Unsupported Flutter target platform: $platform"
+                }
+            }.toSet()
+            require(targetAbis.isNotEmpty()) { "At least one Flutter target platform is required" }
+            extension.defaultConfig.ndk.abiFilters.clear()
+            extension.defaultConfig.ndk.abiFilters.addAll(targetAbis)
+        }
+    }
+    // GitHub 直接下载的 release APK 优先减小下载量。系统安装时解压原生库，
+    // 不删除库、不改加载代码；Play AAB 和开发构建保留原打包策略。
+    onVariants(selector().withFlavor("distribution" to "github").withBuildType("release")) { variant ->
+        variant.packaging.jniLibs.useLegacyPackaging.set(true)
+    }
+}
+
 kotlin {
     compilerOptions {
         jvmTarget = org.jetbrains.kotlin.gradle.dsl.JvmTarget.JVM_17

@@ -87,6 +87,14 @@ debug 支持 hot reload；最终图形/OCR/插件行为必须另外用 release/R
 若连接电脑仍自动息屏，先看 `adb shell dumpsys battery`：本机 USB-PD 被识别为 AC 而不是 USB，
 此时可在已获准的测试期间临时使用 `svc power stayon true`，结束后仍恢复原值。
 
+## 包体与静态一致性
+
+GitHub release APK 仍使用 `--target-platform android-arm64`，不重新启用 `--split-per-abi`。Gradle 在单包且未显式关闭 ABI 过滤时，将原生库范围对齐本次 Flutter 目标架构，防止插件带入没有对应引擎的架构；多架构目标、Play AAB 与显式分包仍保留各自范围。仅 GitHub release APK 压缩原生库，安装时由系统解压；下载体积减少不代表安装占用等比例减少。保留现有 OCR 模型与 R8 反射保护规则。
+
+提醒使用完整 `timezone` 数据库的 gzip 资源 `assets/timezone/latest_all.tzf.gz`，不裁掉历史规则或别名。升级该依赖后运行 `dart scripts/prepare_timezone_asset.dart` 重新生成资源，再以 `dart scripts/prepare_timezone_asset.dart --check` 核对解压数据与依赖逐字节一致；CI 在依赖安装后执行此只读检查。
+
+授权构建后，CI 以 `dart scripts/verify_android_package.dart <apk|aab> <逗号分隔的ABI>` 只读核对成品架构、Flutter/OCR 原生库与时区资源；GitHub APK 另加 `--compressed` 验证原生库压缩。此检查不安装或执行应用，不能替代 release/R8 冷启动、OCR 与提醒的真机验收。实际体积须以新构建成品为准。
+
 ## 验收与交付
 
  - 使用与发布包一致的设计参数（`UNIFIED_DESIGN_PREVIEW=true`）；widget 测试保留 393×852 和 360dp 布局检查，

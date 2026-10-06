@@ -1,8 +1,8 @@
 import 'dart:io';
 
+import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
-import 'package:timezone/data/latest_all.dart' as tz_data;
 import 'package:timezone/timezone.dart' as tz;
 
 import '../currency_math.dart';
@@ -31,6 +31,7 @@ class NotificationScheduler {
 
   bool _initialized = false;
   bool _timezoneReady = false;
+  bool _timezoneDatabaseLoaded = false;
 
   bool get supported => Platform.isAndroid || Platform.isIOS;
 
@@ -60,7 +61,17 @@ class NotificationScheduler {
     if (_timezoneReady) {
       return;
     }
-    tz_data.initializeTimeZones();
+    if (!_timezoneDatabaseLoaded) {
+      // 保留 latest_all 的全部历史/别名数据，只改变包内存储形式。
+      // scripts/prepare_timezone_asset.dart --check 保证解压后与锁定依赖逐字节相同。
+      final data = await rootBundle.load('assets/timezone/latest_all.tzf.gz');
+      final packed = data.buffer.asUint8List(
+        data.offsetInBytes,
+        data.lengthInBytes,
+      );
+      tz.initializeDatabase(gzip.decode(packed));
+      _timezoneDatabaseLoaded = true;
+    }
     try {
       final info = await FlutterTimezone.getLocalTimezone();
       tz.setLocalLocation(tz.getLocation(info.identifier));

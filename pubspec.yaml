@@ -100,6 +100,8 @@ flutter:
   assets:
     - assets/account_icons/
     - assets/import_icons/
+    # 完整 IANA 时区数据的无损压缩版；由脚本对照锁定依赖生成与静态校验。
+    - assets/timezone/latest_all.tzf.gz
 
   # To add assets to your application, add an assets section, like this:
   # assets:
