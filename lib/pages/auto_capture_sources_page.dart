@@ -230,15 +230,22 @@ class _AutoCaptureSourcesPageState extends State<AutoCaptureSourcesPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
-                        CheckboxListTile(
-                          contentPadding: EdgeInsets.zero,
-                          controlAffinity: ListTileControlAffinity.leading,
-                          title: Text(app.value.isEmpty ? app.key : app.value),
-                          subtitle: Text(app.key),
-                          value: selected,
-                          onChanged: _saving
-                              ? null
-                              : (value) => _toggleApp(app.key, value ?? false),
+                        // 让选择行的点击反馈绘制在卡片实色表面之上。
+                        Material(
+                          type: MaterialType.transparency,
+                          child: CheckboxListTile(
+                            contentPadding: EdgeInsets.zero,
+                            controlAffinity: ListTileControlAffinity.leading,
+                            title: Text(
+                              app.value.isEmpty ? app.key : app.value,
+                            ),
+                            subtitle: Text(app.key),
+                            value: selected,
+                            onChanged: _saving
+                                ? null
+                                : (value) =>
+                                      _toggleApp(app.key, value ?? false),
+                          ),
                         ),
                         if (!_loading &&
                             !_loadFailed &&

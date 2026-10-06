@@ -261,6 +261,8 @@ void main() {
       occurredAt: event.receivedAt,
       note: '麦当劳',
       tagIds: const <String>[],
+      // 用相同来源指纹建立确定的旧合并候选，验证账户约束仍可阻止合并。
+      sourceRecords: <EntrySourceRecord>[sourceRecordForCapture(event)],
     );
     expect(
       findCaptureDuplicate(event, <LedgerEntry>[entry])?.safeToMerge,
