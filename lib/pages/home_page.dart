@@ -958,7 +958,7 @@ class HomeTrendPanel extends StatelessWidget {
                   ),
                 ),
                 if (veriUnifiedDesignPreview)
-                  Flexible(
+                  Expanded(
                     child: Text(
                       window.label,
                       textAlign: TextAlign.right,

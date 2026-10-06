@@ -371,7 +371,7 @@ class ProfilePage extends StatelessWidget {
   }
 }
 
-/// 我的页功能宫格卡：常规宽度四列，窄屏和大字体按相同规则调整两组入口。
+/// 我的页功能宫格卡：常规宽度三列，窄屏和大字体减少列数，按顺序排列。
 class _FeatureGridCard extends StatelessWidget {
   const _FeatureGridCard({super.key, required this.title, required this.tiles});
 
@@ -389,59 +389,43 @@ class _FeatureGridCard extends StatelessWidget {
           LayoutBuilder(
             builder: (context, constraints) {
               final textScaler = MediaQuery.textScalerOf(context);
-              final boldText = MediaQuery.boldTextOf(context);
               final labelStyle = DefaultTextStyle.of(context).style.merge(
                 Theme.of(context).textTheme.bodyMedium?.copyWith(
-                  fontWeight: boldText ? FontWeight.bold : FontWeight.w600,
-                ),
-              );
-              final subtitleStyle = DefaultTextStyle.of(context).style.merge(
-                Theme.of(context).textTheme.labelSmall?.copyWith(
-                  fontWeight: boldText ? FontWeight.bold : FontWeight.w400,
+                  fontWeight: MediaQuery.boldTextOf(context)
+                      ? FontWeight.bold
+                      : FontWeight.w600,
                 ),
               );
               // 中文无需空格也能换行；不能让一条长标题改变整组的列数。
               // 列数只由可用宽度和字体缩放决定，两组图标因而保持同一列网格。
               const spacing = 8.0;
-              final minTileWidth = math.max(64.0, textScaler.scale(64));
+              final minTileWidth = math.max(88.0, textScaler.scale(64));
               final columns =
                   ((constraints.maxWidth + spacing) / (minTileWidth + spacing))
                       .floor()
-                      .clamp(1, 4);
-              final textWidth = math.max(
-                1.0,
-                (constraints.maxWidth - spacing * (columns - 1)) / columns - 4,
-              );
+                      .clamp(1, 3);
+              final tileWidth =
+                  (constraints.maxWidth - spacing * (columns - 1)) / columns;
               final rows = <List<_FeatureTileData>>[
                 for (var start = 0; start < tiles.length; start += columns)
                   tiles.sublist(start, math.min(start + columns, tiles.length)),
               ];
+              // 同排标题区域等高、文字靠底，让标题末行和小字同时对齐，
+              // 避免短标题与小字之间出现额外留白。
               final painter = TextPainter(
                 textScaler: textScaler,
                 textDirection: Directionality.of(context),
                 locale: Localizations.localeOf(context),
               );
-              // 每行按最长标题预留高度，副标题对齐；其他行不为长标题多留空白。
-              final rowHeights = <({double label, double subtitle})>[];
+              final labelHeights = <double>[];
               for (final row in rows) {
-                var labelHeight = 0.0;
-                var subtitleHeight = 0.0;
+                var height = 0.0;
                 for (final tile in row) {
                   painter.text = TextSpan(text: tile.label, style: labelStyle);
-                  painter.layout(maxWidth: textWidth);
-                  labelHeight = math.max(labelHeight, painter.height);
-                  painter.maxLines = 2;
-                  painter.ellipsis = '…';
-                  painter.text = TextSpan(
-                    text: tile.subtitle.isEmpty ? ' ' : tile.subtitle,
-                    style: subtitleStyle,
-                  );
-                  painter.layout(maxWidth: textWidth);
-                  subtitleHeight = math.max(subtitleHeight, painter.height);
-                  painter.maxLines = null;
-                  painter.ellipsis = null;
+                  painter.layout(maxWidth: math.max(1.0, tileWidth - 4));
+                  height = math.max(height, painter.height);
                 }
-                rowHeights.add((label: labelHeight, subtitle: subtitleHeight));
+                labelHeights.add(height);
               }
               painter.dispose();
               return Column(
@@ -453,28 +437,21 @@ class _FeatureGridCard extends StatelessWidget {
                   ) ...<Widget>[
                     if (rowIndex > 0) const SizedBox(height: 8),
                     Row(
+                      mainAxisAlignment: MainAxisAlignment.start,
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: <Widget>[
                         for (final (index, tile) in rows[rowIndex].indexed) ...[
                           if (index != 0) const SizedBox(width: spacing),
-                          Expanded(
+                          SizedBox(
+                            width: tileWidth,
                             child: _FeatureTile(
                               key: ValueKey<String>(
                                 'profile_tile_${tile.label}',
                               ),
                               data: tile,
-                              labelHeight: rowHeights[rowIndex].label,
-                              subtitleHeight: rowHeights[rowIndex].subtitle,
+                              labelHeight: labelHeights[rowIndex],
                             ),
                           ),
-                        ],
-                        for (
-                          var index = rows[rowIndex].length;
-                          index < columns;
-                          index++
-                        ) ...[
-                          if (index != 0) const SizedBox(width: spacing),
-                          const Expanded(child: SizedBox.shrink()),
                         ],
                       ],
                     ),
@@ -510,12 +487,10 @@ class _FeatureTile extends StatelessWidget {
     super.key,
     required this.data,
     required this.labelHeight,
-    required this.subtitleHeight,
   });
 
   final _FeatureTileData data;
   final double labelHeight;
-  final double subtitleHeight;
 
   @override
   Widget build(BuildContext context) {
@@ -534,18 +509,20 @@ class _FeatureTile extends StatelessWidget {
               SizedBox(
                 width: double.infinity,
                 height: labelHeight,
-                child: Text(
-                  data.label,
-                  textAlign: TextAlign.center,
-                  style: Theme.of(
-                    context,
-                  ).textTheme.bodyMedium?.copyWith(fontWeight: FontWeight.w600),
+                child: Align(
+                  alignment: Alignment.bottomCenter,
+                  child: Text(
+                    data.label,
+                    textAlign: TextAlign.center,
+                    style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+                      fontWeight: FontWeight.w600,
+                    ),
+                  ),
                 ),
               ),
-              const SizedBox(height: 3),
+              const SizedBox(height: 2),
               SizedBox(
                 width: double.infinity,
-                height: subtitleHeight,
                 child: Text(
                   data.subtitle,
                   maxLines: 2,

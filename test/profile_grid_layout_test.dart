@@ -52,7 +52,15 @@ void _expectAlignedGrid(WidgetTester tester, List<Finder> tiles) {
     expect(tester.getRect(label).right, lessThanOrEqualTo(rect.right + 0.5));
     expect(tester.getRect(label).bottom, lessThanOrEqualTo(rect.bottom));
   }
+  final firstRowBounds = tester
+      .getRect(rows.first.first)
+      .expandToInclude(tester.getRect(rows.first.last));
+  final tileWidth = tester.getRect(tiles.first).width;
   for (final row in rows) {
+    final rowBounds = tester
+        .getRect(row.first)
+        .expandToInclude(tester.getRect(row.last));
+    expect(rowBounds.left, closeTo(firstRowBounds.left, 0.5));
     final firstIcon = tester.getRect(
       find.descendant(of: row.first, matching: find.byType(VeriIconBox)),
     );
@@ -60,18 +68,26 @@ void _expectAlignedGrid(WidgetTester tester, List<Finder> tiles) {
       of: row.first,
       matching: find.byType(Text),
     );
-    final firstSubtitle = tester.getRect(firstTexts.last);
+    final firstLabelBottom = tester.getRect(firstTexts.first).bottom;
+    final firstSubtitleTop = tester.getRect(firstTexts.last).top;
     for (final tile in row) {
+      expect(tester.getRect(tile).width, closeTo(tileWidth, 0.5));
       final icon = tester.getRect(
         find.descendant(of: tile, matching: find.byType(VeriIconBox)),
       );
       expect(icon.top, closeTo(firstIcon.top, 0.5));
       expect(icon.width, closeTo(firstIcon.width, 0.5));
       expect(icon.height, closeTo(firstIcon.height, 0.5));
-      final subtitle = find
-          .descendant(of: tile, matching: find.byType(Text))
-          .last;
-      expect(tester.getRect(subtitle).top, closeTo(firstSubtitle.top, 0.5));
+      final texts = find.descendant(of: tile, matching: find.byType(Text));
+      expect(
+        tester.getRect(texts.first).bottom,
+        closeTo(firstLabelBottom, 0.5),
+      );
+      expect(tester.getRect(texts.last).top, closeTo(firstSubtitleTop, 0.5));
+      expect(
+        tester.getRect(texts.last).top - tester.getRect(texts.first).bottom,
+        closeTo(2, 0.5),
+      );
     }
   }
 }
@@ -86,7 +102,7 @@ void main() {
   ]) {
     for (final scale in [1.0, 1.5, 2.0]) {
       for (final locale in [const Locale('zh'), const Locale('en')]) {
-        testWidgets('我的宫格 $size 字体 $scale ${locale.languageCode} 两组列数与行内文字对齐', (
+        testWidgets('我的宫格 $size 字体 $scale ${locale.languageCode} 顺序排列且小字紧跟标题', (
           tester,
         ) async {
           tester.view.devicePixelRatio = 1;
@@ -136,7 +152,7 @@ void main() {
           _expectAlignedGrid(tester, bookTiles);
           final columns = _firstRowColumns(tester, bookTiles);
           final tileWidth = tester.getRect(bookTiles.first).width;
-          if (size.width >= 360 && scale == 1) expect(columns, 4);
+          if (size.width >= 360 && scale == 1) expect(columns, 3);
 
           final tools = find.byKey(
             const ValueKey<String>('profile_feature_grid_tools'),
