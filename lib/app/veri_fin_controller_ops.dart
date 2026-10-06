@@ -532,6 +532,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     bool allowAutomaticActions = true,
     Set<String>? eventIds,
   }) async {
+    final parseSettings = _autoCaptureSettings;
     final originalById = <String, CaptureEvent>{
       for (final event in _captureEvents) event.id: event,
     };
@@ -571,6 +572,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           tagGroups: _tagGroups,
           entries: _entries.where((entry) => entry.bookId == book.id).toList(),
           rules: _autoCaptureRules,
+          notificationAccountTypes: parseSettings.notificationAccountTypes,
         );
         var parsed = parseCaptureEvent(original, parseContext);
 
@@ -605,8 +607,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
                           AiOption(id: category.id, label: category.label),
                     )
                     .toList(),
-                accounts: parseContext.accounts
-                    .where((account) => !account.hidden)
+                accounts: parseContext
+                    .accountsFor(original)
                     .map(
                       (account) => AiOption(
                         id: account.id,
@@ -653,6 +655,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     }
     if (processed == 0) return 0;
     return _enqueueCaptureMutation(() async {
+      // 配置在等待 AI 时可能已改变；丢弃旧类型映射下的结果，保留 raw 供下一次解析。
+      if (!identical(parseSettings, _autoCaptureSettings)) return 0;
       var nextEntries = List<LedgerEntry>.of(_entries);
       final currentEvents = List<CaptureEvent>.of(_captureEvents);
       var committed = 0;
@@ -671,7 +675,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             .firstOrNull;
         if (book == null) continue;
         if (parsed.status != CaptureStatus.failed) {
-          final duplicate = findCaptureDuplicate(parsed, nextEntries);
+          final duplicate = findCaptureDuplicate(
+            parsed,
+            nextEntries,
+            requireMatchedAccount:
+                parsed.sourceKind == CaptureSourceKind.notification &&
+                parseSettings.notificationAccountTypes.containsKey(
+                  parsed.sourceId,
+                ),
+          );
           if (allowAutomaticActions && duplicate?.safeToMerge == true) {
             final entryIndex = nextEntries.indexWhere(
               (entry) => entry.id == duplicate!.entryId,
@@ -882,6 +894,67 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         eventId: eventId,
         status: CaptureStatus.misidentified,
       );
+
+  /// 批量标记本次选中的待处理/自动入账事件；保留原文，不改正式交易。
+  /// 返回实际处理条数，保存失败返回 null 且保留原内存状态。
+  Future<int?> markCaptureEventsMisidentified(Iterable<String> eventIds) {
+    final ids = eventIds.toSet();
+    final bookId = _activeBookId;
+    return _enqueueCaptureMutation(
+      () => _mutateCaptureEventsBatch(ids, bookId: bookId, delete: false),
+    );
+  }
+
+  /// 批量删除本次选中的识别记录及原文，不删除已生成交易及其来源证据。
+  /// 返回实际删除条数，保存失败返回 null。调用方须先取得用户确认。
+  Future<int?> deleteCaptureEvents(Iterable<String> eventIds) {
+    final ids = eventIds.toSet();
+    final bookId = _activeBookId;
+    return _enqueueCaptureMutation(
+      () => _mutateCaptureEventsBatch(ids, bookId: bookId, delete: true),
+    );
+  }
+
+  Future<int?> _mutateCaptureEventsBatch(
+    Set<String> eventIds, {
+    required String bookId,
+    required bool delete,
+  }) async {
+    if (eventIds.isEmpty) return 0;
+    var changed = 0;
+    final next = <CaptureEvent>[];
+    for (final event in _captureEvents) {
+      // 确认框或后台解析期间已确认/合并的事件不再批量处理；其他账本保持原样。
+      if (event.bookId != bookId ||
+          !eventIds.contains(event.id) ||
+          !(event.status.canRetry ||
+              event.status == CaptureStatus.autoPosted)) {
+        next.add(event);
+        continue;
+      }
+      changed++;
+      if (!delete) {
+        next.add(
+          event.copyWith(
+            status: CaptureStatus.misidentified,
+            clearLinkedEntryId: true,
+          ),
+        );
+      }
+    }
+    if (changed == 0) return 0;
+    try {
+      await _repository.saveCaptureEvents(next);
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return null;
+    }
+    _captureEvents
+      ..clear()
+      ..addAll(next);
+    notifyListeners();
+    return changed;
+  }
 
   /// 只重新解析指定的未落账事件，并保留原文与幂等指纹。
   ///

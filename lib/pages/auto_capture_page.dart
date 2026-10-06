@@ -11,12 +11,13 @@ import '../app/platform_bridge.dart';
 import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
+import 'auto_capture_sources_page.dart';
 import 'entry_detail_page.dart';
 import 'sheets.dart';
 import 'transaction_detail_page.dart';
 
-/// 首次启用通知监听时使用的常见支付来源白名单。银行 App 包名数量多且变化频繁，
-/// 由“监听所有来源”覆盖；原生仍会做金融关键词前置过滤。
+/// 尚未配置通知来源时使用的常见支付 APP 白名单；用户可在来源选择页修改。
+/// 主动清空后的名单不会被此默认值覆盖，原生仍会做金融关键词前置过滤。
 const List<String> _defaultCapturePackages = <String>[
   'com.eg.android.AlipayGphone',
   'com.tencent.mm',
@@ -39,6 +40,11 @@ class _AutoCapturePageState extends State<AutoCapturePage>
   bool _smsSupported = false;
   bool _smsPermission = false;
   bool _pendingNotificationEnable = false;
+  bool _selectionMode = false;
+  bool _batchBusy = false;
+  String? _selectionBookId;
+  final Set<String> _selectionListIds = <String>{};
+  final Set<String> _selectedEventIds = <String>{};
   AutoCaptureNativeDiagnostics _nativeDiagnostics =
       AutoCaptureNativeDiagnostics.unavailable;
 
@@ -52,7 +58,14 @@ class _AutoCapturePageState extends State<AutoCapturePage>
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    _settings ??= VeriFinScope.of(context).autoCaptureSettings;
+    final controller = VeriFinScope.of(context);
+    _settings ??= controller.autoCaptureSettings;
+    if (_selectionBookId != controller.activeBook.id) {
+      _selectionBookId = controller.activeBook.id;
+      _selectionMode = false;
+      _selectionListIds.clear();
+      _selectedEventIds.clear();
+    }
   }
 
   @override
@@ -101,7 +114,9 @@ class _AutoCapturePageState extends State<AutoCapturePage>
       await _saveSettings(
         _settings!.copyWith(
           notificationEnabled: true,
-          sourcePackages: _settings!.sourcePackages.isEmpty
+          sourcePackages:
+              (_settings!.sourcePackages.isEmpty &&
+                  !_settings!.sourcePackagesConfigured)
               ? _defaultCapturePackages
               : _settings!.sourcePackages,
         ),
@@ -182,9 +197,42 @@ class _AutoCapturePageState extends State<AutoCapturePage>
     await _saveSettings(
       _settings!.copyWith(
         notificationEnabled: true,
-        sourcePackages: _settings!.sourcePackages.isEmpty
+        sourcePackages:
+            (_settings!.sourcePackages.isEmpty &&
+                !_settings!.sourcePackagesConfigured)
             ? _defaultCapturePackages
             : _settings!.sourcePackages,
+      ),
+    );
+  }
+
+  Future<void> _editAppSources() async {
+    final controller = VeriFinScope.of(context);
+    final settings = _settings ?? controller.autoCaptureSettings;
+    final knownApps = <String, String>{
+      for (final event in controller.captureEvents)
+        if (event.sourceKind == CaptureSourceKind.notification)
+          event.sourceId: event.sourceLabel,
+    };
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => AutoCaptureSourcesPage(
+          settings:
+              settings.sourcePackagesConfigured ||
+                  settings.sourcePackages.isNotEmpty
+              ? settings
+              : settings.copyWith(sourcePackages: _defaultCapturePackages),
+          knownApps: knownApps,
+          onSave: (next) => _saveSettings(
+            controller.autoCaptureSettings.copyWith(
+              listenAllNotificationSources: next.listenAllNotificationSources,
+              sourcePackages: next.sourcePackages,
+              excludedSourcePackages: next.excludedSourcePackages,
+              sourcePackagesConfigured: next.sourcePackagesConfigured,
+              notificationAccountTypes: next.notificationAccountTypes,
+            ),
+          ),
+        ),
       ),
     );
   }
@@ -237,13 +285,18 @@ class _AutoCapturePageState extends State<AutoCapturePage>
     final attention = controller.captureEvents
         .where(
           (event) =>
-              event.status.needsAttention ||
-              event.status == CaptureStatus.raw ||
-              event.status == CaptureStatus.autoPosted,
+              (event.status.canRetry ||
+                  event.status == CaptureStatus.autoPosted) &&
+              (!_selectionMode || _selectionListIds.contains(event.id)),
         )
         .take(30)
         .toList();
+    final visibleIds = attention.map((event) => event.id).toSet();
+    final selectedIds = _selectedEventIds.intersection(visibleIds);
     return Scaffold(
+      bottomNavigationBar: _selectionMode
+          ? _buildBatchBar(l10n, visibleIds, selectedIds)
+          : null,
       body: SafeArea(
         child: VeriPage(
           child: ListView(
@@ -305,18 +358,27 @@ class _AutoCapturePageState extends State<AutoCapturePage>
                       onChanged: _smsSupported ? _toggleSms : null,
                     ),
                     const Divider(height: 1),
-                    CompactSwitchRow(
+                    SettingsRow(
                       icon: Icons.apps_outlined,
-                      title: Text(l10n.autoCaptureListenAllTitle),
-                      subtitle: Text(l10n.autoCaptureListenAllDesc),
-                      value: settings.listenAllNotificationSources,
-                      onChanged: settings.notificationEnabled
-                          ? (value) => _saveSettings(
-                              settings.copyWith(
-                                listenAllNotificationSources: value,
-                              ),
+                      title: l10n.autoCaptureAppSourcesTitle,
+                      trailing: settings.listenAllNotificationSources
+                          ? l10n.autoCaptureExcludedAppsCount(
+                              settings.excludedSourcePackages.length,
                             )
-                          : null,
+                          : l10n.autoCaptureAllowedAppsCount(
+                              settings.sourcePackagesConfigured ||
+                                      settings.sourcePackages.isNotEmpty
+                                  ? settings.sourcePackages
+                                        .where(
+                                          (package) => !settings
+                                              .excludedSourcePackages
+                                              .contains(package),
+                                        )
+                                        .length
+                                  : _defaultCapturePackages.length,
+                            ),
+                      trailingIcon: Icons.chevron_right,
+                      onTap: _editAppSources,
                     ),
                     const Divider(height: 1),
                     CompactSwitchRow(
@@ -367,14 +429,16 @@ class _AutoCapturePageState extends State<AutoCapturePage>
                     ),
                   ),
                   TextButton.icon(
-                    onPressed: () async {
-                      await AppAutoCaptureBridge.drainQueue(
-                        ingest: (inputs) async {
-                          await controller.ingestCaptureInputs(inputs);
-                        },
-                        isStored: controller.captureInputIsStored,
-                      );
-                    },
+                    onPressed: _batchBusy
+                        ? null
+                        : () async {
+                            await AppAutoCaptureBridge.drainQueue(
+                              ingest: (inputs) async {
+                                await controller.ingestCaptureInputs(inputs);
+                              },
+                              isStored: controller.captureInputIsStored,
+                            );
+                          },
                     icon: const Icon(Icons.refresh, size: 18),
                     label: Text(l10n.commonRefresh),
                   ),
@@ -382,16 +446,39 @@ class _AutoCapturePageState extends State<AutoCapturePage>
               ),
               Align(
                 alignment: Alignment.centerRight,
-                child: TextButton.icon(
-                  onPressed: () async {
-                    final count = await controller.replayRecentCaptureEvents();
-                    if (!context.mounted) return;
-                    await VeriFeedbackHost.of(
-                      context,
-                    ).showMessage(message: l10n.autoCaptureReplayResult(count));
-                  },
-                  icon: const Icon(Icons.replay, size: 18),
-                  label: Text(l10n.autoCaptureReplayRecent),
+                child: Wrap(
+                  spacing: 8,
+                  alignment: WrapAlignment.end,
+                  children: <Widget>[
+                    if (!_selectionMode && attention.isNotEmpty)
+                      TextButton.icon(
+                        key: const Key('capture_batch_select'),
+                        onPressed: () => setState(() {
+                          _selectionMode = true;
+                          _selectionListIds
+                            ..clear()
+                            ..addAll(visibleIds);
+                          _selectedEventIds.clear();
+                        }),
+                        icon: const Icon(Icons.checklist, size: 18),
+                        label: Text(l10n.multiSelect),
+                      ),
+                    if (!_selectionMode)
+                      TextButton.icon(
+                        onPressed: _batchBusy
+                            ? null
+                            : () async {
+                                final count = await controller
+                                    .replayRecentCaptureEvents();
+                                if (!context.mounted) return;
+                                await VeriFeedbackHost.of(context).showMessage(
+                                  message: l10n.autoCaptureReplayResult(count),
+                                );
+                              },
+                        icon: const Icon(Icons.replay, size: 18),
+                        label: Text(l10n.autoCaptureReplayRecent),
+                      ),
+                  ],
                 ),
               ),
               const SizedBox(height: 4),
@@ -407,7 +494,17 @@ class _AutoCapturePageState extends State<AutoCapturePage>
                   (event) => Padding(
                     padding: const EdgeInsets.only(bottom: 8),
                     child: _CaptureEventCard(
+                      key: ValueKey<String>('capture_event_${event.id}'),
                       event: event,
+                      selectionMode: _selectionMode,
+                      selected: selectedIds.contains(event.id),
+                      onSelect: _batchBusy
+                          ? null
+                          : () => setState(() {
+                              if (!_selectedEventIds.add(event.id)) {
+                                _selectedEventIds.remove(event.id);
+                              }
+                            }),
                       onReview: event.status == CaptureStatus.autoPosted
                           ? () => _openLinkedEntry(event)
                           : () => _reviewEvent(event),
@@ -430,6 +527,148 @@ class _AutoCapturePageState extends State<AutoCapturePage>
         ),
       ),
     );
+  }
+
+  Widget _buildBatchBar(
+    AppLocalizations l10n,
+    Set<String> visibleIds,
+    Set<String> selectedIds,
+  ) {
+    final allSelected =
+        visibleIds.isNotEmpty && selectedIds.length == visibleIds.length;
+    return SafeArea(
+      top: false,
+      child: Material(
+        color: Theme.of(context).colorScheme.surface,
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 8),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: <Widget>[
+              Wrap(
+                spacing: 8,
+                crossAxisAlignment: WrapCrossAlignment.center,
+                alignment: WrapAlignment.center,
+                children: <Widget>[
+                  Text(l10n.selectedCount(selectedIds.length)),
+                  TextButton(
+                    onPressed: _batchBusy || visibleIds.isEmpty
+                        ? null
+                        : () => setState(() {
+                            _selectedEventIds.clear();
+                            if (!allSelected) {
+                              _selectedEventIds.addAll(visibleIds);
+                            }
+                          }),
+                    child: Text(
+                      allSelected
+                          ? l10n.importPreviewDeselectAll
+                          : l10n.autoCaptureSelectVisible,
+                    ),
+                  ),
+                  TextButton(
+                    onPressed: _batchBusy
+                        ? null
+                        : () => setState(() {
+                            _selectionMode = false;
+                            _selectionListIds.clear();
+                            _selectedEventIds.clear();
+                          }),
+                    child: Text(l10n.commonCancel),
+                  ),
+                ],
+              ),
+              Wrap(
+                spacing: 8,
+                alignment: WrapAlignment.center,
+                children: <Widget>[
+                  TextButton.icon(
+                    onPressed: _batchBusy || selectedIds.isEmpty
+                        ? null
+                        : () => _processSelectedEvents(
+                            selectedIds,
+                            delete: false,
+                          ),
+                    icon: const Icon(Icons.wrong_location_outlined, size: 18),
+                    label: Text(l10n.autoCaptureBatchMisidentified),
+                  ),
+                  TextButton.icon(
+                    onPressed: _batchBusy || selectedIds.isEmpty
+                        ? null
+                        : () =>
+                              _processSelectedEvents(selectedIds, delete: true),
+                    style: TextButton.styleFrom(
+                      foregroundColor: veriSemantic(context, veriExpense),
+                    ),
+                    icon: const Icon(Icons.delete_outline, size: 18),
+                    label: Text(l10n.autoCaptureBatchDelete),
+                  ),
+                ],
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+
+  Future<void> _processSelectedEvents(
+    Set<String> selectedIds, {
+    required bool delete,
+  }) async {
+    if (_batchBusy || selectedIds.isEmpty) return;
+    final ids = Set<String>.of(selectedIds);
+    final controller = VeriFinScope.of(context);
+    final bookId = controller.activeBook.id;
+    final l10n = AppLocalizations.of(context);
+    setState(() => _batchBusy = true);
+    try {
+      final confirmed = await showConfirmDialog(
+        context,
+        title: delete
+            ? l10n.autoCaptureBatchDeleteTitle
+            : l10n.autoCaptureBatchMisidentifiedTitle,
+        message: delete
+            ? l10n.autoCaptureBatchDeleteMessage(ids.length)
+            : l10n.autoCaptureBatchMisidentifiedMessage(ids.length),
+        confirmLabel: delete
+            ? l10n.commonDelete
+            : l10n.autoCaptureMisidentified,
+        destructive: delete,
+      );
+      if (!confirmed || !mounted || controller.activeBook.id != bookId) return;
+      final count = delete
+          ? await controller.deleteCaptureEvents(ids)
+          : await controller.markCaptureEventsMisidentified(ids);
+      // 保存失败由 Controller 的持久化错误入口提示，保留选择以便重试。
+      if (!mounted || count == null || controller.activeBook.id != bookId) {
+        return;
+      }
+      if (count == 0) {
+        unawaited(
+          VeriFeedbackHost.of(context).showMessage(
+            message: l10n.autoCaptureBatchChanged,
+            tone: VeriFeedbackTone.warning,
+          ),
+        );
+        return;
+      }
+      setState(() {
+        _selectionMode = false;
+        _selectionListIds.clear();
+        _selectedEventIds.clear();
+      });
+      unawaited(
+        VeriFeedbackHost.of(context).showMessage(
+          message: delete
+              ? l10n.autoCaptureBatchDeleteResult(count)
+              : l10n.autoCaptureBatchMisidentifiedResult(count),
+          tone: VeriFeedbackTone.success,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _batchBusy = false);
+    }
   }
 
   /// 用标准记账页复核事件；交易、来源证据与已确认状态一起原子落库。
@@ -869,6 +1108,7 @@ class _CaptureEventCard extends StatelessWidget {
   /// [onRetry] 只在对应状态允许时传入；其中 [onRetry] 为 null 时隐藏重试入口，
   /// 防止已落账事件被重新解析并清除关联。
   const _CaptureEventCard({
+    super.key,
     required this.event,
     required this.onReview,
     required this.onIgnore,
@@ -876,6 +1116,9 @@ class _CaptureEventCard extends StatelessWidget {
     this.onRetry,
     this.onMerge,
     this.onUndo,
+    this.selectionMode = false,
+    this.selected = false,
+    this.onSelect,
   });
 
   final CaptureEvent event;
@@ -885,6 +1128,9 @@ class _CaptureEventCard extends StatelessWidget {
   final VoidCallback? onUndo;
   final VoidCallback onMisidentified;
   final VoidCallback? onRetry;
+  final bool selectionMode;
+  final bool selected;
+  final VoidCallback? onSelect;
 
   @override
   Widget build(BuildContext context) {
@@ -896,17 +1142,26 @@ class _CaptureEventCard extends StatelessWidget {
         ? '—'
         : formatUserMoney(event.parsedAmount!, event.currencyCode);
     return VeriCard(
+      onTap: selectionMode ? onSelect : null,
+      quietTap: true,
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: <Widget>[
           Row(
             children: <Widget>[
-              VeriIconBox(
-                icon: event.sourceKind == CaptureSourceKind.sms
-                    ? Icons.sms_outlined
-                    : Icons.notifications_none,
-                color: _confidenceColor(context, event.confidence),
-              ),
+              if (selectionMode)
+                Checkbox(
+                  key: ValueKey<String>('capture_select_${event.id}'),
+                  value: selected,
+                  onChanged: onSelect == null ? null : (_) => onSelect!(),
+                )
+              else
+                VeriIconBox(
+                  icon: event.sourceKind == CaptureSourceKind.sms
+                      ? Icons.sms_outlined
+                      : Icons.notifications_none,
+                  color: _confidenceColor(context, event.confidence),
+                ),
               const SizedBox(width: 10),
               Expanded(
                 child: Column(
@@ -944,40 +1199,42 @@ class _CaptureEventCard extends StatelessWidget {
             overflow: TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.bodySmall,
           ),
-          const SizedBox(height: 8),
-          Wrap(
-            spacing: 8,
-            runSpacing: 4,
-            children: <Widget>[
-              TextButton(
-                onPressed: onReview,
-                child: Text(l10n.autoCaptureReview),
-              ),
-              if (onMerge != null)
+          if (!selectionMode) ...<Widget>[
+            const SizedBox(height: 8),
+            Wrap(
+              spacing: 8,
+              runSpacing: 4,
+              children: <Widget>[
                 TextButton(
-                  onPressed: onMerge,
-                  child: Text(l10n.autoCaptureMerge),
+                  onPressed: onReview,
+                  child: Text(l10n.autoCaptureReview),
                 ),
-              if (onUndo != null)
+                if (onMerge != null)
+                  TextButton(
+                    onPressed: onMerge,
+                    child: Text(l10n.autoCaptureMerge),
+                  ),
+                if (onUndo != null)
+                  TextButton(
+                    onPressed: onUndo,
+                    child: Text(l10n.autoCaptureUndo),
+                  ),
+                if (onRetry != null)
+                  TextButton(
+                    onPressed: onRetry,
+                    child: Text(l10n.autoCaptureRetry),
+                  ),
                 TextButton(
-                  onPressed: onUndo,
-                  child: Text(l10n.autoCaptureUndo),
+                  onPressed: onIgnore,
+                  child: Text(l10n.autoCaptureIgnore),
                 ),
-              if (onRetry != null)
                 TextButton(
-                  onPressed: onRetry,
-                  child: Text(l10n.autoCaptureRetry),
+                  onPressed: onMisidentified,
+                  child: Text(l10n.autoCaptureMisidentified),
                 ),
-              TextButton(
-                onPressed: onIgnore,
-                child: Text(l10n.autoCaptureIgnore),
-              ),
-              TextButton(
-                onPressed: onMisidentified,
-                child: Text(l10n.autoCaptureMisidentified),
-              ),
-            ],
-          ),
+              ],
+            ),
+          ],
         ],
       ),
     );

@@ -85,6 +85,7 @@ class MainActivity : FlutterFragmentActivity() {
                             BuildConfig.FLAVOR != "play",
                         listenAll = call.argument<Boolean>("listenAll") ?: false,
                         packages = packages,
+                        excludedPackages = call.argument<List<String>>("excludedPackages") ?: emptyList(),
                     )
                     val notificationAccess = notificationListenerAccessGranted()
                     if (saved && notificationEnabled && notificationAccess &&
@@ -93,6 +94,18 @@ class MainActivity : FlutterFragmentActivity() {
                         PaymentNotificationListenerService.requestReconnect(this)
                     }
                     result.success(saved)
+                }
+                "getInstalledNotificationApps" -> {
+                    val knownPackages = call.argument<List<String>>("knownPackages") ?: emptyList()
+                    Thread {
+                        try {
+                            val apps = AutoCaptureBridge.installedNotificationApps(this, knownPackages)
+                            runOnUiThread { result.success(apps) }
+                        } catch (error: Exception) {
+                            // 不记录应用列表或通知正文；Flutter 页面负责显示失败与重试。
+                            runOnUiThread { result.error("APP_LIST_FAILED", error.javaClass.simpleName, null) }
+                        }
+                    }.start()
                 }
                 "readAutoCaptureQueue" -> result.success(AutoCaptureBridge.read(this))
                 "ackAutoCaptureQueue" -> {

@@ -121,9 +121,47 @@ class AutoCaptureNativeDiagnostics {
   }
 }
 
+/// Android 可见的已安装应用（桌面入口及已知通知来源）。不读取通知正文。
+class InstalledNotificationApp {
+  const InstalledNotificationApp({
+    required this.packageName,
+    required this.label,
+  });
+  final String packageName;
+  final String label;
+}
+
 /// Android 通知/短信监听桥。原生层只捕获并持久化原文，解析与正式落账全部在 Dart 层。
 class AppAutoCaptureBridge {
   AppAutoCaptureBridge._();
+
+  /// null 表示原生读取不可用，调用方必须显示失败与重试入口。
+  static Future<List<InstalledNotificationApp>?> installedNotificationApps({
+    List<String> knownPackages = const <String>[],
+  }) async {
+    try {
+      final result = await _channel.invokeListMethod<Object?>(
+        'getInstalledNotificationApps',
+        <String, Object?>{'knownPackages': knownPackages},
+      );
+      if (result == null) return null;
+      return <InstalledNotificationApp>[
+        for (final value in result)
+          if (value is Map &&
+              value['packageName'] is String &&
+              (value['packageName'] as String).isNotEmpty)
+            InstalledNotificationApp(
+              packageName: value['packageName'] as String,
+              label:
+                  value['label'] as String? ?? value['packageName'] as String,
+            ),
+      ];
+    } on MissingPluginException {
+      return null; // 测试或旧原生桥不可用，由页面明确显示读取失败。
+    } on PlatformException {
+      return null; // Android 读取失败，由页面给出可重试的反馈。
+    }
+  }
 
   /// 同一 Flutter 引擎内的原生队列消费链。启动、回前台、原生回调和手动刷新
   /// 可能几乎同时发生，必须串行化以避免同一队列被并发解析两次。
@@ -141,6 +179,7 @@ class AppAutoCaptureBridge {
                 'smsEnabled': settings.smsEnabled,
                 'listenAll': settings.listenAllNotificationSources,
                 'packages': settings.sourcePackages,
+                'excludedPackages': settings.excludedSourcePackages,
               }) ??
           false;
     } on MissingPluginException {

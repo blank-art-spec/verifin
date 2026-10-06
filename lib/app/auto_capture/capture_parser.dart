@@ -41,6 +41,7 @@ class CaptureParseContext {
     this.tagGroups = defaultTagGroups,
     required this.entries,
     required this.rules,
+    this.notificationAccountTypes = const <String, AccountType>{},
   });
 
   final LedgerBook book;
@@ -51,6 +52,25 @@ class CaptureParseContext {
   final List<TagGroup> tagGroups;
   final List<LedgerEntry> entries;
   final List<AutoCaptureRule> rules;
+  final Map<String, AccountType> notificationAccountTypes;
+
+  AccountType? notificationAccountType(CaptureEvent event) =>
+      event.sourceKind == CaptureSourceKind.notification
+      ? notificationAccountTypes[event.sourceId]
+      : null;
+
+  /// 类型映射只缩小当前账本的可见账户范围，不跨账本、不选择列表首项。
+  List<Account> accountsFor(CaptureEvent event) {
+    final type = notificationAccountType(event);
+    return accounts
+        .where(
+          (account) =>
+              account.bookId == event.bookId &&
+              !account.hidden &&
+              (type == null || account.type == type),
+        )
+        .toList();
+  }
 }
 
 /// 跨来源去重的候选结果。只有 [safeToMerge] 为 true 时才可自动追加来源证据；
@@ -168,14 +188,42 @@ CaptureEvent parseCaptureEvent(
   var kind = _detectKind(text);
   var cardLast4 = _cardLast4Pattern.firstMatch(text)?.group(1) ?? '';
   var merchant = _extractMerchant(text, event.sourceLabel);
+  final mappedType = context.notificationAccountType(event);
+  var candidates = context.accountsFor(event);
+  if (mappedType != null && cardLast4.isNotEmpty) {
+    // 映射存在时，卡尾号是硬条件；未知卡不能仅凭 APP 类型绑定唯一账户。
+    final creditIds = context.creditAccounts
+        .where(
+          (credit) =>
+              credit.bookId == event.bookId &&
+              credit.cardLast4 == cardLast4 &&
+              (credit.institution.isEmpty || text.contains(credit.institution)),
+        )
+        .map((credit) => credit.id)
+        .toSet();
+    candidates = candidates
+        .where(
+          (account) =>
+              (account.type.supportsCardLast4 &&
+                  account.cardLast4 == cardLast4) ||
+              creditIds.contains(account.creditAccountId),
+        )
+        .toList();
+  }
   String? accountId = _matchAccount(
     text: text,
     cardLast4: cardLast4,
     currencyCode: currencyCode,
     sourceId: event.sourceId,
-    accounts: context.accounts,
+    accounts: candidates,
     creditAccounts: context.creditAccounts,
   );
+  if (accountId == null && mappedType != null && cardLast4.isEmpty) {
+    final unique = candidates
+        .where((account) => account.currencyCode == currencyCode)
+        .toList();
+    if (unique.length == 1) accountId = unique.single.id;
+  }
   String? toAccountId;
   String? categoryId;
   List<String> tagIds = const <String>[];
@@ -206,6 +254,12 @@ CaptureEvent parseCaptureEvent(
       tagIds = <String>[...tagIds, ...rule.setTagIds];
     }
     if (rule.setMerchant.trim().isNotEmpty) merchant = rule.setMerchant.trim();
+  }
+
+  // APP 类型是用户指定的候选范围，冲突规则不能绕过它绑定其他类型。
+  if (mappedType != null &&
+      !context.accountsFor(event).any((account) => account.id == accountId)) {
+    accountId = null;
   }
 
   // 若规则指定的账户币种与文本未明确币种一致，以账户币种为准；文本明确写了币种时
@@ -378,16 +432,20 @@ CaptureEvent applyAiCaptureSupplement(
   final kind = event.kind == CaptureTransactionKind.unknown
       ? draftKind
       : event.kind;
+  // 已指定 APP 类型但本地无法唯一匹配时，AI 不能在多个同类账户中猜一个。
   final accountId =
       event.accountCandidateId ??
-      context.accounts
-          .where(
-            (account) =>
-                account.id == draft.accountId &&
-                account.currencyCode == event.currencyCode,
-          )
-          .firstOrNull
-          ?.id;
+      (context.notificationAccountType(event) != null
+          ? null
+          : context
+                .accountsFor(event)
+                .where(
+                  (account) =>
+                      account.id == draft.accountId &&
+                      account.currencyCode == event.currencyCode,
+                )
+                .firstOrNull
+                ?.id);
   final expectedCategoryType = kind.entryType;
   final aiCategoryReliable = !draft.warnings.contains(
     AiDraftWarning.categoryUnmatched,
@@ -448,12 +506,18 @@ CaptureEvent applyAiCaptureSupplement(
 /// 单一弱命中只返回疑似重复，达到高阈值且没有并列候选才允许自动合并。
 CaptureDuplicateMatch? findCaptureDuplicate(
   CaptureEvent event,
-  List<LedgerEntry> entries,
-) {
+  List<LedgerEntry> entries, {
+  bool requireMatchedAccount = false,
+}) {
+  // 显式 APP 类型映射下，去重合并也必须遵循已唯一匹配的账户。
+  if (requireMatchedAccount && event.accountCandidateId == null) return null;
   final amount = event.parsedAmount;
   if (amount == null || amount <= 0) return null;
   final candidates = <(LedgerEntry, double)>[];
   for (final entry in entries) {
+    if (requireMatchedAccount && entry.accountId != event.accountCandidateId) {
+      continue;
+    }
     final expectedType = event.kind.entryType;
     if (expectedType == null ||
         entry.bookId != event.bookId ||

@@ -31,6 +31,7 @@ void main() {
       smsEnabled: true,
       listenAllNotificationSources: true,
       sourcePackages: <String>['com.example.bank'],
+      excludedSourcePackages: <String>['com.example.ad'],
     );
     final saved = await AppAutoCaptureBridge.syncConfig(settings);
 
@@ -41,7 +42,41 @@ void main() {
       'smsEnabled': true,
       'listenAll': true,
       'packages': <String>['com.example.bank'],
+      'excludedPackages': <String>['com.example.ad'],
     });
+  });
+
+  test('读取应用列表传递已知来源并区分失败与空列表', () async {
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_channel, (call) async {
+          expect(call.method, 'getInstalledNotificationApps');
+          expect(call.arguments, <String, Object?>{
+            'knownPackages': <String>['com.example.bank'],
+          });
+          return <Object?>[
+            <String, String>{
+              'packageName': 'com.example.bank',
+              'label': 'Bank',
+            },
+            <String, String>{'packageName': 'com.example.wallet'},
+          ];
+        });
+    final apps = await AppAutoCaptureBridge.installedNotificationApps(
+      knownPackages: <String>['com.example.bank'],
+    );
+    expect(apps?.map((app) => app.label), <String>[
+      'Bank',
+      'com.example.wallet',
+    ]);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(_channel, (call) async => <Object?>[]);
+    expect(await AppAutoCaptureBridge.installedNotificationApps(), isEmpty);
+    TestDefaultBinaryMessengerBinding.instance.defaultBinaryMessenger
+        .setMockMethodCallHandler(
+          _channel,
+          (call) async => throw PlatformException(code: 'APP_LIST_FAILED'),
+        );
+    expect(await AppAutoCaptureBridge.installedNotificationApps(), isNull);
   });
 
   test('原生诊断区分系统授权、服务连接、原生开关与最近通知阶段', () async {

@@ -1,6 +1,8 @@
 package top.talyra42.verifin
 
 import android.content.Context
+import android.content.Intent
+import android.content.pm.PackageManager
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -25,6 +27,7 @@ object AutoCaptureBridge {
     private const val KEY_SMS_ENABLED = "smsEnabled"
     private const val KEY_LISTEN_ALL = "listenAll"
     private const val KEY_PACKAGES = "packages"
+    private const val KEY_EXCLUDED_PACKAGES = "excludedPackages"
     private const val KEY_QUEUE = "queue"
     private const val KEY_NOTIFICATION_ENABLED_AT = "notificationEnabledAt"
     private const val KEY_LISTENER_CONNECTED_AT = "listenerConnectedAt"
@@ -87,6 +90,7 @@ object AutoCaptureBridge {
         smsEnabled: Boolean,
         listenAll: Boolean,
         packages: List<String>,
+        excludedPackages: List<String> = emptyList(),
     ): Boolean {
         val values = prefs(context)
         val wasNotificationEnabled = values.getBoolean(KEY_NOTIFICATION_ENABLED, false)
@@ -95,6 +99,7 @@ object AutoCaptureBridge {
             .putBoolean(KEY_SMS_ENABLED, smsEnabled)
             .putBoolean(KEY_LISTEN_ALL, listenAll)
             .putStringSet(KEY_PACKAGES, packages.map { it.trim() }.filter { it.isNotEmpty() }.toSet())
+            .putStringSet(KEY_EXCLUDED_PACKAGES, excludedPackages.map { it.trim() }.filter { it.isNotEmpty() }.toSet())
         if (notificationEnabled && !wasNotificationEnabled) {
             editor.putLong(KEY_NOTIFICATION_ENABLED_AT, System.currentTimeMillis())
         }
@@ -103,6 +108,28 @@ object AutoCaptureBridge {
         // 配置来自用户刚完成的显式操作。这里同步提交，保证应用随即退到后台或进程被
         // 系统回收时，NotificationListenerService 仍能读到已经确认的新开关。
         return editor.commit()
+    }
+
+    /** 查询桌面可启动的已安装应用，并补充系统可见的已知通知来源。
+     * 不申请 QUERY_ALL_PACKAGES；已卸载或不可见的已知包名由 Dart 保留以便清理配置。
+     */
+    @Suppress("DEPRECATION")
+    fun installedNotificationApps(context: Context, knownPackages: List<String>): List<Map<String, String>> {
+        val manager = context.packageManager
+        val launcher = Intent(Intent.ACTION_MAIN).addCategory(Intent.CATEGORY_LAUNCHER)
+        val packages = manager.queryIntentActivities(launcher, 0)
+            .map { it.activityInfo.packageName }.toSet() + knownPackages
+        return packages.distinct().mapNotNull { packageName ->
+            try {
+                val info = manager.getApplicationInfo(packageName, 0)
+                if (packageName == context.packageName) null else mapOf(
+                    "packageName" to packageName,
+                    "label" to manager.getApplicationLabel(info).toString(),
+                )
+            } catch (_: PackageManager.NameNotFoundException) {
+                null // 已卸载或受系统可见性限制，页面仍保留已配置的来源。
+            }
+        }.sortedBy { it["label"].orEmpty().lowercase() }
     }
 
     /** 返回通知采集总开关。 */
@@ -120,6 +147,7 @@ object AutoCaptureBridge {
     /** 判断某通知来源是否在用户允许的范围内。 */
     fun notificationSourceAllowed(context: Context, packageName: String): Boolean {
         val values = prefs(context)
+        if (values.getStringSet(KEY_EXCLUDED_PACKAGES, emptySet())?.contains(packageName) == true) return false
         if (values.getBoolean(KEY_LISTEN_ALL, false)) return true
         return values.getStringSet(KEY_PACKAGES, emptySet())?.contains(packageName) == true
     }

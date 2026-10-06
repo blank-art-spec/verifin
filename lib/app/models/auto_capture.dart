@@ -6,6 +6,7 @@ library;
 
 import 'dart:convert';
 
+import 'account.dart';
 import 'currency.dart';
 import 'ledger_entry.dart';
 
@@ -487,6 +488,9 @@ class AutoCaptureSettings {
     this.autoPostHighConfidence = true,
     this.aiAssistEnabled = false,
     this.sourcePackages = const <String>[],
+    this.excludedSourcePackages = const <String>[],
+    this.sourcePackagesConfigured = false,
+    this.notificationAccountTypes = const <String, AccountType>{},
   });
 
   final bool notificationEnabled;
@@ -498,6 +502,17 @@ class AutoCaptureSettings {
   /// 默认关闭；即使启用，AI 参与的事件也必须由用户确认后才能落账。
   final bool aiAssistEnabled;
   final List<String> sourcePackages;
+  final List<String> excludedSourcePackages;
+
+  /// 区分尚未选择来源与用户主动清空白名单，避免重新开启时恢复默认来源。
+  final bool sourcePackagesConfigured;
+
+  /// 设备级 APP → 账户类型映射；具体账户仍在事件所属账本内唯一匹配。
+  final Map<String, AccountType> notificationAccountTypes;
+
+  bool allowsNotificationSource(String packageName) =>
+      !excludedSourcePackages.contains(packageName) &&
+      (listenAllNotificationSources || sourcePackages.contains(packageName));
 
   static const AutoCaptureSettings disabled = AutoCaptureSettings();
 
@@ -509,6 +524,9 @@ class AutoCaptureSettings {
     bool? autoPostHighConfidence,
     bool? aiAssistEnabled,
     List<String>? sourcePackages,
+    List<String>? excludedSourcePackages,
+    bool? sourcePackagesConfigured,
+    Map<String, AccountType>? notificationAccountTypes,
   }) => AutoCaptureSettings(
     notificationEnabled: notificationEnabled ?? this.notificationEnabled,
     smsEnabled: smsEnabled ?? this.smsEnabled,
@@ -518,6 +536,12 @@ class AutoCaptureSettings {
         autoPostHighConfidence ?? this.autoPostHighConfidence,
     aiAssistEnabled: aiAssistEnabled ?? this.aiAssistEnabled,
     sourcePackages: sourcePackages ?? this.sourcePackages,
+    excludedSourcePackages:
+        excludedSourcePackages ?? this.excludedSourcePackages,
+    sourcePackagesConfigured:
+        sourcePackagesConfigured ?? this.sourcePackagesConfigured,
+    notificationAccountTypes:
+        notificationAccountTypes ?? this.notificationAccountTypes,
   );
 
   /// 编码为 KV 字符串；仅保存非敏感开关与包名，不包含通知/短信原文。
@@ -528,6 +552,11 @@ class AutoCaptureSettings {
     'autoPostHighConfidence': autoPostHighConfidence,
     'aiAssistEnabled': aiAssistEnabled,
     'sourcePackages': sourcePackages,
+    'excludedSourcePackages': excludedSourcePackages,
+    'sourcePackagesConfigured': sourcePackagesConfigured,
+    'notificationAccountTypes': notificationAccountTypes.map(
+      (package, type) => MapEntry(package, type.name),
+    ),
   });
 
   /// 从 KV 字符串恢复配置；损坏配置回落为全关，避免后台能力被意外开启。
@@ -537,6 +566,21 @@ class AutoCaptureSettings {
       final decoded = jsonDecode(raw);
       if (decoded is! Map) return disabled;
       final json = Map<String, Object?>.from(decoded);
+      final packages =
+          (json['sourcePackages'] as List?)?.whereType<String>().toList() ??
+          const <String>[];
+      final accountTypes = <String, AccountType>{};
+      final rawTypes = json['notificationAccountTypes'];
+      if (rawTypes is Map) {
+        for (final entry in rawTypes.entries) {
+          final type = AccountType.values
+              .where((type) => type.name == entry.value)
+              .firstOrNull;
+          if (entry.key is String && type != null) {
+            accountTypes[entry.key as String] = type;
+          }
+        }
+      }
       return AutoCaptureSettings(
         notificationEnabled: json['notificationEnabled'] as bool? ?? false,
         smsEnabled: json['smsEnabled'] as bool? ?? false,
@@ -544,9 +588,15 @@ class AutoCaptureSettings {
             json['listenAllNotificationSources'] as bool? ?? false,
         autoPostHighConfidence: json['autoPostHighConfidence'] as bool? ?? true,
         aiAssistEnabled: json['aiAssistEnabled'] as bool? ?? false,
-        sourcePackages:
-            (json['sourcePackages'] as List?)?.whereType<String>().toList() ??
+        sourcePackages: packages,
+        excludedSourcePackages:
+            (json['excludedSourcePackages'] as List?)
+                ?.whereType<String>()
+                .toList() ??
             const <String>[],
+        sourcePackagesConfigured:
+            json['sourcePackagesConfigured'] as bool? ?? packages.isNotEmpty,
+        notificationAccountTypes: accountTypes,
       );
     } on Object {
       return disabled;

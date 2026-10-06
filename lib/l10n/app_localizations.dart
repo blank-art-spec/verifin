@@ -10011,6 +10011,102 @@ abstract class AppLocalizations {
   /// **'未获得短信权限，短信补充保持关闭'**
   String get autoCaptureSmsPermissionDenied;
 
+  /// No description provided for @autoCaptureAppSourcesTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知来源与账户类型'**
+  String get autoCaptureAppSourcesTitle;
+
+  /// No description provided for @autoCaptureAppSourcesDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择允许或排除的 APP，并设置识别使用的账户类型。'**
+  String get autoCaptureAppSourcesDesc;
+
+  /// No description provided for @autoCaptureAllowedMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅识别所选 APP'**
+  String get autoCaptureAllowedMode;
+
+  /// No description provided for @autoCaptureExcludedMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'识别全部，排除所选 APP'**
+  String get autoCaptureExcludedMode;
+
+  /// No description provided for @autoCaptureAllowedModeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'勾选允许识别的 APP。未选择任何 APP 时，不识别通知。'**
+  String get autoCaptureAllowedModeHint;
+
+  /// No description provided for @autoCaptureExcludedModeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'勾选不参与识别的 APP。其余通知仍需通过交易内容筛选。'**
+  String get autoCaptureExcludedModeHint;
+
+  /// No description provided for @autoCaptureAccountTypeHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户类型仅用于当前账本内匹配。多个同类账户需要账户名或卡尾号等信息，无法唯一匹配时保留待复核。'**
+  String get autoCaptureAccountTypeHint;
+
+  /// No description provided for @autoCaptureAppsSearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'搜索应用名称或包名'**
+  String get autoCaptureAppsSearch;
+
+  /// No description provided for @autoCaptureAppsReadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取已安装应用，可重试；已配置的来源仍可编辑。'**
+  String get autoCaptureAppsReadFailed;
+
+  /// No description provided for @autoCaptureAppsVisibilityHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'显示有桌面入口的已安装应用及已知通知来源。部分系统应用受 Android 可见性限制。'**
+  String get autoCaptureAppsVisibilityHint;
+
+  /// No description provided for @autoCaptureAppNotVisible.
+  ///
+  /// In zh, this message translates to:
+  /// **'已知来源 · 当前未读取到应用'**
+  String get autoCaptureAppNotVisible;
+
+  /// No description provided for @autoCaptureAppsEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有匹配的应用'**
+  String get autoCaptureAppsEmpty;
+
+  /// No description provided for @autoCaptureAccountTypeAuto.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动匹配'**
+  String get autoCaptureAccountTypeAuto;
+
+  /// No description provided for @autoCaptureAppAccountType.
+  ///
+  /// In zh, this message translates to:
+  /// **'识别账户类型'**
+  String get autoCaptureAppAccountType;
+
+  /// No description provided for @autoCaptureAllowedAppsCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'允许 {count} 个 APP'**
+  String autoCaptureAllowedAppsCount(int count);
+
+  /// No description provided for @autoCaptureExcludedAppsCount.
+  ///
+  /// In zh, this message translates to:
+  /// **'排除 {count} 个 APP'**
+  String autoCaptureExcludedAppsCount(int count);
+
   /// No description provided for @autoCaptureListenAllTitle.
   ///
   /// In zh, this message translates to:
@@ -10190,6 +10286,66 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'标记误识别'**
   String get autoCaptureMisidentified;
+
+  /// No description provided for @autoCaptureSelectVisible.
+  ///
+  /// In zh, this message translates to:
+  /// **'全选当前列表'**
+  String get autoCaptureSelectVisible;
+
+  /// No description provided for @autoCaptureBatchMisidentified.
+  ///
+  /// In zh, this message translates to:
+  /// **'批量误识别'**
+  String get autoCaptureBatchMisidentified;
+
+  /// No description provided for @autoCaptureBatchDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'批量删除'**
+  String get autoCaptureBatchDelete;
+
+  /// No description provided for @autoCaptureBatchMisidentifiedTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'批量标记误识别？'**
+  String get autoCaptureBatchMisidentifiedTitle;
+
+  /// No description provided for @autoCaptureBatchMisidentifiedMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'将所选 {count} 条事件标记为误识别并移出待处理列表。原文保留，已生成的交易不变。'**
+  String autoCaptureBatchMisidentifiedMessage(int count);
+
+  /// No description provided for @autoCaptureBatchDeleteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'批量删除识别记录？'**
+  String get autoCaptureBatchDeleteTitle;
+
+  /// No description provided for @autoCaptureBatchDeleteMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除所选 {count} 条识别记录及原文，无法恢复。已生成的交易不受影响。'**
+  String autoCaptureBatchDeleteMessage(int count);
+
+  /// No description provided for @autoCaptureBatchMisidentifiedResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'已标记 {count} 条误识别事件'**
+  String autoCaptureBatchMisidentifiedResult(int count);
+
+  /// No description provided for @autoCaptureBatchDeleteResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'已删除 {count} 条识别记录'**
+  String autoCaptureBatchDeleteResult(int count);
+
+  /// No description provided for @autoCaptureBatchChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'所选记录已发生变化，请重新选择'**
+  String get autoCaptureBatchChanged;
 
   /// No description provided for @autoCaptureNeedsMoreInfo.
   ///

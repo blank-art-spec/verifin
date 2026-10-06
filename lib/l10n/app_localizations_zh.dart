@@ -5562,6 +5562,60 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCaptureSmsPermissionDenied => '未获得短信权限，短信补充保持关闭';
 
   @override
+  String get autoCaptureAppSourcesTitle => '通知来源与账户类型';
+
+  @override
+  String get autoCaptureAppSourcesDesc => '选择允许或排除的 APP，并设置识别使用的账户类型。';
+
+  @override
+  String get autoCaptureAllowedMode => '仅识别所选 APP';
+
+  @override
+  String get autoCaptureExcludedMode => '识别全部，排除所选 APP';
+
+  @override
+  String get autoCaptureAllowedModeHint => '勾选允许识别的 APP。未选择任何 APP 时，不识别通知。';
+
+  @override
+  String get autoCaptureExcludedModeHint => '勾选不参与识别的 APP。其余通知仍需通过交易内容筛选。';
+
+  @override
+  String get autoCaptureAccountTypeHint =>
+      '账户类型仅用于当前账本内匹配。多个同类账户需要账户名或卡尾号等信息，无法唯一匹配时保留待复核。';
+
+  @override
+  String get autoCaptureAppsSearch => '搜索应用名称或包名';
+
+  @override
+  String get autoCaptureAppsReadFailed => '无法读取已安装应用，可重试；已配置的来源仍可编辑。';
+
+  @override
+  String get autoCaptureAppsVisibilityHint =>
+      '显示有桌面入口的已安装应用及已知通知来源。部分系统应用受 Android 可见性限制。';
+
+  @override
+  String get autoCaptureAppNotVisible => '已知来源 · 当前未读取到应用';
+
+  @override
+  String get autoCaptureAppsEmpty => '没有匹配的应用';
+
+  @override
+  String get autoCaptureAccountTypeAuto => '自动匹配';
+
+  @override
+  String get autoCaptureAppAccountType => '识别账户类型';
+
+  @override
+  String autoCaptureAllowedAppsCount(int count) {
+    return '允许 $count 个 APP';
+  }
+
+  @override
+  String autoCaptureExcludedAppsCount(int count) {
+    return '排除 $count 个 APP';
+  }
+
+  @override
   String get autoCaptureListenAllTitle => '覆盖银行等全部来源';
 
   @override
@@ -5653,6 +5707,44 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get autoCaptureMisidentified => '标记误识别';
+
+  @override
+  String get autoCaptureSelectVisible => '全选当前列表';
+
+  @override
+  String get autoCaptureBatchMisidentified => '批量误识别';
+
+  @override
+  String get autoCaptureBatchDelete => '批量删除';
+
+  @override
+  String get autoCaptureBatchMisidentifiedTitle => '批量标记误识别？';
+
+  @override
+  String autoCaptureBatchMisidentifiedMessage(int count) {
+    return '将所选 $count 条事件标记为误识别并移出待处理列表。原文保留，已生成的交易不变。';
+  }
+
+  @override
+  String get autoCaptureBatchDeleteTitle => '批量删除识别记录？';
+
+  @override
+  String autoCaptureBatchDeleteMessage(int count) {
+    return '删除所选 $count 条识别记录及原文，无法恢复。已生成的交易不受影响。';
+  }
+
+  @override
+  String autoCaptureBatchMisidentifiedResult(int count) {
+    return '已标记 $count 条误识别事件';
+  }
+
+  @override
+  String autoCaptureBatchDeleteResult(int count) {
+    return '已删除 $count 条识别记录';
+  }
+
+  @override
+  String get autoCaptureBatchChanged => '所选记录已发生变化，请重新选择';
 
   @override
   String get autoCaptureNeedsMoreInfo => '暂不能生成记账草稿，请检查通知原文或补充规则后重试';

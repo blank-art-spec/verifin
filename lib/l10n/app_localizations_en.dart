@@ -5725,6 +5725,65 @@ class AppLocalizationsEn extends AppLocalizations {
       'SMS permission was not granted; SMS capture remains off';
 
   @override
+  String get autoCaptureAppSourcesTitle => 'Notification apps & account types';
+
+  @override
+  String get autoCaptureAppSourcesDesc =>
+      'Choose allowed or excluded apps and the account type used for recognition.';
+
+  @override
+  String get autoCaptureAllowedMode => 'Only selected apps';
+
+  @override
+  String get autoCaptureExcludedMode => 'All apps except selected';
+
+  @override
+  String get autoCaptureAllowedModeHint =>
+      'Check apps to recognize. If none are selected, no notifications are captured.';
+
+  @override
+  String get autoCaptureExcludedModeHint =>
+      'Check apps to exclude. Other notifications still pass the financial content filter.';
+
+  @override
+  String get autoCaptureAccountTypeHint =>
+      'Types limit matching to accounts in the current ledger. Multiple accounts need a name or card suffix; ambiguous matches remain for review.';
+
+  @override
+  String get autoCaptureAppsSearch => 'Search app name or package';
+
+  @override
+  String get autoCaptureAppsReadFailed =>
+      'Could not read installed apps. Retry or edit previously configured sources.';
+
+  @override
+  String get autoCaptureAppsVisibilityHint =>
+      'Shows installed apps with launcher entries and known notification sources. Android may limit visibility of some system apps.';
+
+  @override
+  String get autoCaptureAppNotVisible =>
+      'Known source · app currently unavailable';
+
+  @override
+  String get autoCaptureAppsEmpty => 'No matching apps';
+
+  @override
+  String get autoCaptureAccountTypeAuto => 'Automatic matching';
+
+  @override
+  String get autoCaptureAppAccountType => 'Recognition account type';
+
+  @override
+  String autoCaptureAllowedAppsCount(int count) {
+    return 'Allow $count apps';
+  }
+
+  @override
+  String autoCaptureExcludedAppsCount(int count) {
+    return 'Exclude $count apps';
+  }
+
+  @override
   String get autoCaptureListenAllTitle => 'Include banks and all sources';
 
   @override
@@ -5824,6 +5883,46 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get autoCaptureMisidentified => 'Mark incorrect';
+
+  @override
+  String get autoCaptureSelectVisible => 'Select current list';
+
+  @override
+  String get autoCaptureBatchMisidentified => 'Mark selected incorrect';
+
+  @override
+  String get autoCaptureBatchDelete => 'Delete selected';
+
+  @override
+  String get autoCaptureBatchMisidentifiedTitle =>
+      'Mark selected events incorrect?';
+
+  @override
+  String autoCaptureBatchMisidentifiedMessage(int count) {
+    return 'Mark $count selected events incorrect and remove them from the pending list. Original text is kept; existing transactions stay unchanged.';
+  }
+
+  @override
+  String get autoCaptureBatchDeleteTitle => 'Delete selected capture records?';
+
+  @override
+  String autoCaptureBatchDeleteMessage(int count) {
+    return 'Permanently delete $count selected capture records and their original text. Existing transactions stay unchanged.';
+  }
+
+  @override
+  String autoCaptureBatchMisidentifiedResult(int count) {
+    return 'Marked $count events incorrect';
+  }
+
+  @override
+  String autoCaptureBatchDeleteResult(int count) {
+    return 'Deleted $count capture records';
+  }
+
+  @override
+  String get autoCaptureBatchChanged =>
+      'The selected records have changed. Select them again.';
 
   @override
   String get autoCaptureNeedsMoreInfo =>
