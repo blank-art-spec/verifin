@@ -9669,6 +9669,12 @@ abstract class AppLocalizations {
   /// **'自动记账与智能识别'**
   String get autoCaptureTitle;
 
+  /// No description provided for @autoCaptureTileTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动记账'**
+  String get autoCaptureTileTitle;
+
   /// No description provided for @autoCaptureShort.
   ///
   /// In zh, this message translates to:

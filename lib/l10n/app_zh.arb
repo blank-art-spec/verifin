@@ -3322,6 +3322,7 @@
   "commonRefresh": "刷新",
   "commonAdd": "新增",
   "autoCaptureTitle": "自动记账与智能识别",
+  "autoCaptureTileTitle": "自动记账",
   "autoCaptureShort": "自动识别",
   "autoCaptureSubtitle": "原始事件先保存，确认后再成为正式交易",
   "autoCapturePendingSummary": "{count} 笔待处理",

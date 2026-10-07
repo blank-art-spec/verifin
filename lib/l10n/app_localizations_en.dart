@@ -5532,6 +5532,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get autoCaptureTitle => 'Automatic capture';
 
   @override
+  String get autoCaptureTileTitle => 'Auto bookkeeping';
+
+  @override
   String get autoCaptureShort => 'Smart capture';
 
   @override

@@ -5383,6 +5383,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCaptureTitle => '自动记账与智能识别';
 
   @override
+  String get autoCaptureTileTitle => '自动记账';
+
+  @override
   String get autoCaptureShort => '自动识别';
 
   @override

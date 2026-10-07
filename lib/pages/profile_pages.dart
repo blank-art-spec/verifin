@@ -334,7 +334,7 @@ class ProfilePage extends StatelessWidget {
               _FeatureTileData(
                 icon: Icons.auto_mode_outlined,
                 color: veriSemantic(context, veriWarning),
-                label: AppLocalizations.of(context).autoCaptureTitle,
+                label: AppLocalizations.of(context).autoCaptureTileTitle,
                 subtitle: controller.autoCaptureStats().pendingReview == 0
                     ? AppLocalizations.of(context).autoCaptureShort
                     : AppLocalizations.of(context).autoCapturePendingSummary(

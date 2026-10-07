@@ -406,7 +406,7 @@ void main() {
           accountId: 'report-credit-card',
           note: '账期消费',
           occurredAt: now,
-          billingCycleId: billingCycleIdFor(currentCycle.end),
+          billingCycleId: billingCycleIdForWindow(currentCycle),
         ),
       )
       ..addEntry(
@@ -419,7 +419,7 @@ void main() {
           accountId: 'report-credit-card',
           note: '上账期消费',
           occurredAt: previousCycle.start,
-          billingCycleId: billingCycleIdFor(previousCycle.end),
+          billingCycleId: billingCycleIdForWindow(previousCycle),
         ),
       )
       ..addEntry(
@@ -432,7 +432,7 @@ void main() {
           accountId: 'report-credit-card',
           note: '去年同期账期消费',
           occurredAt: lastYearCycle.start,
-          billingCycleId: billingCycleIdFor(lastYearCycle.end),
+          billingCycleId: billingCycleIdForWindow(lastYearCycle),
         ),
       )
       ..dispose();

@@ -579,10 +579,53 @@ void main() {
     // 今天已过本月账单日 → 顺延到下月。
     final after = nextStatementDate(5, DateTime(2026, 7, 10));
     expect(after, DateTime(2026, 8, 5));
-    // 当前周期：上一账单日次日 至 下一账单日当天。
+    // 当前周期：上一账单日 至 下一账单日前一天。
     final cycle = currentBillingCycle(5, DateTime(2026, 7, 10));
-    expect(cycle.start, DateTime(2026, 7, 6));
-    expect(cycle.end, DateTime(2026, 8, 5));
+    expect(cycle.start, DateTime(2026, 7, 5));
+    expect(cycle.end, DateTime(2026, 8, 4));
+    expect(billingCycleIdForWindow(cycle), '2026-08-05');
+  });
+
+  test('消费账期在出账日零点切换，月首、闰年与跨年保持连续', () {
+    for (final (day, before, onDay, nextStatement) in [
+      (
+        5,
+        DateTime(2026, 10, 4, 23, 59, 59),
+        DateTime(2026, 10, 5),
+        DateTime(2026, 11, 5),
+      ),
+      (
+        1,
+        DateTime(2026, 12, 31, 23, 59, 59),
+        DateTime(2027, 1, 1),
+        DateTime(2027, 2, 1),
+      ),
+      (
+        28,
+        DateTime(2024, 2, 27, 23, 59, 59),
+        DateTime(2024, 2, 28),
+        DateTime(2024, 3, 28),
+      ),
+    ]) {
+      final previous = currentBillingCycle(day, before);
+      final current = currentBillingCycle(day, onDay);
+      expect(previous.end, dateOnly(before));
+      expect(current.start, onDay);
+      expect(current.end, addCalendarDays(nextStatement, -1));
+      expect(billingStatementDateForExpense(day, before), onDay);
+      expect(billingStatementDateForExpense(day, onDay), nextStatement);
+      expect(
+        billingStatementDateForExpense(
+          day,
+          DateTime(onDay.year, onDay.month, onDay.day, 23, 59, 59),
+        ),
+        nextStatement,
+      );
+      expect(
+        billingCycleIdForWindow(current),
+        billingCycleIdFor(nextStatement),
+      );
+    }
   });
 
   test('本期账单：只统计周期内本账户支出净额，退款冲抵、还款不计', () {

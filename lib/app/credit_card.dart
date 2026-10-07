@@ -48,8 +48,7 @@ DateTime nextStatementDate(int statementDay, DateTime now) {
 /// 把一期信用账单的出账日编码为可持久化的账期标识 `yyyy-MM-dd`。
 ///
 /// 标识只表达银行确认的账期归属，不包含账户 id；调用方仍必须先按账户筛选交易。
-/// 采用出账日而非流水发生日，是因为账单日当天究竟归入本期还是下一期取决于银行
-/// 切账时点，不能从自然日可靠推断。
+/// 显式归属优先于默认规则；未指定时，出账日当天的消费计入下一期。
 String billingCycleIdFor(DateTime statementDate) {
   final date = dateOnly(statementDate);
   final month = date.month.toString().padLeft(2, '0');
@@ -58,16 +57,27 @@ String billingCycleIdFor(DateTime statementDate) {
       '$month-$day';
 }
 
-/// 当前账单周期：上一个账单日次日 至 下一个（含今天）账单日当天（含首尾）。
-/// 该窗口内的消费将在下个账单日出账。
+/// 消费日期对应的目标出账日；出账日当天消费归入下月出账的账期。
+/// 使用日历日推进，避免夏令时使日期边界偏移。
+DateTime billingStatementDateForExpense(int statementDay, DateTime occurredAt) {
+  return nextStatementDate(
+    statementDay,
+    addCalendarDays(dateOnly(occurredAt), 1),
+  );
+}
+
+/// 当前账单周期：上一个账单日 至 下一个账单日前一天（含首尾）。
+/// 如每月 5 日出账，5 日至次月 4 日的消费将在次月 5 日出账。
 DateWindow currentBillingCycle(int statementDay, DateTime now) {
-  final nextStmt = nextStatementDate(statementDay, now);
+  final nextStmt = billingStatementDateForExpense(statementDay, now);
   final day = statementDay.clamp(1, 28);
   final prevStmt = DateTime(nextStmt.year, nextStmt.month - 1, day);
-  return DateWindow(
-    start: DateTime(prevStmt.year, prevStmt.month, prevStmt.day + 1),
-    end: nextStmt,
-  );
+  return DateWindow(start: prevStmt, end: addCalendarDays(nextStmt, -1));
+}
+
+/// 当前账期闭区间对应的出账日标识；区间结束日是出账日的前一天。
+String billingCycleIdForWindow(DateWindow cycle) {
+  return billingCycleIdFor(addCalendarDays(cycle.end, 1));
 }
 
 /// 按信用主体的动态还款规则计算某一期账单的到期日。
@@ -184,11 +194,7 @@ CreditCycleOverview buildCreditCycleOverview({
     accountIds: childIds,
     now: now,
   );
-  final nextStatement = _nextUnbilledStatementDate(
-    statementDay: statementDay,
-    now: now,
-    latestStatement: latestStatement,
-  );
+  final nextStatement = billingStatementDateForExpense(statementDay, now);
   final cycle = _currentBillingCycleFromStatement(
     statementDay: statementDay,
     nextStatement: nextStatement,
@@ -355,30 +361,6 @@ BillingStatement? _latestStatementForAccounts({
   return candidates.firstOrNull;
 }
 
-/// 计算尚未出账的目标出账日。
-///
-/// 账单日当天按配置结转，未出账窗口推进到下月。银行确认的交易归属仍优先使用
-/// billingCycleId；日历结转本身不创建或改写正式账单。
-DateTime _nextUnbilledStatementDate({
-  required int statementDay,
-  required DateTime now,
-  required BillingStatement? latestStatement,
-}) {
-  final candidate = nextStatementDate(statementDay, now);
-  if (!candidate.isAtSameMomentAs(dateOnly(now)) &&
-      (latestStatement == null ||
-          !dateOnly(
-            latestStatement.statementDate,
-          ).isAtSameMomentAs(candidate))) {
-    return candidate;
-  }
-  return DateTime(
-    candidate.year,
-    candidate.month + 1,
-    statementDay.clamp(1, 28),
-  );
-}
-
 class _ScheduledCreditDebt {
   const _ScheduledCreditDebt(this.amounts, this.repayments, this.refundIds);
 
@@ -417,7 +399,7 @@ _ScheduledCreditDebt _scheduledCreditDebt({
       continue;
     }
     final cycle = entry.billingCycleId == null
-        ? nextStatementDate(statementDay, entry.occurredAt)
+        ? billingStatementDateForExpense(statementDay, entry.occurredAt)
         : DateTime.tryParse(entry.billingCycleId!);
     if (cycle == null || cycle.isAfter(today)) continue;
     final covered = formal.any((statement) {
@@ -426,9 +408,7 @@ _ScheduledCreditDebt _scheduledCreditDebt({
         return true;
       }
       if (entry.billingCycleId != null) return false;
-      final date = dateOnly(entry.occurredAt);
-      return !date.isBefore(dateOnly(statement.periodStart)) &&
-          !date.isAfter(dateOnly(statement.periodEnd));
+      return _expenseIsInStatementPeriod(entry, statement);
     });
     if (covered) continue;
     cycleByExpense[entry.id] = cycle;
@@ -499,10 +479,11 @@ _ScheduledCreditDebt _scheduledCreditDebt({
   return _ScheduledCreditDebt(amounts, used, refundIds);
 }
 
-/// 构造首页使用的当前未出账窗口，正式账单的真实截止日优先于日历日猜测。
+/// 构造首页使用的当前未出账窗口，出账日当天开始下一期。
 ///
 /// 只有最近账单恰好是目标账期的上一期时才采用它，避免用户漏录数月账单后把多个月
-/// 的流水误并入本期。没有可用快照时保持旧版“上个账单日次日”回退规则。
+/// 的流水误并入本期。正式截止日可补充更早的起点，但不排除出账日当天；
+/// 已有明确账期标识的交易仍按标识归属，不靠修改发生日期切账。
 DateWindow _currentBillingCycleFromStatement({
   required int statementDay,
   required DateTime nextStatement,
@@ -514,18 +495,20 @@ DateWindow _currentBillingCycleFromStatement({
     nextStatement.month - 1,
     day,
   );
-  final inferredStart = addCalendarDays(expectedPreviousStatement, 1);
+  final inferredStart = expectedPreviousStatement;
   var start = inferredStart;
   if (latestStatement != null &&
       dateOnly(
         latestStatement.statementDate,
       ).isAtSameMomentAs(dateOnly(expectedPreviousStatement))) {
-    final confirmedStart = addCalendarDays(latestStatement.periodEnd, 1);
-    if (!confirmedStart.isAfter(nextStatement)) {
+    final confirmedStart = dateOnly(
+      addCalendarDays(latestStatement.periodEnd, 1),
+    );
+    if (confirmedStart.isBefore(inferredStart)) {
       start = confirmedStart;
     }
   }
-  return DateWindow(start: start, end: nextStatement);
+  return DateWindow(start: start, end: addCalendarDays(nextStatement, -1));
 }
 
 /// 本期账单金额：本账单周期内、该账户支出的净额合计（退款冲抵后）。
@@ -537,7 +520,7 @@ double billingCycleExpense(
 ) {
   final start = dateOnly(cycle.start);
   final end = dateOnly(cycle.end);
-  final cycleId = billingCycleIdFor(cycle.end);
+  final cycleId = billingCycleIdForWindow(cycle);
   return entries
       .where(
         (entry) =>
@@ -562,6 +545,17 @@ class CreditStatementOverview {
   final double billedOutstanding;
   final double unbilledAmount;
   final BillingStatement? latestStatement;
+}
+
+/// 无明确归期的出账日消费不能被旧快照的包含式截止日吸收到上一期。
+bool _expenseIsInStatementPeriod(
+  LedgerEntry expense,
+  BillingStatement statement,
+) {
+  final date = dateOnly(expense.occurredAt);
+  return date.isBefore(dateOnly(statement.statementDate)) &&
+      !date.isBefore(dateOnly(statement.periodStart)) &&
+      !date.isAfter(dateOnly(statement.periodEnd));
 }
 
 /// 从已到账退款推导出账后退款对正式账单的冲抵关系。
@@ -605,9 +599,7 @@ List<StatementRefundAllocation> allocateStatementRefunds({
         return original.billingCycleId ==
             billingCycleIdFor(statement.statementDate);
       }
-      final date = dateOnly(original.occurredAt);
-      return !date.isBefore(dateOnly(statement.periodStart)) &&
-          !date.isAfter(dateOnly(statement.periodEnd));
+      return _expenseIsInStatementPeriod(original, statement);
     }).toList();
     if (candidates.length != 1) continue;
     final statement = candidates.single;
@@ -698,11 +690,7 @@ CreditStatementOverview creditStatementOverview({
   }
   final nextStatement = statementDay == null
       ? null
-      : _nextUnbilledStatementDate(
-          statementDay: statementDay,
-          now: now,
-          latestStatement: latest,
-        );
+      : billingStatementDateForExpense(statementDay, now);
   final currentCycleId = nextStatement == null
       ? null
       : billingCycleIdFor(nextStatement);

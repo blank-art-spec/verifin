@@ -107,7 +107,8 @@ void main() {
       final overview = _overview(now, [expense]);
       expect(overview.currentCycleDebt, 0);
       expect(overview.billedOutstanding, 138.78);
-      expect(overview.cycle.start, DateTime(2026, 10, 6));
+      expect(overview.cycle.start, DateTime(2026, 10, 5));
+      expect(overview.cycle.end, DateTime(2026, 11, 4));
       expect(overview.nextStatementDate, DateTime(2026, 11, 5));
       expect(overview.dueDate, DateTime(2026, 10, 15));
       final detail = creditStatementOverview(
@@ -120,6 +121,84 @@ void main() {
       expect(detail.unbilledAmount, 0);
       expect(detail.latestStatement, isNull);
     }
+  });
+
+  test('出账日全天消费自动进入下一期，首页和账户详情口径一致', () {
+    final entries = [
+      _expense('previous-last-second', 100, DateTime(2026, 10, 4, 23, 59, 59)),
+      _expense('new-midnight', 20, DateTime(2026, 10, 5)),
+      _expense('new-last-second', 30, DateTime(2026, 10, 5, 23, 59, 59)),
+      _expense(
+        'explicit-previous',
+        7,
+        DateTime(2026, 10, 5, 12),
+        cycleId: '2026-10-05',
+      ),
+    ];
+    final now = DateTime(2026, 10, 5, 23, 59, 59);
+    for (final statements in <List<BillingStatement>>[
+      [],
+      [_statement(DateTime(2026, 10, 5), 107, 0)],
+    ]) {
+      final overview = _overview(now, entries, statements: statements);
+      final detail = creditStatementOverview(
+        account: _account,
+        entries: entries,
+        statements: statements,
+        now: now,
+      );
+      expect(overview.cycle.start, DateTime(2026, 10, 5));
+      expect(overview.cycle.end, DateTime(2026, 11, 4));
+      expect(overview.nextStatementDate, DateTime(2026, 11, 5));
+      expect(overview.netSpending, 50);
+      expect(overview.currentCycleDebt, 50);
+      expect(overview.billedOutstanding, 107);
+      expect(detail.billedOutstanding, 107);
+      expect(detail.unbilledAmount, 50);
+      final later = _overview(
+        DateTime(2026, 11, 5),
+        entries,
+        statements: statements,
+      );
+      expect(later.billedOutstanding, 157);
+      expect(later.currentCycleDebt, 0);
+    }
+  });
+
+  test('出账日消费的退款不误冲抵旧账单，明确归期仍优先', () {
+    final original = _expense('statement-day', 30, DateTime(2026, 10, 5, 12));
+    final refund = LedgerEntry(
+      id: 'new-cycle-refund',
+      bookId: 'book',
+      type: EntryType.refund,
+      amount: 10,
+      accountId: _account.id,
+      categoryId: 'expense',
+      note: '',
+      occurredAt: DateTime(2026, 10, 6),
+      settledAt: DateTime(2026, 10, 6),
+      refundOf: original.id,
+    );
+    final statement = _statement(DateTime(2026, 10, 5), 100, 0);
+    final now = DateTime(2026, 10, 6, 12);
+    expect(
+      allocateStatementRefunds(
+        entries: [original, refund],
+        statements: [statement],
+        now: now,
+      ),
+      isEmpty,
+    );
+    final explicit = allocateStatementRefunds(
+      entries: [
+        original.copyWith(billingCycleId: '2026-10-05'),
+        refund,
+      ],
+      statements: [statement],
+      now: now,
+    );
+    expect(explicit.single.statementId, statement.id);
+    expect(explicit.single.amount, 10);
   });
 
   test('明确归入下一账期的账单日消费保持未出账，未来流水不提前结转', () {

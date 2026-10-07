@@ -156,7 +156,7 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
         .where((account) => account.creditAccountId == selectedCredit.id)
         .map((account) => account.id)
         .toSet();
-    final cycleId = billingCycleIdFor(range.end);
+    final cycleId = billingCycleIdForWindow(range.window);
     final start = dateOnly(range.start);
     final end = dateOnly(range.end);
     return controller.entries
@@ -175,8 +175,8 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
 
   /// 计算当前信用账期相对上账期（环比）和去年同期账期（同比）的净消费汇总。
   ///
-  /// 锚点按月或按年平移且保留 1–28 日，确保 9/26–10/25 的上一期是
-  /// 8/26–9/25，而不是因为锚点掉到月初跳过一期。每个周期再独立解析正式账单边界，
+  /// 锚点按月或按年平移且保留 1–28 日，确保 9/25–10/24 的上一期是
+  /// 8/25–9/24，而不是因为锚点掉到月初跳过一期。每个周期再独立解析正式账单边界，
   /// 并通过 [_entriesForRange] 让银行确认的 `billingCycleId` 优先于发生日期。
   ReportComparison _billingCycleComparison(
     VeriFinController controller,

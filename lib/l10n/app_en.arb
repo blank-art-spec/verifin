@@ -2187,6 +2187,7 @@
   "commonRefresh": "Refresh",
   "commonAdd": "Add",
   "autoCaptureTitle": "Automatic capture",
+  "autoCaptureTileTitle": "Auto bookkeeping",
   "autoCaptureShort": "Smart capture",
   "autoCaptureSubtitle": "Raw events are saved before they can become ledger entries",
   "autoCapturePendingSummary": "{count} pending",
