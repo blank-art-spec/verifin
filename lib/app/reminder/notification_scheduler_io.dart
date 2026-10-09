@@ -194,7 +194,7 @@ class NotificationScheduler {
     AppLocalizations? l10n,
   }) async {
     for (final reminder in reminders) {
-      if (settings.statementDateEnabled) {
+      if (settings.statementDateEnabled && reminder.hasUpcomingStatementDebt) {
         final date = DateTime(
           reminder.overview.nextStatementDate.year,
           reminder.overview.nextStatementDate.month,
@@ -214,9 +214,7 @@ class NotificationScheduler {
           );
         }
       }
-      if (settings.repaymentDueEnabled &&
-          reminder.hasFormalStatement &&
-          reminder.hasOutstandingStatement) {
+      if (settings.repaymentDueEnabled && reminder.hasOutstandingStatement) {
         final date = DateTime(
           reminder.dueDate.year,
           reminder.dueDate.month,
@@ -229,7 +227,7 @@ class NotificationScheduler {
               : l10n?.reminderDaysUntilDue(settings.advanceDays) ??
                     '${settings.advanceDays} 天后还款';
           final amount = formatUserMoney(
-            reminder.overview.billedOutstanding,
+            reminder.dueOutstandingAmount!,
             reminder.creditAccount.currencyCode,
           );
           final outstanding =

@@ -1863,6 +1863,10 @@
     }
   },
   "personalInfo": "个人信息",
+  "profileAvatarTitle": "个人头像",
+  "profileChangeAvatar": "点按更换头像",
+  "profileBasicSection": "基本资料",
+  "profileDetailsSection": "更多资料",
   "nicknameLabel": "昵称",
   "nicknameEmptyTitle": "未设置昵称",
   "nicknameEmptyMessage": "未设置昵称，将使用默认昵称「Veri Fin」。是否继续保存？",

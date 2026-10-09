@@ -87,10 +87,15 @@ class CaptureDuplicateMatch {
   final bool safeToMerge;
 }
 
+const _captureCurrencyPattern =
+    r'人民币|RMB|CNY|￥|¥|USD|US\s*\$|美元|美金|EUR|欧元|JPY|日元|HKD|港币|元';
+const _captureNumberPattern =
+    r'(?:[0-9]{1,3}(?:,[0-9]{3})+|[0-9]+)(?:\.[0-9]{1,3})?';
 final RegExp _amountPattern = RegExp(
-  r'(?:人民币|RMB|CNY|￥|¥|USD|US\$|美元|EUR|欧元|JPY|日元|HKD|港币)?\s*'
-  r'([0-9]{1,3}(?:,[0-9]{3})*(?:\.[0-9]{1,3})?|[0-9]+(?:\.[0-9]{1,3})?)\s*'
-  r'(?:元|人民币|RMB|CNY|美元|USD|US\$|欧元|EUR|日元|JPY|港币|HKD)',
+  // 单位可在数字前或后；限制数字边界，避免长金额被截成末三位。
+  '(?:($_captureCurrencyPattern)\\s*($_captureNumberPattern)'
+  '(?:\\s*($_captureCurrencyPattern))?(?![0-9]|[.,][0-9])|'
+  '(?<![0-9.,])($_captureNumberPattern)\\s*($_captureCurrencyPattern))',
   caseSensitive: false,
 );
 final RegExp _fallbackAmountPattern = RegExp(
@@ -183,8 +188,16 @@ CaptureEvent parseCaptureEvent(
   DateTime? processedAt,
 }) {
   final text = event.rawText.trim();
-  final amount = _extractAmount(text);
-  var currencyCode = _extractCurrencyCode(text, context.book.baseCurrencyCode);
+  final amountMatch = _extractAmountMatch(text);
+  final amount = _amountFromMatch(amountMatch);
+  // 币种与被选中的交易金额绑定，后面的促销价格/额度不能覆盖它。
+  final currencyText = amountMatch != null && amountMatch.groupCount > 1
+      ? amountMatch.group(0)!
+      : text;
+  var currencyCode = _extractCurrencyCode(
+    currencyText,
+    context.book.baseCurrencyCode,
+  );
   var kind = _detectKind(text);
   var cardLast4 = _cardLast4Pattern.firstMatch(text)?.group(1) ?? '';
   var merchant = _extractMerchant(text, event.sourceLabel);
@@ -267,7 +280,7 @@ CaptureEvent parseCaptureEvent(
   final matchedAccount = context.accounts
       .where((account) => account.id == accountId)
       .firstOrNull;
-  if (!_textHasExplicitCurrency(text) && matchedAccount != null) {
+  if (!_textHasExplicitCurrency(currencyText) && matchedAccount != null) {
     currencyCode = matchedAccount.currencyCode;
   }
 
@@ -647,7 +660,7 @@ bool _ruleMatches(
 }
 
 /// 提取最可信的金额。带货币单位的数字优先，避免把卡尾号或短信验证码当金额。
-double? _extractAmount(String text) {
+RegExpMatch? _extractAmountMatch(String text) {
   final matches = _amountPattern.allMatches(text).toList();
   RegExpMatch? match;
   var bestScore = -100;
@@ -679,8 +692,16 @@ double? _extractAmount(String text) {
       match = candidate;
     }
   }
-  match ??= _fallbackAmountPattern.firstMatch(text);
-  final raw = match?.group(1)?.replaceAll(',', '');
+  return match ?? _fallbackAmountPattern.firstMatch(text);
+}
+
+double? _amountFromMatch(RegExpMatch? match) {
+  if (match == null) return null;
+  final raw =
+      (match.groupCount == 1
+              ? match.group(1)
+              : match.group(2) ?? match.group(4))
+          ?.replaceAll(',', '');
   final amount = raw == null ? null : double.tryParse(raw);
   return amount == null || !amount.isFinite || amount <= 0 ? null : amount;
 }
@@ -688,20 +709,29 @@ double? _extractAmount(String text) {
 /// 从原文识别 ISO 4217 币种；没有明确线索时使用当前账本本位币。
 String _extractCurrencyCode(String text, String fallback) {
   final upper = text.toUpperCase();
-  if (upper.contains('USD') || upper.contains('US\$') || text.contains('美元')) {
+  if (upper.contains('USD') ||
+      RegExp(r'US\s*\$', caseSensitive: false).hasMatch(text) ||
+      text.contains('美元') ||
+      text.contains('美金')) {
     return 'USD';
   }
   if (upper.contains('EUR') || text.contains('欧元')) return 'EUR';
   if (upper.contains('JPY') || text.contains('日元')) return 'JPY';
   if (upper.contains('HKD') || text.contains('港币')) return 'HKD';
+  if (upper.contains('CNY') ||
+      upper.contains('RMB') ||
+      text.contains('人民币') ||
+      text.contains('￥') ||
+      text.contains('¥') ||
+      text.contains('元')) {
+    return 'CNY';
+  }
   return fallback.toUpperCase();
 }
 
 /// 判断原文是否明确带出币种；用于决定能否用账户币种补充。
-bool _textHasExplicitCurrency(String text) => RegExp(
-  r'USD|US\$|美元|EUR|欧元|JPY|日元|HKD|港币|CNY|RMB|人民币',
-  caseSensitive: false,
-).hasMatch(text);
+bool _textHasExplicitCurrency(String text) =>
+    RegExp(_captureCurrencyPattern, caseSensitive: false).hasMatch(text);
 
 /// 识别交易业务类型。还款/转账/退款优先于宽泛的“到账/收入”，防止还款污染收入统计。
 CaptureTransactionKind _detectKind(String text) {

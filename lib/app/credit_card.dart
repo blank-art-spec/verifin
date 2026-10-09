@@ -106,6 +106,7 @@ class CreditCycleOverview {
     required this.earlyRepayment,
     required this.currentCycleDebt,
     required this.billedOutstanding,
+    required this.dueOutstandingAmount,
     required this.totalDebt,
     required this.missingConversion,
   });
@@ -125,6 +126,10 @@ class CreditCycleOverview {
 
   /// 正式账单剩余，加上已到出账日但尚无正式账单的流水待还。
   final double billedOutstanding;
+
+  /// 最早未结到期日对应的正式账单与流水结转待还合计，缺少该组汇率时为 null。
+  /// 未出账消费不参与，正式账单覆盖的账期不会再从流水重复计算。
+  final double? dueOutstandingAmount;
 
   /// 所有子账户当前负余额折算后的总欠款。
   final double totalDebt;
@@ -275,18 +280,39 @@ CreditCycleOverview buildCreditCycleOverview({
   }
 
   var billedOutstanding = 0.0;
-  BillingStatement? dueStatement;
-  DateTime? scheduledDueDate;
+  final outstandingByDueDate = <DateTime, double?>{};
+  void addBilledOutstanding(
+    double amount,
+    String currencyCode,
+    DateTime amountDate,
+    DateTime dueDate,
+  ) {
+    final date = dateOnly(dueDate);
+    final converted = convertToCreditCurrency(amount, currencyCode, amountDate);
+    if (converted == null) {
+      missing = true;
+      outstandingByDueDate[date] = null;
+      return;
+    }
+    billedOutstanding += converted;
+    if (!outstandingByDueDate.containsKey(date)) {
+      outstandingByDueDate[date] = converted;
+    } else if (outstandingByDueDate[date] != null) {
+      outstandingByDueDate[date] = outstandingByDueDate[date]! + converted;
+    }
+  }
+
   for (final account in childAccounts) {
     for (final bill
         in scheduled[account.id]?.amounts.entries ??
             <MapEntry<DateTime, double>>[]) {
       if (bill.value <= 0) continue;
-      billedOutstanding += convert(bill.value, account.currencyCode, bill.key);
-      final due = creditDueDate(creditAccount, bill.key);
-      if (scheduledDueDate == null || due.isBefore(scheduledDueDate)) {
-        scheduledDueDate = due;
-      }
+      addBilledOutstanding(
+        bill.value,
+        account.currencyCode,
+        bill.key,
+        creditDueDate(creditAccount, bill.key),
+      );
     }
   }
   for (final statement in statementList) {
@@ -294,15 +320,12 @@ CreditCycleOverview buildCreditCycleOverview({
         statement.outstandingAmount <= 0) {
       continue;
     }
-    billedOutstanding += convert(
+    addBilledOutstanding(
       statement.outstandingAmount,
       statement.currencyCode,
       statement.statementDate,
+      statement.dueDate,
     );
-    if (dueStatement == null ||
-        statement.dueDate.isBefore(dueStatement.dueDate)) {
-      dueStatement = statement;
-    }
   }
 
   var totalDebt = 0.0;
@@ -316,10 +339,12 @@ CreditCycleOverview buildCreditCycleOverview({
   final currentDebt = (netSpending - earlyRepayment)
       .clamp(0.0, double.infinity)
       .toDouble();
-  var dueDate = dueStatement?.dueDate ?? scheduledDueDate;
-  if (scheduledDueDate != null &&
-      (dueDate == null || scheduledDueDate.isBefore(dueDate))) {
-    dueDate = scheduledDueDate;
+  DateTime? dueDate;
+  for (final group in outstandingByDueDate.entries) {
+    if (group.value != null && group.value! <= 0.005) continue;
+    if (dueDate == null || group.key.isBefore(dueDate)) {
+      dueDate = group.key;
+    }
   }
   return CreditCycleOverview(
     cycle: cycle,
@@ -329,6 +354,7 @@ CreditCycleOverview buildCreditCycleOverview({
     earlyRepayment: earlyRepayment,
     currentCycleDebt: currentDebt,
     billedOutstanding: billedOutstanding,
+    dueOutstandingAmount: dueDate == null ? 0 : outstandingByDueDate[dueDate],
     totalDebt: totalDebt,
     missingConversion: missing,
   );

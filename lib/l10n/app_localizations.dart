@@ -5161,6 +5161,30 @@ abstract class AppLocalizations {
   /// **'个人信息'**
   String get personalInfo;
 
+  /// No description provided for @profileAvatarTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'个人头像'**
+  String get profileAvatarTitle;
+
+  /// No description provided for @profileChangeAvatar.
+  ///
+  /// In zh, this message translates to:
+  /// **'点按更换头像'**
+  String get profileChangeAvatar;
+
+  /// No description provided for @profileBasicSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'基本资料'**
+  String get profileBasicSection;
+
+  /// No description provided for @profileDetailsSection.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多资料'**
+  String get profileDetailsSection;
+
   /// No description provided for @nicknameLabel.
   ///
   /// In zh, this message translates to:

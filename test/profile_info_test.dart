@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:verifin/app/app_theme.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/local_storage/local_storage.dart';
@@ -14,7 +15,10 @@ void main() {
     await tester.pumpWidget(
       VeriFinScope(
         controller: controller,
-        child: zhMaterialApp(home: const ProfileInfoPage()),
+        child: zhMaterialApp(
+          theme: buildVeriFinTheme(Brightness.light),
+          home: const ProfileInfoPage(),
+        ),
       ),
     );
     await tester.pumpAndSettle();
@@ -53,6 +57,32 @@ void main() {
     expect(saveButton.onPressed, isNull);
   });
 
+  testWidgets('简介浮动标签与昵称的位置一致，正文从顶部开始', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    controller.updateProfile(controller.profile.copyWith(bio: '第一行\n第二行'));
+    await pumpProfilePage(tester, controller);
+
+    final field = find.byKey(const Key('profile_bio_field'));
+    await tester.ensureVisible(field);
+    await tester.pumpAndSettle();
+    final nicknameField = find.ancestor(
+      of: find.text('昵称'),
+      matching: find.byType(TextField),
+    );
+    final nicknameLabelOffset =
+        tester.getTopLeft(find.text('昵称')) - tester.getTopLeft(nicknameField);
+    final bioLabelOffset =
+        tester.getTopLeft(find.text('简介')) - tester.getTopLeft(field);
+    expect(bioLabelOffset.dx, closeTo(nicknameLabelOffset.dx, 0.5));
+    expect(bioLabelOffset.dy, closeTo(nicknameLabelOffset.dy, 0.5));
+    final input = tester.widget<TextField>(field);
+    expect(input.textAlignVertical, TextAlignVertical.top);
+    expect(input.decoration?.labelText, '简介');
+    expect(input.decoration?.prefixIcon, isA<Icon>());
+    expect(input.controller?.text, '第一行\n第二行');
+  });
+
   testWidgets('性别使用锚点菜单并在保存后提交', (tester) async {
     final controller = await makeController();
     addTearDown(controller.dispose);
@@ -89,6 +119,8 @@ void main() {
     await pumpProfilePage(tester, controller);
 
     expect(find.text('1990-01-02'), findsOneWidget);
+    await tester.ensureVisible(find.byKey(const Key('profile_birthday_field')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('profile_birthday_clear')));
     await tester.pump();
 

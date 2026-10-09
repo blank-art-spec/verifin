@@ -2832,6 +2832,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get personalInfo => '个人信息';
 
   @override
+  String get profileAvatarTitle => '个人头像';
+
+  @override
+  String get profileChangeAvatar => '点按更换头像';
+
+  @override
+  String get profileBasicSection => '基本资料';
+
+  @override
+  String get profileDetailsSection => '更多资料';
+
+  @override
   String get nicknameLabel => '昵称';
 
   @override

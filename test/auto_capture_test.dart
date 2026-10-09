@@ -306,6 +306,91 @@ void main() {
     }
   });
 
+  test('美元单位前置/后置与千位金额绑定同币种信用子账户', () async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    final cny = Account(
+      id: 'cmb-cny',
+      bookId: controller.activeBook.id,
+      name: '招商人民币',
+      type: AccountType.creditCard,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'credit',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+      cardLast4: '4185',
+    );
+    final usd = cny.copyWith(id: 'cmb-usd', name: '招商美元', currencyCode: 'USD');
+    final context = CaptureParseContext(
+      book: controller.activeBook,
+      accounts: <Account>[cny, usd],
+      creditAccounts: const <CreditAccount>[],
+      categories: controller.categories,
+      tags: controller.tags,
+      entries: controller.entries,
+      rules: const <AutoCaptureRule>[],
+    );
+    final amounts = <(String, double)>[
+      ('USD 12.34', 12.34),
+      ('usd12.34', 12.34),
+      (r'US$12.34', 12.34),
+      (r'US $ 12.34', 12.34),
+      ('美元12.34', 12.34),
+      ('12.34美元', 12.34),
+      ('美金12.34', 12.34),
+      ('1234.56美元', 1234.56),
+      ('1,234.56美元', 1234.56),
+      ('USD 1,234.56', 1234.56),
+      ('USD 12.34,', 12.34),
+    ];
+    for (var index = 0; index < amounts.length; index++) {
+      final (amountText, expectedAmount) = amounts[index];
+      final parsed = parseCaptureEvent(
+        captureEventFromInput(
+          id: 'usd-format-$index',
+          bookId: controller.activeBook.id,
+          input: RawCaptureInput(
+            sourceKind: CaptureSourceKind.notification,
+            sourceId: 'cmb-life',
+            sourceLabel: '掌上生活',
+            sourceEventId: 'usd-format-$index',
+            rawText:
+                '尾号4185信用卡消费$amountText，商户示例商户。'
+                '【19.9人民币起看电影】',
+            receivedAt: DateTime(2026, 10, 8, 12),
+          ),
+        ),
+        context,
+      );
+      expect(parsed.parsedAmount, expectedAmount, reason: amountText);
+      expect(parsed.currencyCode, 'USD', reason: amountText);
+      expect(parsed.accountCandidateId, usd.id, reason: amountText);
+      expect(parsed.kind, CaptureTransactionKind.expense);
+    }
+
+    final cnyParsed = parseCaptureEvent(
+      captureEventFromInput(
+        id: 'cny-with-usd-promotion',
+        bookId: controller.activeBook.id,
+        input: RawCaptureInput(
+          sourceKind: CaptureSourceKind.notification,
+          sourceId: 'cmb-life',
+          sourceEventId: 'cny-with-usd-promotion',
+          rawText:
+              '尾号4185信用卡消费1234.56人民币，商户示例商户。'
+              '【美元10.00起优惠】',
+          receivedAt: DateTime(2026, 10, 8, 12),
+        ),
+      ),
+      context,
+    );
+    expect(cnyParsed.parsedAmount, 1234.56);
+    expect(cnyParsed.currencyCode, 'CNY');
+    expect(cnyParsed.accountCandidateId, cny.id);
+  });
+
   test('本地规则可把完整通知高置信度入账，多来源事件合并为同一交易', () async {
     final controller = await makeController();
     expect(

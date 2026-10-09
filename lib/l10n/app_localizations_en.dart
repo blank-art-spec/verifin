@@ -2890,6 +2890,18 @@ class AppLocalizationsEn extends AppLocalizations {
   String get personalInfo => 'Personal info';
 
   @override
+  String get profileAvatarTitle => 'Profile photo';
+
+  @override
+  String get profileChangeAvatar => 'Tap to change photo';
+
+  @override
+  String get profileBasicSection => 'Basic details';
+
+  @override
+  String get profileDetailsSection => 'More details';
+
+  @override
   String get nicknameLabel => 'Nickname';
 
   @override

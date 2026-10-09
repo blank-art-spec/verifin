@@ -20,6 +20,7 @@ class CreditReminderSnapshot {
     required this.daysUntilStatement,
     required this.dueDate,
     required this.daysUntilDue,
+    required this.dueOutstandingAmount,
     required this.latestBilledAmount,
     required this.latestOutstandingAmount,
     required this.hasFormalStatement,
@@ -37,11 +38,15 @@ class CreditReminderSnapshot {
   /// 距离下一次出账的日历日数；今天为 0。
   final int daysUntilStatement;
 
-  /// 有未结正式账单时为最早到期日，否则为最近正式账单或当前规则推导的到期日。
+  /// 正式账单或已出账流水待还有余额时为最早到期日，否则沿用当前账期规则。
   final DateTime dueDate;
 
   /// [dueDate] 距今天的日历日数；负数表示已逾期。
   final int daysUntilDue;
+
+  /// 最早未结到期日下的正式账单与已出账流水待还合计；缺汇率时为 null。
+  /// 不包含未出账消费。
+  final double? dueOutstandingAmount;
 
   /// 最近一个出账日下，多币种正式账单折算到信用主体币种后的账单金额。
   final double latestBilledAmount;
@@ -67,16 +72,21 @@ class CreditReminderSnapshot {
       !formalStatementMissingConversion &&
       latestOutstandingAmount <= 0.005;
 
-  /// 任一期正式账单仍有待还金额时为 true；总额沿用首页信用主体聚合口径。
+  /// 下一次出账对应的当前账期确有待还金额时才安排出账提醒。
+  bool get hasUpcomingStatementDebt =>
+      !overview.missingConversion && overview.currentCycleDebt > 0.005;
+
+  /// 正式账单或已出账流水存在可确定的待还金额时安排还款提醒。
   bool get hasOutstandingStatement =>
-      !overview.missingConversion && overview.billedOutstanding > 0.005;
+      dueOutstandingAmount != null && dueOutstandingAmount! > 0.005;
 }
 
 /// 计算单个信用主体的预算、出账和还款提醒投影。
 ///
 /// [convertToCreditCurrency] 负责把正式账单币种换算为信用主体币种；返回 null 表示
 /// 缺少汇率。账单以最近出账日分组，多币种子账户同日账单会被合并，旧账单不会冒充
-/// “本期已出账”。到期提醒则优先选择所有未结账单中最早的到期日，避免漏掉逾期项。
+/// “本期已出账”。还款日期与金额复用 [overview] 的正式账单与流水结转合计，
+/// 优先选择仍有待还金额的最早到期日。
 CreditReminderSnapshot buildCreditReminderSnapshot({
   required CreditAccount creditAccount,
   required CreditCycleOverview overview,
@@ -100,16 +110,10 @@ CreditReminderSnapshot buildCreditReminderSnapshot({
       )
       .toList(growable: false);
   DateTime? latestStatementDate;
-  BillingStatement? earliestOutstanding;
   for (final statement in visibleStatements) {
     if (latestStatementDate == null ||
         statement.statementDate.isAfter(latestStatementDate)) {
       latestStatementDate = statement.statementDate;
-    }
-    if (statement.outstandingAmount > 0.005 &&
-        (earliestOutstanding == null ||
-            statement.dueDate.isBefore(earliestOutstanding.dueDate))) {
-      earliestOutstanding = statement;
     }
   }
 
@@ -151,18 +155,7 @@ CreditReminderSnapshot buildCreditReminderSnapshot({
     >= 0.8 => CycleBudgetAlertLevel.warning,
     _ => CycleBudgetAlertLevel.none,
   };
-  final dueDate =
-      earliestOutstanding?.dueDate ??
-      (latestStatementDate == null
-          ? overview.dueDate
-          : visibleStatements
-                .where(
-                  (item) => dateOnly(
-                    item.statementDate,
-                  ).isAtSameMomentAs(dateOnly(latestStatementDate!)),
-                )
-                .map((item) => item.dueDate)
-                .reduce((a, b) => a.isBefore(b) ? a : b));
+  final dueDate = overview.dueDate;
 
   return CreditReminderSnapshot(
     creditAccount: creditAccount,
@@ -170,6 +163,7 @@ CreditReminderSnapshot buildCreditReminderSnapshot({
     daysUntilStatement: calendarDaysBetween(today, overview.nextStatementDate),
     dueDate: dueDate,
     daysUntilDue: calendarDaysBetween(today, dueDate),
+    dueOutstandingAmount: overview.dueOutstandingAmount,
     latestBilledAmount: latestBilledAmount,
     latestOutstandingAmount: latestOutstandingAmount,
     hasFormalStatement: latestStatementDate != null,
