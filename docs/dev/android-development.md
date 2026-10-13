@@ -38,20 +38,20 @@ Windows 安装顺序：
    `flutter doctor -v` 和 `adb devices -l` 复核。macOS/Linux 同样使用官方 Flutter
    归档、JDK 与对应平台 Command-line Tools，不执行 Windows 安装命令。
 
-本机已验证的工具（供发现已有安装，不能作为其他环境的硬依赖）：
+本机当前使用项目目录内的独立工具链，不将本项目的新工具、缓存或配置安装到 C 盘。
+JDK、SDK 和 Flutter 放在 `.toolchain/`，Gradle/Pub 缓存、Android 偏好、模拟器数据、
+工具的用户配置与临时文件也放在该目录；已有系统 Git/Java 和其他项目的共享数据不搬动。
+以下入口用于加载本地环境（本机文件不随仓库分发）：
 
 ```powershell
-$env:PATH='C:\Dev\flutter-3.47.2\bin;C:\Dev\android-sdk\platform-tools;'+$env:PATH
-$env:ANDROID_HOME='C:\Dev\android-sdk'
-# 本机 Java AF_UNIX 临时目录和跨盘 Kotlin 缓存问题的局部绕过：
-New-Item -ItemType Directory -Force C:/Dev/java-tmp | Out-Null
-$env:JAVA_TOOL_OPTIONS='-Djava.io.tmpdir=C:/Dev/java-tmp -Djdk.net.unixdomain.tmpdir=C:/Dev/java-tmp -Dorg.gradle.project.kotlin.incremental=false'
-flutter doctor -v
+. .\.toolchain\environment.ps1
+flutter --no-version-check doctor -v
 adb devices -l
 ```
 
-仅在复现同类错误时使用上述 Java/Kotlin 绕过，不复制到 CI 全局配置。`local.properties`
-由 Flutter 维护且不提交；正式 keystore 永远不替换或输出。
+环境入口只修改当前终端及其子进程，Java 使用项目内用户和临时目录，避免 Windows 本地套接字
+路径限制；不把本机路径复制到 CI。`local.properties` 由 Flutter 维护且不提交；正式 keystore
+永远不替换或输出。历史跨盘 Kotlin 缓存问题仍只在复现时单独关闭增量编译。
 
 **别拿并行 `input tap` 压测模拟器。** 每次 `input` 都会在设备上起一个 JVM，几十路并发足以把
 模拟器自己打爆：之后应用冷启动会从几秒退化到 30 秒以上、日志出现 `NO_INPUT_CHANNEL`、点击
@@ -75,7 +75,12 @@ JDK 17、Android SDK、官方 Android Emulator 和一个 Android 15/API 35 AOSP 
 具体脚本说明在本机 `.toolchain/README.md`，这些本地文件不随仓库分发。
 
 工具链脚本只设置当前终端环境，以空闲 `V:` 盘符给项目内目录建立无空格别名，
-不修改系统 PATH，不覆盖已有盘符；AVD、Gradle 缓存和临时文件均留在项目中。
+不修改系统 PATH，不覆盖已有盘符；AVD、Gradle/Pub 缓存和临时文件均留在项目中。
+同时显式指定 `ANDROID_EMULATOR_HOME`，并将本工具链进程的 `USERPROFILE`、`APPDATA`、
+`LOCALAPPDATA`、`TEMP`、`TMP` 和 Java `user.home` 指向项目内隔离目录，避免工具默认回写 C 盘。
+具体 Android 专用变量含义见 [官方环境变量说明](https://developer.android.com/tools/variables)。
+旧 `C:\vf-toolchain` 迁移并校验后只保留兼容目录连接，实际文件位于本项目 `.toolchain/`；
+历史同名配置若与当前配置不同，保存在 `.toolchain/migrated-conflicts/`，不覆盖当前签名或设置。
 默认设备为 `emulator-5556`，只安装 `diagnostic` 测试应用并带
 `--dart-define=UNIFIED_DESIGN_PREVIEW=true`。本地 debug APK 不作为正式发布产物。
 
