@@ -204,6 +204,9 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     AppSecurityBridge.setSecureFlag(_controller.appLockEnabled);
     // 记账提醒：配置变化时重排本地通知，开屏按当前配置对齐一次。
     _controller.onReminderChanged = _handleReminderChanged;
+    _controller.accountEntryRemindersListenable.addListener(
+      _handleAccountRemindersChanged,
+    );
     unawaited(_syncNotifications());
     BackupCoordinator.maybeBackupOnOpen(_controller);
     // 自动采集原生层只保存原文；Flutter 启动/回前台后先同步开关，再把队列写入
@@ -274,6 +277,11 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     unawaited(_syncNotifications());
   }
 
+  /// 账户提醒独立偏好变化时重排全部账本；不会随当前浏览账本缩小通知范围。
+  void _handleAccountRemindersChanged() {
+    unawaited(_syncNotifications());
+  }
+
   /// 把每日提醒、账单日期提醒和预算跨档通知同步到系统。
   ///
   /// 调度期间若又发生状态变化，只登记一次补跑；这样不会并发执行多个“先取消、再重建”
@@ -294,6 +302,24 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
           l10n: l10n,
           financialReminders: snapshots,
         );
+        try {
+          await AppAccountReminderBridge.sync(
+            _controller.accountEntryReminderNotifications(l10n),
+          );
+        } catch (error) {
+          _controller.logger?.error(
+            '账户记账提醒排程失败',
+            source: 'account-reminder',
+            error: error.runtimeType,
+          );
+          unawaited(
+            _feedbackController.showMessage(
+              message: l10n.accountEntryReminderScheduleFailed,
+              tone: VeriFeedbackTone.error,
+              dedupeKey: 'account-reminder-schedule',
+            ),
+          );
+        }
         for (final reminder in _controller.pendingBudgetReminderSnapshots()) {
           final shown = await _notifications.showBudgetAlert(
             reminder,
@@ -375,6 +401,9 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _controller.accountEntryRemindersListenable.removeListener(
+      _handleAccountRemindersChanged,
+    );
     _widgetRefreshTimer?.cancel();
     _billingDateTimer?.cancel();
     _controller.onWidgetProjectionInvalidated = null;

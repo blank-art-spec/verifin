@@ -1,0 +1,220 @@
+import 'dart:convert';
+
+import 'package:flutter_test/flutter_test.dart';
+import 'package:verifin/app/ledger_math.dart';
+import 'package:verifin/app/models.dart';
+import 'package:verifin/app/reminder/account_entry_reminder.dart';
+import 'package:verifin/l10n/app_localizations_zh.dart';
+import 'package:verifin/local_storage/local_storage.dart';
+
+import 'support/test_harness.dart';
+
+/// 账户提醒回归用例；本次按用户要求仅纳入静态分析，不执行测试程序。
+void main() {
+  useTestDatabases();
+
+  /// 为 [account] 构造每天可触发的固定支出草稿，避免测试依赖执行当天是周几。
+  AccountEntryReminder draftFor(Account account, String categoryId) =>
+      AccountEntryReminder(
+        id: '',
+        accountId: account.id,
+        bookId: account.bookId,
+        currencyCode: account.currencyCode,
+        enabled: true,
+        name: '饭堂午餐',
+        amount: 12.5,
+        categoryId: categoryId,
+        weekdays: const [1, 2, 3, 4, 5, 6, 7],
+        confirmLabel: '确定',
+        cancelLabel: '取消',
+      );
+
+  test('切换账本不丢失提醒，确认固定写回原账户，并发点击和冷启动不重复', () async {
+    final store = LocalKeyValueStore();
+    var controller = await makeController(store);
+    final account = controller.accounts.first;
+    final category = controller.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    final beforeCount = controller.entries.length;
+    expect(
+      await controller.saveAccountEntryReminder(draftFor(account, category.id)),
+      isTrue,
+    );
+    final rule = controller.accountEntryReminder(account.id)!;
+    final today = currencyDateKey(dateOnly(DateTime.now()));
+    controller.addLedgerBook('日常开销');
+    final browsingBook = controller.activeBook.id;
+    expect(
+      controller
+          .accountEntryReminderNotifications(AppLocalizationsZh())
+          .single['bookId'],
+      account.bookId,
+    );
+    final results = await Future.wait([
+      controller.handleAccountEntryReminder(
+        id: rule.id,
+        date: today,
+        confirm: true,
+      ),
+      controller.handleAccountEntryReminder(
+        id: rule.id,
+        date: today,
+        confirm: true,
+      ),
+    ]);
+    expect(results, [
+      AccountReminderResult.recorded,
+      AccountReminderResult.alreadyHandled,
+    ]);
+    expect(controller.activeBook.id, browsingBook);
+    expect(controller.entries, isEmpty);
+    controller.switchLedgerBook(account.bookId);
+    expect(controller.entries.length, beforeCount + 1);
+    final entry = controller.entries.firstWhere(
+      (item) => item.id.startsWith('entry_account_reminder_'),
+    );
+    expect(entry.accountId, account.id);
+    expect(entry.bookId, account.bookId);
+    expect(entry.amount, 12.5);
+    expect(entry.accountAmount, 12.5);
+    await controller.flushPendingWrites();
+    controller.dispose();
+    controller = await makeController(store);
+    expect(
+      await controller.handleAccountEntryReminder(
+        id: rule.id,
+        date: today,
+        confirm: true,
+      ),
+      AccountReminderResult.alreadyHandled,
+    );
+    expect(controller.entries.length, beforeCount + 1);
+    controller.dispose();
+  });
+
+  test('取消零落账，重启与重新配置都不能再处理当天', () async {
+    final store = LocalKeyValueStore();
+    var controller = await makeController(store);
+    final account = controller.accounts.first;
+    final category = controller.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    final beforeCount = controller.entries.length;
+    expect(
+      await controller.saveAccountEntryReminder(draftFor(account, category.id)),
+      isTrue,
+    );
+    final rule = controller.accountEntryReminder(account.id)!;
+    final today = currencyDateKey(dateOnly(DateTime.now()));
+    expect(
+      await controller.handleAccountEntryReminder(
+        id: rule.id,
+        date: today,
+        confirm: false,
+      ),
+      AccountReminderResult.cancelled,
+    );
+    expect(controller.entries.length, beforeCount);
+    await controller.flushPendingWrites();
+    controller.dispose();
+    controller = await makeController(store);
+    expect(
+      await controller.saveAccountEntryReminder(rule.copyWith(amount: 20)),
+      isTrue,
+    );
+    final changed = controller.accountEntryReminder(account.id)!;
+    expect(changed.handledDate, today);
+    expect(
+      await controller.handleAccountEntryReminder(
+        id: changed.id,
+        date: today,
+        confirm: true,
+      ),
+      AccountReminderResult.alreadyHandled,
+    );
+    expect(controller.entries.length, beforeCount);
+    controller.dispose();
+  });
+
+  test('过期日期和编辑前旧通知不落账，提醒配置不进入账本备份', () async {
+    final controller = await makeController();
+    final account = controller.accounts.first;
+    final category = controller.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    expect(
+      await controller.saveAccountEntryReminder(draftFor(account, category.id)),
+      isTrue,
+    );
+    final rule = controller.accountEntryReminder(account.id)!;
+    final beforeCount = controller.entries.length;
+    final now = DateTime.now();
+    final yesterday = currencyDateKey(addCalendarDays(dateOnly(now), -1));
+    expect(
+      await controller.handleAccountEntryReminder(
+        id: rule.id,
+        date: yesterday,
+        confirm: true,
+      ),
+      AccountReminderResult.expired,
+    );
+    expect(
+      await controller.saveAccountEntryReminder(rule.copyWith(amount: 15)),
+      isTrue,
+    );
+    expect(
+      await controller.handleAccountEntryReminder(
+        id: rule.id,
+        date: currencyDateKey(dateOnly(now)),
+        confirm: true,
+      ),
+      AccountReminderResult.expired,
+    );
+    expect(controller.entries.length, beforeCount);
+    final exported =
+        jsonDecode(controller.exportDataJson()) as Map<String, Object?>;
+    expect(jsonEncode(exported), isNot(contains('account_entry_reminders')));
+    expect(jsonEncode(exported), isNot(contains(rule.id)));
+    controller.dispose();
+  });
+
+  test('删除无流水账户清除提醒，初始化清除提醒且旧通知失效', () async {
+    final controller = await makeController();
+    final original = controller.accounts.first;
+    final account = original.copyWith(
+      id: 'reminder-empty-account',
+      name: '空账户',
+    );
+    controller.addAccount(account);
+    await controller.waitForPendingWrites();
+    final category = controller.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    expect(
+      await controller.saveAccountEntryReminder(draftFor(account, category.id)),
+      isTrue,
+    );
+    expect(await controller.deleteAccount(account.id), isNotNull);
+    expect(controller.accountEntryReminder(account.id), isNull);
+    expect(
+      await controller.saveAccountEntryReminder(
+        draftFor(original, category.id),
+      ),
+      isTrue,
+    );
+    final rule = controller.accountEntryReminder(original.id)!;
+    controller.resetAllData();
+    expect(controller.accountEntryRemindersListenable.value, isEmpty);
+    expect(
+      await controller.handleAccountEntryReminder(
+        id: rule.id,
+        date: currencyDateKey(dateOnly(DateTime.now())),
+        confirm: true,
+      ),
+      AccountReminderResult.expired,
+    );
+    await controller.flushPendingWrites();
+    controller.dispose();
+  });
+}

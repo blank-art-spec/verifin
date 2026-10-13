@@ -4,6 +4,7 @@ import 'dart:convert';
 import 'package:flutter/foundation.dart' hide Category;
 
 import '../data/ledger_repository.dart';
+import '../l10n/app_localizations.dart';
 import '../local_storage/local_storage.dart';
 import 'ai/ai_capabilities.dart';
 import 'ai/ai_entry_parser.dart';
@@ -34,10 +35,12 @@ import 'logging/app_logger.dart';
 import 'models.dart';
 import 'recurring.dart';
 import 'reminder/reminder_settings.dart';
+import 'reminder/account_entry_reminder.dart';
 import 'reminder/financial_reminder.dart';
 
 part 'veri_fin_controller_state.dart';
 part 'veri_fin_controller_ops.dart';
+part 'veri_fin_controller_account_reminders.dart';
 
 /// 导入校验用的已知备份数据键：`data` 里出现其一即认定为本应用备份（配合 `app`
 /// 标记）。用于拦截「格式合法却非本应用」的 JSON，避免其把数据静默覆盖为初始态。
@@ -90,6 +93,7 @@ const String _backupSettingsKey = 'verifin.backup_settings.v1';
 const String _backupPassphraseKey = 'verifin.backup_passphrase.v1';
 const String _webdavKey = 'verifin.webdav.v1';
 const String _reminderKey = 'verifin.reminder.v1';
+const String _accountEntryReminderKey = 'verifin.account_entry_reminders.v1';
 const String _reminderDeliveryKey = 'verifin.reminder_delivery.v1';
 const String _fabActionKey = 'verifin.fab_action.v1';
 const String _numberPadLayoutKey = 'verifin.number_pad_layout.v1';
@@ -162,7 +166,7 @@ class BackupRestorePreview {
 /// 由应用根组件注入，控制器本身不做文件 I/O，测试宿主保持为空。
 
 class VeriFinController extends ChangeNotifier
-    with _ControllerState, _ControllerOps {
+    with _ControllerState, _ControllerOps, _AccountEntryReminderOps {
   VeriFinController._(
     this._store,
     this._repository, {
@@ -204,6 +208,8 @@ class VeriFinController extends ChangeNotifier
       await repository.saveProjects(List<Project>.of(controller._projects));
     }
     controller._syncAmountFormatContext();
+    // SQLite 全部实体载入后才过滤账户提醒，避免把加载中的暂时空集合当成删除。
+    controller._pruneAccountEntryReminderReferences();
     return controller;
   }
 
@@ -225,6 +231,7 @@ class VeriFinController extends ChangeNotifier
     themePreferenceListenable.dispose();
     localePreferenceListenable.dispose();
     aiCapabilityListenable.dispose();
+    accountEntryRemindersListenable.dispose();
     super.dispose();
   }
 }

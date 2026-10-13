@@ -7,12 +7,16 @@ import 'package:flutter/services.dart';
 
 import '../app/app_theme.dart';
 import '../app/models.dart';
+import '../app/common_widgets.dart';
+import '../app/ledger_math.dart';
+import '../app/reminder/account_entry_reminder.dart';
 import '../app/feedback.dart';
 import '../app/platform_bridge.dart';
 import '../app/root_navigation.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'ai_entry_sheet.dart';
+import 'app_lock_gate.dart';
 import 'assets_pages.dart';
 import 'capture_entry.dart';
 import 'entry_detail_page.dart';
@@ -28,7 +32,10 @@ class VeriFinShell extends StatefulWidget {
   State<VeriFinShell> createState() => _VeriFinShellState();
 }
 
-class _VeriFinShellState extends State<VeriFinShell> {
+class _VeriFinShellState extends State<VeriFinShell>
+    with WidgetsBindingObserver {
+  bool _remindersUnlocked = false;
+  bool _reminderActionProcessing = false;
   int _index = 0;
   int? _programmaticPageTarget;
   DateTime? _lastBackPressedAt;
@@ -59,6 +66,10 @@ class _VeriFinShellState extends State<VeriFinShell> {
   @override
   void initState() {
     super.initState();
+    WidgetsBinding.instance.addObserver(this);
+    AppAccountReminderBridge.pendingActions.addListener(
+      _scheduleAccountReminderActions,
+    );
     _pageController.addListener(_trackScrollVelocity);
     AppCaptureBridge.setQuickEntryHandler(_openQuickEntryFromPlatform);
     AppCaptureBridge.setSharedCaptureHandler(_openSharedCaptureFromPlatform);
@@ -84,12 +95,127 @@ class _VeriFinShellState extends State<VeriFinShell> {
 
   @override
   void dispose() {
+    AppAccountReminderBridge.pendingActions.removeListener(
+      _scheduleAccountReminderActions,
+    );
+    WidgetsBinding.instance.removeObserver(this);
     AppCaptureBridge.clearQuickEntryHandler();
     AppCaptureBridge.clearSharedCaptureHandler();
     AppWidgetBridge.clearRouteHandler();
     _pageController.removeListener(_trackScrollVelocity);
     _pageController.dispose();
     super.dispose();
+  }
+
+  /// 订阅应用锁门卫；冷启动与解锁后仅在可交互状态消费外部记账操作。
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    _remindersUnlocked = AppUnlockScope.of(context);
+    _scheduleAccountReminderActions();
+  }
+
+  /// 回前台时检查持久队列；后台或锁屏阶段只保留用户点击，不写入交易。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) _scheduleAccountReminderActions();
+  }
+
+  /// 等待当前帧完成后再处理通知，避免在依赖变化或页面构建过程中打开确认框。
+  void _scheduleAccountReminderActions() {
+    WidgetsBinding.instance.addPostFrameCallback((_) {
+      if (mounted) unawaited(_drainAccountReminderActions());
+    });
+    WidgetsBinding.instance.ensureVisualUpdate();
+  }
+
+  /// 按原生持久队列顺序处理确认/取消；点通知正文时使用现有确认框补一次显式选择。
+  /// 失败不确认消费，后续回前台可重试；过期与已处理操作只关闭通知，不产生交易。
+  Future<void> _drainAccountReminderActions() async {
+    if (_reminderActionProcessing ||
+        !_remindersUnlocked ||
+        WidgetsBinding.instance.lifecycleState != AppLifecycleState.resumed) {
+      return;
+    }
+    _reminderActionProcessing = true;
+    final controller = VeriFinScope.of(context);
+    final feedback = VeriFeedbackHost.of(context);
+    final l10n = AppLocalizations.of(context);
+    try {
+      while (mounted && _remindersUnlocked) {
+        final action = await AppAccountReminderBridge.consume();
+        if (!mounted || !_remindersUnlocked || action == null) return;
+        final id = action['id'] as String? ?? '';
+        final date = action['date'] as String? ?? '';
+        final choice = action['choice'] as String? ?? '';
+        var confirm = choice == 'confirm';
+        if (choice == 'open') {
+          final rule = controller.accountEntryRemindersListenable.value
+              .where((item) => item.id == id)
+              .firstOrNull;
+          final notification = controller
+              .accountEntryReminderNotifications(l10n)
+              .where((item) => item['id'] == id)
+              .firstOrNull;
+          if (rule != null &&
+              notification != null &&
+              rule.handledDate != date &&
+              date == currencyDateKey(dateOnly(DateTime.now()))) {
+            confirm = await showConfirmDialog(
+              context,
+              title: notification['title']! as String,
+              message: notification['body']! as String,
+              confirmLabel: notification['confirmLabel']! as String,
+              cancelLabel: notification['cancelLabel']! as String,
+            );
+            if (!mounted || !_remindersUnlocked) return;
+          }
+        }
+        final result = await controller.handleAccountEntryReminder(
+          id: id,
+          date: date,
+          confirm: confirm,
+        );
+        if (!mounted) return;
+        final message = switch (result) {
+          AccountReminderResult.recorded => l10n.accountEntryReminderRecorded,
+          AccountReminderResult.cancelled => l10n.accountEntryReminderCancelled,
+          AccountReminderResult.alreadyHandled =>
+            l10n.accountEntryReminderAlreadyHandled,
+          AccountReminderResult.expired => l10n.accountEntryReminderExpired,
+          AccountReminderResult.missingRate =>
+            l10n.accountEntryReminderMissingRate,
+          AccountReminderResult.failed => l10n.saveFailed,
+        };
+        final failed =
+            result == AccountReminderResult.failed ||
+            result == AccountReminderResult.missingRate;
+        unawaited(
+          feedback.showMessage(
+            message: message,
+            tone: failed ? VeriFeedbackTone.error : VeriFeedbackTone.info,
+            dedupeKey: 'account-reminder-action',
+          ),
+        );
+        if (failed) return;
+        await AppAccountReminderBridge.acknowledge(action['key']! as String);
+      }
+    } catch (error) {
+      controller.logger?.error(
+        '账户提醒操作处理失败',
+        source: 'account-reminder',
+        error: error.runtimeType,
+      );
+      unawaited(
+        feedback.showMessage(
+          message: l10n.accountEntryReminderActionFailed,
+          tone: VeriFeedbackTone.error,
+          dedupeKey: 'account-reminder-action',
+        ),
+      );
+    } finally {
+      _reminderActionProcessing = false;
+    }
   }
 
   /// 按帧差分滚动速度，作为切页弹簧的初速度：改点目标时顺着当前速度接着跑。

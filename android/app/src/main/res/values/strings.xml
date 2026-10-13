@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="account_entry_reminder_channel">账户记账提醒</string>
     <string name="quick_entry_widget_description">今日支出概览与快速记账入口</string>
     <string name="budget_widget_description">本月可用预算概览</string>
     <string name="net_worth_widget_description">全部账户资产总额</string>

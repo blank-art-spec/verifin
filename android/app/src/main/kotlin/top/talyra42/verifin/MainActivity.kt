@@ -47,6 +47,7 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingDirectoryPick: MethodChannel.Result? = null
 
     override fun onCreate(savedInstanceState: Bundle?) {
+        rememberAccountReminderAction(intent)
         rememberQuickEntryIntent(intent)
         rememberWidgetRouteIntent(intent)
         rememberCaptureIntent(intent)
@@ -58,6 +59,24 @@ class MainActivity : FlutterFragmentActivity() {
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_NAME)
         channel?.setMethodCallHandler { call, result ->
             when (call.method) {
+                "syncAccountEntryReminders", "consumeAccountReminderAction", "acknowledgeAccountReminderAction" -> {
+                    try {
+                        when (call.method) {
+                            "syncAccountEntryReminders" -> {
+                                AccountEntryReminderReceiver.sync(this,
+                                    JSONArray(call.argument<List<Map<String, Any?>>>("reminders") ?: emptyList<Map<String, Any?>>()))
+                                result.success(null)
+                            }
+                            "consumeAccountReminderAction" -> result.success(AccountEntryReminderReceiver.consumeAction(this))
+                            else -> {
+                                AccountEntryReminderReceiver.acknowledgeAction(this, call.argument<String>("key") ?: "")
+                                result.success(null)
+                            }
+                        }
+                    } catch (error: Exception) {
+                        result.error("ACCOUNT_REMINDER_FAILED", "账户记账提醒处理失败：${error.javaClass.simpleName}", null)
+                    }
+                }
                 "consumeQuickEntryIntent" -> {
                     val shouldOpen = pendingQuickEntryIntent
                     pendingQuickEntryIntent = false
@@ -234,6 +253,9 @@ class MainActivity : FlutterFragmentActivity() {
     override fun onNewIntent(intent: Intent) {
         super.onNewIntent(intent)
         setIntent(intent)
+        if (rememberAccountReminderAction(intent)) {
+            channel?.invokeMethod("accountReminderActionAvailable", null)
+        }
         if (intent.action == ACTION_QUICK_ENTRY) {
             if (channel == null) {
                 pendingQuickEntryIntent = true
@@ -253,6 +275,14 @@ class MainActivity : FlutterFragmentActivity() {
             // 引擎已就绪则立刻通知 Flutter 拉取；冷启动时由 Flutter 开屏主动 consume。
             channel?.invokeMethod("openSharedCapture", null)
         }
+    }
+
+    /** 收到系统通知操作后先落本机队列；[intent] 校验失败不执行任何账目操作。 */
+    private fun rememberAccountReminderAction(intent: Intent?): Boolean = try {
+        AccountEntryReminderReceiver.rememberAction(this, intent)
+    } catch (error: Exception) {
+        android.util.Log.e("AccountEntryReminder", "保存账户提醒操作失败：${error.javaClass.simpleName}")
+        false
     }
 
     /// 记住分享/外部采集意图（由 ShareReceiverActivity 转发进来），待 Flutter 拉取。

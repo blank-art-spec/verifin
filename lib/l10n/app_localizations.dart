@@ -98,6 +98,149 @@ abstract class AppLocalizations {
     Locale('zh'),
   ];
 
+  /// No description provided for @accountEntryReminderTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户记账提醒'**
+  String get accountEntryReminderTitle;
+
+  /// No description provided for @accountEntryReminderEnabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用记账提醒'**
+  String get accountEntryReminderEnabled;
+
+  /// No description provided for @accountEntryReminderDescription.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒固定关联此账户，切换账本仍会提醒。确认才记账，取消或不处理都不记账。'**
+  String get accountEntryReminderDescription;
+
+  /// No description provided for @accountEntryReminderName.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒名称'**
+  String get accountEntryReminderName;
+
+  /// No description provided for @accountEntryReminderAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'预设金额'**
+  String get accountEntryReminderAmount;
+
+  /// No description provided for @accountEntryReminderTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒时间'**
+  String get accountEntryReminderTime;
+
+  /// No description provided for @accountEntryReminderRepeat.
+  ///
+  /// In zh, this message translates to:
+  /// **'重复星期'**
+  String get accountEntryReminderRepeat;
+
+  /// No description provided for @accountEntryReminderConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认方式'**
+  String get accountEntryReminderConfirmation;
+
+  /// No description provided for @accountEntryReminderConfirmLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认按钮文字'**
+  String get accountEntryReminderConfirmLabel;
+
+  /// No description provided for @accountEntryReminderCancelLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消按钮文字'**
+  String get accountEntryReminderCancelLabel;
+
+  /// No description provided for @accountEntryReminderConfirmDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'确定'**
+  String get accountEntryReminderConfirmDefault;
+
+  /// No description provided for @accountEntryReminderButtonHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'按钮文字可自定义，留空使用默认文字，最多 12 个字符。确认按钮始终记账，取消按钮只跳过本次。'**
+  String get accountEntryReminderButtonHint;
+
+  /// No description provided for @accountEntryReminderValidation.
+  ///
+  /// In zh, this message translates to:
+  /// **'请选择至少一个星期；启用时须填写大于零的金额并选择分类。按钮文字最多 12 个字符。'**
+  String get accountEntryReminderValidation;
+
+  /// No description provided for @accountEntryReminderOn.
+  ///
+  /// In zh, this message translates to:
+  /// **'已启用'**
+  String get accountEntryReminderOn;
+
+  /// No description provided for @accountEntryReminderOff.
+  ///
+  /// In zh, this message translates to:
+  /// **'未启用'**
+  String get accountEntryReminderOff;
+
+  /// No description provided for @accountEntryReminderRecorded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已记入提醒对应的账户和账本。'**
+  String get accountEntryReminderRecorded;
+
+  /// No description provided for @accountEntryReminderCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已跳过本次提醒，未记账。'**
+  String get accountEntryReminderCancelled;
+
+  /// No description provided for @accountEntryReminderAlreadyHandled.
+  ///
+  /// In zh, this message translates to:
+  /// **'今天的这条提醒已处理，无需重复记账。'**
+  String get accountEntryReminderAlreadyHandled;
+
+  /// No description provided for @accountEntryReminderExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒已过期或配置已更改，未记账。'**
+  String get accountEntryReminderExpired;
+
+  /// No description provided for @accountEntryReminderMissingRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少提醒日期的本位币汇率，尚未记账。请补充汇率后重试。'**
+  String get accountEntryReminderMissingRate;
+
+  /// No description provided for @accountEntryReminderScheduleFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户提醒已保存，但系统排程失败。请重新打开应用重试。'**
+  String get accountEntryReminderScheduleFailed;
+
+  /// No description provided for @accountEntryReminderActionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户提醒操作处理失败，操作已保留，请重新打开应用重试。'**
+  String get accountEntryReminderActionFailed;
+
+  /// 固定到账户及其所属账本的交易确认通知
+  ///
+  /// In zh, this message translates to:
+  /// **'{book} · {account}\n是否记录一笔{type} {amount}？'**
+  String accountEntryReminderNotification(
+    String book,
+    String account,
+    String type,
+    String amount,
+  );
+
   /// 应用名称
   ///
   /// In zh, this message translates to:
