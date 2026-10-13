@@ -52,13 +52,15 @@ void main() {
     );
   });
 
-  test('seeds English defaults when system locale is not Chinese', () async {
-    // 不经 makeController（它预置中文），模拟英文系统的全新首启动。
+  test('已选择跟随系统时，英文系统仍播种英文默认数据', () async {
+    // 显式保存跟随系统，验证新的中文默认值不会覆盖用户已有选择。
+    final store = LocalKeyValueStore()..write('verifin.locale.v1', 'system');
     final controller = await VeriFinController.create(
-      LocalKeyValueStore(),
+      store,
       repository: InMemoryLedgerRepository(),
       systemIsEnglish: true,
     );
+    expect(controller.localePreference, LocalePreference.system);
     expect(controller.activeBook.name, 'Daily Ledger');
     expect(controller.categories.map((c) => c.label), contains('Dining'));
     expect(controller.profile.bio, 'Completely free · Own your data');

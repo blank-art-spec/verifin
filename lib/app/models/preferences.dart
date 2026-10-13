@@ -41,7 +41,7 @@ enum ThemePreference {
 }
 
 /// 应用语言偏好：跟随系统或固定某一语言。设备本地偏好（存 KV），
-/// 不进 JSON 备份，初始化数据时保留。
+/// 不进 JSON 备份，初始化数据时保留；未保存偏好时默认简体中文。
 enum LocalePreference {
   system,
   zh,
@@ -71,10 +71,16 @@ enum LocalePreference {
     }
   }
 
+  /// 将设备 KV 保存的 [value]（枚举名 `zh`、`en` 或 `system`）恢复为语言偏好。
+  ///
+  /// [value] 为 null 表示尚未选择语言，此时返回简体中文，让所有构建渠道在
+  /// 英文系统上首次启动也保持中文；空串或无法识别的旧值同样回落中文。
+  /// 已保存的有效选择原样返回，尤其不会把用户选择的英文或跟随系统改成中文。
+  /// 本方法只解析并返回结果，不写 KV，也不重命名已经生成的账本和分类。
   static LocalePreference fromStorage(String? value) {
     return LocalePreference.values.firstWhere(
       (preference) => preference.name == value,
-      orElse: () => LocalePreference.system,
+      orElse: () => LocalePreference.zh,
     );
   }
 }

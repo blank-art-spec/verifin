@@ -143,7 +143,9 @@ mixin _ControllerState on ChangeNotifier {
   late final ValueNotifier<AiCapabilityProfile?> aiCapabilityListenable;
 
   ThemePreference _themePreference = ThemePreference.system;
-  LocalePreference _localePreference = LocalePreference.system;
+
+  /// 默认简体中文；载入 KV 后仍以用户保存的选择为准，与 fromStorage 缺省值一致。
+  LocalePreference _localePreference = LocalePreference.zh;
   UserProfile _profile = defaultUserProfile;
   String _activeBookId = defaultLedgerBookId;
   String _assetCoverUrl = '';
