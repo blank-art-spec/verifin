@@ -59,6 +59,26 @@ adb devices -l
 即可恢复。连点、快速切页这类压测优先用 `flutter test` 的 widget 测试（可控、可复现、能断言），
 真机/模拟器只做最终确认。
 
+## 当前目录的轻量模拟器（Windows 可选）
+
+本机可将独立工具链安装在根目录 `.toolchain/`（已被 Git 忽略），包含 Flutter 3.47.2、
+JDK 17、Android SDK、官方 Android Emulator 和一个 Android 15/API 35 AOSP x86_64 镜像。
+不必安装完整 Android Studio。已有工具优先复用，构建平台仍按 Flutter 插件选择 API 36，
+不能把模拟器的 API 35 当成 compileSdk。
+
+屏幕按 [vivo X300 官方参数](https://www.vivo.com/sg/products/param/x300) 的 1216×2640 比例
+降为 608×1320、248 dpi，应用逻辑尺寸约 392×852；2 核、2 GB 内存，关闭音频与快照。
+这个配置用于基础运行及布局，不模拟 OriginOS，也不能替代真机权限、OCR 和 release/R8 验收。
+
+安装后双击 `.toolchain/启动模拟器.cmd`，待桌面出现，再双击 `.toolchain/打开应用.cmd`。
+需要重新编译时由用户手动执行 `.toolchain/手动构建并打开.cmd`；没有自动构建任务。
+具体脚本说明在本机 `.toolchain/README.md`，这些本地文件不随仓库分发。
+
+工具链脚本只设置当前终端环境，以空闲 `V:` 盘符给项目内目录建立无空格别名，
+不修改系统 PATH，不覆盖已有盘符；AVD、Gradle 缓存和临时文件均留在项目中。
+默认设备为 `emulator-5556`，只安装 `diagnostic` 测试应用并带
+`--dart-define=UNIFIED_DESIGN_PREVIEW=true`。本地 debug APK 不作为正式发布产物。
+
 ## 日常真机开发
 
 手机开启 USB 调试并授权电脑；某些 ROM 还需允许 USB 安装。`unauthorized`、锁屏或
