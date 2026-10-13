@@ -9,6 +9,92 @@ class AppLocalizationsEn extends AppLocalizations {
   AppLocalizationsEn([String locale = 'en']) : super(locale);
 
   @override
+  String get accountEntryReminderTitle => 'Account entry reminder';
+
+  @override
+  String get accountEntryReminderEnabled => 'Enable entry reminder';
+
+  @override
+  String get accountEntryReminderDescription =>
+      'Linked to this account even when you switch ledgers. Only confirmation records an entry; cancelling or ignoring does not.';
+
+  @override
+  String get accountEntryReminderName => 'Reminder name';
+
+  @override
+  String get accountEntryReminderAmount => 'Preset amount';
+
+  @override
+  String get accountEntryReminderTime => 'Reminder time';
+
+  @override
+  String get accountEntryReminderRepeat => 'Repeat on';
+
+  @override
+  String get accountEntryReminderConfirmation => 'Confirmation';
+
+  @override
+  String get accountEntryReminderConfirmLabel => 'Confirm button text';
+
+  @override
+  String get accountEntryReminderCancelLabel => 'Cancel button text';
+
+  @override
+  String get accountEntryReminderConfirmDefault => 'Confirm';
+
+  @override
+  String get accountEntryReminderButtonHint =>
+      'Custom button text supports up to 12 characters. Leave blank for the default. Confirm always records an entry; cancel skips this occurrence.';
+
+  @override
+  String get accountEntryReminderValidation =>
+      'Select at least one weekday. When enabled, enter a positive amount and choose a category. Button text supports up to 12 characters.';
+
+  @override
+  String get accountEntryReminderOn => 'Enabled';
+
+  @override
+  String get accountEntryReminderOff => 'Disabled';
+
+  @override
+  String get accountEntryReminderRecorded =>
+      'Recorded in the reminder\'s account and ledger.';
+
+  @override
+  String get accountEntryReminderCancelled =>
+      'Skipped this reminder without recording an entry.';
+
+  @override
+  String get accountEntryReminderAlreadyHandled =>
+      'Today\'s reminder has already been handled. No duplicate entry was recorded.';
+
+  @override
+  String get accountEntryReminderExpired =>
+      'The reminder expired or its configuration changed. No entry was recorded.';
+
+  @override
+  String get accountEntryReminderMissingRate =>
+      'No base currency rate is available for the reminder date. Add the rate and try again; no entry has been recorded.';
+
+  @override
+  String get accountEntryReminderScheduleFailed =>
+      'The account reminder was saved, but scheduling failed. Reopen the app to try again.';
+
+  @override
+  String get accountEntryReminderActionFailed =>
+      'The account reminder action failed and was retained. Reopen the app to try again.';
+
+  @override
+  String accountEntryReminderNotification(
+    String book,
+    String account,
+    String type,
+    String amount,
+  ) {
+    return '$book · $account\nRecord an $type entry of $amount?';
+  }
+
+  @override
   String get appTitle => 'Veri Fin';
 
   @override

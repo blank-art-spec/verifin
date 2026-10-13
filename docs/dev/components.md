@@ -77,6 +77,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `AutoCapturePage` / `AutoCaptureRulesPage` / `AutoCaptureRuleEditorPage` | 页面 Widget | `auto_capture_page.dart` | 自动采集权限与高置信度开关、原生链路诊断（系统授权 / NLS 实时连接 / 原生开关 / 最近通知提取·过滤·入队结果）、今日捕获/识别及最近捕获时间、最近未落账事件安全回放、待确认/疑似重复/自动入账纠错，以及本地确定性规则管理；系统通知/短信原文不直接写交易 |
 | `AttentionCenterPage` / `AttentionCenterSnapshot` | 页面 Widget / 纯投影 | `attention_center_page.dart` / `attention_center.dart` | 统一汇总对账冲突、疑似重复、未匹配退款、未关联还款、缺失汇率与低置信度采集；快照不持久化，处理后随权威数据自动消失；入口位于“我的 → 数据与工具” |
 | `ReminderSettingsPage` / `CreditReminderSnapshot` | 页面 Widget / 纯投影 | `reminder_settings_page.dart` / `reminder/financial_reminder.dart` | 分别控制每日记账、账期预算、账单日和还款日提醒；实时投影信用主体的出账/到期倒计时、最近正式账单、待还与预算档位，UI 与系统通知共用同一口径；预算通知按账期跨重启去重 |
+| `AccountEntryReminderPage` / `AccountEntryReminder` / `AppAccountReminderBridge` | 页面 / 配置 / 原生桥 | `account_entry_reminder_page.dart` / `reminder/account_entry_reminder.dart` / `platform_bridge_account_reminder.dart` | 所有账户通用的确认记账提醒；收入/支出预设、重复星期、两个自定义按钮，跨账本固定保存、当天去重与应用锁守卫；见 [账户提醒](account-entry-reminders.md) |
+| `AppUnlockScope` | 状态作用域 | `app_lock_gate.dart` | 只公开应用锁当前是否解锁；账户提醒操作在解锁后消费，不提供绕过认证能力 |
 | `CreditAccountCycleCard` | 首页展开详情 Widget | `home_page.dart` | 信用账户摘要点行后显示；按信用主体聚合币种子账户，分开显示本账期净消费、当前账期欠款、正式账单与到期流水待还、总欠款、出账/还款日和账期预算进度；日历结转只计算视图，正式快照优先 |
 | `HomeTrendPanel` | 首页概览 Widget | `home_page.dart` | 按实际字体与金额宽度分配主金额和右侧胶囊；放不下时胶囊换行，金额不省略，三个指标方块随宽度和字体换行 |
 | `AccountSectionCard` | Widget | `common_widgets.dart` | 资产页账户分区卡（可折叠 + 分区合计）；普通资产页折叠状态由 Controller 按账本/视图模式持久化，设置页可在草稿中调整；同时服务类型、文件夹分组和隐藏账户等分区，拖拽只由 `sectionDragIndex != null` 开启，`sectionDragImmediate` 控制即时/延迟拖拽 |

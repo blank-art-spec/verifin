@@ -17,10 +17,12 @@ import '../app/feedback.dart';
 import '../app/icon_catalog.dart';
 import '../app/ledger_math.dart';
 import '../app/models.dart';
+import '../app/reminder/account_entry_reminder.dart';
 import '../app/series_math.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'billing_statements_page.dart';
+import 'account_entry_reminder_page.dart';
 import 'credit_account_editor_page.dart';
 import 'credit_repayment_page.dart';
 import 'entry_detail_page.dart';
@@ -357,6 +359,36 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                 ),
                 const SizedBox(height: 10),
                 SectionLabel(AppLocalizations.of(context).accountSectionBasic),
+                ValueListenableBuilder<List<AccountEntryReminder>>(
+                  valueListenable: controller.accountEntryRemindersListenable,
+                  builder: (context, reminders, _) => VeriCard(
+                    child: SettingsRow(
+                      icon: Icons.notifications_active_outlined,
+                      title: AppLocalizations.of(
+                        context,
+                      ).accountEntryReminderTitle,
+                      trailing:
+                          reminders.any(
+                            (rule) =>
+                                rule.accountId == persistedAccount.id &&
+                                rule.enabled,
+                          )
+                          ? AppLocalizations.of(context).accountEntryReminderOn
+                          : AppLocalizations.of(
+                              context,
+                            ).accountEntryReminderOff,
+                      trailingIcon: Icons.chevron_right,
+                      onTap: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute<void>(
+                          builder: (_) => AccountEntryReminderPage(
+                            account: persistedAccount,
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 10),
                 VeriCard(
                   child: Column(
                     children: <Widget>[

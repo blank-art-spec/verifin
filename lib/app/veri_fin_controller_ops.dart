@@ -7379,9 +7379,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   }
 
   void resetAllData() {
+    // 初始化会使原账户失效，账户提醒及其当日处理标记一起清除。
+    accountEntryRemindersListenable.value = const <AccountEntryReminder>[];
     // 偏好类 KV 键清空；账目类数据在下方以默认状态写回 SQLite。
     for (final key in <String>[
       _themeKey,
+      _accountEntryReminderKey,
       _profileKey,
       _activeBookKey,
       _assetCoverKey,

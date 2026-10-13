@@ -138,6 +138,16 @@
             </intent-filter>
         </receiver>
         <!-- flutter_local_notifications 定时通知的接收器；开机后重排已安排的记账提醒。 -->
+        <!-- 账户确认提醒只展示通知；确认/取消打开应用并通过应用锁后才处理。 -->
+        <receiver android:name=".AccountEntryReminderReceiver" android:exported="false">
+            <intent-filter>
+                <action android:name="android.intent.action.BOOT_COMPLETED" />
+                <action android:name="android.intent.action.MY_PACKAGE_REPLACED" />
+                <action android:name="android.intent.action.TIME_SET" />
+                <action android:name="android.intent.action.TIMEZONE_CHANGED" />
+                <action android:name="android.app.action.SCHEDULE_EXACT_ALARM_PERMISSION_STATE_CHANGED" />
+            </intent-filter>
+        </receiver>
         <receiver
             android:exported="false"
             android:name="com.dexterous.flutterlocalnotifications.ScheduledNotificationReceiver" />

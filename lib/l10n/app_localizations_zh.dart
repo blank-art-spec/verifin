@@ -9,6 +9,85 @@ class AppLocalizationsZh extends AppLocalizations {
   AppLocalizationsZh([String locale = 'zh']) : super(locale);
 
   @override
+  String get accountEntryReminderTitle => '账户记账提醒';
+
+  @override
+  String get accountEntryReminderEnabled => '启用记账提醒';
+
+  @override
+  String get accountEntryReminderDescription =>
+      '提醒固定关联此账户，切换账本仍会提醒。确认才记账，取消或不处理都不记账。';
+
+  @override
+  String get accountEntryReminderName => '提醒名称';
+
+  @override
+  String get accountEntryReminderAmount => '预设金额';
+
+  @override
+  String get accountEntryReminderTime => '提醒时间';
+
+  @override
+  String get accountEntryReminderRepeat => '重复星期';
+
+  @override
+  String get accountEntryReminderConfirmation => '确认方式';
+
+  @override
+  String get accountEntryReminderConfirmLabel => '确认按钮文字';
+
+  @override
+  String get accountEntryReminderCancelLabel => '取消按钮文字';
+
+  @override
+  String get accountEntryReminderConfirmDefault => '确定';
+
+  @override
+  String get accountEntryReminderButtonHint =>
+      '按钮文字可自定义，留空使用默认文字，最多 12 个字符。确认按钮始终记账，取消按钮只跳过本次。';
+
+  @override
+  String get accountEntryReminderValidation =>
+      '请选择至少一个星期；启用时须填写大于零的金额并选择分类。按钮文字最多 12 个字符。';
+
+  @override
+  String get accountEntryReminderOn => '已启用';
+
+  @override
+  String get accountEntryReminderOff => '未启用';
+
+  @override
+  String get accountEntryReminderRecorded => '已记入提醒对应的账户和账本。';
+
+  @override
+  String get accountEntryReminderCancelled => '已跳过本次提醒，未记账。';
+
+  @override
+  String get accountEntryReminderAlreadyHandled => '今天的这条提醒已处理，无需重复记账。';
+
+  @override
+  String get accountEntryReminderExpired => '提醒已过期或配置已更改，未记账。';
+
+  @override
+  String get accountEntryReminderMissingRate => '缺少提醒日期的本位币汇率，尚未记账。请补充汇率后重试。';
+
+  @override
+  String get accountEntryReminderScheduleFailed => '账户提醒已保存，但系统排程失败。请重新打开应用重试。';
+
+  @override
+  String get accountEntryReminderActionFailed => '账户提醒操作处理失败，操作已保留，请重新打开应用重试。';
+
+  @override
+  String accountEntryReminderNotification(
+    String book,
+    String account,
+    String type,
+    String amount,
+  ) {
+    return '$book · $account\n是否记录一笔$type $amount？';
+  }
+
+  @override
   String get appTitle => 'Veri Fin';
 
   @override

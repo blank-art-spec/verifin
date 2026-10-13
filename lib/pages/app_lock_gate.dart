@@ -15,6 +15,29 @@ class AppLockGate extends StatefulWidget {
   State<AppLockGate> createState() => _AppLockGateState();
 }
 
+/// 向后代公开当前解锁状态，外部通知只在 [unlocked] 为 true 时消费。
+/// 这里只传递状态，不提供解锁或绕过认证的能力。
+class AppUnlockScope extends InheritedWidget {
+  /// [unlocked] 由应用锁门卫计算，[child] 为保留状态的应用路由树。
+  const AppUnlockScope({
+    super.key,
+    required this.unlocked,
+    required super.child,
+  });
+
+  final bool unlocked;
+
+  /// 读取并订阅解锁变化；测试页面没有门卫时按可交互页面处理。
+  static bool of(BuildContext context) =>
+      context.dependOnInheritedWidgetOfExactType<AppUnlockScope>()?.unlocked ??
+      true;
+
+  /// 仅解锁状态发生变化时通知后代重新检查待处理的系统操作。
+  @override
+  bool updateShouldNotify(AppUnlockScope oldWidget) =>
+      unlocked != oldWidget.unlocked;
+}
+
 class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
   bool _locked = false;
   bool _initialized = false;
@@ -67,7 +90,10 @@ class _AppLockGateState extends State<AppLockGate> with WidgetsBindingObserver {
         // 半透明材质不能透出锁屏下方的账目；保留页面状态，但停止绘制、语义和焦点访问。
         ExcludeFocus(
           excluding: showLock,
-          child: Offstage(offstage: showLock, child: widget.child),
+          child: AppUnlockScope(
+            unlocked: !showLock,
+            child: Offstage(offstage: showLock, child: widget.child),
+          ),
         ),
         if (showLock)
           // 本门卫位于 `MaterialApp.builder`，即在根 Navigator 之上，自身没有

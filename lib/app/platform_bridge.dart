@@ -29,6 +29,7 @@ part 'platform_bridge_auto_capture.dart';
 part 'platform_bridge_storage.dart';
 part 'platform_bridge_update.dart';
 part 'platform_bridge_widget.dart';
+part 'platform_bridge_account_reminder.dart';
 
 const MethodChannel _channel = MethodChannel('verifin/app');
 
@@ -36,6 +37,10 @@ const MethodChannel _channel = MethodChannel('verifin/app');
 /// （[_quickEntryHandler] 等）在对应 part 里定义，分发时按当前值动态读取。
 void _ensureInboundDispatcher() {
   _channel.setMethodCallHandler((call) async {
+    if (call.method == 'accountReminderActionAvailable') {
+      AppAccountReminderBridge.pendingActions.value++;
+      return;
+    }
     if (call.method == 'openQuickEntry') {
       await _quickEntryHandler?.call();
       return;

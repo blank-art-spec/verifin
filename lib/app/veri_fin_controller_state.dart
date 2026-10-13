@@ -106,6 +106,7 @@ mixin _ControllerState on ChangeNotifier {
 
   @override
   void notifyListeners() {
+    _pruneAccountEntryReminderReferences();
     _syncAmountFormatContext();
     _invalidateDerivedViews();
     onWidgetProjectionInvalidated?.call();
@@ -158,6 +159,45 @@ mixin _ControllerState on ChangeNotifier {
   String _backupPassphrase = '';
   WebdavConfig _webdavConfig = const WebdavConfig();
   ReminderSettings _reminderSettings = ReminderSettings.disabled;
+
+  /// 账户提醒使用独立通知源，编辑配置不触发整个账目树重建。
+  final ValueNotifier<List<AccountEntryReminder>>
+  accountEntryRemindersListenable = ValueNotifier<List<AccountEntryReminder>>(
+    const <AccountEntryReminder>[],
+  );
+
+  /// 删除账户/账本/分类或变更账户币种后清理无效提醒；权威实体变化成功后才调用。
+  /// 配置属于本机 KV，清理失败通过既有持久化错误入口报告，冷启动会再次过滤。
+  void _pruneAccountEntryReminderReferences() {
+    final current = accountEntryRemindersListenable.value;
+    final next = current
+        .where(
+          (rule) =>
+              _ledgerBooks.any((book) => book.id == rule.bookId) &&
+              _accounts.any(
+                (account) =>
+                    account.id == rule.accountId &&
+                    account.bookId == rule.bookId &&
+                    account.currencyCode == rule.currencyCode,
+              ) &&
+              (!rule.enabled ||
+                  _categories.any(
+                    (category) =>
+                        category.id == rule.categoryId &&
+                        category.type == rule.type,
+                  )),
+        )
+        .toList(growable: false);
+    if (next.length == current.length) return;
+    accountEntryRemindersListenable.value =
+        List<AccountEntryReminder>.unmodifiable(next);
+    _trackWrite(
+      _store.writeAndFlush(
+        _accountEntryReminderKey,
+        jsonEncode(next.map((rule) => rule.toJson()).toList()),
+      ),
+    );
+  }
 
   /// 已成功显示的账期预算通知档位。
   ///
@@ -258,6 +298,22 @@ mixin _ControllerState on ChangeNotifier {
     _backupPassphrase = _store.read(_backupPassphraseKey) ?? '';
     _webdavConfig = WebdavConfig.decode(_store.read(_webdavKey));
     _reminderSettings = ReminderSettings.decode(_store.read(_reminderKey));
+    try {
+      final raw = _store.read(_accountEntryReminderKey);
+      if (raw != null) {
+        final seen = <String>{};
+        accountEntryRemindersListenable.value =
+            List<AccountEntryReminder>.unmodifiable(
+              _decodeModelList(
+                jsonDecode(raw),
+                AccountEntryReminder.fromJson,
+              ).where((rule) => rule.id.isNotEmpty && seen.add(rule.accountId)),
+            );
+      }
+    } catch (error) {
+      // 损坏配置按全部关闭处理；不尝试猜测金额或自动创建交易。
+      _logger?.warning('账户记账提醒配置损坏，已停止加载', source: 'account-reminder');
+    }
     _loadReminderDeliveryState();
     _fabActionMode = FabActionMode.fromStorage(_store.read(_fabActionKey));
     _numberPadLayout = NumberPadLayout.fromStorage(

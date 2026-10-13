@@ -1,5 +1,6 @@
 <?xml version="1.0" encoding="utf-8"?>
 <resources>
+    <string name="account_entry_reminder_channel">Account entry reminders</string>
     <string name="quick_entry_tile_label">Quick entry</string>
     <string name="quick_entry_button">Add entry</string>
     <string name="quick_entry_widget_description">Today spending and quick entry</string>
