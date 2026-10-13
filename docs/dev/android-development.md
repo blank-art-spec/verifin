@@ -79,7 +79,7 @@ JDK 17、Android SDK、官方 Android Emulator 和一个 Android 15/API 35 AOSP 
 同时显式指定 `ANDROID_EMULATOR_HOME`，并将本工具链进程的 `USERPROFILE`、`APPDATA`、
 `LOCALAPPDATA`、`TEMP`、`TMP` 和 Java `user.home` 指向项目内隔离目录，避免工具默认回写 C 盘。
 具体 Android 专用变量含义见 [官方环境变量说明](https://developer.android.com/tools/variables)。
-旧 `C:\vf-toolchain` 迁移并校验后只保留兼容目录连接，实际文件位于本项目 `.toolchain/`；
+旧 `C:\vf-toolchain` 已完成迁移并删除兼容目录连接，实际文件位于本项目 `.toolchain/`；
 历史同名配置若与当前配置不同，保存在 `.toolchain/migrated-conflicts/`，不覆盖当前签名或设置。
 默认设备为 `emulator-5556`，只安装 `diagnostic` 测试应用并带
 `--dart-define=UNIFIED_DESIGN_PREVIEW=true`。本地 debug APK 不作为正式发布产物。
