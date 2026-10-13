@@ -2257,8 +2257,116 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     return true;
   }
 
+  /// 记录不指定扣款账户的信用还款，原子保存转账、正式账单与还款分配。
+  ///
+  /// [repaymentEntryId] 是页面草稿的稳定 id，失败重试仍用同一个 id；
+  /// [accountId] 必须是当前账本的信用币种子账户；[amount] 是该币种实际到账额；
+  /// [occurredAt] 是到账时间；[note] 是可选备注，保存前会去掉首尾空白。
+  /// 无转出账户表示只记录信用端的还款，不扣减其他资产，也不计入收支。
+  /// 不清零余额或伪造锚点：未出账消费及其真实欠款继续保留。
+  /// 返回类型区分校验失败与落库失败；落库成功后才更新内存和通知界面。
+  Future<EntrySaveResult> recordCreditRepayment({
+    required String repaymentEntryId,
+    required String accountId,
+    required double amount,
+    required DateTime occurredAt,
+    String note = '',
+  }) => _enqueueCaptureMutation(() async {
+    if (repaymentEntryId.isEmpty ||
+        _entries.any((entry) => entry.id == repaymentEntryId)) {
+      return const EntrySaveValidationFailure(EntryValidationCode.staleDraft);
+    }
+    final account = accounts
+        .where((item) => item.id == accountId && item.type.supportsCredit)
+        .firstOrNull;
+    final transferCategory = categoriesForType(EntryType.transfer).firstOrNull;
+    if (account == null ||
+        transferCategory == null ||
+        !amount.isFinite ||
+        amount <= 0) {
+      return const EntrySaveValidationFailure(
+        EntryValidationCode.invalidAmounts,
+      );
+    }
+    final normalizedAmount = normalizeCurrencyAmount(
+      amount,
+      account.currencyCode,
+    );
+    final entry = LedgerEntry(
+      id: repaymentEntryId,
+      bookId: account.bookId,
+      type: EntryType.transfer,
+      amount: normalizedAmount,
+      currencyCode: account.currencyCode,
+      accountAmount: null,
+      toAccountAmount: normalizedAmount,
+      baseAmount: 0,
+      conversionSource: ConversionSource.identity,
+      categoryId: transferCategory.id,
+      // 空 id 是模型既定的“无账户”语义，不创建虚拟扣款账户。
+      accountId: '',
+      toAccountId: account.id,
+      note: note.trim(),
+      occurredAt: occurredAt,
+    );
+    final issue = validateLedgerEntries(
+      books: <LedgerBook>[activeBook],
+      accounts: accounts,
+      entries: <LedgerEntry>[entry],
+      requireMinorUnitNormalization: true,
+    );
+    if (issue != null) {
+      return const EntrySaveValidationFailure(
+        EntryValidationCode.invalidAmounts,
+      );
+    }
+    final plan = _planRepaymentToStatements(
+      entry: entry,
+      account: account,
+      repaymentAmount: normalizedAmount,
+    );
+    if (plan == null) {
+      return const EntrySaveValidationFailure(
+        EntryValidationCode.invalidAmounts,
+      );
+    }
+    final nextEntries = <LedgerEntry>[
+      ..._entries,
+      appendEntryAudit(
+        before: null,
+        after: entry,
+        actor: EntryAuditActor.user,
+        reason: EntryAuditReason.created,
+        at: DateTime.now(),
+      ),
+    ]..sort(_compareEntriesLatestFirst);
+    if (!await _runTrackedWrite(
+      () => _repository.saveCreditAggregate(
+        entries: nextEntries,
+        statements: plan.statements,
+        allocations: plan.allocations,
+      ),
+    )) {
+      return const EntrySavePersistenceFailure();
+    }
+    _entries
+      ..clear()
+      ..addAll(nextEntries);
+    _billingStatements
+      ..clear()
+      ..addAll(plan.statements);
+    _statementRepaymentAllocations
+      ..clear()
+      ..addAll(plan.allocations);
+    notifyListeners();
+    onEntryAdded?.call();
+    return const EntrySaveSuccess();
+  });
+
   /// 把一笔已保存的还款按“最早到期优先”自动分配给尚未结清的账单。
   ///
+  /// [repaymentEntryId] 指向已保存的转账；[creditAccountId] 是接收还款的子账户，
+  /// 并非信用主体 id；[repaymentAmount] 是该子账户币种的待分配总额。
   /// 分配可跨多期；超过已出账待还的剩余金额保持未分配，代表提前还款/未出账部分。
   Future<double> allocateRepaymentToStatements({
     required String repaymentEntryId,
@@ -2280,6 +2388,48 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         repaymentAmount <= 0) {
       return 0;
     }
+    final plan = _planRepaymentToStatements(
+      entry: entry,
+      account: account,
+      repaymentAmount: repaymentAmount,
+    );
+    if (plan == null) return 0;
+    if (!await _runTrackedWrite(
+      () => _repository.saveCreditAggregate(
+        entries: _entries,
+        statements: plan.statements,
+        allocations: plan.allocations,
+      ),
+    )) {
+      return 0;
+    }
+    _billingStatements
+      ..clear()
+      ..addAll(plan.statements);
+    _statementRepaymentAllocations
+      ..clear()
+      ..addAll(plan.allocations);
+    notifyListeners();
+    return plan.allocated;
+  }
+
+  /// 为还款生成账单与分配的新快照，不落库，也不改变当前内存数据。
+  ///
+  /// [entry] 和 [account] 已由调用方校验为同账本的还款及目标子账户；
+  /// [repaymentAmount] 按真实转入额封顶。重新分配先撤销这笔还款的旧关系，
+  /// 再按最早到期顺序抵扣退款后的待还，供新还款原子保存和旧还款修正共同复用。
+  /// 返回账单、分配列表与实际分配额；转入金额无效时返回 null。
+  ({
+    List<BillingStatement> statements,
+    List<StatementRepaymentAllocation> allocations,
+    double allocated,
+  })? _planRepaymentToStatements({
+    required LedgerEntry entry,
+    required Account account,
+    required double repaymentAmount,
+  }) {
+    final repaymentEntryId = entry.id;
+    final creditAccountId = account.id;
     final previousAllocations = _statementRepaymentAllocations
         .where((item) => item.repaymentEntryId == repaymentEntryId)
         .toList();
@@ -2325,7 +2475,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         entry.toAccountAmount ??
         (entry.currencyCode == account.currencyCode ? entry.amount : 0);
     if (!transferAmount.isFinite || transferAmount <= 0) {
-      return 0;
+      return null;
     }
     var remaining = normalizeCurrencyAmount(
       repaymentAmount.clamp(0, transferAmount),
@@ -2366,23 +2516,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         account.currencyCode,
       );
     }
-    if (!await _runTrackedWrite(
-      () => _repository.saveCreditAggregate(
-        entries: _entries,
-        statements: nextStatements,
-        allocations: nextAllocations,
-      ),
-    )) {
-      return 0;
-    }
-    _billingStatements
-      ..clear()
-      ..addAll(nextStatements);
-    _statementRepaymentAllocations
-      ..clear()
-      ..addAll(nextAllocations);
-    notifyListeners();
-    return allocated;
+    return (
+      statements: nextStatements,
+      allocations: nextAllocations,
+      allocated: allocated,
+    );
   }
 
   List<AccountGroup> get accountGroups {

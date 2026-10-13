@@ -70,7 +70,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `confirmDeleteAccount` | Dialog 函数 | `sheets.dart` | 删账户流程（有流水→隐藏/删除三选；级联提示停用周期规则）；返回命令是否完成，由带 Guard 的调用页统一退出 |
 | `CardNumberFields` | Widget | `common_widgets.dart` | 完整卡号 + 后四位输入组，含「后四位跟随卡号」开关（信用卡/储蓄卡录入用）；**受控**：`follows`/`onFollowsChanged` 由调用方持久化（`Account.cardLast4Follows`），组件不自行反推 |
 | `showCardNumberDialog` | Dialog 函数 | `sheets.dart` | 编辑完整卡号+后四位+跟随开关，返回 `({number, last4, follows})?`（内部用 `CardNumberFields`，后四位以 `cardLast4Of` 归一化） |
-| `CreditRepaymentPage` | 页面 Widget | `credit_repayment_page.dart` | 信用卡/信用账户还款页；预填欠款、扣款账户可选/可代还，落一笔转账后按最早到期优先分配到正式账单 |
+| `CreditRepaymentPage` | 页面 Widget | `credit_repayment_page.dart` | 信用卡/信用账户还款页；只填金额、到账日期与备注，默认预填该币种子账户的已出账待还，没有待还时为 0、不回退总欠款；调用 `recordCreditRepayment` 原子保存无转出账户的还款转账和正式账单分配，不扣其他账户。自动结转待还由流水实时抵扣，未出账欠款保留 |
 | `BillingStatementsPage` / `BillingStatementDetailPage` | 页面 Widget | `billing_statements_page.dart` | 正式信用账单列表、新增与详情；详情分别展示原账单金额、实际还款、出账后退款冲抵和当前待还，退款行可回到原消费，并可在不低于已有还款分配的前提下修正历史实际已还基线 |
 | `resolveEntryFieldProvenance` | 纯函数 | `entry_provenance.dart` | 从同笔交易的多条来源证据分别解释发生时间、记账日、金额及商户；日期精度低的账单不能覆盖实时通知时分，金额冲突时不宣称已核准 |
 | `CreditAccountEditorPage` | 页面 Widget | `credit_account_editor_page.dart` | 编辑信用主体名称、机构、共享额度、账单日、固定日/账单后天数还款规则与账期预算；账户详情的共享配置统一进入此页，保存时主体与子账户兼容镜像原子落库（外币子账户不复制无币种标识的旧额度字段） |

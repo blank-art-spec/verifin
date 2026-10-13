@@ -11,7 +11,7 @@ import 'support/test_harness.dart';
 void main() {
   useTestDatabases();
 
-  testWidgets('信用卡还款：默认预填欠款，确认生成转账并抵消欠款', (WidgetTester tester) async {
+  testWidgets('还款预填已出账待还，结清账单且不扣默认账户', (WidgetTester tester) async {
     final store = LocalKeyValueStore();
     final controller = await makeController(store);
     final card = Account(
@@ -20,7 +20,7 @@ void main() {
       name: '测试信用卡',
       type: AccountType.creditCard,
       groupId: null,
-      initialBalance: -500,
+      initialBalance: -10438.30,
       iconCode: 'credit',
       note: '',
       includeInAssets: true,
@@ -43,7 +43,19 @@ void main() {
       ..addAccount(bank)
       ..setDefaultAccountId(bank.id);
 
-    expect(controller.accountBalance(card), -500);
+    await controller.waitForPendingWrites();
+    final now = DateTime.now();
+    await controller.createBillingStatement(
+      account: card,
+      statementDate: DateTime(now.year, now.month - 1, 25),
+      periodStart: DateTime(now.year, now.month - 2, 26),
+      periodEnd: DateTime(now.year, now.month - 1, 25, 23, 59, 59),
+      statementAmount: 5219.15,
+      minimumPayment: 0,
+      dueDate: now,
+      paidAmount: 0,
+    );
+    expect(controller.accountBalance(card), -10438.30);
 
     await tester.pumpWidget(
       VeriFinScope(
@@ -70,24 +82,40 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // 还款金额默认预填当前欠款 500，扣款账户默认取记账默认账户（储蓄卡）。
+    // 总欠款超过一万元，但这里只预填已出账的 5219.15；默认储蓄卡不参与还款。
     expect(find.text('还款'), findsWidgets);
-    expect(find.textContaining('500'), findsWidgets);
-    expect(find.textContaining('测试储蓄卡'), findsOneWidget);
+    expect(find.textContaining('5219.15'), findsOneWidget);
+    expect(find.textContaining('10438.3'), findsNothing);
+    expect(find.text('扣款账户'), findsNothing);
+    expect(find.byKey(const Key('repay_from_account')), findsNothing);
 
     // 点击右上角保存。
     await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
 
-    // 欠款被抵消，储蓄卡扣款。
-    expect(controller.accountBalance(card), 0);
-    expect(controller.accountBalance(bank), 500);
+    // 本期正式账单结清；另一部分真实欠款保留，储蓄卡没有被扣款。
+    expect(controller.accountBalance(card), closeTo(-5219.15, 0.001));
+    expect(controller.accountBalance(bank), 1000);
+    expect(controller.creditOverview(card).billedOutstanding, 0);
+    expect(
+      controller.billingStatements.single.status,
+      BillingStatementStatus.paid,
+    );
+    expect(controller.billingStatements.single.paidAmount, 5219.15);
     final repayment = controller.entries.firstWhere(
       (entry) =>
           entry.type == EntryType.transfer && entry.toAccountId == card.id,
     );
-    expect(repayment.amount, 500);
-    expect(repayment.accountId, bank.id);
+    expect(repayment.amount, 5219.15);
+    expect(repayment.accountId, '');
+    expect(repayment.accountAmount, isNull);
+    expect(repayment.toAccountAmount, 5219.15);
+    expect(repayment.baseAmount, 0);
+    expect(repayment.auditHistory, hasLength(1));
+    expect(
+      controller.allocationsForStatement(controller.billingStatements.single.id),
+      hasLength(1),
+    );
     // 用真实转账分类（非空），列表不会回退成「已删除分类」。
     final transferCategoryIds = controller
         .categoriesForType(EntryType.transfer)
@@ -97,7 +125,7 @@ void main() {
     expect(transferCategoryIds, contains(repayment.categoryId));
   });
 
-  testWidgets('信用卡还款：无账户（代还）只增额度不扣任何账户', (WidgetTester tester) async {
+  testWidgets('无正式账单的结转待还也可直接还款，无需选择账户', (WidgetTester tester) async {
     final store = LocalKeyValueStore();
     final controller = await makeController(store);
     final card = Account(
@@ -106,13 +134,29 @@ void main() {
       name: '花呗',
       type: AccountType.creditAccount,
       groupId: null,
-      initialBalance: -300,
+      initialBalance: 0,
       iconCode: 'wallet',
       note: '',
       includeInAssets: true,
       hidden: false,
+      statementDay: 1,
     );
     controller.addAccount(card);
+    final now = DateTime.now();
+    controller.addEntry(
+      LedgerEntry(
+        id: 'last-cycle-expense',
+        bookId: controller.activeBook.id,
+        type: EntryType.expense,
+        amount: 300,
+        categoryId: controller.categoriesForType(EntryType.expense).first.id,
+        accountId: card.id,
+        note: '',
+        occurredAt: DateTime(now.year, now.month - 1, 15),
+      ),
+    );
+    await controller.waitForPendingWrites();
+    expect(controller.creditOverview(card).billedOutstanding, 300);
 
     await tester.pumpWidget(
       VeriFinScope(
@@ -139,17 +183,17 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // 选择「无账户（代还）」。
-    await tester.tap(find.byKey(const Key('repay_from_account')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.widgetWithText(ListTile, '无账户（代还）'));
-    await tester.pumpAndSettle();
+    // 页面不再有扣款账户选择，默认即可直接记录已到账还款。
+    expect(find.byKey(const Key('repay_from_account')), findsNothing);
+    expect(find.byKey(const Key('repay_from_amount')), findsNothing);
 
     await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();
 
     // 欠款被抵消，且没有从任何账户扣款（转账 accountId 为空）。
     expect(controller.accountBalance(card), 0);
+    expect(controller.creditOverview(card).billedOutstanding, 0);
+    expect(controller.billingStatements, isEmpty);
     final repayment = controller.entries.firstWhere(
       (entry) =>
           entry.type == EntryType.transfer && entry.toAccountId == card.id,
@@ -157,7 +201,7 @@ void main() {
     expect(repayment.accountId, '');
     expect(repayment.amount, 300);
 
-    // 无账户代还仍可在交易详情中识别来源和转入账户，不能被归一化成首个账户或清空转入端。
+    // 仅记录信用端还款仍可查看交易，不回退到首个账户，也不清空转入端。
     await tester.pumpWidget(
       VeriFinScope(
         controller: controller,
@@ -169,6 +213,48 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('无账户'), findsOneWidget);
     expect(find.textContaining('花呗'), findsWidgets);
+
+    // 冷启动后自动结转待还保持为 0，不能把还款重复计入下一期。
+    final reloaded = await makeController(store);
+    addTearDown(reloaded.dispose);
+    final reloadedCard = reloaded.accounts.firstWhere(
+      (item) => item.id == card.id,
+    );
+    expect(reloaded.accountBalance(reloadedCard), 0);
+    expect(reloaded.creditOverview(reloadedCard).billedOutstanding, 0);
+  });
+
+  testWidgets('没有已出账待还时不以历史总欠款预填还款', (WidgetTester tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    final card = Account(
+      id: 'credit-only-history',
+      bookId: controller.activeBook.id,
+      name: '仅有历史欠款',
+      type: AccountType.creditCard,
+      groupId: null,
+      initialBalance: -10438.30,
+      iconCode: 'credit',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+    );
+    controller.addAccount(card);
+    await controller.waitForPendingWrites();
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: controller,
+        child: zhMaterialApp(home: CreditRepaymentPage(account: card)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('10438.3'), findsNothing);
+    expect(find.byKey(const Key('repay_from_account')), findsNothing);
+    // 金额为 0 时保存不可用，浏览页面不会凭空结清未知归属的历史欠款。
+    await tester.tap(find.byTooltip('保存'));
+    await tester.pumpAndSettle();
+    expect(controller.entries, isEmpty);
+    expect(controller.accountBalance(card), -10438.30);
   });
 
   testWidgets('还款页未改动时返回不弹未保存确认，也不写交易', (WidgetTester tester) async {
