@@ -135,6 +135,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   LedgerEntry? _initialEntryDraft;
   List<String>? _initialAttachmentDataUrls;
   LedgerEntry? _savedResult;
+  // 固定原事件归属，不能随用户切换账本变化；保存时用它验证草稿仍有效。
+  String? _captureEventBookId;
   final EditorExitController _exitController = EditorExitController();
   // 程序化写入备注时置真，令备注监听忽略这次（不误判为用户输入）。
   bool _applyingSuggestion = false;
@@ -212,8 +214,12 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   }
 
   @override
+  /// 初始化金额与复核来源账本；来源只记录一次，不随目标账本选择变化。
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (widget.captureEventId != null) {
+      _captureEventBookId ??= VeriFinScope.of(context).activeBook.id;
+    }
     if (!_moneyInitialized) {
       _initializeCurrencyAmounts();
     } else {
@@ -228,8 +234,12 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
 
   /// 账户从「无」变成「有」时补一次金额解析。用户在记账页空状态里新建账户后返回
   /// 就会走到这里：不补这一次，`_accountAmount` 一直是 null，保存按钮会一直禁用。
+  /// 采集复核不做首账户兜底，未匹配的账户必须由用户明确选择。
   void _resolveNewlyAvailableAccount() {
-    if (_accountFallbackResolved || _noAccount || _accountAmount != null) {
+    if (widget.captureEventId != null ||
+        _accountFallbackResolved ||
+        _noAccount ||
+        _accountAmount != null) {
       return;
     }
     final controller = VeriFinScope.of(context);
@@ -666,6 +676,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       _noAccount = false;
     }
     if (hasAccounts &&
+        widget.captureEventId == null &&
         !_noAccount &&
         !accounts.any((account) => account.id == _accountId)) {
       _accountId = accounts.first.id;
@@ -745,6 +756,16 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                       ).entryDetailSubtitle,
                       showBack: true,
                     ),
+                    if (widget.captureEventId != null) ...<Widget>[
+                      const SizedBox(height: 12),
+                      SelectField(
+                        key: const Key('capture_review_book'),
+                        label: AppLocalizations.of(context).ledgerLabel,
+                        value: controller.activeBook.name,
+                        icon: Icons.menu_book_outlined,
+                        onTap: _saving ? null : _pickCaptureBook,
+                      ),
+                    ],
                     if (widget.initialDraft != null) ...<Widget>[
                       const SizedBox(height: 12),
                       _AiReviewBanner(draft: widget.initialDraft!),
@@ -837,12 +858,22 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                       SelectField(
                         key: const Key('account_dropdown'),
                         label: AppLocalizations.of(context).transferOutAccount,
-                        value:
-                            '${accountById(accounts, _accountId).name} (${formatUserMoney(controller.accountBalance(accountById(accounts, _accountId)), accountById(accounts, _accountId).currencyCode)})',
-                        leading: AccountIconBox(
-                          iconCode: accountById(accounts, _accountId).iconCode,
-                          size: 26,
-                        ),
+                        // 未匹配时显示选择提示，不能把空 id 展示成首账户。
+                        value: _accountFor(accounts, _accountId) == null
+                            ? AppLocalizations.of(context).pleaseSelect
+                            : '${accountById(accounts, _accountId).name} (${formatUserMoney(controller.accountBalance(accountById(accounts, _accountId)), accountById(accounts, _accountId).currencyCode)})',
+                        icon: _accountFor(accounts, _accountId) == null
+                            ? Icons.call_made
+                            : null,
+                        leading: _accountFor(accounts, _accountId) == null
+                            ? null
+                            : AccountIconBox(
+                                iconCode: accountById(
+                                  accounts,
+                                  _accountId,
+                                ).iconCode,
+                                size: 26,
+                              ),
                         onTap: () => _pickAccount(accounts),
                       ),
                       const SizedBox(height: 10),
@@ -1546,6 +1577,61 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     _applyCategoryAccountSuggestion(VeriFinScope.of(context));
   }
 
+  /// 选择复核账本，并更新该账本的账户候选与金额换算。
+  /// 无参数；取消选择不改状态。确认选择沿用应用的账本切换偏好，尚不写交易。
+  /// 金额、交易币种、日期、备注、全局分类与标签保留；旧账本账户和手填换算清除，
+  /// 防止误用旧账户或把旧本位币金额写进新账本。目标账户不明确时收支使用「无账户」。
+  Future<void> _pickCaptureBook() async {
+    final controller = VeriFinScope.of(context);
+    final selected = await showLedgerBookPickerSheet(
+      context: context,
+      selectedBook: controller.activeBook,
+    );
+    if (!mounted ||
+        selected == null ||
+        _saving ||
+        selected.id == controller.activeBook.id) {
+      return;
+    }
+    final event = controller.captureEventForReview(
+      widget.captureEventId!,
+      sourceBookId: _captureEventBookId!,
+      targetBookId: selected.id,
+    );
+    if (event == null) return;
+    setState(() {
+      controller.switchLedgerBook(selected.id);
+      _accountId = event.accountCandidateId ?? '';
+      _toAccountId = event.toAccountCandidateId;
+      // 转账的原币就是转出账户币种，换账本不应把旧金额悄悄解释成别的币种。
+      // 币种不符时先留空，等用户明确选择转出账户后再按既有编辑流程处理。
+      if (_type == EntryType.transfer &&
+          _accountFor(controller.accounts, _accountId)?.currencyCode !=
+              _currencyCode) {
+        _accountId = '';
+      }
+      _noAccount = _type != EntryType.transfer && _accountId.isEmpty;
+      _accountTouched = false;
+      _accountAmountTouched = false;
+      _toAccountAmountTouched = false;
+      _baseAmountTouched = false;
+      _rememberRate = false;
+      _accountFallbackResolved = false;
+      _accountAmount = null;
+      _toAccountAmount = null;
+      _baseAmount = null;
+      final accounts = _availableAccounts(controller);
+      _normalizeTransferAccounts(accounts);
+      _refreshCurrencyAmounts(
+        controller,
+        accounts,
+        forceAccount: true,
+        forceToAccount: true,
+        forceBase: true,
+      );
+    });
+  }
+
   Future<void> _pickAccount(List<Account> accounts) async {
     final isTransfer = _type == EntryType.transfer;
     final selected = await showAccountPickerSheet(
@@ -1621,6 +1707,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
   }
 
+  /// 校验转入账户；[accounts] 仅含当前账本可见账户。
+  /// 手工记账沿用原有快捷预选，采集复核缺候选时留空等待用户选择。
   void _normalizeTransferAccounts(List<Account> accounts) {
     if (_type != EntryType.transfer) {
       _toAccountId = null;
@@ -1633,12 +1721,19 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     if (_toAccountId == null ||
         _toAccountId == _accountId ||
         !accounts.any((account) => account.id == _toAccountId)) {
+      // 自动采集跨账本复核时，不把尚未匹配的转入账户回退到列表第一项。
+      if (widget.captureEventId != null) {
+        _toAccountId = null;
+        return;
+      }
       _toAccountId = accounts
           .firstWhere((account) => account.id != _accountId)
           .id;
     }
   }
 
+  /// 判断金额与账户是否足够保存；[accounts] 限定目标账本的可见账户。
+  /// 转账两端必须明确，收支可选无账户；缺少本位币换算金额时禁止保存。
   bool _canSave(List<Account> accounts) {
     if (_type != EntryType.transfer) {
       // 无账户也可保存（只记金额）；否则需有可选账户。
@@ -1649,7 +1744,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
           _baseAmount != null &&
           _baseAmount! > 0;
     }
-    if (accounts.isEmpty) {
+    if (accounts.isEmpty ||
+        !accounts.any((account) => account.id == _accountId)) {
       return false;
     }
     return _toAccountId != null &&
@@ -1666,6 +1762,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     final l10n = AppLocalizations.of(context);
     if (_type == EntryType.transfer) {
       if (accounts.length < 2 ||
+          !accounts.any((account) => account.id == _accountId) ||
           _toAccountId == null ||
           _toAccountId == _accountId) {
         return l10n.entrySaveReasonTransferAccount;
@@ -1860,6 +1957,9 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
   }
 
+  /// 保存当前账本的用户草稿，无参数；成功返回 true，失败保留页面供重试。
+  /// 采集复核同时传入固定的原事件账本，使跨账本交易与确认状态原子落库。
+  /// 导入草稿只返回结果不落库，重复点击由 _saving 阻止。
   Future<bool> _save() async {
     if (_saving) {
       return false;
@@ -1910,6 +2010,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       entry: draft,
       isNew: true,
       captureEventId: widget.captureEventId,
+      captureEventBookId: _captureEventBookId,
       attachments: attachments,
       rememberRateCurrencyCode: _rememberRate ? draft.currencyCode : null,
       rememberRateToBase: _rememberRate

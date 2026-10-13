@@ -42,6 +42,72 @@ void main() {
     occurredAt: DateTime(2026, 5, int.parse(id)),
   );
 
+  test('SQLite 跨账本复核事务失败不移动事件，重试与重启保持目标账本', () async {
+    final repo = await openRepo();
+    final store = LocalKeyValueStore();
+    var controller = await VeriFinController.create(store, repository: repo);
+    final sourceBookId = controller.activeBook.id;
+    controller.addLedgerBook('复核目标');
+    final targetBookId = controller.activeBook.id;
+    await controller.waitForPendingWrites();
+    final event = captureEventFromInput(
+      id: 'sqlite-cross-book',
+      bookId: sourceBookId,
+      input: RawCaptureInput(
+        sourceKind: CaptureSourceKind.notification,
+        sourceId: 'test-bank',
+        sourceEventId: 'sqlite-cross-book',
+        rawText: '消费10.00元',
+        receivedAt: DateTime(2026, 10, 2),
+      ),
+    ).copyWith(status: CaptureStatus.pendingReview);
+    await repo.saveCaptureEvents([event]);
+    controller.dispose();
+    controller = await VeriFinController.create(store, repository: repo);
+    final draft = entry(
+      '1',
+    ).copyWith(bookId: targetBookId, accountId: '', clearAccountAmount: true);
+    final db = opened.last.db;
+    await db.execute(
+      "CREATE TRIGGER reject_cross_book BEFORE INSERT ON capture_events BEGIN SELECT RAISE(ABORT, '模拟跨账本保存失败'); END",
+    );
+    expect(
+      await controller.saveEntryAggregateDraftResult(
+        entry: draft,
+        isNew: true,
+        captureEventId: event.id,
+        captureEventBookId: sourceBookId,
+      ),
+      isA<EntrySavePersistenceFailure>(),
+    );
+    expect(await repo.loadEntries(), isEmpty);
+    expect((await repo.loadCaptureEvents()).single.bookId, sourceBookId);
+    await db.execute('DROP TRIGGER reject_cross_book');
+    expect(
+      (await controller.saveEntryAggregateDraftResult(
+        entry: draft,
+        isNew: true,
+        captureEventId: event.id,
+        captureEventBookId: sourceBookId,
+      )).isSuccess,
+      isTrue,
+    );
+    controller.dispose();
+    controller = await VeriFinController.create(
+      store,
+      repository: SqliteLedgerRepository(opened.last),
+    );
+    expect(controller.entries.single.bookId, targetBookId);
+    expect(controller.captureEvents.single.bookId, targetBookId);
+    expect(controller.captureEvents.single.linkedEntryId, draft.id);
+    expect(
+      controller.entries.single.sourceRecords.single.fingerprint,
+      event.fingerprint,
+    );
+    expect(await controller.replayRecentCaptureEvents(), 0);
+    controller.dispose();
+  });
+
   test('挂载仓储后新增的交易写入 SQLite 并可被新控制器读回', () async {
     final repo = await openRepo();
     final controller = await VeriFinController.create(
@@ -147,7 +213,10 @@ void main() {
       (item) => item.id == card.id,
     );
     expect(reloaded.creditOverview(reloadedCard).billedOutstanding, 0);
-    expect(reloaded.billingStatements.single.status, BillingStatementStatus.paid);
+    expect(
+      reloaded.billingStatements.single.status,
+      BillingStatementStatus.paid,
+    );
     expect(reloaded.statementRepaymentAllocations, hasLength(1));
     expect(reloaded.entries.single.auditHistory, hasLength(1));
     expect(reloaded.accountBalance(reloadedCard), closeTo(-5219.15, 0.001));

@@ -190,6 +190,20 @@ Future<bool> confirmCleartextIfRisky(BuildContext context, String url) async {
   return confirmed == true;
 }
 
+/// 选择复核记账的目标账本，仅返回选择，不写交易或切换全局账本。
+/// [context] 提供主题和语言；[selectedBook] 表示当前选择，取消返回 null。
+/// 账本数量动态变化，因此复用通用列表选择器，而不是静态枚举菜单。
+Future<LedgerBook?> showLedgerBookPickerSheet({
+  required BuildContext context,
+  required LedgerBook selectedBook,
+}) => showOptionSheet<LedgerBook>(
+  context: context,
+  title: AppLocalizations.of(context).ledgerLabel,
+  values: VeriFinScope.of(context).ledgerBooks,
+  selected: selectedBook,
+  labelOf: (book) => book.name,
+);
+
 /// 通用单选底部弹窗。[sectionOf] 非空时按其返回的分区标题给选项加小标题分组
 /// （相邻同分区归为一组、分区变化处插入小标题），供筛选场景把「快捷项」与
 /// 「具体项」分区展示（如标签筛选的「快捷筛选 / 标签」两组）。

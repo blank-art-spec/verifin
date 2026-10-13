@@ -82,6 +82,90 @@ LedgerEntry _entry(VeriFinController controller, String id) => LedgerEntry(
 );
 
 void main() {
+  test('跨账本复核失败不搬移事件，成功后冷启动与重复通知保持单笔', () async {
+    final store = LocalKeyValueStore();
+    final repo = _DelayedCaptureRepository();
+    var controller = await VeriFinController.create(store, repository: repo);
+    final sourceBookId = controller.activeBook.id;
+    controller.addLedgerBook('旅行账本');
+    final targetBookId = controller.activeBook.id;
+    await controller.waitForPendingWrites();
+    final event = _event(
+      'cross-book-review',
+      sourceBookId,
+    ).copyWith(status: CaptureStatus.pendingReview);
+    await repo.saveCaptureEvents([event]);
+    controller.dispose();
+    controller = await VeriFinController.create(store, repository: repo);
+    final entry = _entry(controller, 'cross-book-entry');
+
+    // 未提供原账本时保持旧校验，不允许随意把其他账本事件关联过来。
+    expect(
+      (await controller.saveEntryAggregateDraftResult(
+        entry: entry,
+        isNew: true,
+        captureEventId: event.id,
+      )).isSuccess,
+      isFalse,
+    );
+    repo.failAggregate = true;
+    expect(
+      await controller.saveEntryAggregateDraftResult(
+        entry: entry,
+        isNew: true,
+        captureEventId: event.id,
+        captureEventBookId: sourceBookId,
+      ),
+      isA<EntrySavePersistenceFailure>(),
+    );
+    expect((await repo.loadCaptureEvents()).single.bookId, sourceBookId);
+    expect(await repo.loadEntries(), isEmpty);
+    repo.failAggregate = false;
+    expect(
+      (await controller.saveEntryAggregateDraftResult(
+        entry: entry,
+        isNew: true,
+        captureEventId: event.id,
+        captureEventBookId: sourceBookId,
+      )).isSuccess,
+      isTrue,
+    );
+    expect(controller.captureEvents.single.bookId, targetBookId);
+    expect(controller.captureEvents.single.linkedEntryId, entry.id);
+    expect(
+      controller.entries.single.sourceRecords.single.fingerprint,
+      event.fingerprint,
+    );
+    expect(
+      (await controller.saveEntryAggregateDraftResult(
+        entry: entry.copyWith(id: 'cross-book-duplicate'),
+        isNew: true,
+        captureEventId: event.id,
+        captureEventBookId: sourceBookId,
+      )).isSuccess,
+      isFalse,
+    );
+    controller.dispose();
+    controller = await VeriFinController.create(store, repository: repo);
+    controller.switchLedgerBook(sourceBookId);
+    await controller.ingestCaptureInputs([
+      RawCaptureInput(
+        sourceKind: event.sourceKind,
+        sourceId: event.sourceId,
+        sourceEventId: event.sourceEventId,
+        rawText: event.rawText,
+        receivedAt: event.receivedAt,
+      ),
+    ]);
+    expect(controller.entries, isEmpty);
+    expect(controller.captureEvents, isEmpty);
+    controller.switchLedgerBook(targetBookId);
+    expect(controller.entries.single.id, entry.id);
+    expect(controller.captureEvents.single.status, CaptureStatus.confirmed);
+    expect(await controller.replayRecentCaptureEvents(), 0);
+    controller.dispose();
+  });
+
   test('后台延迟落库不能覆盖用户已复核状态，冷启动后仍已确认', () async {
     final store = LocalKeyValueStore();
     final repo = _DelayedCaptureRepository();

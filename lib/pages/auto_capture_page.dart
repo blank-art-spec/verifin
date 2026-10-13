@@ -675,6 +675,7 @@ class _AutoCapturePageState extends State<AutoCapturePage>
   ///
   /// [event] 是卡片构建时的解析快照。若金额或类型仍为空，先仅针对这条原文
   /// 重跑本地解析，再读取最新候选；重跑不会自动入账，已有交易关联也不会被清除。
+  /// 普通交易在记账页选账本；退款先选账本，再仅在目标账本匹配唯一原支出。
   Future<void> _reviewEvent(CaptureEvent event) async {
     final controller = VeriFinScope.of(context);
     var reviewEvent = event;
@@ -688,15 +689,32 @@ class _AutoCapturePageState extends State<AutoCapturePage>
     }
     if (reviewEvent.kind == CaptureTransactionKind.refund) {
       final l10n = AppLocalizations.of(context);
+      var targetBook = controller.activeBook;
+      if (controller.ledgerBooks.length > 1) {
+        final selected = await showLedgerBookPickerSheet(
+          context: context,
+          selectedBook: targetBook,
+        );
+        if (!mounted || selected == null) return;
+        targetBook = selected;
+      }
       final confirmed = await showConfirmDialog(
         context,
-        title: l10n.autoCaptureConfirmRefundTitle,
+        title: '${l10n.autoCaptureConfirmRefundTitle} · ${targetBook.name}',
         message: l10n.autoCaptureConfirmRefundMessage,
         confirmLabel: l10n.commonConfirm,
       );
       if (!confirmed || !mounted) return;
-      final entry = await controller.confirmParsedCaptureEvent(reviewEvent.id);
-      if (!mounted || entry != null) return;
+      final entry = await controller.confirmParsedCaptureEvent(
+        reviewEvent.id,
+        sourceBookId: reviewEvent.bookId,
+        targetBookId: targetBook.id,
+      );
+      if (!mounted) return;
+      if (entry != null) {
+        controller.switchLedgerBook(targetBook.id);
+        return;
+      }
       unawaited(
         VeriFeedbackHost.of(context).showMessage(
           message: l10n.autoCaptureNeedsMoreInfo,

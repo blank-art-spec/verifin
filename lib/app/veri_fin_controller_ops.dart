@@ -781,6 +781,49 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     });
   }
 
+  /// 读取指定目标账本的复核候选，全程只读，不触发 AI、自动入账或事件搬移。
+  /// [eventId] 指定原事件，[sourceBookId] 校验打开页面时的归属，
+  /// [targetBookId] 用于限定账户、历史和规则；过期事件或已删除账本返回 null。
+  /// 跨账本重新解析只供用户预览，正式归属在确认保存的事务中一起更新。
+  CaptureEvent? captureEventForReview(
+    String eventId, {
+    required String sourceBookId,
+    required String targetBookId,
+  }) {
+    final event = _captureEvents
+        .where(
+          (item) =>
+              item.id == eventId &&
+              item.bookId == sourceBookId &&
+              item.status.canRetry &&
+              item.linkedEntryId == null,
+        )
+        .firstOrNull;
+    final book = ledgerBooks
+        .where((item) => item.id == targetBookId)
+        .firstOrNull;
+    if (event == null || book == null) return null;
+    if (sourceBookId == targetBookId) return event;
+    return parseCaptureEvent(
+      event.copyWith(bookId: targetBookId, clearDuplicateEntryId: true),
+      CaptureParseContext(
+        book: book,
+        accounts: _accounts
+            .where((item) => item.bookId == targetBookId)
+            .toList(),
+        creditAccounts: _creditAccounts
+            .where((item) => item.bookId == targetBookId)
+            .toList(),
+        categories: _categories,
+        tags: _tags,
+        tagGroups: _tagGroups,
+        entries: entriesForBook(targetBookId),
+        rules: _autoCaptureRules,
+        notificationAccountTypes: _autoCaptureSettings.notificationAccountTypes,
+      ),
+    );
+  }
+
   /// 把待确认事件转换为标准记账页草稿。退款仍需关联原支出，因此返回 null，改走合并入口。
   AiEntryDraft? captureEntryDraft(String eventId) {
     final event = _captureEvents
@@ -825,20 +868,41 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   ///
   /// 主要用于标准记账页不能表达的关联退款；仍复用 [_buildAutomaticCaptureEntry] 的
   /// 唯一原支出、账户、汇率与类型校验。交易与事件状态在同一事务提交，失败返回 null。
-  Future<LedgerEntry?> confirmParsedCaptureEvent(String eventId) =>
-      _enqueueCaptureMutation(() => _confirmParsedCaptureEvent(eventId));
+  /// [sourceBookId] 是打开复核时事件所属账本，用于拒绝过期页面；
+  /// [targetBookId] 是用户选择的目标账本，省略时保持原有同账本行为。
+  Future<LedgerEntry?> confirmParsedCaptureEvent(
+    String eventId, {
+    String? sourceBookId,
+    String? targetBookId,
+  }) => _enqueueCaptureMutation(
+    () => _confirmParsedCaptureEvent(
+      eventId,
+      sourceBookId: sourceBookId,
+      targetBookId: targetBookId,
+    ),
+  );
 
-  Future<LedgerEntry?> _confirmParsedCaptureEvent(String eventId) async {
+  /// 串行确认退款：重新匹配目标账本的账户与原支出，成功才提交事件归属。
+  /// 参数与公共入口一致；找不到唯一原支出或持久化失败时返回 null。
+  Future<LedgerEntry?> _confirmParsedCaptureEvent(
+    String eventId, {
+    String? sourceBookId,
+    String? targetBookId,
+  }) async {
     final eventIndex = _captureEvents.indexWhere(
       (event) =>
           event.id == eventId &&
-          event.bookId == _activeBookId &&
-          event.status != CaptureStatus.autoPosted &&
-          event.status != CaptureStatus.confirmed &&
-          event.status != CaptureStatus.merged,
+          event.bookId == (sourceBookId ?? _activeBookId) &&
+          event.status.canRetry &&
+          event.linkedEntryId == null,
     );
     if (eventIndex == -1) return null;
-    final event = _captureEvents[eventIndex];
+    final event = captureEventForReview(
+      eventId,
+      sourceBookId: sourceBookId ?? _activeBookId,
+      targetBookId: targetBookId ?? _captureEvents[eventIndex].bookId,
+    );
+    if (event == null) return null;
     final book = _ledgerBooks
         .where((item) => item.id == event.bookId)
         .firstOrNull;
@@ -853,6 +917,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     nextEvents[eventIndex] = event.copyWith(
       status: CaptureStatus.confirmed,
       linkedEntryId: entry.id,
+      clearDuplicateEntryId: true,
     );
     try {
       await _repository.saveCaptureProcessing(
@@ -2423,7 +2488,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     List<BillingStatement> statements,
     List<StatementRepaymentAllocation> allocations,
     double allocated,
-  })? _planRepaymentToStatements({
+  })?
+  _planRepaymentToStatements({
     required LedgerEntry entry,
     required Account account,
     required double repaymentAmount,
@@ -4213,11 +4279,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     onEntryAdded?.call();
   }
 
-  /// Atomically persists an entry together with its refunds and attachments.
-  ///
-  /// [entry.refundedBaseAmount] is ignored and derived again from the settled
-  /// refunds, preventing an editor's stale entry snapshot from overwriting the
-  /// controller-managed cache.
+  /// 原子保存交易、退款、附件、可选汇率与复核事件；成功后才更新内存。
+  /// [entry] 是用户确认的草稿，[isNew] 区分新增和编辑，退款缓存由 [refunds] 重算。
+  /// [captureEventId] 关联识别事件；[captureEventBookId] 是打开复核时的原账本，
+  /// 显式提供它才允许跨账本保存，可同时拒绝已经被另一页面处理的过期草稿。
+  /// 其余可选参数用于一并保存附件与用户选择记住的汇率，不改变已有交易冻结金额。
   Future<EntrySaveResult> saveEntryAggregateDraftResult({
     required LedgerEntry entry,
     required bool isNew,
@@ -4227,6 +4293,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     double? rememberRateToBase,
     DateTime? rememberRateEffectiveDate,
     String? captureEventId,
+    String? captureEventBookId,
   }) => _enqueueCaptureMutation(
     () => _saveEntryAggregateDraftResult(
       entry: entry,
@@ -4237,9 +4304,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       rememberRateToBase: rememberRateToBase,
       rememberRateEffectiveDate: rememberRateEffectiveDate,
       captureEventId: captureEventId,
+      captureEventBookId: captureEventBookId,
     ),
   );
 
+  /// 串行执行公共保存入口；参数含义见 [saveEntryAggregateDraftResult]。
+  /// 任一校验或落库失败都不迁移识别记录，原事件仍可供用户重试。
   Future<EntrySaveResult> _saveEntryAggregateDraftResult({
     required LedgerEntry entry,
     required bool isNew,
@@ -4249,11 +4319,14 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     double? rememberRateToBase,
     DateTime? rememberRateEffectiveDate,
     String? captureEventId,
+    String? captureEventBookId,
   }) async {
     List<CaptureEvent>? nextCaptureEvents;
     if (captureEventId != null) {
       final index = _captureEvents.indexWhere(
-        (event) => event.id == captureEventId && event.bookId == entry.bookId,
+        (event) =>
+            event.id == captureEventId &&
+            event.bookId == (captureEventBookId ?? entry.bookId),
       );
       if (!isNew ||
           index == -1 ||
@@ -4274,9 +4347,19 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       );
       nextCaptureEvents = List<CaptureEvent>.of(_captureEvents);
       nextCaptureEvents[index] = event.copyWith(
+        // 归属随交易一起提交；原文、事件号与指纹保留，重复通知仍全局幂等。
+        bookId: entry.bookId,
         status: CaptureStatus.confirmed,
         linkedEntryId: entry.id,
         clearDuplicateEntryId: true,
+        accountCandidateId: entry.accountId,
+        toAccountCandidateId: entry.toAccountId,
+        clearToAccountCandidateId: entry.toAccountId == null,
+        categoryCandidateId: entry.categoryId,
+        tagCandidateIds: entry.tagIds,
+        appliedRuleIds: event.bookId == entry.bookId
+            ? event.appliedRuleIds
+            : const <String>[],
       );
     }
     final currentIndex = _entries.indexWhere((item) => item.id == entry.id);
