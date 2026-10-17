@@ -1094,10 +1094,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get creditRepayFromAccount => '扣款账户';
 
   @override
-  String get creditRepayNoAccountLabel => '无账户（代还）';
+  String get creditRepayNoAccountLabel => '无账户转账还款';
 
   @override
-  String get creditRepayNoAccountHint => '他人代还，不从你的账户扣款';
+  String get creditRepayNoAccountHint => '只记录信用账户到账金额，不扣减其他账户';
 
   @override
   String get creditRepayDefaultNote => '还款';

@@ -2140,13 +2140,13 @@ abstract class AppLocalizations {
   /// No description provided for @creditRepayNoAccountLabel.
   ///
   /// In zh, this message translates to:
-  /// **'无账户（代还）'**
+  /// **'无账户转账还款'**
   String get creditRepayNoAccountLabel;
 
   /// No description provided for @creditRepayNoAccountHint.
   ///
   /// In zh, this message translates to:
-  /// **'他人代还，不从你的账户扣款'**
+  /// **'只记录信用账户到账金额，不扣减其他账户'**
   String get creditRepayNoAccountHint;
 
   /// No description provided for @creditRepayDefaultNote.

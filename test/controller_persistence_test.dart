@@ -127,100 +127,132 @@ void main() {
     expect(reloaded.entries.single.id, '1');
   });
 
-  test('仅记录还款时 SQLite 分配失败全部回滚，重试及冷启动保持结清', () async {
-    final repo = await openRepo();
-    final store = LocalKeyValueStore();
-    final controller = await VeriFinController.create(store, repository: repo);
-    addTearDown(controller.dispose);
-    final card = Account(
-      id: 'repayment-card',
-      bookId: controller.activeBook.id,
-      name: '测试信用卡',
-      type: AccountType.creditCard,
-      groupId: null,
-      initialBalance: -10438.30,
-      iconCode: 'credit',
-      note: '',
-      includeInAssets: true,
-      hidden: false,
-    );
-    controller.addAccount(card);
-    await controller.waitForPendingWrites();
-    final now = DateTime.now();
-    expect(
-      await controller.createBillingStatement(
-        account: card,
-        statementDate: DateTime(now.year, now.month - 1, 25),
-        periodStart: DateTime(now.year, now.month - 2, 26),
-        periodEnd: DateTime(now.year, now.month - 1, 25, 23, 59, 59),
-        statementAmount: 5219.15,
-        minimumPayment: 0,
-        dueDate: now,
-        paidAmount: 0,
-      ),
-      isTrue,
-    );
-    final db = opened.last.db;
-    // 分配表是事务中最后写入的表；让它失败可检查此前交易与账单也已回滚。
-    await db.execute(
-      "CREATE TRIGGER reject_repayment BEFORE INSERT ON statement_repayment_allocations BEGIN SELECT RAISE(ABORT, '模拟还款分配失败'); END",
-    );
-    final failed = await controller.recordCreditRepayment(
-      repaymentEntryId: 'repayment-once',
-      accountId: card.id,
-      amount: 5219.15,
-      occurredAt: now,
-    );
-    expect(failed, isA<EntrySavePersistenceFailure>());
-    expect(controller.entries, isEmpty);
-    expect(controller.billingStatements.single.paidAmount, 0);
-    expect(controller.statementRepaymentAllocations, isEmpty);
-    expect(controller.accountBalance(card), -10438.30);
-    expect(await repo.loadEntries(), isEmpty);
-    expect((await repo.loadBillingStatements()).single.paidAmount, 0);
-    expect(await repo.loadStatementRepaymentAllocations(), isEmpty);
+  for (final withPaymentAccount in [false, true]) {
+    test('还款带扣款账户=$withPaymentAccount：SQLite 失败全部回滚，重试及冷启动保持结清', () async {
+      final repo = await openRepo();
+      final store = LocalKeyValueStore();
+      final controller = await VeriFinController.create(
+        store,
+        repository: repo,
+      );
+      addTearDown(controller.dispose);
+      final card = Account(
+        id: 'repayment-card',
+        bookId: controller.activeBook.id,
+        name: '测试信用卡',
+        type: AccountType.creditCard,
+        groupId: null,
+        initialBalance: -10438.30,
+        iconCode: 'credit',
+        note: '',
+        includeInAssets: true,
+        hidden: false,
+      );
+      controller.addAccount(card);
+      final bank = Account(
+        id: 'repayment-bank',
+        bookId: controller.activeBook.id,
+        name: '扣款储蓄卡',
+        type: AccountType.debitCard,
+        groupId: null,
+        initialBalance: 10000,
+        iconCode: 'wallet',
+        note: '',
+        includeInAssets: true,
+        hidden: false,
+      );
+      controller.addAccount(bank);
+      await controller.waitForPendingWrites();
+      final now = DateTime.now();
+      expect(
+        await controller.createBillingStatement(
+          account: card,
+          statementDate: DateTime(now.year, now.month - 1, 25),
+          periodStart: DateTime(now.year, now.month - 2, 26),
+          periodEnd: DateTime(now.year, now.month - 1, 25, 23, 59, 59),
+          statementAmount: 5219.15,
+          minimumPayment: 0,
+          dueDate: now,
+          paidAmount: 0,
+        ),
+        isTrue,
+      );
+      final db = opened.last.db;
+      // 分配表是事务中最后写入的表；让它失败可检查此前交易与账单也已回滚。
+      await db.execute(
+        "CREATE TRIGGER reject_repayment BEFORE INSERT ON statement_repayment_allocations BEGIN SELECT RAISE(ABORT, '模拟还款分配失败'); END",
+      );
+      final failed = await controller.recordCreditRepayment(
+        repaymentEntryId: 'repayment-once',
+        fromAccountId: withPaymentAccount ? bank.id : '',
+        accountId: card.id,
+        amount: 5219.15,
+        occurredAt: now,
+      );
+      expect(failed, isA<EntrySavePersistenceFailure>());
+      expect(controller.entries, isEmpty);
+      expect(controller.billingStatements.single.paidAmount, 0);
+      expect(controller.statementRepaymentAllocations, isEmpty);
+      expect(controller.accountBalance(card), -10438.30);
+      expect(controller.accountBalance(bank), 10000);
+      expect(await repo.loadEntries(), isEmpty);
+      expect((await repo.loadBillingStatements()).single.paidAmount, 0);
+      expect(await repo.loadStatementRepaymentAllocations(), isEmpty);
 
-    await db.execute('DROP TRIGGER reject_repayment');
-    final saved = await controller.recordCreditRepayment(
-      repaymentEntryId: 'repayment-once',
-      accountId: card.id,
-      amount: 5219.15,
-      occurredAt: now,
-      note: ' 实际还款 ',
-    );
-    expect(saved.isSuccess, isTrue);
-    expect(controller.entries.single.note, '实际还款');
-    expect(controller.entries.single.accountId, '');
-    expect(
-      controller.billingStatements.single.status,
-      BillingStatementStatus.paid,
-    );
-    expect(controller.creditOverview(card).billedOutstanding, 0);
-    expect(controller.accountBalance(card), closeTo(-5219.15, 0.001));
+      await db.execute('DROP TRIGGER reject_repayment');
+      final saved = await controller.recordCreditRepayment(
+        repaymentEntryId: 'repayment-once',
+        fromAccountId: withPaymentAccount ? bank.id : '',
+        accountId: card.id,
+        amount: 5219.15,
+        occurredAt: now,
+        note: ' 实际还款 ',
+      );
+      expect(saved.isSuccess, isTrue);
+      expect(controller.entries.single.note, '实际还款');
+      expect(
+        controller.entries.single.accountId,
+        withPaymentAccount ? bank.id : '',
+      );
+      expect(
+        controller.accountBalance(bank),
+        withPaymentAccount ? 4780.85 : 10000,
+      );
+      expect(
+        controller.billingStatements.single.status,
+        BillingStatementStatus.paid,
+      );
+      expect(controller.creditOverview(card).billedOutstanding, 0);
+      expect(controller.accountBalance(card), closeTo(-5219.15, 0.001));
 
-    // 同一草稿再次提交必须拒绝，避免重复抵扣账单与信用账户余额。
-    final duplicate = await controller.recordCreditRepayment(
-      repaymentEntryId: 'repayment-once',
-      accountId: card.id,
-      amount: 5219.15,
-      occurredAt: now,
-    );
-    expect(duplicate, isA<EntrySaveValidationFailure>());
-    expect(controller.entries, hasLength(1));
-    final reloaded = await VeriFinController.create(store, repository: repo);
-    addTearDown(reloaded.dispose);
-    final reloadedCard = reloaded.accounts.firstWhere(
-      (item) => item.id == card.id,
-    );
-    expect(reloaded.creditOverview(reloadedCard).billedOutstanding, 0);
-    expect(
-      reloaded.billingStatements.single.status,
-      BillingStatementStatus.paid,
-    );
-    expect(reloaded.statementRepaymentAllocations, hasLength(1));
-    expect(reloaded.entries.single.auditHistory, hasLength(1));
-    expect(reloaded.accountBalance(reloadedCard), closeTo(-5219.15, 0.001));
-  });
+      // 同一草稿再次提交必须拒绝，避免重复抵扣账单与信用账户余额。
+      final duplicate = await controller.recordCreditRepayment(
+        repaymentEntryId: 'repayment-once',
+        accountId: card.id,
+        amount: 5219.15,
+        occurredAt: now,
+      );
+      expect(duplicate, isA<EntrySaveValidationFailure>());
+      expect(controller.entries, hasLength(1));
+      final reloaded = await VeriFinController.create(store, repository: repo);
+      addTearDown(reloaded.dispose);
+      final reloadedCard = reloaded.accounts.firstWhere(
+        (item) => item.id == card.id,
+      );
+      expect(reloaded.creditOverview(reloadedCard).billedOutstanding, 0);
+      expect(
+        reloaded.billingStatements.single.status,
+        BillingStatementStatus.paid,
+      );
+      expect(reloaded.statementRepaymentAllocations, hasLength(1));
+      expect(reloaded.entries.single.auditHistory, hasLength(1));
+      expect(reloaded.accountBalance(reloadedCard), closeTo(-5219.15, 0.001));
+      expect(
+        reloaded.accountBalance(bank),
+        withPaymentAccount ? 4780.85 : 10000,
+      );
+    });
+  }
 
   test('SQLite 复核状态写失败会回滚交易附件，重试后冷启动仍已确认', () async {
     final repo = await openRepo();

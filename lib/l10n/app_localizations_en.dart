@@ -1121,11 +1121,11 @@ class AppLocalizationsEn extends AppLocalizations {
   String get creditRepayFromAccount => 'Payment account';
 
   @override
-  String get creditRepayNoAccountLabel => 'No account (paid by others)';
+  String get creditRepayNoAccountLabel => 'Repay without a payment account';
 
   @override
   String get creditRepayNoAccountHint =>
-      'Paid by someone else; no account deducted';
+      'Record the credit repayment without deducting another account';
 
   @override
   String get creditRepayDefaultNote => 'Repayment';

@@ -1,6 +1,8 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:verifin/app/common_widgets.dart';
 import 'package:verifin/app/models.dart';
+import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 import 'package:verifin/pages/credit_repayment_page.dart';
@@ -11,7 +13,246 @@ import 'support/test_harness.dart';
 void main() {
   useTestDatabases();
 
-  testWidgets('还款预填已出账待还，结清账单且不扣默认账户', (WidgetTester tester) async {
+  Account repaymentAccount(
+    String id, {
+    bool credit = false,
+    String currencyCode = 'CNY',
+    double balance = 0,
+  }) => Account(
+    id: id,
+    bookId: 'default',
+    name: id,
+    type: credit ? AccountType.creditCard : AccountType.debitCard,
+    groupId: null,
+    initialBalance: balance,
+    iconCode: credit ? 'credit' : 'wallet',
+    note: '',
+    includeInAssets: true,
+    hidden: false,
+    currencyCode: currencyCode,
+  );
+
+  Future<void> createStatement(
+    VeriFinController controller,
+    Account card,
+  ) async {
+    final now = DateTime.now();
+    expect(
+      await controller.createBillingStatement(
+        account: card,
+        statementDate: DateTime(now.year, now.month - 1, 25),
+        periodStart: DateTime(now.year, now.month - 2, 26),
+        periodEnd: DateTime(now.year, now.month - 1, 25, 23, 59, 59),
+        statementAmount: 100,
+        minimumPayment: 0,
+        dueDate: now,
+        paidAmount: 0,
+      ),
+      isTrue,
+    );
+  }
+
+  Future<void> openRepayment(
+    WidgetTester tester,
+    VeriFinController controller,
+    Account card,
+  ) async {
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: controller,
+        child: zhMaterialApp(
+          home: Builder(
+            builder: (context) => Scaffold(
+              body: Center(
+                child: ElevatedButton(
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => CreditRepaymentPage(account: card),
+                    ),
+                  ),
+                  child: const Text('open'),
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+    await tester.tap(find.text('open'));
+    await tester.pumpAndSettle();
+  }
+
+  testWidgets('可更换扣款账户，保存后只扣选中账户并同步结清账单', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    final card = repaymentAccount('card', credit: true, balance: -150);
+    final bank = repaymentAccount('default-bank', balance: 1000);
+    final other = repaymentAccount('other-bank', balance: 2000);
+    controller
+      ..addAccount(card)
+      ..addAccount(bank)
+      ..addAccount(other)
+      ..setDefaultAccountId(bank.id);
+    await controller.waitForPendingWrites();
+    await createStatement(controller, card);
+    await openRepayment(tester, controller, card);
+    expect(find.textContaining(bank.name), findsOneWidget);
+    await tester.tap(find.byKey(const Key('repay_from_account')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text(other.name));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('保存'));
+    await tester.pumpAndSettle();
+    expect(controller.accountBalance(bank), 1000);
+    expect(controller.accountBalance(other), 1900);
+    expect(controller.accountBalance(card), -50);
+    expect(controller.creditOverview(card).billedOutstanding, 0);
+    expect(controller.entries.single.accountId, other.id);
+    expect(controller.entries.single.accountAmount, 100);
+    expect(controller.entries.single.toAccountAmount, 100);
+    expect(controller.entries.single.baseAmount, 0);
+    expect(
+      controller.billingStatements.single.status,
+      BillingStatementStatus.paid,
+    );
+    expect(controller.statementRepaymentAllocations.single.amount, 100);
+  });
+
+  for (final width in [393.0, 360.0]) {
+    testWidgets('跨币种缺汇率时手填实际扣款，按美元到账额结清账单（$width）', (tester) async {
+      await tester.binding.setSurfaceSize(Size(width, 852));
+      addTearDown(() => tester.binding.setSurfaceSize(null));
+      final controller = await makeController();
+      addTearDown(controller.dispose);
+      final card = repaymentAccount(
+        'usd-card',
+        credit: true,
+        currencyCode: 'USD',
+        balance: -150,
+      );
+      final bank = repaymentAccount('cny-bank', balance: 1000);
+      controller
+        ..addAccount(card)
+        ..addAccount(bank)
+        ..setDefaultAccountId(bank.id);
+      await controller.waitForPendingWrites();
+      await createStatement(controller, card);
+      await openRepayment(tester, controller, card);
+      expect(find.text('尚未设置汇率'), findsOneWidget);
+      expect(
+        tester
+            .widget<SaveHeaderAction>(find.byType(SaveHeaderAction))
+            .onPressed,
+        isNull,
+      );
+      await tester.tap(find.byKey(const Key('repay_from_amount')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('number_key_C')));
+      for (final digit in ['7', '2', '5']) {
+        await tester.tap(find.byKey(Key('number_key_$digit')));
+      }
+      await tester.pumpAndSettle();
+      await tester.tap(find.byKey(const Key('number_pad_ok')));
+      await tester.pumpAndSettle();
+      await tester.tap(find.byTooltip('保存'));
+      await tester.pumpAndSettle();
+      expect(controller.accountBalance(bank), 275);
+      expect(controller.accountBalance(card), -50);
+      final repayment = controller.entries.single;
+      expect(repayment.currencyCode, 'CNY');
+      expect(repayment.amount, 725);
+      expect(repayment.accountAmount, 725);
+      expect(repayment.toAccountAmount, 100);
+      expect(repayment.conversionSource, ConversionSource.manual);
+      expect(repayment.baseAmount, 0);
+      expect(controller.statementRepaymentAllocations.single.amount, 100);
+      expect(controller.creditOverview(card).billedOutstanding, 0);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  for (final withoutAccount in [false, true]) {
+    testWidgets('跨币种按汇率预填，无账户还款=$withoutAccount', (tester) async {
+      final controller = await makeController();
+      addTearDown(controller.dispose);
+      final card = repaymentAccount(
+        'usd-card',
+        credit: true,
+        currencyCode: 'USD',
+        balance: -100,
+      );
+      final bank = repaymentAccount('cny-bank', balance: 1000);
+      controller
+        ..addAccount(card)
+        ..addAccount(bank)
+        ..setDefaultAccountId(bank.id);
+      await controller.waitForPendingWrites();
+      await controller.saveExchangeRateDraft(
+        currencyCode: 'USD',
+        effectiveDate: DateTime(2020),
+        rateToBase: 7.2,
+      );
+      await createStatement(controller, card);
+      await openRepayment(tester, controller, card);
+      expect(find.textContaining('720'), findsOneWidget);
+      if (withoutAccount) {
+        await tester.tap(find.byKey(const Key('repay_from_account')));
+        await tester.pumpAndSettle();
+        await tester.tap(find.text('无账户转账还款'));
+        await tester.pumpAndSettle();
+        expect(find.byKey(const Key('repay_from_amount')), findsNothing);
+      }
+      await tester.tap(find.byTooltip('保存'));
+      await tester.pumpAndSettle();
+      expect(controller.accountBalance(bank), withoutAccount ? 1000 : 280);
+      expect(controller.accountBalance(card), 0);
+      expect(
+        controller.entries.single.currencyCode,
+        withoutAccount ? 'USD' : 'CNY',
+      );
+      expect(controller.entries.single.amount, withoutAccount ? 100 : 720);
+      expect(
+        controller.entries.single.accountAmount,
+        withoutAccount ? isNull : 720,
+      );
+      expect(controller.entries.single.toAccountAmount, 100);
+      expect(
+        controller.entries.single.conversionSource,
+        withoutAccount ? ConversionSource.identity : ConversionSource.rateTable,
+      );
+    });
+  }
+
+  testWidgets('只改扣款账户也会提示保存，选择器取消不改变草稿', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    final card = repaymentAccount('card', credit: true, balance: -100);
+    final bank = repaymentAccount('bank', balance: 1000);
+    controller
+      ..addAccount(card)
+      ..addAccount(bank)
+      ..setDefaultAccountId(bank.id);
+    await controller.waitForPendingWrites();
+    await openRepayment(tester, controller, card);
+    await tester.tap(find.byKey(const Key('repay_from_account')));
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    expect(find.textContaining(bank.name), findsOneWidget);
+    await tester.tap(find.byKey(const Key('repay_from_account')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('无账户转账还款'));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+    expect(find.text('保存修改？'), findsOneWidget);
+    expect(controller.entries, isEmpty);
+    await tester.tap(find.text('不保存'));
+    await tester.pumpAndSettle();
+    expect(find.byType(CreditRepaymentPage), findsNothing);
+  });
+
+  testWidgets('还款预填已出账待还，默认扣款账户可切换为无账户转账还款', (WidgetTester tester) async {
     final store = LocalKeyValueStore();
     final controller = await makeController(store);
     final card = Account(
@@ -82,12 +323,18 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // 总欠款超过一万元，但这里只预填已出账的 5219.15；默认储蓄卡不参与还款。
+    // 只预填已出账的 5219.15，恢复默认储蓄卡选择，并可改为无账户还款。
     expect(find.text('还款'), findsWidgets);
     expect(find.textContaining('5219.15'), findsOneWidget);
     expect(find.textContaining('10438.3'), findsNothing);
-    expect(find.text('扣款账户'), findsNothing);
-    expect(find.byKey(const Key('repay_from_account')), findsNothing);
+    expect(find.text('扣款账户'), findsOneWidget);
+    expect(find.textContaining('测试储蓄卡'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('repay_from_account')));
+    await tester.pumpAndSettle();
+    expect(find.text('测试信用卡'), findsOneWidget); // 只有页头，不在候选中。
+    await tester.tap(find.text('无账户转账还款'));
+    await tester.pumpAndSettle();
+    expect(find.text('无账户转账还款'), findsOneWidget);
 
     // 点击右上角保存。
     await tester.tap(find.byTooltip('保存'));
@@ -113,7 +360,9 @@ void main() {
     expect(repayment.baseAmount, 0);
     expect(repayment.auditHistory, hasLength(1));
     expect(
-      controller.allocationsForStatement(controller.billingStatements.single.id),
+      controller.allocationsForStatement(
+        controller.billingStatements.single.id,
+      ),
       hasLength(1),
     );
     // 用真实转账分类（非空），列表不会回退成「已删除分类」。
@@ -183,8 +432,9 @@ void main() {
     await tester.tap(find.text('open'));
     await tester.pumpAndSettle();
 
-    // 页面不再有扣款账户选择，默认即可直接记录已到账还款。
-    expect(find.byKey(const Key('repay_from_account')), findsNothing);
+    // 没有其他可用账户时默认无账户，仍可打开选择器。
+    expect(find.byKey(const Key('repay_from_account')), findsOneWidget);
+    expect(find.text('无账户转账还款'), findsOneWidget);
     expect(find.byKey(const Key('repay_from_amount')), findsNothing);
 
     await tester.tap(find.byTooltip('保存'));
@@ -249,7 +499,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     expect(find.textContaining('10438.3'), findsNothing);
-    expect(find.byKey(const Key('repay_from_account')), findsNothing);
+    expect(find.byKey(const Key('repay_from_account')), findsOneWidget);
     // 金额为 0 时保存不可用，浏览页面不会凭空结清未知归属的历史欠款。
     await tester.tap(find.byTooltip('保存'));
     await tester.pumpAndSettle();

@@ -2322,11 +2322,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     return true;
   }
 
-  /// 记录不指定扣款账户的信用还款，原子保存转账、正式账单与还款分配。
+  /// 记录信用还款，原子保存两端转账、正式账单与还款分配。
   ///
   /// [repaymentEntryId] 是页面草稿的稳定 id，失败重试仍用同一个 id；
   /// [accountId] 必须是当前账本的信用币种子账户；[amount] 是该币种实际到账额；
   /// [occurredAt] 是到账时间；[note] 是可选备注，保存前会去掉首尾空白。
+  /// [fromAccountId] 为空时表示无扣款账户；否则必须是当前账本的其他可见账户。
+  /// 跨币种时 [fromAmount] 必须提供真实扣款额，[conversionSource] 记录金额来源。
   /// 无转出账户表示只记录信用端的还款，不扣减其他资产，也不计入收支。
   /// 不清零余额或伪造锚点：未出账消费及其真实欠款继续保留。
   /// 返回类型区分校验失败与落库失败；落库成功后才更新内存和通知界面。
@@ -2336,6 +2338,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     required double amount,
     required DateTime occurredAt,
     String note = '',
+    String fromAccountId = '',
+    double? fromAmount,
+    ConversionSource conversionSource = ConversionSource.manual,
   }) => _enqueueCaptureMutation(() async {
     if (repaymentEntryId.isEmpty ||
         _entries.any((entry) => entry.id == repaymentEntryId)) {
@@ -2357,19 +2362,54 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       amount,
       account.currencyCode,
     );
+    final source = accounts
+        .where((item) => item.id == fromAccountId && !item.hidden)
+        .firstOrNull;
+    final creditId = creditAccountForAccount(account)?.id;
+    if (fromAccountId.isNotEmpty &&
+            (source == null ||
+                source.id == account.id ||
+                creditId != null &&
+                    creditAccountForAccount(source)?.id == creditId) ||
+        fromAccountId.isEmpty && fromAmount != null) {
+      return const EntrySaveValidationFailure(
+        EntryValidationCode.invalidAmounts,
+      );
+    }
+    final sourceCode = source?.currencyCode ?? account.currencyCode;
+    final sameCurrency = sourceCode == account.currencyCode;
+    final sourceAmount = sameCurrency ? normalizedAmount : fromAmount;
+    if (sourceAmount == null ||
+        !sourceAmount.isFinite ||
+        sourceAmount <= 0 ||
+        sameCurrency &&
+            fromAmount != null &&
+            (!fromAmount.isFinite ||
+                normalizeCurrencyAmount(fromAmount, sourceCode) !=
+                    normalizedAmount)) {
+      return const EntrySaveValidationFailure(
+        EntryValidationCode.invalidAmounts,
+      );
+    }
+    final normalizedSourceAmount = normalizeCurrencyAmount(
+      sourceAmount,
+      sourceCode,
+    );
     final entry = LedgerEntry(
       id: repaymentEntryId,
       bookId: account.bookId,
       type: EntryType.transfer,
-      amount: normalizedAmount,
-      currencyCode: account.currencyCode,
-      accountAmount: null,
+      amount: normalizedSourceAmount,
+      currencyCode: sourceCode,
+      accountAmount: source == null ? null : normalizedSourceAmount,
       toAccountAmount: normalizedAmount,
       baseAmount: 0,
-      conversionSource: ConversionSource.identity,
+      conversionSource: sameCurrency
+          ? ConversionSource.identity
+          : conversionSource,
       categoryId: transferCategory.id,
       // 空 id 是模型既定的“无账户”语义，不创建虚拟扣款账户。
-      accountId: '',
+      accountId: fromAccountId,
       toAccountId: account.id,
       note: note.trim(),
       occurredAt: occurredAt,
