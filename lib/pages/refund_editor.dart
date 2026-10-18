@@ -87,6 +87,15 @@ class RefundSection extends StatelessWidget {
     final netBaseAmount = (expense.baseAmount - _settledBaseTotal)
         .clamp(0.0, expense.baseAmount)
         .toDouble();
+    final useOriginal =
+        expense.currencyCode != controller.activeBook.baseCurrencyCode &&
+        expense.referenceBaseAmount == null;
+    final originalNet =
+        (expense.amount -
+                refunds
+                    .where((r) => r.isSettledRefund)
+                    .fold<double>(0, (s, r) => s + r.amount))
+            .clamp(0.0, expense.amount);
 
     return VeriCard(
       child: Column(
@@ -106,8 +115,10 @@ class RefundSection extends StatelessWidget {
                 Text(
                   l10n.refundNetLabel(
                     formatUserMoney(
-                      netBaseAmount,
-                      controller.activeBook.baseCurrencyCode,
+                      useOriginal ? originalNet : netBaseAmount,
+                      useOriginal
+                          ? expense.currencyCode
+                          : controller.activeBook.baseCurrencyCode,
                     ),
                   ),
                   style: Theme.of(context).textTheme.bodySmall?.copyWith(
@@ -327,7 +338,12 @@ class _RefundSheetState extends State<_RefundSheet> {
       _amount = existing.amount;
       _accountId = existing.accountId;
       _accountAmount = existing.accountAmount;
-      _baseAmount = existing.baseAmount;
+      _baseAmount =
+          existing.currencyCode ==
+              VeriFinScope.of(context).activeBook.baseCurrencyCode
+          ? existing.amount
+          : existing.referenceBaseAmount ?? 0;
+      _baseAmountTouched = existing.referenceBaseAmount != null;
       _conversionSource = existing.conversionSource;
       _settled = existing.settledAt != null;
       _settledAt = existing.settledAt ?? DateTime.now();
@@ -372,7 +388,11 @@ class _RefundSheetState extends State<_RefundSheet> {
     final baseCode = controller.activeBook.baseCurrencyCode;
     if ((forceBase || !_baseAmountTouched) && expense.amount > 0) {
       _baseAmount = normalizeCurrencyAmount(
-        expense.baseAmount * _amount / expense.amount,
+        (expense.currencyCode == baseCode
+                ? expense.amount
+                : expense.referenceBaseAmount ?? 0) *
+            _amount /
+            expense.amount,
         baseCode,
       );
     }
@@ -579,6 +599,13 @@ class _RefundSheetState extends State<_RefundSheet> {
     accountAmount: _accountId.isEmpty ? null : _accountAmount,
     baseAmount: _baseAmount,
     conversionSource: _conversionSource,
+    referenceBaseAmount:
+        widget.expense.currencyCode !=
+                VeriFinScope.of(context).activeBook.baseCurrencyCode &&
+            _baseAmount > 0 &&
+            (_baseAmountTouched || widget.expense.referenceBaseAmount != null)
+        ? _baseAmount
+        : null,
     categoryId: widget.expense.categoryId,
     accountId: _accountId,
     note: _note.trim(),
@@ -590,7 +617,9 @@ class _RefundSheetState extends State<_RefundSheet> {
   Future<bool> _save() async {
     if (_amount <= 0 ||
         _maxRefund <= 0 ||
-        _baseAmount <= 0 ||
+        (_baseAmount <= 0 &&
+            widget.expense.currencyCode ==
+                VeriFinScope.of(context).activeBook.baseCurrencyCode) ||
         (_accountId.isNotEmpty && (_accountAmount ?? 0) <= 0)) {
       return false;
     }
@@ -634,7 +663,7 @@ class _RefundSheetState extends State<_RefundSheet> {
     final baseCode = controller.activeBook.baseCurrencyCode;
     final canSave =
         _amount > 0 &&
-        _baseAmount > 0 &&
+        (_baseAmount > 0 || widget.expense.currencyCode != baseCode) &&
         (_accountId.isEmpty || (_accountAmount ?? 0) > 0) &&
         (widget.existing == null || _isDirty);
 
@@ -736,7 +765,9 @@ class _RefundSheetState extends State<_RefundSheet> {
                   ),
                 CurrencyAmountField(
                   key: const Key('refund_base_amount'),
-                  label: l10n.refundBaseAmountLabel,
+                  label: widget.expense.currencyCode == baseCode
+                      ? l10n.refundBaseAmountLabel
+                      : l10n.referenceAmountLabel,
                   currencyCode: baseCode,
                   amount: _baseAmount > 0 ? _baseAmount : null,
                   missingText: l10n.exchangeRateNotSet,

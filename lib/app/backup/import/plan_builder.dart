@@ -249,6 +249,7 @@ ImportPlan buildImportPlanFromRecords({
       matchedCount++;
       return existing.copyWith(
         reconciliationStatus: ReconciliationStatus.autoMatched,
+        referenceBaseAmount: imported.referenceBaseAmount,
         postDate: record.postedDate,
         sourceRecords: <EntrySourceRecord>[
           ...existing.sourceRecords,
@@ -286,6 +287,7 @@ ImportPlan buildImportPlanFromRecords({
       accountAmount: imported.accountAmount,
       toAccountAmount: imported.toAccountAmount,
       baseAmount: imported.baseAmount,
+      referenceBaseAmount: imported.referenceBaseAmount,
       conversionSource: imported.conversionSource,
       categoryId: imported.categoryId,
       accountId: imported.accountId,
@@ -799,17 +801,24 @@ ImportPlan buildImportPlanFromRecords({
             targetCurrencyCode: baseCurrencyCode,
             providedRate: providedRate,
           );
-    final rawBaseAmount = record.baseAmount ?? convertedBaseAmount;
-    if (rawBaseAmount == null) {
-      addConversionIssue(record, currencyCode, '缺少本位币金额或可用汇率');
-      continue;
-    }
-    if (!rawBaseAmount.isFinite || rawBaseAmount <= 0) {
+    final providedBaseAmount =
+        record.baseAmount ??
+        (accountCurrency == baseCurrencyCode ? record.accountAmount : null) ??
+        (providedRate != null ? convertedBaseAmount : null);
+    final confirmedBaseAmount =
+        providedBaseAmount != null && providedBaseAmount > 0
+        ? normalizeCurrencyAmount(providedBaseAmount, baseCurrencyCode)
+        : null;
+    final rawBaseAmount = confirmedBaseAmount ?? convertedBaseAmount ?? 0;
+    if (!rawBaseAmount.isFinite ||
+        rawBaseAmount < 0 ||
+        rawBaseAmount == 0 && currencyCode == baseCurrencyCode) {
       errors.add(ImportRowError(line: line, message: '本位币金额无效'));
       continue;
     }
     final baseAmount = normalizeCurrencyAmount(rawBaseAmount, baseCurrencyCode);
     if (record.baseAmount != null &&
+        providedRate != null &&
         convertedBaseAmount != null &&
         (record.baseAmount! - convertedBaseAmount).abs() >=
             currencyAmountTolerance(baseCurrencyCode)) {
@@ -845,6 +854,9 @@ ImportPlan buildImportPlanFromRecords({
           ? null
           : normalizeCurrencyAmount(accountAmount, accountCurrency!),
       baseAmount: baseAmount,
+      referenceBaseAmount: currencyCode != baseCurrencyCode
+          ? confirmedBaseAmount
+          : null,
       conversionSource: ConversionSource.imported,
       categoryId: categoryId,
       accountId: accountId,
@@ -884,6 +896,10 @@ ImportPlan buildImportPlanFromRecords({
                   accountCurrency!,
                 ),
           baseAmount: refundedBase,
+          referenceBaseAmount:
+              confirmedBaseAmount != null && currencyCode != baseCurrencyCode
+              ? refundedBase
+              : null,
           conversionSource: ConversionSource.imported,
           categoryId: categoryId,
           accountId: accountId,

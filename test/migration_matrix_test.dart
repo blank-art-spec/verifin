@@ -175,6 +175,8 @@ void main() {
       expect(lunch.billingCycleId, isNull);
       expect(lunch.occurredAtPrecision, OccurredAtPrecision.second);
       expect(lunch.postDate, isNull);
+      expect(lunch.referenceBaseAmount, isNull);
+      expect(lunch.repaymentBatchId, isNull);
       final transfer = entries.singleWhere((entry) => entry.id == 'e4');
       expect(transfer.currencyCode, 'CNY');
       expect(transfer.accountAmount, 50);
@@ -247,6 +249,47 @@ void main() {
       await app.close();
     });
   }
+
+  test('v27 仅把旧明确手填和导入额迁为参考额，自动缓存与转账不固定', () async {
+    final path = '${tempDir.path}/v26_reference_amount.db';
+    final raw = await databaseFactoryFfi.openDatabase(path);
+    for (final statement in _schemaV1) {
+      await raw.execute(statement);
+    }
+    await _seedV1Data(raw);
+    for (var version = 2; version <= 26; version++) {
+      await AppDatabase.migrations[version]!(raw);
+    }
+    for (final item in [
+      ('e1', 'manual', 70),
+      ('e2', 'rateTable', 80),
+      ('e3', 'imported', 90),
+      ('e4', 'manual', 0),
+    ]) {
+      await raw.update(
+        'entries',
+        {'conversion_source': item.$2, 'base_amount': item.$3},
+        where: 'id = ?',
+        whereArgs: [item.$1],
+      );
+    }
+    await raw.execute('PRAGMA user_version = 26');
+    await raw.close();
+    final app = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+    final entries = await SqliteLedgerRepository(app).loadEntries();
+    expect(entries.singleWhere((e) => e.id == 'e1').referenceBaseAmount, 70);
+    expect(
+      entries.singleWhere((e) => e.id == 'e2').referenceBaseAmount,
+      isNull,
+    );
+    expect(entries.singleWhere((e) => e.id == 'e3').referenceBaseAmount, 90);
+    expect(
+      entries.singleWhere((e) => e.id == 'e4').referenceBaseAmount,
+      isNull,
+    );
+    expect(entries.singleWhere((e) => e.id == 'e1').baseAmount, 70);
+    await app.close();
+  });
 
   test('v23 前缀标签迁移保留交易关联，并补建项目类型维度', () async {
     final path = '${tempDir.path}/v23_tag_dimensions.db';

@@ -150,7 +150,7 @@ void main() {
     expect(controller.exchangeRates.single.rateToBase, 7.123456);
     await tester.pumpAndSettle();
     expect(find.text('1 USD = 7.1235 CNY'), findsOneWidget);
-    expect(find.textContaining('应用不会联网'), findsNothing);
+    expect(find.textContaining('汇率保存在本机'), findsNothing);
   });
 
   testWidgets('汇率说明从页头问号打开且不再常驻显示', (tester) async {
@@ -158,15 +158,15 @@ void main() {
     addTearDown(controller.dispose);
     await pumpPage(tester, controller, const CurrencyRatesPage());
 
-    expect(find.textContaining('应用不会联网'), findsNothing);
+    expect(find.textContaining('汇率保存在本机'), findsNothing);
     await tester.tap(find.byTooltip('汇率说明'));
     await tester.pumpAndSettle();
 
     expect(find.text('汇率说明'), findsOneWidget);
-    expect(find.textContaining('应用不会联网'), findsOneWidget);
+    expect(find.textContaining('汇率保存在本机'), findsOneWidget);
     await tester.tap(find.text('知道了'));
     await tester.pumpAndSettle();
-    expect(find.textContaining('应用不会联网'), findsNothing);
+    expect(find.textContaining('汇率保存在本机'), findsNothing);
   });
 
   testWidgets('汇率历史行使用锚点菜单提供编辑和删除', (tester) async {
@@ -223,7 +223,7 @@ void main() {
     );
   });
 
-  testWidgets('外币普通交易同时保存原币、账户金额和冻结本位币金额', (tester) async {
+  testWidgets('外币未填折算时只保存实际原币，统计采用最新汇率', (tester) async {
     final controller = await makeController();
     final rateDate = DateTime.now();
     controller.addAccount(
@@ -265,8 +265,7 @@ void main() {
       findsOneWidget,
     );
     expect(find.byKey(const Key('entry_base_amount')), findsOneWidget);
-    expect(find.text('72 ¥'), findsOneWidget);
-    expect(find.textContaining(currencyDateKey(rateDate)), findsOneWidget);
+    expect(find.text('72 ¥'), findsNothing);
     await tester.ensureVisible(find.byKey(const Key('save_entry_button')));
     await tester.tap(find.byKey(const Key('save_entry_button')));
     await tester.pumpAndSettle();
@@ -275,7 +274,9 @@ void main() {
     expect(saved.amount, 10);
     expect(saved.currencyCode, 'USD');
     expect(saved.accountAmount, 10);
-    expect(saved.baseAmount, 72);
+    expect(saved.baseAmount, 0);
+    expect(saved.referenceBaseAmount, isNull);
+    expect(controller.statisticsEntries.single.baseAmount, 72);
     expect(saved.conversionSource, ConversionSource.rateTable);
   });
 
@@ -371,6 +372,7 @@ void main() {
           currencyCode: 'USD',
           accountAmount: 10,
           baseAmount: 72,
+          referenceBaseAmount: 72,
           conversionSource: ConversionSource.manual,
           categoryId: 'dining',
           accountId: 'usd-cash',
@@ -414,6 +416,7 @@ void main() {
           currencyCode: 'USD',
           accountAmount: 10,
           baseAmount: 72,
+          referenceBaseAmount: 72,
           conversionSource: ConversionSource.manual,
           categoryId: 'dining',
           accountId: 'usd-cash',
@@ -479,6 +482,7 @@ void main() {
           currencyCode: 'USD',
           accountAmount: 10,
           baseAmount: 72,
+          referenceBaseAmount: 72,
           conversionSource: ConversionSource.manual,
           categoryId: 'dining',
           accountId: 'usd-cash',
@@ -541,6 +545,7 @@ void main() {
           currencyCode: 'USD',
           accountAmount: 10,
           baseAmount: 72,
+          referenceBaseAmount: 72,
           conversionSource: ConversionSource.manual,
           categoryId: 'dining',
           accountId: 'usd-cash',
@@ -613,6 +618,7 @@ void main() {
           currencyCode: 'USD',
           accountAmount: 100,
           baseAmount: 720,
+          referenceBaseAmount: 720,
           conversionSource: ConversionSource.manual,
           categoryId: 'dining',
           accountId: 'usd-cash',

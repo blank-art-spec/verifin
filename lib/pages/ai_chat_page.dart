@@ -197,7 +197,7 @@ class _AiChatPageState extends State<AiChatPage> {
     final l10n = AppLocalizations.of(context);
     final prior = _priorMessages();
     final context0 = AiToolContext(
-      entries: scope.entries,
+      entries: scope.statisticsEntries,
       accounts: scope.accounts,
       creditAccounts: scope.creditAccounts,
       billingStatements: scope.billingStatements,

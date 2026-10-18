@@ -64,7 +64,7 @@ class _BudgetSettingsPageState extends State<BudgetSettingsPage> {
     final now = DateTime.now();
     final keyMonth = budgetCycleKeyMonthFor(now, _draftStartDay);
     final periodEntries = entriesInWindow(
-      controller.entries,
+      controller.statisticsEntries,
       budgetCycleOfKeyMonth(keyMonth, _draftStartDay),
     );
     final persistedCategorySnapshots = computeCategoryBudgetSnapshots(

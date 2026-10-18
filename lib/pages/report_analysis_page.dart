@@ -150,7 +150,7 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     required bool useBillingCycleRules,
   }) {
     if (!useBillingCycleRules || selectedCredit == null) {
-      return entriesInWindow(controller.entries, range.window);
+      return entriesInWindow(controller.statisticsEntries, range.window);
     }
     final childIds = controller.accounts
         .where((account) => account.creditAccountId == selectedCredit.id)
@@ -159,7 +159,7 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     final cycleId = billingCycleIdForWindow(range.window);
     final start = dateOnly(range.start);
     final end = dateOnly(range.end);
-    return controller.entries
+    return controller.statisticsEntries
         .where((entry) {
           if (!childIds.contains(entry.accountId)) {
             return false;
@@ -364,6 +364,9 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
+          missingCurrencies: VeriFinScope.of(
+            context,
+          ).missingStatisticsCurrencies,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 40),
             children: <Widget>[
@@ -450,7 +453,7 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
                 const SizedBox(height: 10),
                 _ComparisonCard(
                   comparison: reportMonthlyComparison(
-                    controller.entries,
+                    controller.statisticsEntries,
                     range.start,
                   ),
                 ),

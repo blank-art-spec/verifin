@@ -65,7 +65,8 @@ enum RecurringRatePolicy {
 
 enum ExchangeRateSource {
   manual,
-  imported;
+  imported,
+  online;
 
   static ExchangeRateSource fromStorage(String? value) {
     return ExchangeRateSource.values.firstWhere(

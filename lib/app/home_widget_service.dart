@@ -14,7 +14,9 @@ import 'widget_presentation.dart';
 Future<void> pushWidgetData(VeriFinController controller) async {
   final l10n = l10nForPreference(controller.localePreference);
   final now = DateTime.now();
-  final entries = controller.entries;
+  final entries = controller.statisticsEntries;
+  final missingStatisticsRates =
+      controller.missingStatisticsCurrencies.isNotEmpty;
 
   final todayTotal = dayExpenseTotal(entries, dateOnly(now));
 
@@ -110,10 +112,14 @@ Future<void> pushWidgetData(VeriFinController controller) async {
 
   await AppWidgetBridge.updateWidgetData(
     locale: l10n.localeName,
-    todayAmount: formatUserMoney(todayTotal, baseCurrencyCode),
+    todayAmount: missingStatisticsRates
+        ? '—'
+        : formatUserMoney(todayTotal, baseCurrencyCode),
     todayLabel: l10n.widgetTodayExpense,
     quickEntryLabel: l10n.addEntryTooltip,
-    budgetAmount: formatUserMoney(remaining.abs(), baseCurrencyCode),
+    budgetAmount: missingStatisticsRates
+        ? '—'
+        : formatUserMoney(remaining.abs(), baseCurrencyCode),
     budgetLabel: remaining < 0 ? overspentLabel : availableLabel,
     budgetUsage: monthBudget > 0
         ? (cycleExpense / monthBudget).clamp(0.0, 1.0).toDouble()
@@ -135,7 +141,9 @@ Future<void> pushWidgetData(VeriFinController controller) async {
     netWorthLabel: accountValuation.completeTotal == null
         ? '${l10n.widgetNetWorth} · ${l10n.widgetRateMissing}'
         : l10n.widgetNetWorth,
-    trendAmount: formatUserMoney(trendTotal, baseCurrencyCode),
+    trendAmount: missingStatisticsRates
+        ? '—'
+        : formatUserMoney(trendTotal, baseCurrencyCode),
     trendLabel: l10n.widgetMetricPeriodExpense,
     trendPoints: trendPoints.map((value) => value.toStringAsFixed(2)).join(','),
     trendRangeLabel: l10n.widgetRange30d,

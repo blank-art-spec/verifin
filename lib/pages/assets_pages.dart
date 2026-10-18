@@ -22,6 +22,7 @@ import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
 import 'account_detail_page.dart';
+import 'credit_account_detail_page.dart';
 import 'currency_rates_page.dart';
 
 part 'account_group_pages.dart';
@@ -141,7 +142,8 @@ class _AssetsPageState extends State<AssetsPage> {
                       accounts: accounts.where(
                         (account) =>
                             _effectiveGroupId(account) == group.id &&
-                            !account.hidden,
+                            !account.hidden &&
+                            !account.type.supportsCredit,
                       ),
                     ),
                   ),
@@ -156,7 +158,10 @@ class _AssetsPageState extends State<AssetsPage> {
                       mode: viewMode,
                       sectionId: type.name,
                       accounts: accounts.where(
-                        (account) => account.type == type && !account.hidden,
+                        (account) =>
+                            account.type == type &&
+                            !account.hidden &&
+                            !account.type.supportsCredit,
                       ),
                     ),
                   ),
@@ -405,7 +410,7 @@ class _AssetsPageState extends State<AssetsPage> {
             ),
             const SizedBox(height: 12),
           ],
-          if (visibleAssetSections.isEmpty) ...[
+          if (accounts.where((a) => !a.hidden).isEmpty) ...[
             VeriCard(
               child: EmptyState(
                 icon: Icons.account_balance_wallet_outlined,
@@ -429,6 +434,64 @@ class _AssetsPageState extends State<AssetsPage> {
             ),
             const SizedBox(height: 12),
           ],
+          if (controller.legacyCreditAccountsNeedingReview.isNotEmpty)
+            Padding(
+              padding: const EdgeInsets.only(bottom: 12),
+              child: VeriCard(
+                child: Text(AppLocalizations.of(context).creditHierarchyReview),
+              ),
+            ),
+          for (final parent in controller.creditAccounts)
+            if (controller
+                .accountsForCreditAccount(parent.id)
+                .any((a) => !a.hidden))
+              Padding(
+                padding: const EdgeInsets.only(bottom: 12),
+                child: VeriCard(
+                  onTap: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) =>
+                          CreditAccountDetailPage(parentId: parent.id),
+                    ),
+                  ),
+                  child: Builder(
+                    builder: (context) {
+                      final children = controller
+                          .accountsForCreditAccount(parent.id)
+                          .where((a) => !a.hidden)
+                          .toList();
+                      final value = controller.accountBalancesInBase(
+                        accounts: children,
+                      );
+                      return Material(
+                        type: MaterialType.transparency,
+                        child: ListTile(
+                          contentPadding: EdgeInsets.zero,
+                          leading: AccountIconBox(
+                            iconCode: children.first.iconCode,
+                            size: 36,
+                          ),
+                          title: Text(parent.name),
+                          subtitle: Text(
+                            children.map((a) => a.currencyCode).join(' · '),
+                          ),
+                          trailing: Text(
+                            value.isComplete
+                                ? formatUserMoney(
+                                    value.amountsByAccountId.values
+                                        .fold<double>(0, (s, v) => s + v),
+                                    baseCurrencyCode,
+                                  )
+                                : AppLocalizations.of(
+                                    context,
+                                  ).exchangeRateNotSet,
+                          ),
+                        ),
+                      );
+                    },
+                  ),
+                ),
+              ),
           if (visibleAssetSections.isNotEmpty) ...<Widget>[
             for (final section in visibleAssetSections)
               Padding(

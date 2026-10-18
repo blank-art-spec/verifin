@@ -8913,7 +8913,7 @@ abstract class AppLocalizations {
   /// No description provided for @currencyRatesOfflineDesc.
   ///
   /// In zh, this message translates to:
-  /// **'汇率保存在本机并由你维护。应用不会联网获取或自动刷新汇率；修改汇率也不会改变已保存交易的历史统计。'**
+  /// **'汇率保存在本机，可手动维护或启用 Frankfurter 每日更新。已填写折算金额的交易按保存值统计；其余按最新汇率统计，资产负债也按最新汇率估值。'**
   String get currencyRatesOfflineDesc;
 
   /// No description provided for @exchangeRateCurrencies.
@@ -9129,13 +9129,13 @@ abstract class AppLocalizations {
   /// No description provided for @entryConversionSourceRateTable.
   ///
   /// In zh, this message translates to:
-  /// **'已按本地汇率自动换算，可点击金额修改'**
+  /// **'未填写折算金额的收支在统计时按最新汇率换算；原币和账户实际金额保持不变。'**
   String get entryConversionSourceRateTable;
 
   /// No description provided for @entryConversionSourceManual.
   ///
   /// In zh, this message translates to:
-  /// **'本单金额已手动调整，历史统计将冻结保存值'**
+  /// **'已手动填写的折算金额固定用于统计；账户余额仍按实际入账币种计算。'**
   String get entryConversionSourceManual;
 
   /// No description provided for @entryAmountInputTitle.
@@ -11149,6 +11149,192 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'来源记录'**
   String get entryAuditSources;
+
+  /// No description provided for @referenceAmountLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'折算金额（可选）'**
+  String get referenceAmountLabel;
+
+  /// No description provided for @referenceAmountHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写银行实际折算额后固定用于统计；留空时流水仅显示原币，统计使用最新汇率。'**
+  String get referenceAmountHint;
+
+  /// No description provided for @exchangeRateValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'汇率 {value}'**
+  String exchangeRateValue(Object value);
+
+  /// No description provided for @creditChildren.
+  ///
+  /// In zh, this message translates to:
+  /// **'币种子账户'**
+  String get creditChildren;
+
+  /// No description provided for @creditParentTransactions.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部子账户流水'**
+  String get creditParentTransactions;
+
+  /// No description provided for @creditParentPick.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择父账户（按币种入账）'**
+  String get creditParentPick;
+
+  /// No description provided for @creditCreateCurrency.
+  ///
+  /// In zh, this message translates to:
+  /// **'该父账户还没有 {currency} 子账户，是否创建？'**
+  String creditCreateCurrency(Object currency);
+
+  /// No description provided for @creditRepaymentScope.
+  ///
+  /// In zh, this message translates to:
+  /// **'还款范围'**
+  String get creditRepaymentScope;
+
+  /// No description provided for @creditRepaymentCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前待还金额'**
+  String get creditRepaymentCurrent;
+
+  /// No description provided for @creditRepaymentAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'全部待还金额'**
+  String get creditRepaymentAll;
+
+  /// No description provided for @creditRepaymentReferenceRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分还款需要补齐还款范围内未结清外币消费的折算金额。当前账单全额结清可直接还款；超出当前账单的部分仍需补齐。'**
+  String get creditRepaymentReferenceRequired;
+
+  /// No description provided for @creditFillReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'去补齐折算金额'**
+  String get creditFillReference;
+
+  /// No description provided for @creditRepaymentEditBatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'此记录属于统一还款。修改时将一并替换该次全部币种的还款。'**
+  String get creditRepaymentEditBatch;
+
+  /// No description provided for @creditDeleteBatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除此记录会一并撤销本次统一还款的全部币种分配和扣款。'**
+  String get creditDeleteBatch;
+
+  /// No description provided for @creditChildAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'{currency} 实际还款'**
+  String creditChildAmount(Object currency);
+
+  /// No description provided for @creditSourceTotal.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际扣款总额'**
+  String get creditSourceTotal;
+
+  /// No description provided for @creditHierarchyReview.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧账户配置存在冲突，未自动归并。可在信用主体设置中选择同一父账户后处理。'**
+  String get creditHierarchyReview;
+
+  /// No description provided for @automaticExchangeRates.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动更新汇率'**
+  String get automaticExchangeRates;
+
+  /// No description provided for @automaticExchangeRatesHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'Frankfurter 每日参考汇率；开启后每天打开应用时更新。仅发送币种，不发送账目。手填的同日汇率优先。'**
+  String get automaticExchangeRatesHint;
+
+  /// No description provided for @refreshExchangeRates.
+  ///
+  /// In zh, this message translates to:
+  /// **'立即更新汇率'**
+  String get refreshExchangeRates;
+
+  /// No description provided for @exchangeRatesOnline.
+  ///
+  /// In zh, this message translates to:
+  /// **'联网参考汇率'**
+  String get exchangeRatesOnline;
+
+  /// No description provided for @exchangeRatesSynced.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近同步：{date}'**
+  String exchangeRatesSynced(Object date);
+
+  /// No description provided for @exchangeRatesSyncFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'汇率更新失败，继续使用本地缓存。'**
+  String get exchangeRatesSyncFailed;
+
+  /// No description provided for @statisticsMissingRates.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 {currencies} 汇率，汇总暂不完整。请补充汇率后查看。'**
+  String statisticsMissingRates(Object currencies);
+
+  /// No description provided for @clearReferenceAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除折算金额'**
+  String get clearReferenceAmount;
+
+  /// No description provided for @creditNetValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'按账本本币估值'**
+  String get creditNetValue;
+
+  /// No description provided for @creditLinkParent.
+  ///
+  /// In zh, this message translates to:
+  /// **'父账户'**
+  String get creditLinkParent;
+
+  /// No description provided for @creditMoveParent.
+  ///
+  /// In zh, this message translates to:
+  /// **'归入已有父账户'**
+  String get creditMoveParent;
+
+  /// No description provided for @creditMoveParentConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'币种或账单配置冲突，无法归并。请先核对账户设置。'**
+  String get creditMoveParentConflict;
+
+  /// No description provided for @creditRepaymentNoDebt.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前没有可还款的欠款。'**
+  String get creditRepaymentNoDebt;
+
+  /// No description provided for @creditRepaymentTooMuch.
+  ///
+  /// In zh, this message translates to:
+  /// **'还款金额不能超过该币种实际欠款。'**
+  String get creditRepaymentTooMuch;
 }
 
 class _AppLocalizationsDelegate

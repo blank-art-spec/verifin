@@ -3,6 +3,13 @@ part of 'veri_fin_controller.dart';
 /// 控制器的「领域操作」层：交易/账户/分组/账本/分类/标签/预算/偏好/备份/
 /// 导入导出等所有对外方法。字段与持久化在 [_ControllerState]。
 mixin _ControllerOps on ChangeNotifier, _ControllerState {
+  List<LedgerEntry> get statisticsEntries;
+  Future<void> refreshExchangeRatesIfEnabled();
+  List<LedgerEntry> repaymentMissingReferences(
+    String parentId,
+    List<CreditRepaymentLine> lines,
+  );
+
   /// 设备级自动采集配置落盘后的原生同步钩子。
   ///
   /// 根组件用它把开关同步给 NotificationListenerService/短信接收器；
@@ -1446,7 +1453,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final keyMonth = budgetCycleKeyMonthFor(now, startDay);
     return WidgetLedgerSnapshot(
       book: book,
-      entries: entriesForBook(id),
+      entries: projectStatisticsCurrency(
+        entries: entriesForBook(id),
+        book: book,
+        rates: _exchangeRates,
+        now: now,
+      ).entries,
       accounts: List.unmodifiable(_accounts.where((item) => item.bookId == id)),
       rates: List.unmodifiable(
         _exchangeRates.where((item) => item.bookId == id),
@@ -1649,7 +1661,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   }) => buildCreditCycleOverview(
     creditAccount: creditAccount,
     accounts: _accounts.where((item) => item.bookId == creditAccount.bookId),
-    entries: _entries.where((item) => item.bookId == creditAccount.bookId),
+    entries: projectStatisticsCurrency(
+      entries: entriesForBook(creditAccount.bookId),
+      book: activeBook,
+      rates: _exchangeRates,
+      now: now ?? DateTime.now(),
+    ).entries,
     statements: _projectBillingStatements(
       creditAccount.bookId,
       now ?? DateTime.now(),
@@ -1665,7 +1682,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         amount: amount,
         sourceCurrencyCode: sourceCurrencyCode,
         targetCurrencyCode: creditAccount.currencyCode,
-        date: date,
+        date: now ?? DateTime.now(),
       );
       return result is ConvertedCurrencyAmount ? result.amount : null;
     },
@@ -2362,6 +2379,14 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       amount,
       account.currencyCode,
     );
+    if (account.creditAccountId != null &&
+        repaymentMissingReferences(account.creditAccountId!, [
+          CreditRepaymentLine(accountId: account.id, amount: normalizedAmount),
+        ]).isNotEmpty) {
+      return const EntrySaveValidationFailure(
+        EntryValidationCode.invalidAmounts,
+      );
+    }
     final source = accounts
         .where((item) => item.id == fromAccountId && !item.hidden)
         .firstOrNull;
@@ -2533,10 +2558,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     required LedgerEntry entry,
     required Account account,
     required double repaymentAmount,
+    List<BillingStatement>? statements,
+    List<StatementRepaymentAllocation>? allocations,
   }) {
     final repaymentEntryId = entry.id;
     final creditAccountId = account.id;
-    final previousAllocations = _statementRepaymentAllocations
+    final previousAllocations = (allocations ?? _statementRepaymentAllocations)
         .where((item) => item.repaymentEntryId == repaymentEntryId)
         .toList();
     final previousByStatement = <String, double>{};
@@ -2545,11 +2572,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           (previousByStatement[allocation.statementId] ?? 0) +
           allocation.amount;
     }
-    final nextAllocations = _statementRepaymentAllocations
+    final nextAllocations = (allocations ?? _statementRepaymentAllocations)
         .where((item) => item.repaymentEntryId != repaymentEntryId)
         .toList();
     final nextStatements = <BillingStatement>[
-      for (final statement in _billingStatements)
+      for (final statement in statements ?? _billingStatements)
         if (!previousByStatement.containsKey(statement.id))
           statement
         else
@@ -2858,83 +2885,94 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     required DateTime effectiveDate,
     required double rateToBase,
     ExchangeRateSource source = ExchangeRateSource.manual,
-  }) async {
-    final code = currencyCode.trim().toUpperCase();
-    final baseCode = activeBook.baseCurrencyCode.toUpperCase();
-    if (activeBook.currencySetupStatus != CurrencySetupStatus.confirmed ||
-        !CurrencyCatalog.isSupported(code) ||
-        code == baseCode ||
-        !isValidExchangeRate(rateToBase)) {
-      return false;
-    }
-    final date = DateTime(
-      effectiveDate.year,
-      effectiveDate.month,
-      effectiveDate.day,
-    );
-    final idIndex = id == null
-        ? -1
-        : _exchangeRates.indexWhere(
-            (rate) => rate.bookId == _activeBookId && rate.id == id,
-          );
-    final keyIndex = _exchangeRates.indexWhere(
-      (rate) =>
-          rate.bookId == _activeBookId &&
-          rate.baseCurrencyCode == baseCode &&
-          rate.currencyCode == code &&
-          currencyDateKey(rate.effectiveDate) == currencyDateKey(date),
-    );
-    if (idIndex != -1 && keyIndex != -1 && idIndex != keyIndex) return false;
-    final existingIndex = idIndex != -1 ? idIndex : keyIndex;
-    final now = DateTime.now();
-    final existing = existingIndex == -1 ? null : _exchangeRates[existingIndex];
-    final candidate = ExchangeRate(
-      id: existing?.id ?? id ?? _generateId('rate'),
-      bookId: _activeBookId,
-      baseCurrencyCode: baseCode,
-      currencyCode: code,
-      effectiveDate: date,
-      rateToBase: rateToBase,
-      source: source,
-      createdAt: existing?.createdAt ?? now,
-      updatedAt: now,
-    );
-    final next = List<ExchangeRate>.of(_exchangeRates);
-    if (existingIndex == -1) {
-      next.add(candidate);
-    } else {
-      next[existingIndex] = candidate;
-    }
-    try {
-      await _repository.saveExchangeRates(next);
-    } catch (error, stackTrace) {
-      _handlePersistError(error, stackTrace);
-      return false;
-    }
-    _exchangeRates
-      ..clear()
-      ..addAll(next);
-    notifyListeners();
-    return true;
+  }) {
+    final book = activeBook;
+    return _enqueueCaptureMutation(() async {
+      final code = currencyCode.trim().toUpperCase();
+      final baseCode = book.baseCurrencyCode.toUpperCase();
+      if (!_ledgerBooks.any(
+            (b) => b.id == book.id && b.baseCurrencyCode == baseCode,
+          ) ||
+          book.currencySetupStatus != CurrencySetupStatus.confirmed ||
+          !CurrencyCatalog.isSupported(code) ||
+          code == baseCode ||
+          !isValidExchangeRate(rateToBase)) {
+        return false;
+      }
+      final date = DateTime(
+        effectiveDate.year,
+        effectiveDate.month,
+        effectiveDate.day,
+      );
+      final idIndex = id == null
+          ? -1
+          : _exchangeRates.indexWhere(
+              (rate) => rate.bookId == book.id && rate.id == id,
+            );
+      final keyIndex = _exchangeRates.indexWhere(
+        (rate) =>
+            rate.bookId == book.id &&
+            rate.baseCurrencyCode == baseCode &&
+            rate.currencyCode == code &&
+            currencyDateKey(rate.effectiveDate) == currencyDateKey(date),
+      );
+      if (idIndex != -1 && keyIndex != -1 && idIndex != keyIndex) return false;
+      final existingIndex = idIndex != -1 ? idIndex : keyIndex;
+      final now = DateTime.now();
+      final existing = existingIndex == -1
+          ? null
+          : _exchangeRates[existingIndex];
+      final candidate = ExchangeRate(
+        id: existing?.id ?? id ?? _generateId('rate'),
+        bookId: book.id,
+        baseCurrencyCode: baseCode,
+        currencyCode: code,
+        effectiveDate: date,
+        rateToBase: rateToBase,
+        source: source,
+        createdAt: existing?.createdAt ?? now,
+        updatedAt: now,
+      );
+      final next = List<ExchangeRate>.of(_exchangeRates);
+      if (existingIndex == -1) {
+        next.add(candidate);
+      } else {
+        next[existingIndex] = candidate;
+      }
+      try {
+        await _repository.saveExchangeRates(next);
+      } catch (error, stackTrace) {
+        _handlePersistError(error, stackTrace);
+        return false;
+      }
+      _exchangeRates
+        ..clear()
+        ..addAll(next);
+      notifyListeners();
+      return true;
+    });
   }
 
-  Future<bool> deleteExchangeRate(String id) async {
-    final next = <ExchangeRate>[
-      for (final rate in _exchangeRates)
-        if (rate.id != id || rate.bookId != _activeBookId) rate,
-    ];
-    if (next.length == _exchangeRates.length) return false;
-    try {
-      await _repository.saveExchangeRates(next);
-    } catch (error, stackTrace) {
-      _handlePersistError(error, stackTrace);
-      return false;
-    }
-    _exchangeRates
-      ..clear()
-      ..addAll(next);
-    notifyListeners();
-    return true;
+  Future<bool> deleteExchangeRate(String id) {
+    final bookId = _activeBookId;
+    return _enqueueCaptureMutation(() async {
+      final next = <ExchangeRate>[
+        for (final rate in _exchangeRates)
+          if (rate.id != id || rate.bookId != bookId) rate,
+      ];
+      if (next.length == _exchangeRates.length) return false;
+      try {
+        await _repository.saveExchangeRates(next);
+      } catch (error, stackTrace) {
+        _handlePersistError(error, stackTrace);
+        return false;
+      }
+      _exchangeRates
+        ..clear()
+        ..addAll(next);
+      notifyListeners();
+      return true;
+    });
   }
 
   /// Returns due rules in the active ledger that cannot currently be posted
@@ -2992,6 +3030,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
               ? rule.toAccountAmount
               : null,
           baseAmount: rule.type == EntryType.transfer ? 0 : rule.baseAmount,
+          referenceBaseAmount:
+              rule.type != EntryType.transfer &&
+                  sourceCode != book.baseCurrencyCode &&
+                  rule.baseAmount > 0
+              ? rule.baseAmount
+              : null,
           conversionSource: ConversionSource.manual,
           categoryId: rule.categoryId,
           accountId: rule.accountId,
@@ -4362,6 +4406,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     String? captureEventBookId,
   }) async {
     List<CaptureEvent>? nextCaptureEvents;
+    if (entry.repaymentBatchId != null ||
+        _entries.any((e) => e.id == entry.id && e.repaymentBatchId != null)) {
+      return const EntrySaveValidationFailure(EntryValidationCode.staleDraft);
+    }
     if (captureEventId != null) {
       final index = _captureEvents.indexWhere(
         (event) =>
@@ -4702,6 +4750,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final code = entry.currencyCode.toUpperCase();
     if (!CurrencyCatalog.isSupported(code) ||
         !positive(entry.amount) ||
+        (entry.referenceBaseAmount != null &&
+            !positive(entry.referenceBaseAmount)) ||
         !nonNegative(entry.fee)) {
       return false;
     }
@@ -4727,7 +4777,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
               code != toAccount.currencyCode) {
         return false;
       }
-    } else if (!positive(entry.baseAmount) || entry.toAccountId != null) {
+    } else if ((!positive(entry.baseAmount) &&
+            !(entry.baseAmount == 0 &&
+                entry.referenceBaseAmount == null &&
+                code != book.baseCurrencyCode)) ||
+        entry.toAccountId != null) {
       return false;
     }
     if (entry.type != EntryType.transfer && entry.fee != 0) {
@@ -5178,6 +5232,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       currencyCode: expense.currencyCode,
       accountAmount: resolvedAccountAmount,
       baseAmount: resolvedBaseAmount,
+      referenceBaseAmount:
+          expense.currencyCode != book.baseCurrencyCode &&
+              (baseAmount != null || expense.referenceBaseAmount != null) &&
+              resolvedBaseAmount > 0
+          ? resolvedBaseAmount
+          : null,
       conversionSource:
           conversionSource ??
           (expense.currencyCode == book.baseCurrencyCode &&
@@ -5497,6 +5557,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _activeBookId = bookId;
     _store.write(_activeBookKey, _activeBookId);
     notifyListeners();
+    unawaited(refreshExchangeRatesIfEnabled());
   }
 
   bool deleteLedgerBook(String bookId) {
@@ -5582,6 +5643,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   }
 
   Set<String> _withDependentRefundIds(Set<String> entryIds) {
+    final batches = _entries
+        .where((e) => entryIds.contains(e.id))
+        .map((e) => e.repaymentBatchId)
+        .whereType<String>()
+        .toSet();
+    entryIds = {
+      ...entryIds,
+      for (final e in _entries)
+        if (batches.contains(e.repaymentBatchId)) e.id,
+    };
     final refundIds = _entries
         .where(
           (e) =>
@@ -5595,7 +5666,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   }
 
   Future<bool> _deleteEntryIds(Set<String> entryIds) async {
-    final removeIds = _withDependentRefundIds(entryIds);
+    final batches = _entries
+        .where((e) => entryIds.contains(e.id))
+        .map((e) => e.repaymentBatchId)
+        .whereType<String>()
+        .toSet();
+    final removeIds = _withDependentRefundIds({
+      ...entryIds,
+      for (final entry in _entries)
+        if (batches.contains(entry.repaymentBatchId)) entry.id,
+    });
     if (!_entries.any((entry) => removeIds.contains(entry.id))) {
       return false;
     }
@@ -5852,9 +5932,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         creditAccountId.isEmpty) {
       return true;
     }
-    return _creditAccounts.any(
-      (item) => item.id == creditAccountId && item.bookId == account.bookId,
-    );
+    return !_accounts.any(
+          (a) =>
+              a.id != account.id &&
+              a.bookId == account.bookId &&
+              a.creditAccountId == creditAccountId &&
+              a.currencyCode == account.currencyCode,
+        ) &&
+        _creditAccounts.any(
+          (item) => item.id == creditAccountId && item.bookId == account.bookId,
+        );
   }
 
   /// 把主体的共享额度与日期规则复制到全部币种子账户的兼容字段。
@@ -7429,6 +7516,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       _activeBookKey,
       _assetCoverKey,
       _hapticsKey,
+      _autoExchangeRatesKey,
       _assetViewModeKey,
       _assetSectionCollapsedKey,
       _assetAccountOrderKey,
@@ -7441,6 +7529,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       WidgetConfigStore.storageKey,
     ]) {
       _store.delete(key);
+    }
+    _rateSyncGeneration++;
+    for (final book in ledgerBooks) {
+      _store.delete('$_exchangeRateSyncPrefix${book.id}.v1');
+      _store.delete('$_exchangeRateAttemptPrefix${book.id}.v1');
     }
     _entries.clear();
     _captureEvents.clear();
@@ -7504,7 +7597,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 8,
+      'version': 9,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'ledgerBooks': _ledgerBooks.map((book) => book.toJson()).toList(),
@@ -7595,7 +7688,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 8) {
+    if (version < 1 || version > 9) {
       throw FormatException('不支持的备份版本：$version');
     }
 
@@ -7687,6 +7780,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       nextAccounts = migratedAccounts;
       nextCreditAccounts = migratedCreditAccounts;
     }
+    final normalizedHierarchy = normalizeCreditHierarchy(
+      nextAccounts,
+      nextCreditAccounts,
+    );
+    nextAccounts = normalizedHierarchy.accounts;
+    nextCreditAccounts = normalizedHierarchy.parents;
     final importedCategories = _decodeModelList<Category>(
       data['categories'],
       Category.fromJson,
@@ -7950,6 +8049,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _exchangeRates
       ..clear()
       ..addAll(nextExchangeRates);
+    _rateSyncGeneration++;
     _balanceAnchors
       ..clear()
       ..addAll(nextBalanceAnchors);

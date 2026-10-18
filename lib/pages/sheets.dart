@@ -331,7 +331,10 @@ Future<CurrencyDefinition?> showCurrencyPickerSheet({
     builder: (context) => _CurrencyPickerSheet(
       title: title,
       selectedCode: selectedCode?.toUpperCase(),
-      preferredCodes: preferredCodes.map((code) => code.toUpperCase()).toList(),
+      preferredCodes: preferredCodes
+          .map((code) => code.toUpperCase())
+          .toSet()
+          .toList(),
       excludedCodes: excludedCodes.map((code) => code.toUpperCase()).toSet(),
     ),
   );
@@ -837,6 +840,9 @@ Future<String?> showCategoryPickerSheet(
 
 /// 选「全部账户」（筛选场景）时返回的哨兵 [Account]，其 id 为 [accountPickerAllId]。
 const String accountPickerAllId = '__account_picker_all__';
+
+/// 仅选择器返回的父账户哨兵，记账页必须先解析真实币种子账户。
+const String creditParentPickerPrefix = '__credit_parent__:';
 const Account _accountPickerAllSentinel = Account(
   id: accountPickerAllId,
   bookId: '',
@@ -866,6 +872,7 @@ Future<Account?> showAccountPickerSheet({
   String? noneLabel,
   String? noneHint,
   String? allLabel,
+  bool includeCreditParents = false,
 }) {
   return _showVeriModalSheet<Account>(
     context: context,
@@ -882,6 +889,31 @@ Future<Account?> showAccountPickerSheet({
       final maxHeight = MediaQuery.sizeOf(context).height * 0.72;
 
       final children = <Widget>[];
+      if (includeCreditParents) {
+        for (final parent in controller.creditAccounts) {
+          final child = accounts
+              .where((a) => a.creditAccountId == parent.id)
+              .firstOrNull;
+          if (child == null) continue;
+          children.add(
+            Material(
+              type: MaterialType.transparency,
+              child: ListTile(
+                leading: AccountIconBox(iconCode: child.iconCode, size: 32),
+                title: Text('${parent.name} (${l10n.creditLinkParent})'),
+                subtitle: Text(l10n.creditParentPick),
+                trailing: const Icon(Icons.chevron_right),
+                onTap: () => Navigator.of(context).pop(
+                  child.copyWith(
+                    id: '$creditParentPickerPrefix${parent.id}',
+                    name: parent.name,
+                  ),
+                ),
+              ),
+            ),
+          );
+        }
+      }
       if (noneLabel != null) {
         children.add(
           Padding(

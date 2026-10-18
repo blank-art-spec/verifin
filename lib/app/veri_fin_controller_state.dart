@@ -90,8 +90,12 @@ mixin _ControllerState on ChangeNotifier {
   List<ExchangeRate>? _exchangeRatesView;
   Map<String, double>? _accountBalanceCache;
   Map<String, double>? _balanceAfterEntryCache;
+  ({List<LedgerEntry> entries, Set<String> missing})? _statisticsProjection;
+  String? _statisticsProjectionDate;
+  int _rateSyncGeneration = 0;
 
   void _invalidateDerivedViews() {
+    _statisticsProjection = null;
     _entriesView = null;
     _captureEventsView = null;
     _autoCaptureRulesView = null;

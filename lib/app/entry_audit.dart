@@ -53,6 +53,7 @@ Map<String, String> _auditedEntryFields(LedgerEntry entry) => <String, String>{
   'currencyCode': entry.currencyCode,
   'accountAmount': entry.accountAmount?.toString() ?? '',
   'baseAmount': entry.baseAmount.toString(),
+  'referenceBaseAmount': entry.referenceBaseAmount?.toString() ?? '',
   'toAccountAmount': entry.toAccountAmount?.toString() ?? '',
   'conversionSource': entry.conversionSource.name,
   'accountId': entry.accountId,

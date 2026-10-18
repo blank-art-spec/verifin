@@ -117,6 +117,22 @@ LedgerDataValidationIssue? validateLedgerEntries({
         entry.id,
       );
     }
+    if (entry.repaymentBatchId != null &&
+        (entry.repaymentBatchId!.trim().isEmpty ||
+            entry.type != EntryType.transfer)) {
+      return LedgerDataValidationIssue(
+        LedgerDataValidationCode.invalidEntryShape,
+        entry.id,
+      );
+    }
+    if (entry.referenceBaseAmount != null &&
+        (!positive(entry.referenceBaseAmount) ||
+            !normalized(entry.referenceBaseAmount!, book.baseCurrencyCode))) {
+      return LedgerDataValidationIssue(
+        LedgerDataValidationCode.invalidAmount,
+        entry.id,
+      );
+    }
     if (entry.accountId.isEmpty
         ? entry.accountAmount != null
         : !positive(entry.accountAmount)) {
@@ -145,7 +161,10 @@ LedgerDataValidationIssue? validateLedgerEntries({
           entry.id,
         );
       }
-    } else if (!positive(entry.baseAmount) ||
+    } else if ((!positive(entry.baseAmount) &&
+            !(entry.baseAmount == 0 &&
+                entry.referenceBaseAmount == null &&
+                entry.currencyCode != book.baseCurrencyCode)) ||
         entry.toAccountId != null ||
         entry.fee != 0) {
       return LedgerDataValidationIssue(

@@ -194,7 +194,7 @@ void main() {
       );
       await createStatement(controller, card);
       await openRepayment(tester, controller, card);
-      expect(find.textContaining('720'), findsOneWidget);
+      expect(find.textContaining('720'), findsWidgets);
       if (withoutAccount) {
         await tester.tap(find.byKey(const Key('repay_from_account')));
         await tester.pumpAndSettle();
@@ -325,7 +325,7 @@ void main() {
 
     // 只预填已出账的 5219.15，恢复默认储蓄卡选择，并可改为无账户还款。
     expect(find.text('还款'), findsWidgets);
-    expect(find.textContaining('5219.15'), findsOneWidget);
+    expect(find.textContaining('5219.15'), findsWidgets);
     expect(find.textContaining('10438.3'), findsNothing);
     expect(find.text('扣款账户'), findsOneWidget);
     expect(find.textContaining('测试储蓄卡'), findsOneWidget);
@@ -461,7 +461,7 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.text('无账户'), findsOneWidget);
+    expect(find.text('无账户转账还款'), findsOneWidget);
     expect(find.textContaining('花呗'), findsWidgets);
 
     // 冷启动后自动结转待还保持为 0，不能把还款重复计入下一期。

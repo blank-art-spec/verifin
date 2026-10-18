@@ -24,6 +24,9 @@ class ProjectManagementPage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
+          missingCurrencies: VeriFinScope.of(
+            context,
+          ).missingStatisticsCurrencies,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
             children: <Widget>[
@@ -108,11 +111,16 @@ class ProjectDetailPage extends StatelessWidget {
     if (project == null) {
       return Scaffold(
         body: SafeArea(
-          child: VeriPage(child: Center(child: Text(l10n.projectsEmpty))),
+          child: VeriPage(
+            missingCurrencies: VeriFinScope.of(
+              context,
+            ).missingStatisticsCurrencies,
+            child: Center(child: Text(l10n.projectsEmpty)),
+          ),
         ),
       );
     }
-    final entries = controller.entries
+    final entries = controller.statisticsEntries
         .where(
           (entry) =>
               entry.bookId == project.bookId &&
@@ -130,6 +138,9 @@ class ProjectDetailPage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
+          missingCurrencies: VeriFinScope.of(
+            context,
+          ).missingStatisticsCurrencies,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
             children: <Widget>[
@@ -346,6 +357,9 @@ class _ProjectEditorPageState extends State<ProjectEditorPage> {
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
+          missingCurrencies: VeriFinScope.of(
+            context,
+          ).missingStatisticsCurrencies,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
             children: <Widget>[

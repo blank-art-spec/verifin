@@ -65,10 +65,10 @@ class _BudgetOverviewPageState extends State<BudgetOverviewPage> {
     // 周期起始日决定；起始日 = 1 时窗口即自然月，行为与旧版完全一致。
     final cyclic = controller.budgetCycleIsCustom;
     final window = controller.budgetWindow(_month);
-    final monthEntries = entriesInWindow(controller.entries, window);
+    final monthEntries = entriesInWindow(controller.statisticsEntries, window);
     final previousMonth = DateTime(_month.year, _month.month - 1);
     final previousMonthEntries = entriesInWindow(
-      controller.entries,
+      controller.statisticsEntries,
       controller.budgetWindow(previousMonth),
     );
     final monthExpense = sumByType(monthEntries, EntryType.expense);
@@ -126,6 +126,9 @@ class _BudgetOverviewPageState extends State<BudgetOverviewPage> {
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
+          missingCurrencies: VeriFinScope.of(
+            context,
+          ).missingStatisticsCurrencies,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
             children: <Widget>[
@@ -355,7 +358,10 @@ class _BudgetOverviewPageState extends State<BudgetOverviewPage> {
                 const SizedBox(height: 10),
                 _DailyBudgetCard(
                   dailyBudget: controller.dailyBudget(),
-                  todayExpense: dayExpenseTotal(controller.entries, now),
+                  todayExpense: dayExpenseTotal(
+                    controller.statisticsEntries,
+                    now,
+                  ),
                 ),
               ],
               const SizedBox(height: 10),
@@ -629,6 +635,9 @@ class BudgetHistoryPage extends StatelessWidget {
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
+          missingCurrencies: VeriFinScope.of(
+            context,
+          ).missingStatisticsCurrencies,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
             children: <Widget>[

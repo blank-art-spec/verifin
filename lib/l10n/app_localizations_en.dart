@@ -5018,7 +5018,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get currencyRatesOfflineDesc =>
-      'Rates are stored on this device and maintained by you. The app never downloads or refreshes them, and changing a rate does not rewrite historical transaction reports.';
+      'Rates stay on this device. Maintain them manually or enable Frankfurter daily updates. Confirmed conversions stay fixed in statistics; other transactions and current assets use the latest rate.';
 
   @override
   String get exchangeRateCurrencies => 'Foreign currency rates';
@@ -5148,11 +5148,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get entryConversionSourceRateTable =>
-      'Calculated from a local rate. Tap an amount to adjust it.';
+      'Statistics use the latest rate when no conversion is confirmed. Original and account amounts stay unchanged.';
 
   @override
   String get entryConversionSourceManual =>
-      'Amounts were adjusted for this transaction and will be frozen for historical reports.';
+      'Confirmed conversions stay fixed in statistics. Account balances use actual posted amounts.';
 
   @override
   String entryAmountInputTitle(String label, String currency) {
@@ -6374,4 +6374,116 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get entryAuditSources => 'Source records';
+
+  @override
+  String get referenceAmountLabel => 'Converted amount (optional)';
+
+  @override
+  String get referenceAmountHint =>
+      'A confirmed conversion stays fixed in statistics. Leave blank to show only the original amount; statistics use the latest rate.';
+
+  @override
+  String exchangeRateValue(Object value) {
+    return 'Rate $value';
+  }
+
+  @override
+  String get creditChildren => 'Currency accounts';
+
+  @override
+  String get creditParentTransactions => 'All currency transactions';
+
+  @override
+  String get creditParentPick => 'Choose parent (post by currency)';
+
+  @override
+  String creditCreateCurrency(Object currency) {
+    return 'Create a $currency account under this parent?';
+  }
+
+  @override
+  String get creditRepaymentScope => 'Repayment scope';
+
+  @override
+  String get creditRepaymentCurrent => 'Current billed amount';
+
+  @override
+  String get creditRepaymentAll => 'All outstanding debt';
+
+  @override
+  String get creditRepaymentReferenceRequired =>
+      'Partial repayment requires confirmed conversions for unpaid foreign expenses in scope. Paying all current bills is exempt; amounts beyond current bills still require confirmation.';
+
+  @override
+  String get creditFillReference => 'Complete conversions';
+
+  @override
+  String get creditRepaymentEditBatch =>
+      'This belongs to a grouped repayment. Editing replaces all currency payments in this batch.';
+
+  @override
+  String get creditDeleteBatch =>
+      'Deleting this record reverses every payment and debit in this repayment batch.';
+
+  @override
+  String creditChildAmount(Object currency) {
+    return '$currency repayment';
+  }
+
+  @override
+  String get creditSourceTotal => 'Actual total debit';
+
+  @override
+  String get creditHierarchyReview =>
+      'Conflicting legacy accounts were kept separate. Review their credit parent settings to group them.';
+
+  @override
+  String get automaticExchangeRates => 'Automatic exchange rates';
+
+  @override
+  String get automaticExchangeRatesHint =>
+      'Frankfurter daily reference rates, refreshed on opening the app. Only currency codes are sent. Same-day manual rates take priority.';
+
+  @override
+  String get refreshExchangeRates => 'Refresh rates';
+
+  @override
+  String get exchangeRatesOnline => 'Online reference rate';
+
+  @override
+  String exchangeRatesSynced(Object date) {
+    return 'Last synced: $date';
+  }
+
+  @override
+  String get exchangeRatesSyncFailed =>
+      'Rate update failed. Cached rates remain available.';
+
+  @override
+  String statisticsMissingRates(Object currencies) {
+    return 'Missing $currencies rates. Totals are incomplete until rates are added.';
+  }
+
+  @override
+  String get clearReferenceAmount => 'Clear conversion';
+
+  @override
+  String get creditNetValue => 'Value in ledger currency';
+
+  @override
+  String get creditLinkParent => 'Parent account';
+
+  @override
+  String get creditMoveParent => 'Move to an existing parent';
+
+  @override
+  String get creditMoveParentConflict =>
+      'Currency or billing settings conflict. Review the accounts first.';
+
+  @override
+  String get creditRepaymentNoDebt => 'No outstanding debt to repay.';
+
+  @override
+  String get creditRepaymentTooMuch =>
+      'The payment cannot exceed this currency account’s debt.';
 }

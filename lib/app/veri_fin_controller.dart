@@ -20,6 +20,9 @@ import 'budget_cycle.dart';
 import 'category_tree.dart';
 import 'currency_catalog.dart';
 import 'currency_math.dart';
+import 'credit_hierarchy.dart';
+import 'statistics_currency.dart';
+import 'frankfurter_client.dart';
 import 'credit_card.dart';
 import 'demo_data.dart';
 import 'entry_audit.dart';
@@ -41,6 +44,7 @@ import 'reminder/financial_reminder.dart';
 part 'veri_fin_controller_state.dart';
 part 'veri_fin_controller_ops.dart';
 part 'veri_fin_controller_account_reminders.dart';
+part 'veri_fin_controller_credit_hierarchy.dart';
 
 /// 导入校验用的已知备份数据键：`data` 里出现其一即认定为本应用备份（配合 `app`
 /// 标记）。用于拦截「格式合法却非本应用」的 JSON，避免其把数据静默覆盖为初始态。
@@ -81,6 +85,9 @@ const String _profileKey = 'verifin.profile.v1';
 const String _activeBookKey = 'verifin.active_book.v1';
 const String _assetCoverKey = 'verifin.asset_cover.v1';
 const String _hapticsKey = 'verifin.haptics.v1';
+const String _autoExchangeRatesKey = 'verifin.auto_exchange_rates.v1';
+const String _exchangeRateSyncPrefix = 'verifin.exchange_sync.';
+const String _exchangeRateAttemptPrefix = 'verifin.exchange_attempt.';
 const String _privacyConsentKey = 'verifin.privacy_consent.v1';
 const String _appLockKey = 'verifin.app_lock.v1';
 const String _assetViewModeKey = 'verifin.asset_view_mode.v1';
@@ -166,7 +173,11 @@ class BackupRestorePreview {
 /// 由应用根组件注入，控制器本身不做文件 I/O，测试宿主保持为空。
 
 class VeriFinController extends ChangeNotifier
-    with _ControllerState, _ControllerOps, _AccountEntryReminderOps {
+    with
+        _ControllerState,
+        _ControllerOps,
+        _AccountEntryReminderOps,
+        _CreditHierarchyOps {
   VeriFinController._(
     this._store,
     this._repository, {
@@ -204,6 +215,7 @@ class VeriFinController extends ChangeNotifier
     );
     await controller._loadFromRepository();
     await controller._restoreCaptureLinksFromSources();
+    await controller.upgradeCreditHierarchy();
     if (controller._seedLegacyProjects()) {
       await repository.saveProjects(List<Project>.of(controller._projects));
     }

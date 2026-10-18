@@ -24,7 +24,7 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 - `docs/dev/known-limitations.md`：已接受技术债及触发整改的阈值。
 - `docs/dev/ai-tools.md`：AI 账目查询工具的注册和维护约定。
 - `docs/dev/category-budget-override-design.md`：分类默认预算与单期覆盖的职责、Issue #28 兼容方案和验收范围。
-- `docs/dev/multi-currency-design.md`：已落地的多币种、离线汇率、跨币种交易/退款、迁移与验收依据；后续修改须保持三层金额和历史冻结口径。
+- `docs/dev/multi-currency-design.md`：多币种基础设计；2026-10-18 的当前父子账户、参考折算、联网汇率和统一还款口径见 `docs/dev/credit-hierarchy-currency.md`，覆盖旧文档的全部统计冻结约定。原币及账户实际金额保持不变；统计优先明确参考额，否则用最新汇率。
 - `docs/dev/refund-design.md`、`docs/dev/auto-capture-plan.md`、`docs/dev/i18n-verification.md`、`docs/automation.md`：对应领域的设计与验收资料。`refund-design.md` 含历史方案，退款当前行为以源码、测试和 `docs/dev/known-limitations.md` 为准。
 - `docs/dev/android-development.md`：真机开发、工具链检测和缺失时自动安装、日志、隔离验收及测试应用清理。
 - `docs/dev/unified-design-preview.md`：默认关闭的统一设计候选方案；用户确认前不得把 `UNIFIED_DESIGN_PREVIEW` 默认开启或移除旧外观路径。
@@ -34,7 +34,7 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 
 ## 产品原则
 
-- **本地优先、数据自主**：无账号、无自有服务端、无广告、无联网遥测。权威账目数据存于用户设备；只有用户主动启用的导出、WebDAV 备份或 AI 功能才会对外传输相应数据，WebDAV 不是账号云同步。
+- **本地优先、数据自主**：无账号、无自有服务端、无广告、无联网遥测。权威账目数据存于用户设备；导出、WebDAV、AI 与每日汇率须用户主动启用。Frankfurter 请求只带币种/日期，不发账目；WebDAV 不是账号云同步。
 - **隐私优先**：AI 使用用户自己配置的 OpenAI 兼容端点。AI 记账只生成草稿，必须经用户确认后落账；AI 查询工具全部只读，绝不提供写数据能力。
 - **自动采集必须显式授权且原始事件优先**：通知监听与“仅接收新短信”默认关闭，用户逐项启用后只把原文先写入 `CaptureEvent`，再经本地规则、去重和置信度分流；禁止外部文本绕过中间层直接写 `LedgerEntry`。不使用无障碍、常驻录屏，也不读取历史短信；截图仍在端上 OCR，原图不上传。
 - **Android 能力必须真实可用**：测试 stub 不能被当作生产实现。本地存储、图片、文件、通知、生物识别、安装包、桌面小组件或系统入口都要核对 Android 权限、持久化、进程重启和生命周期行为。

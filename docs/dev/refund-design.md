@@ -1,5 +1,7 @@
 # 退款功能扩展 · 设计方案（草案）
 
+> 2026-10-18：当前统计按明确参考额优先、否则最新汇率投影；退款也在同一投影中重建原支出净额。原币退款上限和实际到账余额规则保持。历史冻结统计说明由 [当前口径](credit-hierarchy-currency.md) 覆盖。
+
 > 状态：**已实现（v1）**。对应 GitHub Issue #6 第 1 条「退款相关账单功能」。
 > 本文保留你的 `「」` 批注作为决策记录；下方「决策速览」为最终范围。实现落点：模型/数学/迁移见
 > `models.dart`·`ledger_math.dart`·`veri_fin_controller_*.dart`·`app_database.dart`；UI 见

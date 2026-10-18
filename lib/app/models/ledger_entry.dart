@@ -260,6 +260,8 @@ class LedgerEntry {
     double? accountAmount,
     double? toAccountAmount,
     double? baseAmount,
+    this.referenceBaseAmount,
+    this.repaymentBatchId,
     this.conversionSource = ConversionSource.identity,
     required this.categoryId,
     required this.accountId,
@@ -303,6 +305,13 @@ class LedgerEntry {
 
   /// 保存时冻结的账本本位币金额。转账恒为 0，不随以后汇率表变化。
   final double baseAmount;
+
+  /// 用户明确填写或银行确认的本币折算值；null 表示统计时按最新有效汇率折算。
+  /// 与历史 baseAmount 缓存分离，自动同步汇率不能把估算升级为已确认。
+  final double? referenceBaseAmount;
+
+  /// 同一次信用主体还款的稳定批次 id；父账户不另存重复扣款流水。
+  final String? repaymentBatchId;
   final ConversionSource conversionSource;
   final String categoryId;
   final String accountId;
@@ -391,6 +400,9 @@ class LedgerEntry {
     double? toAccountAmount,
     bool clearToAccountAmount = false,
     double? baseAmount,
+    double? referenceBaseAmount,
+    bool clearReferenceBaseAmount = false,
+    String? repaymentBatchId,
     ConversionSource? conversionSource,
     String? categoryId,
     String? accountId,
@@ -429,6 +441,10 @@ class LedgerEntry {
           ? null
           : toAccountAmount ?? this.toAccountAmount,
       baseAmount: baseAmount ?? this.baseAmount,
+      referenceBaseAmount: clearReferenceBaseAmount
+          ? null
+          : referenceBaseAmount ?? this.referenceBaseAmount,
+      repaymentBatchId: repaymentBatchId ?? this.repaymentBatchId,
       conversionSource: conversionSource ?? this.conversionSource,
       categoryId: categoryId ?? this.categoryId,
       accountId: accountId ?? this.accountId,
@@ -463,6 +479,8 @@ class LedgerEntry {
       if (accountAmount != null) 'accountAmount': accountAmount,
       if (toAccountAmount != null) 'toAccountAmount': toAccountAmount,
       'baseAmount': baseAmount,
+      'referenceBaseAmount': referenceBaseAmount,
+      if (repaymentBatchId != null) 'repaymentBatchId': repaymentBatchId,
       'conversionSource': conversionSource.name,
       'categoryId': categoryId,
       'accountId': accountId,
@@ -507,6 +525,16 @@ class LedgerEntry {
       conversionSource: json.containsKey('conversionSource')
           ? ConversionSource.fromStorage(json['conversionSource'] as String?)
           : ConversionSource.legacy,
+      referenceBaseAmount:
+          (json['referenceBaseAmount'] as num?)?.toDouble() ??
+          (!json.containsKey('referenceBaseAmount') &&
+                  type != EntryType.transfer &&
+                  (json['baseAmount'] as num? ?? 0) > 0 &&
+                  (json['conversionSource'] == 'manual' ||
+                      json['conversionSource'] == 'imported')
+              ? (json['baseAmount'] as num?)?.toDouble()
+              : null),
+      repaymentBatchId: json['repaymentBatchId'] as String?,
       categoryId: json['categoryId'] as String? ?? 'dining',
       accountId: json['accountId'] as String? ?? 'alipay',
       toAccountId: json['toAccountId'] as String?,

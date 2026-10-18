@@ -27,7 +27,12 @@ void main() {
   test('新信用账户自动创建主体，已有账户可合并为同一主体', () async {
     final controller = await makeController();
     expect(await controller.addAccountDraft(card('cny', '招商人民币')), isTrue);
-    expect(await controller.addAccountDraft(card('usd', '招商美元')), isTrue);
+    expect(
+      await controller.addAccountDraft(
+        card('usd', '招商美元').copyWith(currencyCode: 'USD'),
+      ),
+      isTrue,
+    );
     expect(controller.creditAccounts, hasLength(2));
 
     final parent = controller.creditAccountForAccount(

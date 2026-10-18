@@ -117,8 +117,9 @@ class TransactionTile extends StatelessWidget {
         entry.type != EntryType.transfer &&
             baseCurrencyCode != null &&
             baseCurrencyCode != entry.currencyCode &&
-            baseCurrencyCode != fromAccount?.currencyCode
-        ? formatUserMoney(entry.baseAmount, baseCurrencyCode!, forceUnit: true)
+            baseCurrencyCode != fromAccount?.currencyCode &&
+            entry.referenceBaseAmount != null
+        ? '${formatUserMoney(entry.referenceBaseAmount!, baseCurrencyCode!, forceUnit: true)} · ${AppLocalizations.of(context).exchangeRateValue(formatRateValue(entry.referenceBaseAmount! / entry.amount))}'
         : null;
     final conversionText = <String>[
       ?accountAmountText,

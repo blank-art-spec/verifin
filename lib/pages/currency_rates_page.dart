@@ -77,6 +77,47 @@ class _CurrencyRatesPageState extends State<CurrencyRatesPage> {
               ),
               const SizedBox(height: 10),
               VeriCard(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    CompactSwitchRow(
+                      icon: Icons.sync,
+                      title: Text(l10n.automaticExchangeRates),
+                      subtitle: Text(l10n.automaticExchangeRatesHint),
+                      value: controller.autoExchangeRates,
+                      onChanged: (value) =>
+                          unawaited(controller.setAutoExchangeRates(value)),
+                    ),
+                    if (controller.lastRateSync != null)
+                      Text(
+                        l10n.exchangeRatesSynced(
+                          l10n.dateMonthDay(controller.lastRateSync!),
+                        ),
+                      ),
+                    if (controller.rateSyncFailed)
+                      Text(l10n.exchangeRatesSyncFailed),
+                    TextButton.icon(
+                      onPressed: controller.rateSyncRunning
+                          ? null
+                          : () async {
+                              final success = await controller
+                                  .syncExchangeRates();
+                              if (!context.mounted || success) return;
+                              unawaited(
+                                VeriFeedbackHost.of(context).showMessage(
+                                  message: l10n.exchangeRatesSyncFailed,
+                                  tone: VeriFeedbackTone.warning,
+                                ),
+                              );
+                            },
+                      icon: const Icon(Icons.refresh),
+                      label: Text(l10n.refreshExchangeRates),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 10),
+              VeriCard(
                 child: Row(
                   children: <Widget>[
                     const VeriIconBox(
@@ -491,5 +532,6 @@ String exchangeRateSourceLabel(
   return switch (source) {
     ExchangeRateSource.manual => l10n.exchangeRateSourceManual,
     ExchangeRateSource.imported => l10n.exchangeRateSourceImported,
+    ExchangeRateSource.online => l10n.exchangeRatesOnline,
   };
 }

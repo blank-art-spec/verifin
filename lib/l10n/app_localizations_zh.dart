@@ -4875,7 +4875,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get currencyRatesOfflineDesc =>
-      '汇率保存在本机并由你维护。应用不会联网获取或自动刷新汇率；修改汇率也不会改变已保存交易的历史统计。';
+      '汇率保存在本机，可手动维护或启用 Frankfurter 每日更新。已填写折算金额的交易按保存值统计；其余按最新汇率统计，资产负债也按最新汇率估值。';
 
   @override
   String get exchangeRateCurrencies => '外币汇率';
@@ -5000,10 +5000,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get entryConversionSummary => '金额摘要';
 
   @override
-  String get entryConversionSourceRateTable => '已按本地汇率自动换算，可点击金额修改';
+  String get entryConversionSourceRateTable =>
+      '未填写折算金额的收支在统计时按最新汇率换算；原币和账户实际金额保持不变。';
 
   @override
-  String get entryConversionSourceManual => '本单金额已手动调整，历史统计将冻结保存值';
+  String get entryConversionSourceManual => '已手动填写的折算金额固定用于统计；账户余额仍按实际入账币种计算。';
 
   @override
   String entryAmountInputTitle(String label, String currency) {
@@ -6170,4 +6171,109 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get entryAuditSources => '来源记录';
+
+  @override
+  String get referenceAmountLabel => '折算金额（可选）';
+
+  @override
+  String get referenceAmountHint => '填写银行实际折算额后固定用于统计；留空时流水仅显示原币，统计使用最新汇率。';
+
+  @override
+  String exchangeRateValue(Object value) {
+    return '汇率 $value';
+  }
+
+  @override
+  String get creditChildren => '币种子账户';
+
+  @override
+  String get creditParentTransactions => '全部子账户流水';
+
+  @override
+  String get creditParentPick => '选择父账户（按币种入账）';
+
+  @override
+  String creditCreateCurrency(Object currency) {
+    return '该父账户还没有 $currency 子账户，是否创建？';
+  }
+
+  @override
+  String get creditRepaymentScope => '还款范围';
+
+  @override
+  String get creditRepaymentCurrent => '当前待还金额';
+
+  @override
+  String get creditRepaymentAll => '全部待还金额';
+
+  @override
+  String get creditRepaymentReferenceRequired =>
+      '部分还款需要补齐还款范围内未结清外币消费的折算金额。当前账单全额结清可直接还款；超出当前账单的部分仍需补齐。';
+
+  @override
+  String get creditFillReference => '去补齐折算金额';
+
+  @override
+  String get creditRepaymentEditBatch => '此记录属于统一还款。修改时将一并替换该次全部币种的还款。';
+
+  @override
+  String get creditDeleteBatch => '删除此记录会一并撤销本次统一还款的全部币种分配和扣款。';
+
+  @override
+  String creditChildAmount(Object currency) {
+    return '$currency 实际还款';
+  }
+
+  @override
+  String get creditSourceTotal => '实际扣款总额';
+
+  @override
+  String get creditHierarchyReview => '旧账户配置存在冲突，未自动归并。可在信用主体设置中选择同一父账户后处理。';
+
+  @override
+  String get automaticExchangeRates => '自动更新汇率';
+
+  @override
+  String get automaticExchangeRatesHint =>
+      'Frankfurter 每日参考汇率；开启后每天打开应用时更新。仅发送币种，不发送账目。手填的同日汇率优先。';
+
+  @override
+  String get refreshExchangeRates => '立即更新汇率';
+
+  @override
+  String get exchangeRatesOnline => '联网参考汇率';
+
+  @override
+  String exchangeRatesSynced(Object date) {
+    return '最近同步：$date';
+  }
+
+  @override
+  String get exchangeRatesSyncFailed => '汇率更新失败，继续使用本地缓存。';
+
+  @override
+  String statisticsMissingRates(Object currencies) {
+    return '缺少 $currencies 汇率，汇总暂不完整。请补充汇率后查看。';
+  }
+
+  @override
+  String get clearReferenceAmount => '清除折算金额';
+
+  @override
+  String get creditNetValue => '按账本本币估值';
+
+  @override
+  String get creditLinkParent => '父账户';
+
+  @override
+  String get creditMoveParent => '归入已有父账户';
+
+  @override
+  String get creditMoveParentConflict => '币种或账单配置冲突，无法归并。请先核对账户设置。';
+
+  @override
+  String get creditRepaymentNoDebt => '当前没有可还款的欠款。';
+
+  @override
+  String get creditRepaymentTooMuch => '还款金额不能超过该币种实际欠款。';
 }

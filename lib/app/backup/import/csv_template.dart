@@ -88,7 +88,7 @@ const List<String> transactionCsvExportColumns = <String>[
 ];
 
 /// 导出可重新识别币种语义的交易 CSV。退款子条目折叠回原支出的退款列，避免重复；
-/// 完整备份/恢复仍以 JSON v2 为准。
+/// 完整备份/恢复（含统一还款批次）以 JSON v9 为准。
 String transactionCsvExport({
   required List<LedgerEntry> entries,
   required List<Account> accounts,
@@ -111,8 +111,15 @@ String transactionCsvExport({
     final parent = category?.parentId == null
         ? null
         : categoriesById[category!.parentId];
-    final refundedOriginal =
-        entry.type == EntryType.expense && entry.baseAmount > 0
+    final linkedRefunds = entries
+        .where((r) => r.isSettledRefund && r.refundOf == entry.id)
+        .toList();
+    final refundedOriginal = linkedRefunds.isNotEmpty
+        ? normalizeCurrencyAmount(
+            linkedRefunds.fold<double>(0, (sum, r) => sum + r.amount),
+            entry.currencyCode,
+          )
+        : entry.type == EntryType.expense && entry.baseAmount > 0
         ? normalizeCurrencyAmount(
             entry.refundedBaseAmount / entry.baseAmount * entry.amount,
             entry.currencyCode,
@@ -121,8 +128,9 @@ String transactionCsvExport({
     final derivedRate =
         entry.type != EntryType.transfer &&
             entry.currencyCode != baseCurrencyCode &&
+            entry.referenceBaseAmount != null &&
             entry.amount > 0
-        ? entry.baseAmount / entry.amount
+        ? entry.referenceBaseAmount! / entry.amount
         : null;
     rows.add(<String>[
       _csvDate(entry.occurredAt),
@@ -159,7 +167,13 @@ String transactionCsvExport({
               entry.accountAmount!,
               accountsById[entry.accountId]?.currencyCode ?? entry.currencyCode,
             ),
-      formatCurrencyNumber(entry.baseAmount, baseCurrencyCode),
+      entry.type == EntryType.transfer
+          ? '0'
+          : entry.currencyCode == baseCurrencyCode
+          ? formatCurrencyNumber(entry.amount, baseCurrencyCode)
+          : entry.referenceBaseAmount == null
+          ? ''
+          : formatCurrencyNumber(entry.referenceBaseAmount!, baseCurrencyCode),
       entry.toAccountAmount == null
           ? ''
           : formatCurrencyNumber(

@@ -112,7 +112,7 @@ void main() {
     expect(find.byType(EntryDetailPage), findsNothing);
   });
 
-  testWidgets('复核取消账本选择不改状态，跨本位币缺汇率时禁止保存', (tester) async {
+  testWidgets('复核取消账本选择不改状态，缺统计汇率仍可保存实际原币', (tester) async {
     final store = LocalKeyValueStore();
     store.write('verifin.locale.v1', 'zh');
     final repository = InMemoryLedgerRepository();
@@ -173,10 +173,19 @@ void main() {
       tester
           .widget<FilledButton>(find.byKey(const Key('save_entry_button')))
           .onPressed,
-      isNull,
+      isNotNull,
     );
     expect(await repository.loadEntries(), isEmpty);
     expect((await repository.loadCaptureEvents()).single.bookId, sourceBookId);
+    await tester.ensureVisible(find.byKey(const Key('save_entry_button')));
+    await tester.tap(find.byKey(const Key('save_entry_button')));
+    await tester.pumpAndSettle();
+    final saved = (await repository.loadEntries()).single;
+    expect(saved.bookId, targetBookId);
+    expect(saved.currencyCode, 'CNY');
+    expect(saved.baseAmount, 0);
+    expect(saved.referenceBaseAmount, isNull);
+    expect((await repository.loadCaptureEvents()).single.bookId, targetBookId);
     await tester.pumpWidget(const SizedBox.shrink());
     controller.dispose();
   });

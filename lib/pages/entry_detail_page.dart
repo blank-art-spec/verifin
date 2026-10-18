@@ -16,6 +16,7 @@ import '../app/feedback.dart';
 import '../app/model_lookup.dart';
 import '../app/ledger_math.dart';
 import '../app/models.dart';
+import '../app/statistics_currency.dart';
 import '../app/tag_group_labels.dart';
 import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
@@ -29,6 +30,7 @@ class EntryDetailPage extends StatefulWidget {
     super.key,
     required this.initialAmount,
     this.initialAccountId,
+    this.initialCreditAccountId,
     this.initialDraft,
     this.initialSourceRecords = const <EntrySourceRecord>[],
     this.captureEventId,
@@ -53,12 +55,14 @@ class EntryDetailPage extends StatefulWidget {
        draftExtraTags = extraTags,
        initialAmount = entry.amount,
        initialAccountId = null,
+       initialCreditAccountId = null,
        initialDraft = null,
        captureEventId = null,
        initialSourceRecords = const <EntrySourceRecord>[];
 
   final double initialAmount;
   final String? initialAccountId;
+  final String? initialCreditAccountId;
 
   /// AI 解析出的草稿：非空时预填表单并显示复核提示，供用户确认/修改后落账。
   final AiEntryDraft? initialDraft;
@@ -89,6 +93,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   EntryType _type = EntryType.expense;
   String _categoryId = 'dining';
   late String _accountId = widget.initialAccountId ?? '';
+  late String? _creditParentId = widget.initialCreditAccountId;
   // 「无账户」：只记金额、不计入任何账户余额（仅收支有效，转账必须选账户）。
   bool _noAccount = false;
   String? _toAccountId;
@@ -157,6 +162,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   @override
   void initState() {
     super.initState();
+    if (_creditParentId != null) _accountTouched = true;
     _noteController.addListener(_onNoteChanged);
     final editing = widget.draftEntry;
     if (editing != null) {
@@ -177,7 +183,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       _currencyCode = editing.currencyCode;
       _accountAmount = editing.accountAmount;
       _toAccountAmount = editing.toAccountAmount;
-      _baseAmount = editing.baseAmount;
+      _baseAmount = confirmedReferenceAmount(editing);
+      _baseAmountTouched = _baseAmount != null;
       _conversionSource = editing.conversionSource;
       _reimbursable = editing.reimbursable;
       _tagIds = List<String>.of(editing.tagIds);
@@ -301,6 +308,12 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
         forceBase: true,
       );
     } else {
+      if (_currencyCode == controller.activeBook.baseCurrencyCode) {
+        _baseAmount = normalizeCurrencyAmount(
+          _amount,
+          controller.activeBook.baseCurrencyCode,
+        );
+      }
       _refreshMissingRateCodes(controller, accounts);
     }
   }
@@ -422,13 +435,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       _baseAmountTouched = _accountAmountTouched;
       _baseConversion = null;
     } else if (forceBase || !_baseAmountTouched) {
-      _baseAmount = _convertAmount(
-        controller,
-        amount: _amount,
-        sourceCode: code,
-        targetCode: baseCode,
-        target: _EntryConversionTarget.base,
-      );
+      _baseAmount = null;
+      _baseConversion = null;
     }
     _conversionSource = _accountAmountTouched || _baseAmountTouched
         ? ConversionSource.manual
@@ -467,16 +475,6 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
           amount: _amount,
           sourceCurrencyCode: code,
           targetCurrencyCode: account.currencyCode,
-          date: _occurredAt,
-        );
-        if (result is MissingCurrencyRate) missing.addAll(result.currencyCodes);
-      }
-      if (code != controller.activeBook.baseCurrencyCode &&
-          _baseAmount == null) {
-        final result = controller.convertAmount(
-          amount: _amount,
-          sourceCurrencyCode: code,
-          targetCurrencyCode: controller.activeBook.baseCurrencyCode,
           date: _occurredAt,
         );
         if (result is MissingCurrencyRate) missing.addAll(result.currencyCodes);
@@ -1226,13 +1224,13 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                 if (needsBaseAmount)
                   CurrencyAmountField(
                     key: const Key('entry_base_amount'),
-                    label: l10n.entryLedgerAmountLabel,
+                    label: l10n.referenceAmountLabel,
                     currencyCode: baseCode,
                     amount: _baseAmount,
-                    missingText: l10n.exchangeRateNotSet,
+                    missingText: l10n.notSet,
                     onTap: () => _editBaseAmount(baseCode),
                   ),
-                if (needsBaseAmount)
+                if (needsBaseAmount && _baseAmount != null)
                   DetailInfoRow(
                     label: l10n.entryRateLabel,
                     value: _baseAmount == null || _amount <= 0
@@ -1248,6 +1246,22 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                       targetCode: baseCode,
                       transfer: false,
                     ),
+                  ),
+                if (needsBaseAmount)
+                  Text(
+                    l10n.referenceAmountHint,
+                    style: Theme.of(context).textTheme.bodySmall,
+                  ),
+                if (needsBaseAmount &&
+                    _baseAmount != null &&
+                    account?.currencyCode != baseCode)
+                  TextButton(
+                    onPressed: () => setState(() {
+                      _baseAmount = null;
+                      _baseAmountTouched = false;
+                      _rememberRate = false;
+                    }),
+                    child: Text(l10n.clearReferenceAmount),
                   ),
                 if (needsBaseAmount && _baseAmount != null)
                   CompactSwitchRow(
@@ -1319,6 +1333,11 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       ],
     );
     if (!mounted || selected == null || selected.code == _currencyCode) return;
+    if (_creditParentId != null && _type != EntryType.transfer) {
+      final child = await _resolveParentChild(_creditParentId!, selected.code);
+      if (!mounted || child == null) return;
+      _accountId = child.id;
+    }
     setState(() {
       _currencyCode = selected.code;
       _currencyTouched = true;
@@ -1640,6 +1659,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
           ? AppLocalizations.of(context).pickTransferOutAccount
           : AppLocalizations.of(context).pickAccountTitle,
       accounts: accounts,
+      includeCreditParents: !isTransfer,
       selectedId: _noAccount ? '' : _accountId,
       balanceOf: VeriFinScope.of(context).accountBalance,
       // 转账两端都必须是具体账户，故转出账户不提供「无账户」。
@@ -1651,7 +1671,32 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     if (!mounted || selected == null) {
       return;
     }
+    if (selected.id.startsWith(creditParentPickerPrefix)) {
+      final parentId = selected.id.substring(creditParentPickerPrefix.length);
+      final code = _currencyTouched
+          ? _currencyCode!
+          : VeriFinScope.of(context).activeBook.baseCurrencyCode;
+      final child = await _resolveParentChild(parentId, code);
+      if (!mounted || child == null) return;
+      setState(() {
+        _creditParentId = parentId;
+        _accountId = child.id;
+        _noAccount = false;
+        _accountTouched = true;
+        _currencyCode = code;
+        _accountAmountTouched = false;
+        _baseAmountTouched = false;
+        _refreshCurrencyAmounts(
+          VeriFinScope.of(context),
+          _availableAccounts(VeriFinScope.of(context)),
+          forceAccount: true,
+          forceBase: true,
+        );
+      });
+      return;
+    }
     setState(() {
+      _creditParentId = null;
       _accountTouched = true;
       if (selected.id.isEmpty) {
         _noAccount = true;
@@ -1678,6 +1723,25 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
         forceBase: true,
       );
     });
+  }
+
+  Future<Account?> _resolveParentChild(String parentId, String code) async {
+    final c = VeriFinScope.of(context);
+    final existing = c
+        .accountsForCreditAccount(parentId)
+        .where((a) => a.currencyCode == code)
+        .firstOrNull;
+    if (existing != null) return existing;
+    // 导入预览不创建账户；返回后仍由导入计划负责统一创建。
+    if (widget.draftEntry != null) return null;
+    final l = AppLocalizations.of(context);
+    final confirmed = await showConfirmDialog(
+      context,
+      title: l.creditChildren,
+      message: l.creditCreateCurrency(code),
+    );
+    if (!mounted || confirmed != true) return null;
+    return c.ensureCreditCurrencyChild(parentId, code);
   }
 
   Future<void> _pickToAccount(List<Account> accounts) async {
@@ -1741,8 +1805,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
           _noAccount || (_accountAmount != null && _accountAmount! > 0);
       return (_noAccount || accounts.isNotEmpty) &&
           hasAccountAmount &&
-          _baseAmount != null &&
-          _baseAmount! > 0;
+          _amount > 0;
     }
     if (accounts.isEmpty ||
         !accounts.any((account) => account.id == _accountId)) {
@@ -1781,7 +1844,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     if (!_noAccount && (_accountAmount == null || _accountAmount! <= 0)) {
       return l10n.entrySaveReasonAmount;
     }
-    if (_baseAmount == null || _baseAmount! <= 0) {
+    if (_amount <= 0) {
       return l10n.entrySaveReasonAmount;
     }
     return null;
@@ -1887,10 +1950,17 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       baseAmount: _type == EntryType.transfer
           ? 0
           : normalizeCurrencyAmount(
-              _baseAmount ?? _amount,
+              _baseAmount ?? 0,
               controller.activeBook.baseCurrencyCode,
             ),
       conversionSource: _conversionSource,
+      referenceBaseAmount:
+          _type != EntryType.transfer &&
+              code != controller.activeBook.baseCurrencyCode &&
+              _baseAmountTouched &&
+              (_baseAmount ?? 0) > 0
+          ? _baseAmount
+          : null,
       categoryId: _categoryId,
       accountId: noAccount ? '' : _accountId,
       toAccountId: _type == EntryType.transfer ? _toAccountId : null,
@@ -1923,6 +1993,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       left.accountAmount == right.accountAmount &&
       left.toAccountAmount == right.toAccountAmount &&
       left.baseAmount == right.baseAmount &&
+      left.referenceBaseAmount == right.referenceBaseAmount &&
       left.conversionSource == right.conversionSource &&
       left.categoryId == right.categoryId &&
       left.accountId == right.accountId &&

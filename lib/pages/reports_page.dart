@@ -27,7 +27,7 @@ class ReportsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
     final l10n = AppLocalizations.of(context);
-    final entries = controller.entries;
+    final entries = controller.statisticsEntries;
     final now = DateTime.now();
     final monthEntries = entries
         .where((entry) => isInMonth(entry, now))
@@ -272,6 +272,7 @@ class ReportsPage extends StatelessWidget {
     }
 
     return VeriPage(
+      missingCurrencies: VeriFinScope.of(context).missingStatisticsCurrencies,
       child: ListView(
         padding: veriRootPageListPadding(context),
         children: <Widget>[

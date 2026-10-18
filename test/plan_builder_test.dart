@@ -922,18 +922,18 @@ void main() {
       expect(candidate.entryIds, contains(entry.id));
     });
 
-    test('外币缺少本位币金额与历史汇率时保留 conversion issue', () {
+    test('缺少统计汇率时允许导入实际外币，折算保持未确认', () {
       final plan = _build(
         records: <RawImportRecord>[
           _record(amount: 10, currencyCode: 'USD', sourceLine: 7),
         ],
       );
 
-      expect(plan.entries, isEmpty);
+      expect(plan.entries.single.baseAmount, 0);
+      expect(plan.entries.single.referenceBaseAmount, isNull);
       expect(plan.errors, isEmpty);
-      expect(plan.errorCount, 1);
-      expect(plan.conversionIssues.single.line, 7);
-      expect(plan.conversionIssues.single.currencyCode, 'USD');
+      expect(plan.errorCount, 0);
+      expect(plan.conversionIssues, isEmpty);
     });
 
     test('使用交易日之前最近的本地汇率且不生成导入汇率候选', () {

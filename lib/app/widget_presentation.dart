@@ -2,6 +2,7 @@ import '../l10n/app_localizations.dart';
 import 'currency_math.dart';
 import 'ledger_math.dart';
 import 'models.dart';
+import 'statistics_currency.dart';
 import 'widget_config.dart';
 
 /// Immutable input for widget previews. Reading another book never switches the
@@ -114,7 +115,13 @@ WidgetPresentation buildWidgetPresentation({
     WidgetDateRange.budgetCycle => snapshot.budgetWindow,
     WidgetDateRange.year => DateWindow(start: DateTime(now.year), end: today),
   };
-  final filtered = snapshot.entries
+  final projection = projectStatisticsCurrency(
+    entries: snapshot.entries,
+    book: snapshot.book,
+    rates: snapshot.rates,
+    now: now,
+  );
+  final filtered = projection.entries
       .where(
         (entry) =>
             (definition.accountId == null ||
@@ -162,40 +169,61 @@ WidgetPresentation buildWidgetPresentation({
       );
   final valuation = valuationAt(today);
   final hasBudget = snapshot.budget > 0;
-  double? metric(WidgetMetric metric) => switch (metric) {
-    WidgetMetric.todayExpense => dayExpenseTotal(filtered, today),
-    WidgetMetric.periodExpense => expense,
-    WidgetMetric.periodIncome => income,
-    WidgetMetric.budgetRemaining =>
-      hasBudget ? snapshot.budget - budgetSpent : null,
-    WidgetMetric.budgetUsed => budgetSpent,
-    WidgetMetric.budgetRate => hasBudget ? budgetSpent / snapshot.budget : null,
-    WidgetMetric.netWorth => valuation.completeTotal,
-    WidgetMetric.totalAssets =>
-      valuation.isComplete
-          ? valuation.amountsByAccountId.values
-                .where((value) => value > 0)
-                .fold<double>(0, (a, b) => a + b)
-          : null,
-    WidgetMetric.totalLiabilities =>
-      valuation.isComplete
-          ? -valuation.amountsByAccountId.values
-                .where((value) => value < 0)
-                .fold<double>(0, (a, b) => a + b)
-          : null,
-    WidgetMetric.balance =>
-      definition.accountId == null
-          ? valuation.completeTotal
-          : snapshot.accounts.where((a) => a.id == definition.accountId).isEmpty
-          ? null
-          : balanceAt(
-              snapshot.accounts.firstWhere((a) => a.id == definition.accountId),
-              endExclusive,
-            ),
-    WidgetMetric.transactionCount =>
-      period.where((entry) => entry.type != EntryType.refund).length.toDouble(),
-    WidgetMetric.savingsRate => income > 0 ? (income - expense) / income : null,
-  };
+  double? metric(WidgetMetric metric) =>
+      projection.missing.isNotEmpty &&
+          const {
+            WidgetMetric.todayExpense,
+            WidgetMetric.periodExpense,
+            WidgetMetric.periodIncome,
+            WidgetMetric.budgetRemaining,
+            WidgetMetric.budgetUsed,
+            WidgetMetric.budgetRate,
+            WidgetMetric.savingsRate,
+          }.contains(metric)
+      ? null
+      : switch (metric) {
+          WidgetMetric.todayExpense => dayExpenseTotal(filtered, today),
+          WidgetMetric.periodExpense => expense,
+          WidgetMetric.periodIncome => income,
+          WidgetMetric.budgetRemaining =>
+            hasBudget ? snapshot.budget - budgetSpent : null,
+          WidgetMetric.budgetUsed => budgetSpent,
+          WidgetMetric.budgetRate =>
+            hasBudget ? budgetSpent / snapshot.budget : null,
+          WidgetMetric.netWorth => valuation.completeTotal,
+          WidgetMetric.totalAssets =>
+            valuation.isComplete
+                ? valuation.amountsByAccountId.values
+                      .where((value) => value > 0)
+                      .fold<double>(0, (a, b) => a + b)
+                : null,
+          WidgetMetric.totalLiabilities =>
+            valuation.isComplete
+                ? -valuation.amountsByAccountId.values
+                      .where((value) => value < 0)
+                      .fold<double>(0, (a, b) => a + b)
+                : null,
+          WidgetMetric.balance =>
+            definition.accountId == null
+                ? valuation.completeTotal
+                : snapshot.accounts
+                      .where((a) => a.id == definition.accountId)
+                      .isEmpty
+                ? null
+                : balanceAt(
+                    snapshot.accounts.firstWhere(
+                      (a) => a.id == definition.accountId,
+                    ),
+                    endExclusive,
+                  ),
+          WidgetMetric.transactionCount =>
+            period
+                .where((entry) => entry.type != EntryType.refund)
+                .length
+                .toDouble(),
+          WidgetMetric.savingsRate =>
+            income > 0 ? (income - expense) / income : null,
+        };
   final mainMetric =
       definition.primaryMetric ?? defaultWidgetMetric(definition.template);
   final dates = definition.dateRange == WidgetDateRange.year

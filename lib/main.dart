@@ -194,6 +194,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     super.initState();
     WidgetsBinding.instance.addObserver(this);
     _scheduleBillingDateRefresh();
+    unawaited(_controller.syncExchangeRates(force: false));
     // 记账后自动备份挂钩；应用打开时按配置尝试一次自动备份。
     _controller.onEntryAdded = _handleEntryAdded;
     _controller.onWidgetProjectionInvalidated = _scheduleWidgetRefresh;
@@ -374,6 +375,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(_controller.syncExchangeRates(force: false));
       _controller.refreshCreditBillingDate();
       _scheduleBillingDateRefresh();
       // 顺序约束：先补记到期的周期交易，再备份 / 推送小组件——顺序颠倒会把

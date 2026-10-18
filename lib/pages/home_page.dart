@@ -15,7 +15,7 @@ import '../app/series_math.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'budget_pages.dart';
-import 'credit_account_editor_page.dart';
+import 'credit_account_detail_page.dart';
 import 'home_metrics_settings_page.dart';
 import 'panel_settings_page.dart';
 import 'recurring_page.dart';
@@ -29,7 +29,7 @@ class HomePage extends StatelessWidget {
   @override
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
-    final entries = controller.entries;
+    final entries = controller.statisticsEntries;
     final now = DateTime.now();
     final monthEntries = entries
         .where(
@@ -87,10 +87,13 @@ class HomePage extends StatelessWidget {
     final creditItems = <_HomeCreditItem>[
       for (final creditAccount in visibleCreditAccounts)
         _HomeCreditItem(
-          account: creditAccount,
+          account: controller.creditSummaryAccount(creditAccount),
           overview: !creditAccount.hasCompleteCycleRule
               ? null
-              : controller.creditCycleOverview(creditAccount, now: now),
+              : controller.creditCycleOverview(
+                  controller.creditSummaryAccount(creditAccount),
+                  now: now,
+                ),
           childAccounts: controller.accountsForCreditAccount(creditAccount.id),
         ),
     ];
@@ -215,6 +218,7 @@ class HomePage extends StatelessWidget {
     }
 
     return VeriPage(
+      missingCurrencies: VeriFinScope.of(context).missingStatisticsCurrencies,
       compact: veriUnifiedDesignPreview,
       child: ListView(
         padding: veriRootPageListPadding(context),
@@ -374,8 +378,8 @@ class _HomeCreditAccountsPanelState extends State<_HomeCreditAccountsPanel> {
             childAccounts: selected.first.childAccounts,
             onTap: () => Navigator.of(context).push<void>(
               MaterialPageRoute<void>(
-                builder: (context) => CreditAccountEditorPage(
-                  creditAccount: selected.first.account,
+                builder: (context) => CreditAccountDetailPage(
+                  parentId: selected.first.account.id,
                 ),
               ),
             ),
@@ -1471,7 +1475,7 @@ class _IncomeExpenseStatsPageState extends State<IncomeExpenseStatsPage> {
     final isYear = _period == _StatPeriod.year;
     // 年视图无「按天」窗口，用 12 个月聚合；其余按天窗口。
     final window = isYear ? null : _windowForPeriod();
-    final scopedByType = controller.entries
+    final scopedByType = controller.statisticsEntries
         .where((entry) => entry.type == _type)
         .toList();
 
@@ -1527,6 +1531,9 @@ class _IncomeExpenseStatsPageState extends State<IncomeExpenseStatsPage> {
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
+          missingCurrencies: VeriFinScope.of(
+            context,
+          ).missingStatisticsCurrencies,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
             children: <Widget>[

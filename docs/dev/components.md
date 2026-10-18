@@ -1,5 +1,18 @@
 # 组件清单（Component Registry）
 
+2026-10-18 父子账户与折算扩展：
+
+| 组件/函数 | 入口与约定 |
+| --- | --- |
+| `VeriPage.missingCurrencies` | 统计页传入缺失币种时显示不完整汇总提示，布局仍沿用页面容器 |
+| `showAccountPickerSheet(includeCreditParents: true)` | 记账页可选父主体；返回 `creditParentPickerPrefix` 哨兵后必须解析真实币种子账户，不得把哨兵 ID 落账；扣款/转账选择仍用具体账户 |
+| `CreditAccountDetailPage` | 父账户统一估值、币种子账户、收支筛选及合并后最近 20 条流水 |
+| `CreditRepaymentPage` | 父账户范围选择复用 `VeriAnchoredChoice<CreditRepaymentScope>`；原币分配、来源选择、补齐参考额、整批编辑/撤销 |
+| `normalizeCreditHierarchy` | `app/credit_hierarchy.dart`；明确名称的历史子账户幂等归并；冲突 ID 返回供界面复核 |
+| `creditExpenseBelongsToStatement` | `app/credit_card.dart`；部分还款验证遵循银行明确归期，否则复用本地周期，不按记账日自行跨期 |
+| `projectStatisticsCurrency` | `app/statistics_currency.dart`；明确参考额优先、否则最新汇率，重算退款净额并返回缺失币种；只读投影，不覆盖原始交易 |
+| `FrankfurterClient` | `app/frankfurter_client.dart`；只发送币种/日期，校验日汇率响应、超时和体积；由 Controller 合并并落库 |
+
 Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**目录。**写任何新组件、弹窗、格式化或计算之前，先在本表查一遍有没有现成的**：命中就复用或参数化扩展，不要新建变体、不要复制粘贴脚手架。规范见 `AGENTS.md` 的「代码规范 · 组件化」一节。
 
 > 行号为编写时快照，可能随重构漂移；**以符号名为准**（IDE 里搜名字即可）。新增/重命名可复用件时，请同步更新本表。

@@ -1183,6 +1183,8 @@ class SqliteLedgerRepository implements LedgerRepository {
     'account_amount': e.accountAmount,
     'to_account_amount': e.toAccountAmount,
     'base_amount': e.baseAmount,
+    'reference_base_amount': e.referenceBaseAmount,
+    'repayment_batch_id': e.repaymentBatchId,
     'conversion_source': e.conversionSource.name,
     'category_id': e.categoryId,
     'account_id': e.accountId,
@@ -1347,6 +1349,8 @@ class SqliteLedgerRepository implements LedgerRepository {
     accountAmount: (row['account_amount'] as num?)?.toDouble(),
     toAccountAmount: (row['to_account_amount'] as num?)?.toDouble(),
     baseAmount: (row['base_amount'] as num?)?.toDouble() ?? 0,
+    referenceBaseAmount: (row['reference_base_amount'] as num?)?.toDouble(),
+    repaymentBatchId: row['repayment_batch_id'] as String?,
     conversionSource: ConversionSource.fromStorage(
       row['conversion_source'] as String?,
     ),

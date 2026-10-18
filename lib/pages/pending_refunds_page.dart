@@ -18,12 +18,16 @@ class PendingRefundsPage extends StatelessWidget {
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final controller = VeriFinScope.of(context);
-    final pending = controller.pendingRefunds;
+    final ids = controller.pendingRefunds.map((e) => e.id).toSet();
+    final pending = controller.statisticsEntries
+        .where((e) => ids.contains(e.id))
+        .toList();
     final total = pending.fold<double>(0, (sum, r) => sum + r.baseAmount);
 
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
+          missingCurrencies: controller.missingStatisticsCurrencies,
           child: ListView(
             padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
             children: <Widget>[

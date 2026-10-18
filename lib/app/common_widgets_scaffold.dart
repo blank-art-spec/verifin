@@ -7,10 +7,12 @@ class VeriPage extends StatelessWidget {
     super.key,
     required this.child,
     this.compact = veriUnifiedDesignPreview,
+    this.missingCurrencies = const <String>{},
   });
 
   final Widget child;
   final bool compact;
+  final Set<String> missingCurrencies;
 
   @override
   Widget build(BuildContext context) {
@@ -24,7 +26,24 @@ class VeriPage extends StatelessWidget {
       child: Center(
         child: ConstrainedBox(
           constraints: const BoxConstraints(maxWidth: veriPageMaxWidth),
-          child: child,
+          child: missingCurrencies.isEmpty
+              ? child
+              : Column(
+                  children: [
+                    Padding(
+                      padding: const EdgeInsets.fromLTRB(14, 8, 14, 4),
+                      child: Text(
+                        AppLocalizations.of(context).statisticsMissingRates(
+                          (missingCurrencies.toList()..sort()).join(', '),
+                        ),
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: veriSemantic(context, veriWarning),
+                        ),
+                      ),
+                    ),
+                    Expanded(child: child),
+                  ],
+                ),
         ),
       ),
     );

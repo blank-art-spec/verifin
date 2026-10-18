@@ -32,6 +32,8 @@ void main() {
     accountAmount: 888.12,
     toAccountAmount: 99.87,
     baseAmount: 777.65,
+    referenceBaseAmount: 776.54,
+    repaymentBatchId: 'repayment-group-test',
     conversionSource: ConversionSource.imported,
     categoryId: 'cat-x',
     accountId: 'acc-x',

@@ -584,6 +584,14 @@ bool _expenseIsInStatementPeriod(
       !date.isAfter(dateOnly(statement.periodEnd));
 }
 
+/// 还款核验先采用银行确认的归期，再使用本地账单周期；不拿记账日替换消费归期。
+bool creditExpenseBelongsToStatement(
+  LedgerEntry expense,
+  BillingStatement statement,
+) => expense.billingCycleId != null
+    ? expense.billingCycleId == billingCycleIdFor(statement.statementDate)
+    : _expenseIsInStatementPeriod(expense, statement);
+
 /// 从已到账退款推导出账后退款对正式账单的冲抵关系。
 ///
 /// [entries] 是同账本交易， [statements] 是正式账单， [now] 控制未来到账退款不提前

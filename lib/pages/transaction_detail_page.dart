@@ -19,6 +19,7 @@ import '../l10n/app_localizations.dart';
 import 'attachments_editor.dart';
 import 'refund_editor.dart';
 import 'sheets.dart';
+import 'credit_repayment_page.dart';
 
 /// 把审计来源显示成当前语言；[actor] 是落库时保存的稳定来源枚举。
 String _auditActorLabel(AppLocalizations l10n, EntryAuditActor actor) =>
@@ -47,6 +48,7 @@ String _auditFieldLabel(AppLocalizations l10n, String field) => switch (field) {
   'accountAmount' => l10n.entryAuditAccountAmount,
   'toAccountAmount' => l10n.entryAuditToAccountAmount,
   'baseAmount' => l10n.entryAuditBaseAmount,
+  'referenceBaseAmount' => l10n.referenceAmountLabel,
   'conversionSource' => l10n.entryAuditConversionSource,
   'accountId' => l10n.entryAuditAccount,
   'toAccountId' => l10n.entryAuditToAccount,
@@ -127,7 +129,10 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     _currencyCode = entry.currencyCode;
     _accountAmount = entry.accountAmount;
     _toAccountAmount = entry.toAccountAmount;
-    _baseAmount = entry.baseAmount;
+    _baseAmount = entry.currencyCode == controller.activeBook.baseCurrencyCode
+        ? entry.amount
+        : entry.referenceBaseAmount ?? 0;
+    _baseAmountTouched = entry.referenceBaseAmount != null;
     _conversionSource = entry.conversionSource;
     _categoryId = entry.categoryId;
     _accountId = entry.accountId;
@@ -167,6 +172,17 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     }
 
     final provenance = resolveEntryFieldProvenance(entry);
+    if (entry.repaymentBatchId != null) {
+      final child = controller.accounts
+          .where((a) => a.id == entry.toAccountId)
+          .firstOrNull;
+      if (child != null) {
+        return CreditRepaymentPage(
+          account: child,
+          batchId: entry.repaymentBatchId,
+        );
+      }
+    }
 
     final category = controller.categoryById(_categoryId);
     final accounts = controller.accounts
@@ -192,7 +208,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     final canSave =
         (accounts.isNotEmpty || _noAccount) &&
         (_type == EntryType.transfer ||
-            _baseAmount > 0 && (_noAccount || (_accountAmount ?? 0) > 0)) &&
+            _amount > 0 && (_noAccount || (_accountAmount ?? 0) > 0)) &&
         (_type != EntryType.transfer ||
             (_toAccountId != null &&
                 _toAccountId != _accountId &&
@@ -727,8 +743,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       _baseAmount = normalizeCurrencyAmount(_accountAmount!, baseCode);
       _baseAmountTouched = _accountAmountTouched;
     } else if (forceBase || !_baseAmountTouched) {
-      _baseAmount =
-          _converted(controller, _amount, _currencyCode, baseCode) ?? 0;
+      _baseAmount = 0;
     }
     _conversionSource = _accountAmountTouched || _baseAmountTouched
         ? ConversionSource.manual
@@ -796,28 +811,30 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
         fields.add(
           CurrencyAmountField(
             key: const Key('transaction_base_amount'),
-            label: l10n.entryLedgerAmountLabel,
+            label: l10n.referenceAmountLabel,
             currencyCode: baseCode,
             amount: _baseAmount > 0 ? _baseAmount : null,
             missingText: l10n.exchangeRateNotSet,
             onTap: () => _editBaseAmount(baseCode),
           ),
         );
-        fields.add(
-          DetailInfoRow(
-            label: l10n.entryRateLabel,
-            value: _baseAmount <= 0 || _amount <= 0
-                ? l10n.exchangeRateNotSet
-                : l10n.entryRateEquation(
-                    _currencyCode,
-                    formatRateValue(_baseAmount / _amount),
-                    baseCode,
-                  ),
-            placeholder: _baseAmount <= 0,
-            onTap: () =>
-                _editDerivedRate(targetCode: baseCode, transfer: false),
-          ),
-        );
+        if (_baseAmount > 0) {
+          fields.add(
+            DetailInfoRow(
+              label: l10n.entryRateLabel,
+              value: _baseAmount <= 0 || _amount <= 0
+                  ? l10n.exchangeRateNotSet
+                  : l10n.entryRateEquation(
+                      _currencyCode,
+                      formatRateValue(_baseAmount / _amount),
+                      baseCode,
+                    ),
+              placeholder: _baseAmount <= 0,
+              onTap: () =>
+                  _editDerivedRate(targetCode: baseCode, transfer: false),
+            ),
+          );
+        }
         fields.add(
           CompactSwitchRow(
             icon: Icons.bookmark_add_outlined,
@@ -827,6 +844,25 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
             onChanged: (value) => setState(() => _rememberRate = value),
           ),
         );
+        fields.add(
+          Text(
+            l10n.referenceAmountHint,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+        );
+        if (_baseAmount > 0 &&
+            (_noAccount || account.currencyCode != baseCode)) {
+          fields.add(
+            TextButton(
+              onPressed: () => setState(() {
+                _baseAmount = 0;
+                _baseAmountTouched = false;
+                _rememberRate = false;
+              }),
+              child: Text(l10n.clearReferenceAmount),
+            ),
+          );
+        }
       }
     }
     if (_missingRateCodes.isNotEmpty) {
@@ -1340,6 +1376,19 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
               VeriFinScope.of(context).activeBook.baseCurrencyCode,
             ),
       conversionSource: _conversionSource,
+      referenceBaseAmount:
+          _type != EntryType.transfer &&
+              _currencyCode !=
+                  VeriFinScope.of(context).activeBook.baseCurrencyCode &&
+              _baseAmountTouched &&
+              _baseAmount > 0
+          ? _baseAmount
+          : null,
+      clearReferenceBaseAmount:
+          !_baseAmountTouched ||
+          _baseAmount <= 0 ||
+          _type == EntryType.transfer ||
+          _currencyCode == VeriFinScope.of(context).activeBook.baseCurrencyCode,
       categoryId: _categoryId,
       accountId: noAccount ? '' : _accountId,
       toAccountId: _type == EntryType.transfer ? _toAccountId : null,

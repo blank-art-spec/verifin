@@ -11,6 +11,7 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 | --- | --- |
 | 根初始化、生命周期 | `lib/main.dart`；备份、周期补记、提醒、小组件与应用锁挂钩 |
 | Controller | `veri_fin_controller.dart`、`veri_fin_controller_state.dart`、`veri_fin_controller_ops.dart` |
+| 父子账户与汇率 | Controller part `veri_fin_controller_credit_hierarchy.dart`；纯归并 `credit_hierarchy.dart`、只读统计 `statistics_currency.dart`、联网 `frankfurter_client.dart`；[当前金额及统一还款口径](credit-hierarchy-currency.md) |
 | SQLite 与持久化 | `lib/data/`；[技术决策](tech-decisions.md)、repository contract 与 migration matrix 测试 |
 | 模型 | `lib/app/models/`，`models.dart` 稳定导出；信用主体在 `credit_account.dart`，具体币种子账户仍是 `Account`；JSON/SQLite 映射须同步 |
 | 结构化标签与项目 | `lib/app/models/tag.dart` 定义维度、标签、项目及模板；`pages/tag_management_page.dart`、`pages/project_pages.dart` 管理，`app/entry_sheets.dart` 选择和套用模板；SQLite v24–v26 迁移旧标签并保存项目元数据，v26 将存量「项目类型:…」迁入独立维度 |

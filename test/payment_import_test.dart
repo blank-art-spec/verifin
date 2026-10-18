@@ -310,8 +310,9 @@ void main() {
           '2026-07-01,支出,10,餐饮,美元现金,,午饭,USD\n';
       final bytes = Uint8List.fromList(utf8.encode(content));
       final unresolved = run(ImportPlatform.csvTemplate, bytes);
-      expect(unresolved.entries, isEmpty);
-      expect(unresolved.conversionIssues, hasLength(1));
+      expect(unresolved.entries.single.baseAmount, 0);
+      expect(unresolved.entries.single.referenceBaseAmount, isNull);
+      expect(unresolved.conversionIssues, isEmpty);
 
       final resolved = buildPlatformImportPlan(
         platform: ImportPlatform.csvTemplate,
@@ -324,6 +325,74 @@ void main() {
       );
       expect(resolved.conversionIssues, isEmpty);
       expect(resolved.entries.single.baseAmount, 72);
+    });
+
+    test('未确认折算的外币 CSV 往返不固定缓存，原币退款不丢失', () {
+      const account = Account(
+        id: 'usd',
+        bookId: 'book_default',
+        name: '美元现金',
+        type: AccountType.cash,
+        groupId: null,
+        initialBalance: 0,
+        iconCode: 'cash',
+        note: '',
+        includeInAssets: true,
+        hidden: false,
+        currencyCode: 'USD',
+      );
+      final expense = LedgerEntry(
+        id: 'expense',
+        bookId: 'book_default',
+        type: EntryType.expense,
+        amount: 10,
+        currencyCode: 'USD',
+        accountAmount: 10,
+        baseAmount: 72,
+        conversionSource: ConversionSource.rateTable,
+        categoryId: 'dining',
+        accountId: 'usd',
+        note: '',
+        occurredAt: DateTime(2026, 7, 1),
+      );
+      final refund = LedgerEntry(
+        id: 'refund',
+        bookId: 'book_default',
+        type: EntryType.refund,
+        amount: 4,
+        currencyCode: 'USD',
+        accountAmount: 4,
+        baseAmount: 0,
+        categoryId: 'dining',
+        accountId: 'usd',
+        note: '',
+        occurredAt: DateTime(2026, 7, 2),
+        refundOf: 'expense',
+        settledAt: DateTime(2026, 7, 2),
+      );
+      final content = transactionCsvExport(
+        entries: [expense, refund],
+        accounts: [account],
+        categories: const [],
+        tags: const [],
+        baseCurrencyCode: 'CNY',
+      );
+      final imported = run(
+        ImportPlatform.csvTemplate,
+        Uint8List.fromList(utf8.encode(content)),
+      );
+      expect(imported.conversionIssues, isEmpty);
+      expect(imported.entries.length, 2);
+      final restored = imported.entries.firstWhere(
+        (e) => e.type == EntryType.expense,
+      );
+      expect(restored.amount, 10);
+      expect(restored.baseAmount, 0);
+      expect(restored.referenceBaseAmount, isNull);
+      expect(
+        imported.entries.firstWhere((e) => e.type == EntryType.refund).amount,
+        4,
+      );
     });
 
     test('交易 CSV 导出后重新导入保留三层金额', () {
@@ -356,6 +425,7 @@ void main() {
             currencyCode: 'USD',
             accountAmount: 72,
             baseAmount: 72,
+            referenceBaseAmount: 72,
             conversionSource: ConversionSource.imported,
             categoryId: category.id,
             accountId: account.id,
@@ -412,6 +482,7 @@ void main() {
             currencyCode: 'USD',
             accountAmount: 10,
             baseAmount: 72,
+            referenceBaseAmount: 72,
             conversionSource: ConversionSource.manual,
             categoryId: category.id,
             accountId: account.id,

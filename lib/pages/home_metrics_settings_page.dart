@@ -147,7 +147,7 @@ class _HomeMetricsSettingsPageState extends State<HomeMetricsSettingsPage> {
     final config = _draftConfig;
     final now = DateTime.now();
     final window = cumulativeWeekWindowFor(now);
-    final monthEntries = controller.entries
+    final monthEntries = controller.statisticsEntries
         .where(
           (entry) =>
               entry.occurredAt.year == now.year &&
@@ -157,7 +157,7 @@ class _HomeMetricsSettingsPageState extends State<HomeMetricsSettingsPage> {
     final trendEntries = entriesInWindow(monthEntries, window);
     final accountValuation = controller.accountBalancesInBase(date: now);
     final metricContext = HomeMetricContext(
-      entries: controller.entries,
+      entries: controller.statisticsEntries,
       accounts: controller.accounts,
       balanceOf: controller.accountBalance,
       balanceInBaseOf: (account) =>

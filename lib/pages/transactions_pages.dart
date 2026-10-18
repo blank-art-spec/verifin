@@ -211,7 +211,7 @@ class _TransactionsPageState extends State<TransactionsPage> {
   void _ensureDerived(VeriFinController controller, BuildContext context) {
     final filterSignature = _filterSignature();
     final signature = <Object?>[
-      controller.entries,
+      controller.statisticsEntries,
       controller.accounts,
       controller.categories,
       amount_format.amountForceTwoDecimals,
@@ -227,7 +227,10 @@ class _TransactionsPageState extends State<TransactionsPage> {
     _deriveSignature = signature;
     _deriveFilterSignature = filterSignature;
     final entries =
-        _sortedEntries(_filteredEntries(controller.entries), controller)
+        _sortedEntries(
+              _filteredEntries(controller.statisticsEntries),
+              controller,
+            )
             .where(
               (entry) =>
                   entry.type != EntryType.refund ||
@@ -332,6 +335,9 @@ class _TransactionsPageState extends State<TransactionsPage> {
           : null,
       body: SafeArea(
         child: VeriPage(
+          missingCurrencies: VeriFinScope.of(
+            context,
+          ).missingStatisticsCurrencies,
           child: NotificationListener<ScrollNotification>(
             onNotification: (notification) => _onScroll(notification, hasMore),
             child: CustomScrollView(

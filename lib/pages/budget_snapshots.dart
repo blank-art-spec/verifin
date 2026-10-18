@@ -119,7 +119,7 @@ List<BudgetMonthSnapshot> _budgetMonthSnapshots({
   // 一次遍历把所有支出按「预算键月」分桶，避免每个月各扫一遍全部交易。
   final startDay = controller.budgetCycleStartDay;
   final expenseByKeyMonth = <DateTime, double>{};
-  for (final entry in controller.entries) {
+  for (final entry in controller.statisticsEntries) {
     if (entry.type != EntryType.expense) {
       continue;
     }

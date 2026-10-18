@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 26;
+  static const int schemaVersion = 27;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -82,7 +82,19 @@ class AppDatabase {
         24: _migrateToV24,
         25: _migrateToV25,
         26: _migrateToV26,
+        27: _migrateToV27,
       };
+
+  static Future<void> _migrateToV27(Database db) async {
+    await db.execute(
+      'ALTER TABLE entries ADD COLUMN reference_base_amount REAL',
+    );
+    await db.execute('ALTER TABLE entries ADD COLUMN repayment_batch_id TEXT');
+    // 只把明确手填/导入的金额作为确认值，旧的自动汇率缓存不冒充用户填写。
+    await db.execute(
+      "UPDATE entries SET reference_base_amount = base_amount WHERE conversion_source IN ('manual', 'imported') AND base_amount > 0 AND type != 'transfer'",
+    );
+  }
 
   /// 只读暴露迁移注册表，供迁移矩阵测试把库推进到任意中间版本。生产代码勿用。
   @visibleForTesting
@@ -1032,6 +1044,8 @@ class AppDatabase {
       account_amount REAL,
       to_account_amount REAL,
       base_amount REAL NOT NULL DEFAULT 0,
+      reference_base_amount REAL,
+      repayment_batch_id TEXT,
       conversion_source TEXT NOT NULL DEFAULT 'legacy',
       category_id TEXT NOT NULL,
       account_id TEXT NOT NULL,
