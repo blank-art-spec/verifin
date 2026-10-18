@@ -11335,6 +11335,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'还款金额不能超过该币种实际欠款。'**
   String get creditRepaymentTooMuch;
+
+  /// No description provided for @creditAddCurrencyChild.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增币种子账户'**
+  String get creditAddCurrencyChild;
+
+  /// No description provided for @creditCurrencyChildAdded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已新增 {currency} 子账户'**
+  String creditCurrencyChildAdded(String currency);
+
+  /// No description provided for @assetTrendMissingRateDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 {currency} 在 {date} 或之前的历史汇率。请在“货币与汇率”中补充；自动更新不会补齐历史数据。'**
+  String assetTrendMissingRateDetails(String currency, String date);
 }
 
 class _AppLocalizationsDelegate

@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/models.dart';
+import 'package:verifin/app/chart_painters.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/local_storage/local_storage.dart';
@@ -18,6 +19,79 @@ import 'support/test_harness.dart';
 
 void main() {
   useTestDatabases();
+
+  Account historyAccount(double balance) => Account(
+    id: 'history-usd',
+    bookId: 'default',
+    name: 'USD',
+    type: AccountType.debitCard,
+    groupId: null,
+    initialBalance: balance,
+    iconCode: 'wallet',
+    note: '',
+    includeInAssets: true,
+    hidden: false,
+    currencyCode: 'USD',
+  );
+
+  testWidgets('资产历史走势指出缺少币种和日期，提供汇率入口，补齐后显示', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 1200);
+    addTearDown(tester.view.reset);
+    final c = await makeController();
+    addTearDown(c.dispose);
+    expect(await c.addAccountDraft(historyAccount(-10)), isTrue);
+    expect(
+      await c.saveExchangeRateDraft(
+        currencyCode: 'USD',
+        effectiveDate: DateTime.now(),
+        rateToBase: 7.2,
+      ),
+      isTrue,
+    );
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: c,
+        child: zhMaterialApp(home: const Scaffold(body: AssetsPage())),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.textContaining('缺少 USD 在'), findsOneWidget);
+    expect(find.textContaining('自动更新不会补齐历史数据'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('asset_trend_rates_action')));
+    await tester.pumpAndSettle();
+    expect(find.byType(CurrencyRatesPage), findsOneWidget);
+    await tester.tap(find.byTooltip('返回'));
+    await tester.pumpAndSettle();
+    expect(
+      await c.saveExchangeRateDraft(
+        currencyCode: 'USD',
+        effectiveDate: DateTime(DateTime.now().year, 1, 1),
+        rateToBase: 7.1,
+      ),
+      isTrue,
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('asset_trend_rates_action')), findsNothing);
+    expect(find.byType(InteractiveTrendChart), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('空余额外币账户没有汇率也不遮住历史资产走势', (tester) async {
+    final c = await makeController();
+    addTearDown(c.dispose);
+    expect(await c.addAccountDraft(historyAccount(0)), isTrue);
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: c,
+        child: zhMaterialApp(home: const Scaffold(body: AssetsPage())),
+      ),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('asset_trend_rates_action')), findsNothing);
+    expect(find.byType(InteractiveTrendChart), findsOneWidget);
+    expect(c.exchangeRates, isEmpty);
+  });
 
   Future<void> pumpPage(
     WidgetTester tester,

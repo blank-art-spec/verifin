@@ -458,6 +458,7 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
     required String parentId,
     required List<CreditRepaymentLine> lines,
     required DateTime occurredAt,
+    OccurredAtPrecision occurredAtPrecision = OccurredAtPrecision.minute,
     String fromAccountId = '',
     String note = '',
     bool replace = false,
@@ -475,6 +476,7 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
                 e.accountId == fromAccountId &&
                 e.note == note.trim() &&
                 e.occurredAt == occurredAt &&
+                e.occurredAtPrecision == occurredAtPrecision &&
                 lines.any(
                   (l) =>
                       l.accountId == e.toAccountId &&
@@ -578,6 +580,7 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
         toAccountId: account.id,
         note: note.trim(),
         occurredAt: occurredAt,
+        occurredAtPrecision: occurredAtPrecision,
         repaymentBatchId: batchId,
       );
       final plan = _planRepaymentToStatements(

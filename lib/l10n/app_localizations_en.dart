@@ -6486,4 +6486,17 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get creditRepaymentTooMuch =>
       'The payment cannot exceed this currency account’s debt.';
+
+  @override
+  String get creditAddCurrencyChild => 'Add currency subaccount';
+
+  @override
+  String creditCurrencyChildAdded(String currency) {
+    return 'Added $currency subaccount';
+  }
+
+  @override
+  String assetTrendMissingRateDetails(String currency, String date) {
+    return 'Missing a $currency rate effective on or before $date. Add it in Currencies & rates; automatic updates do not backfill historical rates.';
+  }
 }

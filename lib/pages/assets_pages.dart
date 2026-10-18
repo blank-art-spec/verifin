@@ -97,7 +97,7 @@ class _AssetsPageState extends State<AssetsPage> {
               .where((value) => value < 0)
               .fold<double>(0, (sum, value) => sum + value)
         : null;
-    final assetTrendValues = _baseCurrencyAssetTrend(
+    final assetTrend = _baseCurrencyAssetTrend(
       accounts: valuedAccounts,
       entries: controller.entries,
       convert: ({required amount, required currencyCode, required date}) =>
@@ -108,6 +108,7 @@ class _AssetsPageState extends State<AssetsPage> {
             date: date,
           ),
     );
+    final assetTrendValues = assetTrend.values;
     final hasAssetCover = controller.assetCoverUrl.isNotEmpty;
     final assetCardTextColor = hasAssetCover
         ? Colors.white
@@ -314,16 +315,44 @@ class _AssetsPageState extends State<AssetsPage> {
                       ],
                       const SizedBox(height: 14),
                       if (assetTrendValues == null)
-                        SizedBox(
-                          height: 112,
+                        ConstrainedBox(
+                          constraints: const BoxConstraints(minHeight: 112),
                           child: Center(
-                            child: Text(
-                              AppLocalizations.of(
-                                context,
-                              ).assetTrendMissingRate,
-                              textAlign: TextAlign.center,
-                              style: Theme.of(context).textTheme.bodySmall
-                                  ?.copyWith(color: assetCardMutedColor),
+                            child: Column(
+                              mainAxisSize: MainAxisSize.min,
+                              children: [
+                                Text(
+                                  AppLocalizations.of(
+                                    context,
+                                  ).assetTrendMissingRateDetails(
+                                    assetTrend.missingCurrency!,
+                                    MaterialLocalizations.of(
+                                      context,
+                                    ).formatMediumDate(assetTrend.missingDate!),
+                                  ),
+                                  textAlign: TextAlign.center,
+                                  style: Theme.of(context).textTheme.bodySmall
+                                      ?.copyWith(color: assetCardMutedColor),
+                                ),
+                                TextButton(
+                                  key: const Key('asset_trend_rates_action'),
+                                  style: TextButton.styleFrom(
+                                    foregroundColor: assetCardTextColor,
+                                  ),
+                                  onPressed: () =>
+                                      Navigator.of(context).push<void>(
+                                        MaterialPageRoute(
+                                          builder: (_) =>
+                                              const CurrencyRatesPage(),
+                                        ),
+                                      ),
+                                  child: Text(
+                                    AppLocalizations.of(
+                                      context,
+                                    ).currencyRatesTitle,
+                                  ),
+                                ),
+                              ],
                             ),
                           ),
                         )
@@ -642,7 +671,8 @@ typedef _AssetCurrencyConverter =
       required DateTime date,
     });
 
-List<double>? _baseCurrencyAssetTrend({
+({List<double>? values, String? missingCurrency, DateTime? missingDate})
+_baseCurrencyAssetTrend({
   required List<Account> accounts,
   required List<LedgerEntry> entries,
   required _AssetCurrencyConverter convert,
@@ -654,17 +684,25 @@ List<double>? _baseCurrencyAssetTrend({
     final monthEnd = DateTime(now.year, monthIndex + 2, 0);
     var total = 0.0;
     for (final account in accounts) {
+      final amount = nativeSeries[account.id]![monthIndex];
+      if (isZeroCurrencyAmount(amount, account.currencyCode)) continue;
       final conversion = convert(
-        amount: nativeSeries[account.id]![monthIndex],
+        amount: amount,
         currencyCode: account.currencyCode,
         date: monthEnd,
       );
-      if (conversion is! ConvertedCurrencyAmount) return null;
+      if (conversion is! ConvertedCurrencyAmount) {
+        return (
+          values: null,
+          missingCurrency: account.currencyCode,
+          missingDate: monthEnd,
+        );
+      }
       total += conversion.amount;
     }
     result.add(total);
   }
-  return result;
+  return (values: result, missingCurrency: null, missingDate: null);
 }
 
 String _assetSectionTotalText({

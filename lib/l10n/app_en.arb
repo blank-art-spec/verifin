@@ -2506,5 +2506,10 @@
   "creditMoveParent": "Move to an existing parent",
   "creditMoveParentConflict": "Currency or billing settings conflict. Review the accounts first.",
   "creditRepaymentNoDebt": "No outstanding debt to repay.",
-  "creditRepaymentTooMuch": "The payment cannot exceed this currency account’s debt."
+  "creditRepaymentTooMuch": "The payment cannot exceed this currency account’s debt.",
+  "creditAddCurrencyChild": "Add currency subaccount",
+  "creditCurrencyChildAdded": "Added {currency} subaccount",
+  "@creditCurrencyChildAdded": {"placeholders": {"currency": {"type": "String"}}},
+  "assetTrendMissingRateDetails": "Missing a {currency} rate effective on or before {date}. Add it in Currencies & rates; automatic updates do not backfill historical rates.",
+  "@assetTrendMissingRateDetails": {"placeholders": {"currency": {"type": "String"}, "date": {"type": "String"}}}
 }

@@ -1851,11 +1851,9 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   }
 
   Future<void> _pickDate() async {
-    final picked = await showDatePicker(
+    final picked = await showEntryDatePicker(
       context: context,
-      initialDate: _occurredAt,
-      firstDate: DateTime(2020),
-      lastDate: DateTime(2100),
+      initialDateTime: _occurredAt,
     );
 
     if (!mounted || picked == null) {
@@ -1863,13 +1861,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
 
     setState(() {
-      _occurredAt = DateTime(
-        picked.year,
-        picked.month,
-        picked.day,
-        _occurredAt.hour,
-        _occurredAt.minute,
-      );
+      _occurredAt = picked;
       _refreshCurrencyAmounts(
         VeriFinScope.of(context),
         _availableAccounts(VeriFinScope.of(context)),
@@ -1878,9 +1870,9 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
+    final picked = await showEntryTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_occurredAt),
+      initialDateTime: _occurredAt,
     );
 
     if (!mounted || picked == null) {
@@ -1888,13 +1880,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
 
     setState(() {
-      _occurredAt = DateTime(
-        _occurredAt.year,
-        _occurredAt.month,
-        _occurredAt.day,
-        picked.hour,
-        picked.minute,
-      );
+      _occurredAt = picked;
       _occurredAtPrecision = OccurredAtPrecision.minute;
     });
   }

@@ -6,8 +6,9 @@
 | --- | --- |
 | `VeriPage.missingCurrencies` | 统计页传入缺失币种时显示不完整汇总提示，布局仍沿用页面容器 |
 | `showAccountPickerSheet(includeCreditParents: true)` | 记账页可选父主体；返回 `creditParentPickerPrefix` 哨兵后必须解析真实币种子账户，不得把哨兵 ID 落账；扣款/转账选择仍用具体账户 |
-| `CreditAccountDetailPage` | 父账户统一估值、币种子账户、收支筛选及合并后最近 20 条流水 |
-| `CreditRepaymentPage` | 父账户范围选择复用 `VeriAnchoredChoice<CreditRepaymentScope>`；原币分配、来源选择、补齐参考额、整批编辑/撤销 |
+| `CreditAccountDetailPage` | 父账户统一估值；右上角「＋」选择未创建币种并复用 `ensureCreditCurrencyChild`；`VeriSegmentedControl` 互斥选择最近 20 条（默认）/全部/支出/收入 |
+| `CreditRepaymentPage` | 父账户范围选择复用 `VeriAnchoredChoice<CreditRepaymentScope>`；原币分配、来源选择、补齐参考额、整批编辑/撤销；日期与时分保存到同批所有记录，编辑保留原精度 |
+| `showEntryDatePicker` / `showEntryTimePicker` | `pages/sheets.dart`；记账与还款共用。改日期保留时分秒；确认时间精确到分钟；取消返回 null，不修改草稿 |
 | `normalizeCreditHierarchy` | `app/credit_hierarchy.dart`；明确名称的历史子账户幂等归并；冲突 ID 返回供界面复核 |
 | `creditExpenseBelongsToStatement` | `app/credit_card.dart`；部分还款验证遵循银行明确归期，否则复用本地周期，不按记账日自行跨期 |
 | `creditStatementOverview` / `buildCreditCycleOverview` | `app/credit_card.dart`；主体内购汇按两端实际金额转移无正式账单覆盖的原币债务，避免归并后旧外币账重复待还；子账户概览传入 `internalAccountCurrencies`，未出账按账户原币计算 |

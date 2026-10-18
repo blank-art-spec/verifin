@@ -17,6 +17,49 @@ import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'account_icon_picker.dart';
 
+/// 交易与还款共用的日期选择；只改日历日，保留已有时间和精度。
+Future<DateTime?> showEntryDatePicker({
+  required BuildContext context,
+  required DateTime initialDateTime,
+}) async {
+  final date = await showDatePicker(
+    context: context,
+    initialDate: initialDateTime,
+    firstDate: DateTime(2020),
+    lastDate: DateTime(2100),
+  );
+  if (date == null) return null;
+  return DateTime(
+    date.year,
+    date.month,
+    date.day,
+    initialDateTime.hour,
+    initialDateTime.minute,
+    initialDateTime.second,
+    initialDateTime.millisecond,
+    initialDateTime.microsecond,
+  );
+}
+
+/// 交易与还款共用的时间选择；确认后精确到分钟，取消不改草稿。
+Future<DateTime?> showEntryTimePicker({
+  required BuildContext context,
+  required DateTime initialDateTime,
+}) async {
+  final time = await showTimePicker(
+    context: context,
+    initialTime: TimeOfDay.fromDateTime(initialDateTime),
+  );
+  if (time == null) return null;
+  return DateTime(
+    initialDateTime.year,
+    initialDateTime.month,
+    initialDateTime.day,
+    time.hour,
+    time.minute,
+  );
+}
+
 /// 统一的底部弹层外壳：实色表面 + 顶部圆角 + 内置拖拽把手。
 Future<T?> _showVeriModalSheet<T>({
   required BuildContext context,

@@ -6276,4 +6276,17 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get creditRepaymentTooMuch => '还款金额不能超过该币种实际欠款。';
+
+  @override
+  String get creditAddCurrencyChild => '新增币种子账户';
+
+  @override
+  String creditCurrencyChildAdded(String currency) {
+    return '已新增 $currency 子账户';
+  }
+
+  @override
+  String assetTrendMissingRateDetails(String currency, String date) {
+    return '缺少 $currency 在 $date 或之前的历史汇率。请在“货币与汇率”中补充；自动更新不会补齐历史数据。';
+  }
 }

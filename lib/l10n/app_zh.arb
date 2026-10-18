@@ -3649,5 +3649,10 @@
   "creditMoveParent": "归入已有父账户",
   "creditMoveParentConflict": "币种或账单配置冲突，无法归并。请先核对账户设置。",
   "creditRepaymentNoDebt": "当前没有可还款的欠款。",
-  "creditRepaymentTooMuch": "还款金额不能超过该币种实际欠款。"
+  "creditRepaymentTooMuch": "还款金额不能超过该币种实际欠款。",
+  "creditAddCurrencyChild": "新增币种子账户",
+  "creditCurrencyChildAdded": "已新增 {currency} 子账户",
+  "@creditCurrencyChildAdded": {"placeholders": {"currency": {"type": "String"}}},
+  "assetTrendMissingRateDetails": "缺少 {currency} 在 {date} 或之前的历史汇率。请在“货币与汇率”中补充；自动更新不会补齐历史数据。",
+  "@assetTrendMissingRateDetails": {"placeholders": {"currency": {"type": "String"}, "date": {"type": "String"}}}
 }

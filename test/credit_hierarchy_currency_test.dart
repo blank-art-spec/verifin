@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/credit_hierarchy.dart';
 import 'package:verifin/app/frankfurter_client.dart';
+import 'package:verifin/app/common_widgets.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/statistics_currency.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
@@ -181,6 +182,157 @@ class DelayedCreditRepository extends InMemoryLedgerRepository {
 
 void main() {
   useTestDatabases();
+
+  testWidgets('父账户最近与全部互斥，默认最近二十条，新增币种不写流水', (tester) async {
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 1200);
+    addTearDown(tester.view.reset);
+    final f = await setup();
+    for (var i = 0; i < 25; i++) {
+      expect(
+        (await f.c.saveEntryAggregateDraftResult(
+          entry: expense(
+            'extra-$i',
+            'cny',
+            'CNY',
+            1,
+            date: DateTime(2026, 10, 1, 0, i),
+          ),
+          isNew: true,
+        )).isSuccess,
+        isTrue,
+      );
+    }
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: f.c,
+        child: zhMaterialApp(home: CreditAccountDetailPage(parentId: f.parent)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    int visibleEntryCount() {
+      final list = tester.widget<ListView>(find.byType(ListView).first);
+      return (list.childrenDelegate as SliverChildListDelegate).children
+          .whereType<TransactionTile>()
+          .length;
+    }
+
+    expect(visibleEntryCount(), 20);
+    await tester.scrollUntilVisible(
+      find.byKey(const Key('credit_parent_entry_filter')),
+      180,
+      scrollable: firstVerticalScrollable(),
+    );
+    await tester.tap(find.text('全部').first);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('credit_parent_filter_all')), findsOneWidget);
+    expect(find.byKey(const Key('credit_parent_filter_recent')), findsNothing);
+    expect(visibleEntryCount(), 27);
+    await tester.tap(find.text('最近交易').first);
+    await tester.pumpAndSettle();
+    expect(
+      find.byKey(const Key('credit_parent_filter_recent')),
+      findsOneWidget,
+    );
+    expect(find.byKey(const Key('credit_parent_filter_all')), findsNothing);
+    expect(visibleEntryCount(), 20);
+    tester.state<ScrollableState>(firstVerticalScrollable()).position.jumpTo(0);
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('新增币种子账户'));
+    await tester.tap(find.byTooltip('新增币种子账户'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('currency_option_CNY')), findsNothing);
+    expect(find.byKey(const Key('currency_option_USD')), findsNothing);
+    await tester.tap(find.byKey(const Key('currency_option_EUR')));
+    await tester.pumpAndSettle();
+    final eur = f.c
+        .accountsForCreditAccount(f.parent)
+        .singleWhere((a) => a.currencyCode == 'EUR');
+    expect(f.c.accountBalance(eur), 0);
+    expect(f.c.entries, hasLength(27));
+    await tester.tap(find.byTooltip('新增币种子账户'));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('currency_option_EUR')), findsNothing);
+    Navigator.of(
+      tester.element(find.byKey(const Key('currency_search_field'))),
+    ).pop();
+    await tester.pumpAndSettle();
+    expect(f.c.accountsForCreditAccount(f.parent), hasLength(3));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('还款选择日期时分，同批原币记录完整保存，编辑保留时点', (tester) async {
+    tester.platformDispatcher.alwaysUse24HourFormatTestValue = true;
+    addTearDown(tester.platformDispatcher.clearAlwaysUse24HourTestValue);
+    tester.view.devicePixelRatio = 1;
+    tester.view.physicalSize = const Size(393, 1200);
+    addTearDown(tester.view.reset);
+    final f = await setup();
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: f.c,
+        child: zhMaterialApp(home: CreditRepaymentPage(account: f.cny)),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('repay_time')));
+    await tester.tap(find.byKey(const Key('repay_time')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byIcon(Icons.keyboard_outlined));
+    await tester.pumpAndSettle();
+    final timeFields = find.descendant(
+      of: find.byType(TimePickerDialog),
+      matching: find.byType(TextField),
+    );
+    await tester.enterText(timeFields.at(0), '14');
+    await tester.enterText(timeFields.at(1), '37');
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+    expect(find.text('14:37'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('repay_date')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('12').last);
+    await tester.tap(find.text('确定'));
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byTooltip('保存'));
+    await tester.tap(find.byTooltip('保存'));
+    await tester.pumpAndSettle();
+    final batch = f.c.entries.where((e) => e.repaymentBatchId != null).toList();
+    expect(batch, hasLength(2));
+    for (final entry in batch) {
+      expect(entry.occurredAt.day, 12);
+      expect(entry.occurredAt.hour, 14);
+      expect(entry.occurredAt.minute, 37);
+      expect(entry.occurredAt.second, 0);
+      expect(entry.occurredAtPrecision, OccurredAtPrecision.minute);
+    }
+    final backup = f.c.exportDataJson();
+    final restored = await makeController();
+    addTearDown(restored.dispose);
+    restored.importDataJson(backup);
+    await restored.waitForPendingWrites();
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: restored,
+        child: zhMaterialApp(
+          home: CreditRepaymentPage(
+            key: const Key('edit-time'),
+            account: restored.accounts.firstWhere((a) => a.id == 'cny'),
+            batchId: batch.first.repaymentBatchId,
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await tester.ensureVisible(find.byKey(const Key('repay_time')));
+    expect(find.text('14:37'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('repay_time')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(find.text('14:37'), findsOneWidget);
+    expect(tester.takeException(), isNull);
+  });
   test('旧币种账户按明确名称归并，保留全部账户 ID，重复执行不变', () {
     final old = [
       card('a', 'CNY', parent: 'p1', name: '招行卡.人民币'),

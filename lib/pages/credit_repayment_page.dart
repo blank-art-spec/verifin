@@ -4,6 +4,7 @@ import '../app/common_widgets.dart';
 import '../app/credit_hierarchy.dart';
 import '../app/currency_math.dart';
 import '../app/feedback.dart';
+import '../app/ledger_math.dart';
 import '../app/models.dart';
 import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
@@ -27,6 +28,7 @@ class _CreditRepaymentPageState extends State<CreditRepaymentPage> {
   final _touched = <String>{};
   String _fromId = '';
   DateTime _date = DateTime.now();
+  OccurredAtPrecision _timePrecision = OccurredAtPrecision.minute;
   final _note = TextEditingController();
   final _exit = EditorExitController();
   late final _batchId =
@@ -55,7 +57,7 @@ class _CreditRepaymentPageState extends State<CreditRepaymentPage> {
       ),
   ];
   String get _signature =>
-      '$_scope|$_fromId|${_date.year}-${_date.month}-${_date.day} ${_date.hour}:${_date.minute}|${_note.text}|$_amounts|$_debits';
+      '$_scope|$_fromId|${_date.toIso8601String()}|$_timePrecision|${_note.text}|$_amounts|$_debits';
 
   @override
   void didChangeDependencies() {
@@ -72,6 +74,7 @@ class _CreditRepaymentPageState extends State<CreditRepaymentPage> {
     if (old.isNotEmpty) {
       _fromId = old.first.accountId;
       _date = old.first.occurredAt;
+      _timePrecision = old.first.occurredAtPrecision;
       _note.text = old.first.note;
       for (final a in _children(c)) {
         _amounts[a.id] = 0;
@@ -82,6 +85,13 @@ class _CreditRepaymentPageState extends State<CreditRepaymentPage> {
         _touched.add(e.toAccountId!);
       }
     } else {
+      _date = DateTime(
+        _date.year,
+        _date.month,
+        _date.day,
+        _date.hour,
+        _date.minute,
+      );
       _fromId =
           _sources(
             c,
@@ -363,27 +373,43 @@ class _CreditRepaymentPageState extends State<CreditRepaymentPage> {
                 ],
                 const SizedBox(height: 10),
                 SelectField(
+                  key: const Key('repay_date'),
                   label: l.dateLabel,
                   value: l.dateMonthDay(_date),
                   icon: Icons.event_outlined,
                   onTap: _saving
                       ? null
                       : () async {
-                          final date = await showDatePicker(
+                          final date = await showEntryDatePicker(
                             context: context,
-                            initialDate: _date,
-                            firstDate: DateTime(2020),
-                            lastDate: DateTime(2100),
+                            initialDateTime: _date,
                           );
                           if (!mounted || date == null) return;
                           setState(() {
-                            _date = DateTime(
-                              date.year,
-                              date.month,
-                              date.day,
-                              _date.hour,
-                              _date.minute,
-                            );
+                            _date = date;
+                            _resolve(c);
+                          });
+                        },
+                ),
+                const SizedBox(height: 10),
+                SelectField(
+                  key: const Key('repay_time'),
+                  label: l.timeLabel,
+                  value: _timePrecision == OccurredAtPrecision.date
+                      ? l.commonNoneShort
+                      : formatTime(_date),
+                  icon: Icons.schedule_outlined,
+                  onTap: _saving
+                      ? null
+                      : () async {
+                          final time = await showEntryTimePicker(
+                            context: context,
+                            initialDateTime: _date,
+                          );
+                          if (!mounted || time == null) return;
+                          setState(() {
+                            _date = time;
+                            _timePrecision = OccurredAtPrecision.minute;
                             _resolve(c);
                           });
                         },
@@ -429,6 +455,7 @@ class _CreditRepaymentPageState extends State<CreditRepaymentPage> {
       parentId: _parentId,
       lines: _lines,
       occurredAt: _date,
+      occurredAtPrecision: _timePrecision,
       fromAccountId: _fromId,
       note: _note.text,
       replace: widget.batchId != null,
