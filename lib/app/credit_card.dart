@@ -191,6 +191,9 @@ CreditCycleOverview buildCreditCycleOverview({
           statements: statementList,
           allocations: allocations,
           internalAccountIds: childIds,
+          internalAccountCurrencies: {
+            for (final child in childAccounts) child.id: child.currencyCode,
+          },
           now: now,
         ),
   };
@@ -396,7 +399,7 @@ class _ScheduledCreditDebt {
 }
 
 /// 对没有正式账单覆盖的消费按配置账单日结转。只投影流水，不落库，
-/// 不从账户总余额反推，也不把本位币或退到其他账户的钱当作该账户还款。
+/// 不从账户总余额反推。主体内购汇结算转移原币债务，不算父主体外部还款。
 _ScheduledCreditDebt _scheduledCreditDebt({
   required Account account,
   required int statementDay,
@@ -404,6 +407,7 @@ _ScheduledCreditDebt _scheduledCreditDebt({
   required Iterable<BillingStatement> statements,
   required Iterable<StatementRepaymentAllocation> allocations,
   required Set<String> internalAccountIds,
+  required Map<String, String> internalAccountCurrencies,
   required DateTime now,
 }) {
   final today = dateOnly(now);
@@ -418,14 +422,33 @@ _ScheduledCreditDebt _scheduledCreditDebt({
   final amounts = <DateTime, double>{};
   final refundIds = <String>{};
   final cycleByExpense = <String, DateTime>{};
+  bool isCurrencySettlement(LedgerEntry entry) {
+    final source = internalAccountCurrencies[entry.accountId];
+    final target = internalAccountCurrencies[entry.toAccountId];
+    return entry.type == EntryType.transfer &&
+        entry.accountId != entry.toAccountId &&
+        internalAccountIds.contains(entry.accountId) &&
+        internalAccountIds.contains(entry.toAccountId) &&
+        source != null &&
+        target != null &&
+        source != target &&
+        entry.currencyCode == source &&
+        (entry.accountAmount ?? 0) > 0 &&
+        (entry.toAccountAmount ?? 0) > 0;
+  }
+
   for (final entry in entryList) {
-    if (entry.type != EntryType.expense ||
+    final settlement = isCurrencySettlement(entry);
+    if ((entry.type != EntryType.expense && !settlement) ||
         entry.accountId != account.id ||
         entry.occurredAt.isAfter(now)) {
       continue;
     }
     final cycle = entry.billingCycleId == null
-        ? billingStatementDateForExpense(statementDay, entry.occurredAt)
+        ? settlement
+              // 银行出账日购汇已计入当天账单；普通消费仍进入下一期。
+              ? nextStatementDate(statementDay, entry.occurredAt)
+              : billingStatementDateForExpense(statementDay, entry.occurredAt)
         : DateTime.tryParse(entry.billingCycleId!);
     if (cycle == null || cycle.isAfter(today)) continue;
     final covered = formal.any((statement) {
@@ -434,15 +457,19 @@ _ScheduledCreditDebt _scheduledCreditDebt({
         return true;
       }
       if (entry.billingCycleId != null) return false;
+      if (settlement) {
+        final date = dateOnly(entry.occurredAt);
+        return !date.isBefore(dateOnly(statement.periodStart)) &&
+            !date.isAfter(dateOnly(statement.periodEnd)) &&
+            !date.isAfter(dateOnly(statement.statementDate));
+      }
       return _expenseIsInStatementPeriod(entry, statement);
     });
     if (covered) continue;
-    cycleByExpense[entry.id] = cycle;
-    amounts.update(
-      cycle,
-      (value) => value + (entry.accountAmount ?? entry.amount),
-      ifAbsent: () => entry.accountAmount ?? entry.amount,
-    );
+    if (!settlement) cycleByExpense[entry.id] = cycle;
+    final amount =
+        (entry.accountAmount ?? entry.amount) + (settlement ? entry.fee : 0);
+    amounts.update(cycle, (value) => value + amount, ifAbsent: () => amount);
   }
   for (final refund in entryList) {
     final cycle = cycleByExpense[refund.refundOf];
@@ -471,7 +498,8 @@ _ScheduledCreditDebt _scheduledCreditDebt({
             (entry) =>
                 entry.type == EntryType.transfer &&
                 entry.toAccountId == account.id &&
-                !internalAccountIds.contains(entry.accountId) &&
+                (!internalAccountIds.contains(entry.accountId) ||
+                    isCurrencySettlement(entry)) &&
                 !entry.occurredAt.isAfter(now),
           )
           .toList()
@@ -665,6 +693,7 @@ CreditStatementOverview creditStatementOverview({
   required DateTime now,
   Iterable<StatementRepaymentAllocation> repaymentAllocations = const [],
   Set<String>? internalAccountIds,
+  Map<String, String> internalAccountCurrencies = const {},
 }) {
   final entryList = entries
       .where((item) => item.bookId == account.bookId)
@@ -714,6 +743,7 @@ CreditStatementOverview creditStatementOverview({
       statements: statementList,
       allocations: repaymentAllocations,
       internalAccountIds: internalAccountIds ?? {account.id},
+      internalAccountCurrencies: internalAccountCurrencies,
       now: now,
     );
     billed += scheduled.amounts.values.fold<double>(
@@ -735,21 +765,8 @@ CreditStatementOverview creditStatementOverview({
           nextStatement: nextStatement,
           latestStatement: latest,
         );
-  double unbilled;
-  if (cutoff == null) {
-    unbilled = statementDay == null
-        ? 0
-        : billingCycleExpense(
-            entryList,
-            account.id,
-            _currentBillingCycleFromStatement(
-              statementDay: statementDay,
-              nextStatement: nextStatement!,
-              latestStatement: null,
-            ),
-          );
-  } else {
-    unbilled = 0;
+  var unbilled = 0.0;
+  if (currentCycle != null || cutoff != null) {
     for (final entry in entryList) {
       if (allocatedRefundIds.contains(entry.id)) continue;
       // 退款只有在实际到账后才会改变信用账户口径，因此筛选未出账条目时
@@ -760,7 +777,7 @@ CreditStatementOverview creditStatementOverview({
       }
       final belongsToCurrentCycle = entry.billingCycleId == null
           ? currentCycle == null
-                ? effectDate.isAfter(cutoff)
+                ? effectDate.isAfter(cutoff!)
                 : !dateOnly(effectDate).isBefore(currentCycle.start) &&
                       !dateOnly(effectDate).isAfter(currentCycle.end)
           : entry.billingCycleId == currentCycleId;
@@ -771,11 +788,13 @@ CreditStatementOverview creditStatementOverview({
         unbilled -= entry.accountAmount ?? entry.amount;
       }
     }
-    if (unbilled < 0) unbilled = 0;
   }
   return CreditStatementOverview(
     billedOutstanding: billed,
-    unbilledAmount: unbilled,
+    unbilledAmount: normalizeCurrencyAmount(
+      unbilled.clamp(0.0, double.infinity),
+      account.currencyCode,
+    ),
     latestStatement: latest,
   );
 }

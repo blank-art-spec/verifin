@@ -359,6 +359,145 @@ void main() {
     expect(_overview(DateTime(2026, 10, 5), []).billedOutstanding, 0);
   });
 
+  test('历史购汇结算抵扣美元旧账，已还人民币账单不重复待还，未出账使用原币', () {
+    final cny = _account.copyWith(statementDay: 25);
+    final usd = cny.copyWith(id: 'usd', currencyCode: 'USD');
+    final parent = _credit.copyWith(statementDay: 25);
+    final entries = <LedgerEntry>[
+      for (final month in [7, 8, 9]) ...[
+        _expense('usd-$month', 21.02, DateTime(2026, month, 5)).copyWith(
+          accountId: usd.id,
+          currencyCode: 'USD',
+          accountAmount: 21.02,
+          baseAmount: 141.07,
+        ),
+        _repayment('fx-$month', 141.07, DateTime(2026, month, 25)).copyWith(
+          accountId: cny.id,
+          toAccountId: usd.id,
+          accountAmount: 141.07,
+          toAccountAmount: 21.02,
+        ),
+      ],
+      _expense('usd-current', 21.02, DateTime(2026, 10, 8)).copyWith(
+        accountId: usd.id,
+        currencyCode: 'USD',
+        accountAmount: 21.02,
+        baseAmount: 140.93,
+      ),
+    ];
+    final statements = [
+      for (final month in [7, 8, 9])
+        _statement(DateTime(2026, month, 25), 141.07, 141.07),
+    ];
+    final now = DateTime(2026, 10, 18);
+    final overview = buildCreditCycleOverview(
+      creditAccount: parent,
+      accounts: [cny, usd],
+      entries: entries,
+      statements: statements,
+      allocations: const [],
+      baseCurrencyCode: 'CNY',
+      now: now,
+      balanceOf: (a) => a.id == usd.id ? -21.02 : 0,
+      convertToCreditCurrency: (amount, currency, _) =>
+          currency == 'USD' ? amount * 6.7046 : amount,
+    );
+    expect(overview.billedOutstanding, 0);
+    expect(overview.earlyRepayment, 0);
+    expect(overview.currentCycleDebt, 140.93);
+    expect(overview.totalDebt, closeTo(140.93, 0.01));
+    final detail = creditStatementOverview(
+      account: usd,
+      entries: entries,
+      statements: statements,
+      internalAccountIds: {cny.id, usd.id},
+      internalAccountCurrencies: {cny.id: 'CNY', usd.id: 'USD'},
+      now: now,
+    );
+    expect(detail.billedOutstanding, 0);
+    expect(detail.unbilledAmount, 21.02);
+    expect(detail.latestStatement, isNull);
+    expect(statements.every((s) => s.paidAmount == 141.07), isTrue);
+    expect(entries.first.accountAmount, 21.02);
+  });
+
+  test('无正式账单的购汇把债务移到人民币，不作为父账户外部还款', () {
+    final usd = _account.copyWith(id: 'usd', currencyCode: 'USD');
+    final entries = [
+      expense.copyWith(
+        accountId: usd.id,
+        currencyCode: 'USD',
+        amount: 10,
+        accountAmount: 10,
+        baseAmount: 72,
+      ),
+      _repayment('fx', 72, DateTime(2026, 10, 5)).copyWith(
+        accountId: _account.id,
+        toAccountId: usd.id,
+        accountAmount: 72,
+        toAccountAmount: 10,
+      ),
+    ];
+    final overview = buildCreditCycleOverview(
+      creditAccount: _credit,
+      accounts: [_account, usd],
+      entries: entries,
+      statements: const [],
+      allocations: const [],
+      baseCurrencyCode: 'CNY',
+      now: DateTime(2026, 10, 6),
+      balanceOf: (a) => a.id == usd.id ? 0 : -72,
+      convertToCreditCurrency: (amount, currency, _) =>
+          currency == 'USD' ? amount * 7.2 : amount,
+    );
+    expect(overview.billedOutstanding, 72);
+    expect(overview.totalDebt, 72);
+    expect(overview.earlyRepayment, 0);
+    for (final account in [_account, usd]) {
+      final detail = creditStatementOverview(
+        account: account,
+        entries: entries,
+        statements: const [],
+        internalAccountIds: {_account.id, usd.id},
+        internalAccountCurrencies: {_account.id: 'CNY', usd.id: 'USD'},
+        now: DateTime(2026, 10, 6),
+      );
+      expect(detail.billedOutstanding, account.id == usd.id ? 0 : 72);
+    }
+  });
+
+  test('无正式账单的外币未出账使用账户原币并按实际到账退款', () {
+    final usd = _account.copyWith(id: 'usd', currencyCode: 'USD');
+    final original = _expense('usd', 21.02, DateTime(2026, 10, 6)).copyWith(
+      accountId: usd.id,
+      currencyCode: 'USD',
+      accountAmount: 21.02,
+      baseAmount: 140.93,
+    );
+    final refund = LedgerEntry(
+      id: 'usd-refund',
+      bookId: 'book',
+      type: EntryType.refund,
+      amount: 1.02,
+      currencyCode: 'USD',
+      accountAmount: 1.02,
+      baseAmount: 6.84,
+      accountId: usd.id,
+      categoryId: 'expense',
+      note: '',
+      occurredAt: DateTime(2026, 10, 7),
+      settledAt: DateTime(2026, 10, 7),
+      refundOf: original.id,
+    );
+    final detail = creditStatementOverview(
+      account: usd,
+      entries: [original, refund],
+      statements: const [],
+      now: DateTime(2026, 10, 8),
+    );
+    expect(detail.unbilledAmount, 20);
+  });
+
   test('未来正式账单不覆盖当前结转，跨月漏录与重复读取保持一致', () {
     final entries = [expense, _expense('older', 50, DateTime(2026, 8, 10))];
     final future = _statement(DateTime(2026, 11, 5), 999, 0);

@@ -2008,6 +2008,14 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
                   child.creditAccountId == account.creditAccountId)
                 child.id,
         },
+        internalAccountCurrencies: {
+          account.id: account.currencyCode,
+          if (account.creditAccountId != null)
+            for (final child in _accounts)
+              if (child.bookId == account.bookId &&
+                  child.creditAccountId == account.creditAccountId)
+                child.id: child.currencyCode,
+        },
         now: now ?? DateTime.now(),
       );
 
