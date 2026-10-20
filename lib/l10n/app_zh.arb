@@ -3624,7 +3624,13 @@
   "exchangeRateValue": "汇率 {value}",
   "creditChildren": "币种子账户",
   "creditParentTransactions": "全部子账户流水",
-  "creditParentPick": "选择父账户（按币种入账）",
+  "creditParentPick": "按交易币种自动匹配",
+  "entryPostingAccount": "入账账户",
+  "entryPostingAutomatic": "自动（{currency}）",
+  "@entryPostingAutomatic": {
+    "description": "记账页入账账户入口：自动匹配的实际账户币种",
+    "placeholders": {"currency": {"type": "String"}}
+  },
   "creditCreateCurrency": "该父账户还没有 {currency} 子账户，是否创建？",
   "creditRepaymentScope": "还款范围",
   "creditRepaymentCurrent": "当前待还金额",

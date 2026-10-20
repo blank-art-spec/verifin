@@ -906,6 +906,10 @@ const Account _accountPickerAllSentinel = Account(
 /// 哨兵 [Account]（调用方用 `selected.id.isEmpty` 判别「只记金额、不计入账户」）。
 /// 传入 [allLabel] 时（筛选场景），列首额外提供「全部」项，选它返回 id 为
 /// [accountPickerAllId] 的哨兵 [Account]（调用方用 `selected.id == accountPickerAllId` 判别）。
+/// [includeCreditParents] 为 true 时，同一信用主体只展示父账户，隐藏已被代表的
+/// 币种子账户；没有有效父主体的临时账户仍保留，避免导入草稿无账户可选。
+/// [showCreditChildren] 仅在父账户模式下生效，供「入账账户」次级入口同时展示
+/// 自动匹配的父账户与具体币种子账户；普通记账无需开启，转账保持默认的具体账户模式。
 Future<Account?> showAccountPickerSheet({
   required BuildContext context,
   required String title,
@@ -916,6 +920,7 @@ Future<Account?> showAccountPickerSheet({
   String? noneHint,
   String? allLabel,
   bool includeCreditParents = false,
+  bool showCreditChildren = false,
 }) {
   return _showVeriModalSheet<Account>(
     context: context,
@@ -927,36 +932,30 @@ Future<Account?> showAccountPickerSheet({
     builder: (context) {
       final controller = VeriFinScope.of(context);
       final l10n = AppLocalizations.of(context);
-      final sections = _accountPickerSections(controller, l10n, accounts);
+      final parents = includeCreditParents
+          ? controller.creditAccounts
+                .where(
+                  (parent) =>
+                      accounts.any((a) => a.creditAccountId == parent.id),
+                )
+                .toList()
+          : <CreditAccount>[];
+      final parentIds = parents.map((parent) => parent.id).toSet();
+      final sections = _accountPickerSections(
+        controller,
+        l10n,
+        accounts
+            .where(
+              (account) =>
+                  showCreditChildren ||
+                  !parentIds.contains(account.creditAccountId),
+            )
+            .toList(),
+      );
       final headerColor = Theme.of(context).colorScheme.onSurfaceVariant;
       final maxHeight = MediaQuery.sizeOf(context).height * 0.72;
 
       final children = <Widget>[];
-      if (includeCreditParents) {
-        for (final parent in controller.creditAccounts) {
-          final child = accounts
-              .where((a) => a.creditAccountId == parent.id)
-              .firstOrNull;
-          if (child == null) continue;
-          children.add(
-            Material(
-              type: MaterialType.transparency,
-              child: ListTile(
-                leading: AccountIconBox(iconCode: child.iconCode, size: 32),
-                title: Text('${parent.name} (${l10n.creditLinkParent})'),
-                subtitle: Text(l10n.creditParentPick),
-                trailing: const Icon(Icons.chevron_right),
-                onTap: () => Navigator.of(context).pop(
-                  child.copyWith(
-                    id: '$creditParentPickerPrefix${parent.id}',
-                    name: parent.name,
-                  ),
-                ),
-              ),
-            ),
-          );
-        }
-      }
       if (noneLabel != null) {
         children.add(
           Padding(
@@ -976,6 +975,37 @@ Future<Account?> showAccountPickerSheet({
             child: _AllAccountsRow(
               label: allLabel,
               selected: selectedId == accountPickerAllId,
+            ),
+          ),
+        );
+      }
+      for (final parent in parents) {
+        final child = accounts.firstWhere(
+          (a) => a.creditAccountId == parent.id,
+        );
+        final parentPickerId = '$creditParentPickerPrefix${parent.id}';
+        // 父账户和普通账户复用同一行：统一图标、文字起点、字号与选中标记。
+        // 父主体不直接落账，也不能拿某一个子账户余额冒充父主体的合计余额。
+        children.add(
+          Padding(
+            padding: const EdgeInsets.only(bottom: 6),
+            child: _AccountPickerRow(
+              key: ValueKey(parentPickerId),
+              account: child.copyWith(
+                id: parentPickerId,
+                name: parent.name,
+                cardLast4: parent.cardLast4,
+              ),
+              balance: null,
+              subtitle: l10n.creditParentPick,
+              selected:
+                  selectedId == parentPickerId ||
+                  (!showCreditChildren &&
+                      accounts.any(
+                        (a) =>
+                            a.id == selectedId &&
+                            a.creditAccountId == parent.id,
+                      )),
             ),
           ),
         );
@@ -1005,9 +1035,13 @@ Future<Account?> showAccountPickerSheet({
             Padding(
               padding: const EdgeInsets.only(bottom: 6),
               child: _AccountPickerRow(
+                key: ValueKey(account.id),
                 account: account,
                 balance: balanceOf(account),
                 selected: account.id == selectedId,
+                subtitle: includeCreditParents && showCreditChildren
+                    ? account.currencyCode
+                    : null,
               ),
             ),
           );
@@ -1097,16 +1131,23 @@ List<({String title, List<Account> accounts})> _accountPickerSections(
 }
 
 class _AccountPickerRow extends StatelessWidget {
+  /// 绘制统一的账户候选行；[account] 也可为父账户选择哨兵。
+  /// [balance] 为空时不显示余额，[subtitle] 可说明自动匹配方式或具体入账币种。
+  /// [selected] 决定背景、字重与对勾，点击只返回候选，不执行账务操作。
   const _AccountPickerRow({
+    super.key,
     required this.account,
     required this.balance,
     required this.selected,
+    this.subtitle,
   });
 
   final Account account;
-  final double balance;
+  final double? balance;
   final bool selected;
+  final String? subtitle;
 
+  /// 使用相同的紧凑列表参数，保证父账户、普通账户与「无账户」横向对齐。
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -1143,22 +1184,28 @@ class _AccountPickerRow extends StatelessWidget {
             fontWeight: selected ? FontWeight.w800 : FontWeight.w600,
           ),
         ),
-        trailing: Row(
-          mainAxisSize: MainAxisSize.min,
-          children: <Widget>[
-            Text(
-              formatUserMoney(balance, account.currencyCode),
-              style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                color: accountBalanceColor(context, account, balance),
-                fontWeight: FontWeight.w800,
+        subtitle: subtitle == null
+            ? null
+            : Text(subtitle!, style: Theme.of(context).textTheme.bodySmall),
+        trailing: balance == null && !selected
+            ? null
+            : Row(
+                mainAxisSize: MainAxisSize.min,
+                children: <Widget>[
+                  if (balance != null)
+                    Text(
+                      formatUserMoney(balance!, account.currencyCode),
+                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                        color: accountBalanceColor(context, account, balance!),
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                  if (selected) ...<Widget>[
+                    if (balance != null) const SizedBox(width: 6),
+                    const Icon(Icons.check, color: veriRoyal, size: 18),
+                  ],
+                ],
               ),
-            ),
-            if (selected) ...<Widget>[
-              const SizedBox(width: 6),
-              const Icon(Icons.check, color: veriRoyal, size: 18),
-            ],
-          ],
-        ),
         onTap: () => Navigator.of(context).pop(account),
       ),
     );

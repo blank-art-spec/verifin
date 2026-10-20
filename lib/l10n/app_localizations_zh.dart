@@ -6190,7 +6190,15 @@ class AppLocalizationsZh extends AppLocalizations {
   String get creditParentTransactions => '全部子账户流水';
 
   @override
-  String get creditParentPick => '选择父账户（按币种入账）';
+  String get creditParentPick => '按交易币种自动匹配';
+
+  @override
+  String get entryPostingAccount => '入账账户';
+
+  @override
+  String entryPostingAutomatic(String currency) {
+    return '自动（$currency）';
+  }
 
   @override
   String creditCreateCurrency(Object currency) {

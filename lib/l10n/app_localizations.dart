@@ -11183,8 +11183,20 @@ abstract class AppLocalizations {
   /// No description provided for @creditParentPick.
   ///
   /// In zh, this message translates to:
-  /// **'选择父账户（按币种入账）'**
+  /// **'按交易币种自动匹配'**
   String get creditParentPick;
+
+  /// No description provided for @entryPostingAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'入账账户'**
+  String get entryPostingAccount;
+
+  /// 记账页入账账户入口：自动匹配的实际账户币种
+  ///
+  /// In zh, this message translates to:
+  /// **'自动（{currency}）'**
+  String entryPostingAutomatic(String currency);
 
   /// No description provided for @creditCreateCurrency.
   ///

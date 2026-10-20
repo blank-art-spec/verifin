@@ -5,7 +5,7 @@
 | 组件/函数 | 入口与约定 |
 | --- | --- |
 | `VeriPage.missingCurrencies` | 统计页传入缺失币种时显示不完整汇总提示，布局仍沿用页面容器 |
-| `showAccountPickerSheet(includeCreditParents: true)` | 记账页可选父主体；返回 `creditParentPickerPrefix` 哨兵后必须解析真实币种子账户，不得把哨兵 ID 落账；扣款/转账选择仍用具体账户 |
+| `showAccountPickerSheet(includeCreditParents: true)` | 普通记账每个信用主体只展示父账户，隐藏其币种子账户；父行复用 `_AccountPickerRow`，与无账户/普通账户对齐，当前子账户映射父行选中态。次级「入账账户」限定当前主体并传 `showCreditChildren: true`，可显式选币种或点父行恢复自动匹配。返回 `creditParentPickerPrefix` 哨兵后须解析真实子账户，不得把哨兵 ID 落账；默认的扣款/转账选择仍用具体账户 |
 | `CreditAccountDetailPage` | 父账户统一估值；右上角「＋」选择未创建币种并复用 `ensureCreditCurrencyChild`；`VeriSegmentedControl` 互斥选择最近 20 条（默认）/全部/支出/收入 |
 | `CreditRepaymentPage` | 父账户范围选择复用 `VeriAnchoredChoice<CreditRepaymentScope>`；原币分配、来源选择、补齐参考额、整批编辑/撤销；日期与时分保存到同批所有记录，编辑保留原精度 |
 | `showEntryDatePicker` / `showEntryTimePicker` | `pages/sheets.dart`；记账与还款共用。改日期保留时分秒；确认时间精确到分钟；取消返回 null，不修改草稿 |

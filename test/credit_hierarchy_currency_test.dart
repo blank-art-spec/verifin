@@ -13,6 +13,7 @@ import 'package:verifin/local_storage/local_storage.dart';
 import 'package:verifin/pages/credit_account_detail_page.dart';
 import 'package:verifin/pages/credit_repayment_page.dart';
 import 'package:verifin/pages/entry_detail_page.dart';
+import 'package:verifin/pages/sheets.dart';
 import 'support/in_memory_ledger_repository.dart';
 import 'support/test_harness.dart';
 
@@ -178,6 +179,30 @@ class DelayedCreditRepository extends InMemoryLedgerRepository {
       allocations: allocations,
     );
   }
+}
+
+/// 从页首滚动找到 [key] 对应字段；[tester] 驱动懒加载列表。
+/// 切换币种会插入或移除金额卡片，重新从页首定位可避免依赖旧滚动位置。
+Future<void> _revealEntryField(WidgetTester tester, Key key) async {
+  tester.state<ScrollableState>(firstVerticalScrollable()).position.jumpTo(0);
+  await tester.pumpAndSettle();
+  await tester.scrollUntilVisible(
+    find.byKey(key),
+    160,
+    scrollable: firstVerticalScrollable(),
+  );
+  await tester.ensureVisible(find.byKey(key));
+  await tester.pumpAndSettle();
+}
+
+/// 在记账页选择 [code] 原交易币种；[tester] 负责滚动到货币入口并完成选择。
+/// 缺少币种子账户时保留随后弹出的确认框，供用例验证确认或取消行为。
+Future<void> _chooseEntryCurrency(WidgetTester tester, String code) async {
+  await _revealEntryField(tester, const Key('entry_currency_button'));
+  await tester.tap(find.byKey(const Key('entry_currency_button')));
+  await tester.pumpAndSettle();
+  await tester.tap(find.byKey(Key('currency_option_$code')));
+  await tester.pumpAndSettle();
 }
 
 void main() {
@@ -809,7 +834,9 @@ void main() {
     await tester.ensureVisible(find.byKey(const Key('account_dropdown')));
     await tester.tap(find.byKey(const Key('account_dropdown')));
     await tester.pumpAndSettle();
-    await tester.tap(find.text('cny (父账户)'));
+    await tester.tap(
+      find.byKey(ValueKey('$creditParentPickerPrefix${f.parent}')),
+    );
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('entry_currency_button')));
     await tester.tap(find.byKey(const Key('entry_currency_button')));
@@ -837,6 +864,121 @@ void main() {
     expect(saved.accountAmount, 10);
     expect(saved.referenceBaseAmount, 72);
     expect(f.c.accountBalance(f.cny), -100);
+  });
+
+  testWidgets('次级入账选择只列当前卡，美元消费可人民币结算且改币种不覆盖手动账户', (tester) async {
+    final f = await setup();
+    f.c.setAutoSuggestEnabled(false);
+    expect(
+      await f.c.saveExchangeRateDraft(
+        currencyCode: 'USD',
+        effectiveDate: DateTime(2026, 1, 1),
+        rateToBase: 7.2,
+      ),
+      isTrue,
+    );
+    expect(await f.c.addAccountDraft(card('other', 'CNY')), isTrue);
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: f.c,
+        child: zhMaterialApp(
+          home: const EntryDetailPage(
+            initialAmount: 10,
+            initialAccountId: 'cny',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _chooseEntryCurrency(tester, 'USD');
+    await _revealEntryField(tester, const Key('entry_posting_account'));
+    await tester.tap(find.byKey(const Key('entry_posting_account')));
+    await tester.pumpAndSettle();
+    expect(find.byKey(const ValueKey('other')), findsNothing);
+    expect(find.byKey(const ValueKey('cny')), findsOneWidget);
+    expect(find.byKey(const ValueKey('usd')), findsOneWidget);
+    await tester.tap(find.byKey(const ValueKey('cny')));
+    await tester.pumpAndSettle();
+
+    // 换原币再换回美元，手动指定的人民币结算账户应始终保持。
+    await _chooseEntryCurrency(tester, 'CNY');
+    await _chooseEntryCurrency(tester, 'USD');
+    await _revealEntryField(tester, const Key('entry_account_amount'));
+    await tester.tap(find.byKey(const Key('entry_account_amount')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('number_key_C')));
+    await tester.tap(find.byKey(const Key('number_key_7')));
+    await tester.tap(find.byKey(const Key('number_key_3')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('number_pad_ok')));
+    await tester.pumpAndSettle();
+    expect(f.c.entries.length, 2);
+    await tester.tap(find.byKey(const Key('save_entry_button')));
+    await tester.pumpAndSettle();
+    final saved = f.c.entries.where((e) => !e.id.endsWith('-expense')).single;
+    expect(saved.currencyCode, 'USD');
+    expect(saved.amount, 10);
+    expect(saved.accountId, 'cny');
+    expect(saved.accountAmount, 73);
+    expect(saved.referenceBaseAmount, 73);
+    expect(f.c.accountBalance(f.cny), -173);
+    expect(f.c.accountBalance(f.usd), -10);
+  });
+
+  testWidgets('次级入账可恢复按币种自动匹配，取消缺失币种创建不改草稿', (tester) async {
+    final f = await setup();
+    f.c.setAutoSuggestEnabled(false);
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: f.c,
+        child: zhMaterialApp(
+          home: const EntryDetailPage(
+            initialAmount: 10,
+            initialAccountId: 'cny',
+          ),
+        ),
+      ),
+    );
+    await tester.pumpAndSettle();
+    await _chooseEntryCurrency(tester, 'USD');
+    await _revealEntryField(tester, const Key('entry_posting_account'));
+    await tester.tap(find.byKey(const Key('entry_posting_account')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const ValueKey('cny')));
+    await tester.pumpAndSettle();
+    // 明确填入实际人民币结算额；恢复美元自动匹配后仍保留该参考额。
+    await _revealEntryField(tester, const Key('entry_account_amount'));
+    await tester.tap(find.byKey(const Key('entry_account_amount')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('number_key_C')));
+    await tester.tap(find.byKey(const Key('number_key_7')));
+    await tester.tap(find.byKey(const Key('number_key_3')));
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('number_pad_ok')));
+    await tester.pumpAndSettle();
+    await _revealEntryField(tester, const Key('entry_posting_account'));
+    await tester.tap(find.byKey(const Key('entry_posting_account')));
+    await tester.pumpAndSettle();
+    await tester.tap(
+      find.byKey(ValueKey('$creditParentPickerPrefix${f.parent}')),
+    );
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('entry_account_amount')), findsNothing);
+
+    await _chooseEntryCurrency(tester, 'EUR');
+    expect(find.textContaining('EUR 子账户'), findsOneWidget);
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(f.c.accounts.length, 2);
+    await _revealEntryField(tester, const Key('entry_posting_account'));
+    expect(find.text('入账账户 · 自动（USD）'), findsOneWidget);
+    await tester.tap(find.byKey(const Key('save_entry_button')));
+    await tester.pumpAndSettle();
+    final saved = f.c.entries.where((e) => !e.id.endsWith('-expense')).single;
+    expect(saved.accountId, 'usd');
+    expect(saved.currencyCode, 'USD');
+    expect(saved.accountAmount, 10);
+    expect(saved.referenceBaseAmount, 73);
   });
 
   test('汇率保存排队时切换账本，仍写入提交时所属账本', () async {

@@ -6394,7 +6394,15 @@ class AppLocalizationsEn extends AppLocalizations {
   String get creditParentTransactions => 'All currency transactions';
 
   @override
-  String get creditParentPick => 'Choose parent (post by currency)';
+  String get creditParentPick => 'Match transaction currency automatically';
+
+  @override
+  String get entryPostingAccount => 'Posting account';
+
+  @override
+  String entryPostingAutomatic(String currency) {
+    return 'Auto ($currency)';
+  }
 
   @override
   String creditCreateCurrency(Object currency) {

@@ -93,6 +93,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   EntryType _type = EntryType.expense;
   String _categoryId = 'dining';
   late String _accountId = widget.initialAccountId ?? '';
+  // 非空表示随交易币种自动匹配子账户；手动指定入账子账户后清空，防止改币种时覆盖选择。
   late String? _creditParentId = widget.initialCreditAccountId;
   // 「无账户」：只记金额、不计入任何账户余额（仅收支有效，转账必须选账户）。
   bool _noAccount = false;
@@ -258,6 +259,10 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     if (!accounts.any((account) => account.id == _accountId)) {
       _accountId = accounts.first.id;
     }
+    // 只为尚未手动选账户的普通草稿补自动模式，不能覆盖已固定的银行结算账户。
+    if (_draftFree && !_accountTouched) {
+      _creditParentId = _accountFor(accounts, _accountId)?.creditAccountId;
+    }
     _refreshCurrencyAmounts(
       controller,
       accounts,
@@ -286,6 +291,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     return accounts.where((account) => account.id == id).firstOrNull;
   }
 
+  /// 初始化交易币种与各层金额；新建普通记账按父账户自动匹配后续选择的交易币种。
+  /// 已有导入/AI/采集草稿保留其具体入账账户，避免重解释银行已确认的结算币种。
   void _initializeCurrencyAmounts() {
     final controller = VeriFinScope.of(context);
     final accounts = _availableAccounts(controller);
@@ -298,6 +305,12 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     _currencyCode ??=
         _accountFor(accounts, _accountId)?.currencyCode ??
         controller.activeBook.baseCurrencyCode;
+    if (_draftFree &&
+        widget.captureEventId == null &&
+        !_noAccount &&
+        _type != EntryType.transfer) {
+      _creditParentId ??= _accountFor(accounts, _accountId)?.creditAccountId;
+    }
     _moneyInitialized = true;
     if (widget.draftEntry == null) {
       _refreshCurrencyAmounts(
@@ -589,6 +602,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   /// 自动识别开启时，按分类预选「这个分类上次用过的账户」；用户手动改过账户、
   /// 选了「无账户」或当前是转账（两端账户都是显式选择）时都不覆盖。
   /// 关闭自动识别时保持原行为——只用账本默认账户。
+  /// 预选到信用子账户时同步其主体，后续切换原交易币种仍按该卡自动匹配。
   void _applyCategoryAccountSuggestion(VeriFinController controller) {
     if (!_autoSuggestEnabled || _accountTouched || _noAccount) {
       return;
@@ -611,6 +625,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
     setState(() {
       _accountId = suggested;
+      _creditParentId = account.creditAccountId;
       if (!_currencyTouched) {
         _currencyCode = account.currencyCode;
       }
@@ -700,6 +715,13 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     final selectedCategory = categories
         .where((category) => category.id == _categoryId)
         .firstOrNull;
+    // 主账户字段展示真实卡片/平台，具体币种账户放到「更多信息」的入账入口。
+    final selectedAccount = _noAccount
+        ? null
+        : _accountFor(accounts, _accountId);
+    final creditParent = controller.creditAccounts
+        .where((parent) => parent.id == selectedAccount?.creditAccountId)
+        .firstOrNull;
     // 大金额颜色跟随类型:支出红、收入青绿、转账保持蓝色。
     final amountColor = switch (_type) {
       EntryType.expense => veriSemantic(context, veriExpense),
@@ -782,6 +804,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                           _normalizeTransferAccounts(accounts);
                           if (_type == EntryType.transfer) {
                             _currencyTouched = false;
+                            _creditParentId = null;
                           }
                           _refreshCurrencyAmounts(
                             controller,
@@ -915,7 +938,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                         label: AppLocalizations.of(context).accountLabel,
                         value: _noAccount
                             ? AppLocalizations.of(context).noAccountLabel
-                            : '${accountById(accounts, _accountId).name} (${formatUserMoney(controller.accountBalance(accountById(accounts, _accountId)), accountById(accounts, _accountId).currencyCode)})',
+                            : creditParent?.name ??
+                                  '${accountById(accounts, _accountId).name} (${formatUserMoney(controller.accountBalance(accountById(accounts, _accountId)), accountById(accounts, _accountId).currencyCode)})',
                         icon: _noAccount
                             ? Icons.money_off_csred_outlined
                             : null,
@@ -979,6 +1003,18 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                       spacing: 7,
                       runSpacing: 7,
                       children: <Widget>[
+                        if (_type != EntryType.transfer &&
+                            creditParent != null &&
+                            selectedAccount != null)
+                          _EntryMetadataChip(
+                            chipKey: const Key('entry_posting_account'),
+                            icon: Icons.account_balance_wallet_outlined,
+                            label: Text(
+                              '${AppLocalizations.of(context).entryPostingAccount} · ${_creditParentId == null ? selectedAccount.currencyCode : AppLocalizations.of(context).entryPostingAutomatic(selectedAccount.currencyCode)}',
+                            ),
+                            selected: _creditParentId == null,
+                            onTap: () => _pickCreditPostingAccount(accounts),
+                          ),
                         _EntryMetadataChip(
                           chipKey: const Key('entry_metadata_date'),
                           icon: Icons.calendar_today_outlined,
@@ -1321,6 +1357,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     return fields;
   }
 
+  /// 选择原交易币种；自动模式同步匹配子账户，手动入账模式保留已指定的结算账户。
+  /// 取消货币选择或取消创建缺失的币种账户时，交易币种和账户都保持原值。
   Future<void> _pickCurrency() async {
     final controller = VeriFinScope.of(context);
     final selected = await showCurrencyPickerSheet(
@@ -1621,6 +1659,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     setState(() {
       controller.switchLedgerBook(selected.id);
       _accountId = event.accountCandidateId ?? '';
+      // 父主体属于原账本，切换后必须清除，避免随后改币种又匹配回旧账本。
+      _creditParentId = null;
       _toAccountId = event.toAccountCandidateId;
       // 转账的原币就是转出账户币种，换账本不应把旧金额悄悄解释成别的币种。
       // 币种不符时先留空，等用户明确选择转出账户后再按既有编辑流程处理。
@@ -1651,6 +1691,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     });
   }
 
+  /// 选择主账户；[accounts] 是当前账本的可见账户（含导入预览临时账户）。
+  /// 普通收支按父主体展示信用卡，转账仍选择具体币种账户；取消不改草稿。
   Future<void> _pickAccount(List<Account> accounts) async {
     final isTransfer = _type == EntryType.transfer;
     final selected = await showAccountPickerSheet(
@@ -1673,26 +1715,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
     if (selected.id.startsWith(creditParentPickerPrefix)) {
       final parentId = selected.id.substring(creditParentPickerPrefix.length);
-      final code = _currencyTouched
-          ? _currencyCode!
-          : VeriFinScope.of(context).activeBook.baseCurrencyCode;
-      final child = await _resolveParentChild(parentId, code);
-      if (!mounted || child == null) return;
-      setState(() {
-        _creditParentId = parentId;
-        _accountId = child.id;
-        _noAccount = false;
-        _accountTouched = true;
-        _currencyCode = code;
-        _accountAmountTouched = false;
-        _baseAmountTouched = false;
-        _refreshCurrencyAmounts(
-          VeriFinScope.of(context),
-          _availableAccounts(VeriFinScope.of(context)),
-          forceAccount: true,
-          forceBase: true,
-        );
-      });
+      await _selectCreditParent(parentId);
       return;
     }
     setState(() {
@@ -1725,6 +1748,67 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     });
   }
 
+  /// 启用 [parentId] 的自动入账：保留当前原交易币种，解析对应真实子账户。
+  /// 解析取消时不改草稿；成功后重算账户金额，保留已经明确填写的本币参考额。
+  Future<void> _selectCreditParent(String parentId) async {
+    final controller = VeriFinScope.of(context);
+    final code = _currencyCode ?? controller.activeBook.baseCurrencyCode;
+    final child = await _resolveParentChild(parentId, code);
+    if (!mounted || child == null) return;
+    setState(() {
+      _creditParentId = parentId;
+      _accountId = child.id;
+      _noAccount = false;
+      _accountTouched = true;
+      _currencyCode = code;
+      _accountAmountTouched = false;
+      _rememberRate = false;
+      _refreshCurrencyAmounts(
+        controller,
+        _availableAccounts(controller),
+        forceAccount: true,
+      );
+    });
+  }
+
+  /// 调整当前信用主体的实际入账账户；[accounts] 限定当前账本可见候选。
+  /// 次级选择器只列同一主体，可选择具体币种或点父账户恢复按交易币种自动匹配。
+  /// 手动选择仅改变账户及账户金额，不改变原交易币种，也不执行保存。
+  Future<void> _pickCreditPostingAccount(List<Account> accounts) async {
+    final account = _accountFor(accounts, _accountId);
+    final parentId = account?.creditAccountId;
+    if (_noAccount || _type == EntryType.transfer || parentId == null) return;
+    final controller = VeriFinScope.of(context);
+    final selected = await showAccountPickerSheet(
+      context: context,
+      title: AppLocalizations.of(context).entryPostingAccount,
+      accounts: accounts.where((a) => a.creditAccountId == parentId).toList(),
+      selectedId: _creditParentId == null
+          ? _accountId
+          : '$creditParentPickerPrefix$parentId',
+      balanceOf: controller.accountBalance,
+      includeCreditParents: true,
+      showCreditChildren: true,
+    );
+    if (!mounted || selected == null) return;
+    if (selected.id.startsWith(creditParentPickerPrefix)) {
+      await _selectCreditParent(parentId);
+      return;
+    }
+    // 已是手动模式且未换账户时，不用参考汇率覆盖用户填好的实际入账金额。
+    if (_creditParentId == null && selected.id == _accountId) return;
+    setState(() {
+      _creditParentId = null;
+      _accountId = selected.id;
+      _accountTouched = true;
+      _accountAmountTouched = false;
+      _rememberRate = false;
+      _refreshCurrencyAmounts(controller, accounts, forceAccount: true);
+    });
+  }
+
+  /// 查找 [parentId] 下币种为 [code] 的真实账户；存在时直接返回。
+  /// 缺少时先确认再创建；导入预览不创建账户，交由导入计划在最终确认时处理。
   Future<Account?> _resolveParentChild(String parentId, String code) async {
     final c = VeriFinScope.of(context);
     final existing = c
