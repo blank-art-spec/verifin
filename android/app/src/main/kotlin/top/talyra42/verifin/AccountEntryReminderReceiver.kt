@@ -13,6 +13,7 @@ import android.net.Uri
 import android.os.Build
 import android.util.Log
 import androidx.core.app.NotificationCompat
+import androidx.core.app.NotificationManagerCompat
 import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
@@ -25,9 +26,18 @@ import java.util.UUID
  * 每次触发按本地日历安排下次选定星期；冷启动、开机、升级和时区变化后可恢复。
  */
 class AccountEntryReminderReceiver : BroadcastReceiver() {
-    /** 收到闹钟或系统重排广播；过期至隔天的闹钟不补发，防止误认消费日期。 */
+    /**
+     * [context] 为广播执行环境，[intent] 区分正式提醒、一次性测试和系统重排。
+     * 测试从系统保存的 PendingIntent 读取文案，不依赖 Flutter 进程或正式提醒配置；
+     * 正式提醒过期至隔天时不补发，防止误认消费日期。
+     */
     override fun onReceive(context: Context, intent: Intent) {
         try {
+            if (intent.action == TEST_FIRE) {
+                val rule = JSONObject(intent.getStringExtra("testRule") ?: return)
+                show(context, rule, intent.getLongExtra("due", 0L), isTest = true)
+                return
+            }
             val rules = readRules(context)
             if (intent.action != FIRE) {
                 for (index in 0 until rules.length()) schedule(context, rules.getJSONObject(index))
@@ -49,8 +59,40 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
     companion object {
         const val ACTION = "top.talyra42.verifin.ACCOUNT_REMINDER_ACTION"
         private const val FIRE = "top.talyra42.verifin.ACCOUNT_REMINDER_FIRE"
+        private const val TEST_FIRE = "top.talyra42.verifin.ACCOUNT_REMINDER_TEST"
+        // 固定测试身份：连续测试只替换上一条测试，不覆盖任一账户的正式闹钟或通知。
+        private const val TEST_ID = "account_reminder_test"
+        private const val TEST_DELAY_MILLIS = 60_000L
         private const val STORE = "verifin_account_entry_reminders"
         private const val CHANNEL = "verifin_account_entry_reminder"
+
+        /**
+         * 安排一分钟后的一次性测试；[context] 提供系统服务，[title]、[body] 和
+         * [channelName] 为 Flutter 传入的本地化通知文案及渠道名。
+         * 返回是否使用精确闹钟；通知或渠道被禁用时抛错，不能向页面谎报成功。
+         * 文案随 PendingIntent 交给系统保存，进程被回收后仍可触发；重启不恢复测试。
+         */
+        fun scheduleTest(context: Context, title: String, body: String, channelName: String): Boolean {
+            val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
+            ensureChannel(manager, channelName)
+            check(NotificationManagerCompat.from(context).areNotificationsEnabled() &&
+                (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                    manager.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE)) {
+                "系统通知或账户提醒渠道已关闭"
+            }
+            val due = System.currentTimeMillis() + TEST_DELAY_MILLIS
+            val rule = JSONObject().put("id", TEST_ID).put("title", title)
+                .put("body", body).put("channelName", channelName)
+            val pending = PendingIntent.getBroadcast(context, 0,
+                Intent(context, AccountEntryReminderReceiver::class.java).apply {
+                    action = TEST_FIRE
+                    data = Uri.parse("verifin://account-reminder/test/alarm")
+                    putExtra("testRule", rule.toString())
+                    putExtra("due", due)
+                }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
+            manager.cancel(TEST_ID, 0)
+            return scheduleAlarm(context, due, pending)
+        }
 
         /** 读取私有原生配置；内容损坏时交给同步入口报告，不猜测预设交易。 */
         private fun readRules(context: Context): JSONArray = JSONArray(
@@ -92,7 +134,10 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
                     putExtra("due", due)
                 }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
-        /** 从现在起寻找下一次选定星期；Calendar 按日历递增，避免夏令时的 23/25 小时偏移。 */
+        /**
+         * 为 [rule] 的选定星期及本地时刻寻找下一次提醒，用 [context] 交给系统排程。
+         * Calendar 按日历递增，避免夏令时的 23/25 小时偏移；跳过当天已处理的提醒。
+         */
         private fun schedule(context: Context, rule: JSONObject) {
             val now = System.currentTimeMillis()
             val days = rule.getJSONArray("weekdays")
@@ -107,45 +152,71 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
                 val weekday = (candidate.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
                 if (weekday !in selected || candidate.timeInMillis <= now ||
                     rule.optString("handledDate") == dateKey(candidate.timeInMillis)) continue
-                val alarm = requireNotNull(context.getSystemService(AlarmManager::class.java))
                 val pending = alarmIntent(context, rule, candidate.timeInMillis)
-                if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarm.canScheduleExactAlarms()) {
-                    try {
-                        alarm.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, candidate.timeInMillis, pending)
-                    } catch (_: SecurityException) {
-                        // 用户可能在检查后撤销精确闹钟权限；改为系统允许的非精确排程。
-                        alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, candidate.timeInMillis, pending)
-                    }
-                } else {
-                    alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, candidate.timeInMillis, pending)
-                }
+                scheduleAlarm(context, candidate.timeInMillis, pending)
                 return
             }
         }
 
-        /** 展示带两个自定义按钮的实色系统通知；按钮打开应用，由应用锁之后的 Dart 处理。 */
-        private fun show(context: Context, rule: JSONObject, due: Long) {
+        /**
+         * 正式提醒与测试共用排程：[context] 提供 AlarmManager，[due] 为触发时间戳，
+         * [pending] 为系统届时发送的广播。优先精确闹钟；权限不足或检查后撤销时降级。
+         * 返回 true 表示精确，false 表示非精确；不吞掉实际排程失败。
+         */
+        private fun scheduleAlarm(context: Context, due: Long, pending: PendingIntent): Boolean {
+            val alarm = requireNotNull(context.getSystemService(AlarmManager::class.java))
+            if (Build.VERSION.SDK_INT < Build.VERSION_CODES.S || alarm.canScheduleExactAlarms()) {
+                try {
+                    alarm.setExactAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, due, pending)
+                    return true
+                } catch (_: SecurityException) {
+                    // 权限可能刚被用户撤销；仅此情况允许改用系统准许的非精确闹钟。
+                }
+            }
+            alarm.setAndAllowWhileIdle(AlarmManager.RTC_WAKEUP, due, pending)
+            return false
+        }
+
+        /** 创建共用渠道；[manager] 是系统通知服务，[name] 是当前 app 语言下的渠道名。 */
+        private fun ensureChannel(manager: NotificationManager, name: String) {
+            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
+                manager.createNotificationChannel(NotificationChannel(CHANNEL, name,
+                    NotificationManager.IMPORTANCE_DEFAULT))
+            }
+        }
+
+        /**
+         * 通过 [context] 展示 [rule] 的标题/正文，[due] 标记计划时间。
+         * 正式提醒保留两个自定义动作；[isTest] 为 true 时只允许打开应用，
+         * 不生成确认/取消操作，避免测试消耗正式提醒的当天次数或误写真实账目。
+         */
+        private fun show(context: Context, rule: JSONObject, due: Long, isTest: Boolean = false) {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
                 ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
             val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
-            if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O) {
-                manager.createNotificationChannel(NotificationChannel(CHANNEL,
-                    rule.optString("channelName", context.getString(R.string.account_entry_reminder_channel)),
-                    NotificationManager.IMPORTANCE_DEFAULT))
-            }
+            ensureChannel(manager, rule.optString("channelName", context.getString(R.string.account_entry_reminder_channel)))
             val notification = NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(rule.getString("title"))
                 .setContentText(rule.getString("body"))
                 .setStyle(NotificationCompat.BigTextStyle().bigText(rule.getString("body")))
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
-                .setAutoCancel(false)
+                .setAutoCancel(isTest)
                 .setWhen(due)
-                .setContentIntent(actionIntent(context, rule, due, "open"))
-                .addAction(0, rule.getString("confirmLabel"), actionIntent(context, rule, due, "confirm"))
-                .addAction(0, rule.getString("cancelLabel"), actionIntent(context, rule, due, "cancel"))
-                .build()
-            manager.notify(rule.getString("id"), 0, notification)
+            if (isTest) {
+                // 测试点击仅普通启动 MainActivity，不携带正式提醒 ACTION、令牌或交易参数。
+                notification.setContentIntent(PendingIntent.getActivity(context, 0,
+                    Intent(context, MainActivity::class.java).apply {
+                        action = Intent.ACTION_MAIN
+                        data = Uri.parse("verifin://account-reminder/test/open")
+                        flags = Intent.FLAG_ACTIVITY_SINGLE_TOP or Intent.FLAG_ACTIVITY_CLEAR_TOP
+                    }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE))
+            } else {
+                notification.setContentIntent(actionIntent(context, rule, due, "open"))
+                    .addAction(0, rule.getString("confirmLabel"), actionIntent(context, rule, due, "confirm"))
+                    .addAction(0, rule.getString("cancelLabel"), actionIntent(context, rule, due, "cancel"))
+            }
+            manager.notify(rule.getString("id"), 0, notification.build())
         }
 
         /** 生成不可变操作 PendingIntent；私有随机令牌阻止其他应用伪造导出 Activity 操作。 */

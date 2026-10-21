@@ -85,6 +85,34 @@ class AppLocalizationsEn extends AppLocalizations {
       'The account reminder action failed and was retained. Reopen the app to try again.';
 
   @override
+  String get accountEntryReminderTestButton => 'Test reminder in 1 minute';
+
+  @override
+  String get accountEntryReminderTestHint =>
+      'No need to save or enable the reminder. After tapping, go Home, dismiss the app from Recents, or lock the screen and wait. Testing records no entries and does not affect regular reminders. Force stop in system settings blocks reminders.';
+
+  @override
+  String accountEntryReminderTestTitle(String name) {
+    return '$name · Test reminder';
+  }
+
+  @override
+  String get accountEntryReminderTestBody =>
+      'This is an account entry reminder test. No entry will be recorded. Receiving this notification means the system triggered the reminder.';
+
+  @override
+  String get accountEntryReminderTestScheduled =>
+      'Reminder scheduled for 1 minute from now. Go Home or lock the screen to test.';
+
+  @override
+  String get accountEntryReminderTestInexact =>
+      'Test scheduled. Exact alarm permission is unavailable, so the system may delay delivery.';
+
+  @override
+  String get accountEntryReminderTestFailed =>
+      'Could not schedule the test. Check system notification permission and the Account entry reminder notification category, then retry.';
+
+  @override
   String accountEntryReminderNotification(
     String book,
     String account,

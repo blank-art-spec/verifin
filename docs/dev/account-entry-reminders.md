@@ -21,8 +21,37 @@
 
 交易保存复用 Controller 的交易草稿串行队列和 SQLite 原子聚合入口。交易 id 固定为账户＋日期；即使 SQLite 保存后进程退出或辅助 KV 写入失败，重试也不会新增第二笔。取消必须等 KV 标记保存成功；不会以“取消交易”伪造一条零额账目。
 
-## 后续手动验收（本次未执行）
+## 一分钟测试按钮
 
-用户限定本次仅代码修改与静态检查，不运行测试、编译或真机操作。回归用例见 `test/account_entry_reminder_test.dart`，覆盖跨账本、重复点击、冷启动、取消、旧通知、删除和初始化；需要后续手动运行。
+入口：**资产 → 饭堂等对应账户 → 账户记账提醒 →「1 分钟后测试提醒」**。无需先保存草稿、填写金额或启用正式提醒。测试标题优先使用草稿提醒名，留空则使用账户名，并标记「测试提醒」。
+
+按钮先申请通知权限，再由 `AppAccountReminderBridge.scheduleTest` 调用原生 `scheduleAccountEntryReminderTest`。测试与正式提醒共用 `scheduleAlarm`、Receiver 和 `verifin_account_entry_reminder` 通知渠道，使用系统 `PendingIntent` 安排约一分钟后的一次性通知，没有 Dart 定时器或常驻服务。原生确认应用通知及该渠道可用后才返回排程结果；无精确权限时返回非精确结果，页面提示可能延迟，不承诺一分钟准时送达。
+
+测试使用独立且固定的闹钟与通知身份，重复测试只替换上一条，不改正式提醒时刻、配置或当天处理标记，也不进入原生记账操作队列。测试正文明确「不会记账」，点通知仅打开应用，不提供真实确认/取消记账动作。测试文案由系统保存，可跨普通进程回收；手机重启不恢复这条临时测试，正式周期提醒仍按现有配置恢复。
+
+## 手动验证应用没有运行时的提醒
+
+先由用户手动编译并安装新版到隔离的 diagnostic 应用；此任务不自动编译、运行测试或操作手机。首次测试允许通知权限，并检查系统「账户记账提醒」通知类别已打开。使用与发布一致的 `UNIFIED_DESIGN_PREVIEW=true`。当前已有公开截图未包含本页，无需替换。
+
+1. **返回桌面/锁屏**：点测试按钮，看到安排成功提示后按 Home 或锁屏，等待约一分钟，在通知栏确认出现带「测试提醒」的通知。非精确排程按系统允许的窗口观察，不能以一分钟未响直接判失败。
+2. **划掉最近任务**：重新安排测试，从最近任务划掉应用并等待。有些厂商会附加自启动/后台限制，此步骤不能单独证明进程已退出；未收到时检查系统通知、精确闹钟及厂商后台设置。
+3. **明确验证进程已退出**：重新点测试后按 Home，连接已授权 USB 调试的手机，在到点前手动执行下面命令。替换 `<设备序列号>`；默认目标为独立 diagnostic 应用，正式 GitHub/Play 应用包名为 `top.talyra42.verifin`。只结束目标后台进程，不清数据。
+
+   ```powershell
+   adb -s <设备序列号> shell am kill top.talyra42.verifin.graphicsdiagnostic
+   adb -s <设备序列号> shell pidof top.talyra42.verifin.graphicsdiagnostic
+   ```
+
+   `pidof` 无输出才表示此刻没有应用进程；若仍有 PID，本次尚未构成进程退出测试。保持不重新打开应用，等待通知。到点后 Android 为 Receiver 新建进程属于正常行为，说明提醒由系统唤起，无需 Flutter 常驻。
+4. **不要用「强行停止」代替上述步骤**：系统设置的「强行停止」以及 `am force-stop` 会让包进入停止状态，Android 会阻止应用继续按普通方式唤起；Android 15 还会撤销全部 PendingIntent。需要用户重新打开应用后恢复正式排程，再重新点测试按钮。这种情况不能承诺继续提醒。
+5. **验证真实饭堂确认动作**：测试通知只验证送达。另在隔离应用配置饭堂账户的金额、分类、当天重复星期，将正式提醒设为未来 2–3 分钟并保存；退出进程后等待正式通知。取消/不处理不记账，确认（启用应用锁时先解锁）仅记一笔，重复点击不再新增。切换账本后仍应记回原账户，不能拿测试通知验证这一步。
+
+锁屏一分钟通常不足以进入深度 Doze。更深的休眠验收按 Android 官方 [Doze 测试步骤](https://developer.android.com/training/monitoring-device-state/doze-standby#testing_doze)单独进行并恢复测试设备状态；休眠下短时间反复测试可能受系统闹钟限频影响。
+
+依据：[系统闹钟可跨应用进程生命周期运行](https://developer.android.com/develop/background-work/services/alarms)、[`am kill` 仅终止可安全结束的进程](https://developer.android.com/tools/adb#am)、[Android 15 的停止状态及 PendingIntent 规则](https://developer.android.com/about/versions/15/behavior-changes-all#stopped-state)。
+
+## 后续回归验收
+
+回归用例见 `test/account_entry_reminder_test.dart`（跨账本、重复点击、冷启动、取消、旧通知、删除和初始化）与 `test/account_entry_reminder_page_test.dart`（未启用时仍可测试、拒绝权限不排程/不写账、精确/非精确结果及平台失败）；由用户手动运行。
 
 正式验证还需 CI release APK 真机检查：全部账户类型入口、通知权限拒绝/撤销、精确权限降级、工作日/周末、两个自定义按钮、正文确认框、应用锁、后台与进程被杀、重启/升级、切账本、跨日旧通知、取消后下一周期、缺率后重试/取消、配置及实体删除后的旧通知、R8。窄屏和大字号下检查星期选择与长按钮文字完整可读。现有公开截图没有覆盖新配置页，本次未更换截图。

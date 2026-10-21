@@ -21,6 +21,13 @@
   "accountEntryReminderMissingRate": "No base currency rate is available for the reminder date. Add the rate and try again; no entry has been recorded.",
   "accountEntryReminderScheduleFailed": "The account reminder was saved, but scheduling failed. Reopen the app to try again.",
   "accountEntryReminderActionFailed": "The account reminder action failed and was retained. Reopen the app to try again.",
+  "accountEntryReminderTestButton": "Test reminder in 1 minute",
+  "accountEntryReminderTestHint": "No need to save or enable the reminder. After tapping, go Home, dismiss the app from Recents, or lock the screen and wait. Testing records no entries and does not affect regular reminders. Force stop in system settings blocks reminders.",
+  "accountEntryReminderTestTitle": "{name} · Test reminder",
+  "accountEntryReminderTestBody": "This is an account entry reminder test. No entry will be recorded. Receiving this notification means the system triggered the reminder.",
+  "accountEntryReminderTestScheduled": "Reminder scheduled for 1 minute from now. Go Home or lock the screen to test.",
+  "accountEntryReminderTestInexact": "Test scheduled. Exact alarm permission is unavailable, so the system may delay delivery.",
+  "accountEntryReminderTestFailed": "Could not schedule the test. Check system notification permission and the Account entry reminder notification category, then retry.",
   "accountEntryReminderNotification": "{book} · {account}\nRecord an {type} entry of {amount}?",
   "@accountEntryReminderNotification": {
     "description": "Confirmation notification tied to an account and its ledger",

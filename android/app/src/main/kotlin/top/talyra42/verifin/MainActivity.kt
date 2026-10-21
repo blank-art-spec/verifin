@@ -54,14 +54,24 @@ class MainActivity : FlutterFragmentActivity() {
         super.onCreate(savedInstanceState)
     }
 
+    /**
+     * 为 [flutterEngine] 注册本应用的单一平台通道，按方法名转发到各领域原生桥。
+     * 账户提醒测试也从这里分发，复用正式提醒 Receiver，不另建通道或常驻服务。
+     */
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_NAME)
         channel?.setMethodCallHandler { call, result ->
             when (call.method) {
-                "syncAccountEntryReminders", "consumeAccountReminderAction", "acknowledgeAccountReminderAction" -> {
+                "syncAccountEntryReminders", "consumeAccountReminderAction", "acknowledgeAccountReminderAction", "scheduleAccountEntryReminderTest" -> {
                     try {
                         when (call.method) {
+                            // 只安排测试通知；不写正式提醒配置，也不进入记账操作队列。
+                            "scheduleAccountEntryReminderTest" -> result.success(
+                                AccountEntryReminderReceiver.scheduleTest(this,
+                                    requireNotNull(call.argument<String>("title")),
+                                    requireNotNull(call.argument<String>("body")),
+                                    requireNotNull(call.argument<String>("channelName"))))
                             "syncAccountEntryReminders" -> {
                                 AccountEntryReminderReceiver.sync(this,
                                     JSONArray(call.argument<List<Map<String, Any?>>>("reminders") ?: emptyList<Map<String, Any?>>()))

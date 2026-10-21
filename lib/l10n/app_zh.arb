@@ -21,6 +21,17 @@
   "accountEntryReminderMissingRate": "缺少提醒日期的本位币汇率，尚未记账。请补充汇率后重试。",
   "accountEntryReminderScheduleFailed": "账户提醒已保存，但系统排程失败。请重新打开应用重试。",
   "accountEntryReminderActionFailed": "账户提醒操作处理失败，操作已保留，请重新打开应用重试。",
+  "accountEntryReminderTestButton": "1 分钟后测试提醒",
+  "accountEntryReminderTestHint": "无需保存或启用提醒。点击后可返回桌面、划掉最近任务或锁屏等待；测试不会记账，也不影响正式提醒。系统设置中的「强行停止」会阻止提醒。",
+  "accountEntryReminderTestTitle": "{name} · 测试提醒",
+  "@accountEntryReminderTestTitle": {
+    "description": "一次性账户提醒测试的标题；name 为草稿提醒名，留空时使用账户名。",
+    "placeholders": {"name": {"type": "String"}}
+  },
+  "accountEntryReminderTestBody": "这是一条账户记账提醒测试通知，不会记账。收到此通知表示系统已触发提醒。",
+  "accountEntryReminderTestScheduled": "已安排 1 分钟后提醒，现在可返回桌面或锁屏测试。",
+  "accountEntryReminderTestInexact": "已安排测试提醒，未获精确闹钟权限，系统可能延迟发送。",
+  "accountEntryReminderTestFailed": "测试提醒安排失败，请检查系统通知权限及「账户记账提醒」通知类别后重试。",
   "accountEntryReminderNotification": "{book} · {account}\n是否记录一笔{type} {amount}？",
   "@accountEntryReminderNotification": {
     "description": "固定到账户及其所属账本的交易确认通知",

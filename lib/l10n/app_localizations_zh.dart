@@ -78,6 +78,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountEntryReminderActionFailed => '账户提醒操作处理失败，操作已保留，请重新打开应用重试。';
 
   @override
+  String get accountEntryReminderTestButton => '1 分钟后测试提醒';
+
+  @override
+  String get accountEntryReminderTestHint =>
+      '无需保存或启用提醒。点击后可返回桌面、划掉最近任务或锁屏等待；测试不会记账，也不影响正式提醒。系统设置中的「强行停止」会阻止提醒。';
+
+  @override
+  String accountEntryReminderTestTitle(String name) {
+    return '$name · 测试提醒';
+  }
+
+  @override
+  String get accountEntryReminderTestBody =>
+      '这是一条账户记账提醒测试通知，不会记账。收到此通知表示系统已触发提醒。';
+
+  @override
+  String get accountEntryReminderTestScheduled => '已安排 1 分钟后提醒，现在可返回桌面或锁屏测试。';
+
+  @override
+  String get accountEntryReminderTestInexact => '已安排测试提醒，未获精确闹钟权限，系统可能延迟发送。';
+
+  @override
+  String get accountEntryReminderTestFailed =>
+      '测试提醒安排失败，请检查系统通知权限及「账户记账提醒」通知类别后重试。';
+
+  @override
   String accountEntryReminderNotification(
     String book,
     String account,

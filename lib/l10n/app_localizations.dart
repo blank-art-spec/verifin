@@ -230,6 +230,48 @@ abstract class AppLocalizations {
   /// **'账户提醒操作处理失败，操作已保留，请重新打开应用重试。'**
   String get accountEntryReminderActionFailed;
 
+  /// No description provided for @accountEntryReminderTestButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'1 分钟后测试提醒'**
+  String get accountEntryReminderTestButton;
+
+  /// No description provided for @accountEntryReminderTestHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'无需保存或启用提醒。点击后可返回桌面、划掉最近任务或锁屏等待；测试不会记账，也不影响正式提醒。系统设置中的「强行停止」会阻止提醒。'**
+  String get accountEntryReminderTestHint;
+
+  /// 一次性账户提醒测试的标题；name 为草稿提醒名，留空时使用账户名。
+  ///
+  /// In zh, this message translates to:
+  /// **'{name} · 测试提醒'**
+  String accountEntryReminderTestTitle(String name);
+
+  /// No description provided for @accountEntryReminderTestBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是一条账户记账提醒测试通知，不会记账。收到此通知表示系统已触发提醒。'**
+  String get accountEntryReminderTestBody;
+
+  /// No description provided for @accountEntryReminderTestScheduled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安排 1 分钟后提醒，现在可返回桌面或锁屏测试。'**
+  String get accountEntryReminderTestScheduled;
+
+  /// No description provided for @accountEntryReminderTestInexact.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安排测试提醒，未获精确闹钟权限，系统可能延迟发送。'**
+  String get accountEntryReminderTestInexact;
+
+  /// No description provided for @accountEntryReminderTestFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试提醒安排失败，请检查系统通知权限及「账户记账提醒」通知类别后重试。'**
+  String get accountEntryReminderTestFailed;
+
   /// 固定到账户及其所属账本的交易确认通知
   ///
   /// In zh, this message translates to:

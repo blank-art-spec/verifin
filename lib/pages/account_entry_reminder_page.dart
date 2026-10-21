@@ -1,10 +1,13 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
 
 import '../app/common_widgets.dart';
 import '../app/currency_math.dart';
+import '../app/feedback.dart';
 import '../app/models.dart';
+import '../app/platform_bridge.dart';
 import '../app/reminder/account_entry_reminder.dart';
 import '../app/reminder/notification_scheduler.dart';
 import '../app/veri_fin_scope.dart';
@@ -29,6 +32,7 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
   late AccountEntryReminder _draft;
   String? _error;
   bool _saving = false;
+  bool _testing = false;
 
   /// 首次进入读取本机配置；依赖变化不覆盖用户正在编辑的草稿。
   @override
@@ -120,9 +124,10 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
   }
 
   /// 保存时先校验必填项；首次启用才申请通知权限，拒绝时保留草稿且不宣称保存成功。
+  /// 保存或测试仍在等待系统结果时拒绝再次提交，避免两个权限/排程流程互相干扰。
   /// 平台排程由根组件监听已落盘的配置后执行，异常显示根级轻提示。
   Future<bool> _save() async {
-    if (_saving) return false;
+    if (_saving || _testing) return false;
     final controller = VeriFinScope.of(context);
     final l10n = AppLocalizations.of(context);
     if (_draft.weekdays.isEmpty ||
@@ -169,7 +174,67 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
     }
   }
 
+  /// 用户点按钮后申请通知权限，再交给 Android 安排一分钟后的测试通知。
+  /// 仅用当前草稿名称标识测试对象，不保存草稿、不启用正式提醒，也不写入交易。
+  /// 等待期间禁用按钮防止重复提交；原生返回非精确排程时明确提示可能延迟。
+  Future<void> _scheduleTest() async {
+    if (_testing || _saving) return;
+    final controller = VeriFinScope.of(context);
+    final feedback = VeriFeedbackHost.of(context);
+    final l10n = AppLocalizations.of(context);
+    final name = _draft.name.trim();
+    setState(() => _testing = true);
+    try {
+      final granted = await NotificationScheduler().requestPermission();
+      if (!mounted) return;
+      if (!granted) {
+        unawaited(
+          feedback.showMessage(
+            message: l10n.reminderPermissionDenied,
+            tone: VeriFeedbackTone.warning,
+            duration: VeriFeedbackDuration.long,
+          ),
+        );
+        return;
+      }
+      final exact = await AppAccountReminderBridge.scheduleTest(
+        title: l10n.accountEntryReminderTestTitle(
+          name.isEmpty ? widget.account.name : name,
+        ),
+        body: l10n.accountEntryReminderTestBody,
+        channelName: l10n.accountEntryReminderTitle,
+      );
+      if (!mounted) return;
+      unawaited(
+        feedback.showMessage(
+          message: exact
+              ? l10n.accountEntryReminderTestScheduled
+              : l10n.accountEntryReminderTestInexact,
+          tone: exact ? VeriFeedbackTone.success : VeriFeedbackTone.warning,
+          duration: VeriFeedbackDuration.long,
+        ),
+      );
+    } catch (error) {
+      // 只记录阶段和异常类型，避免平台异常包含账户名等测试通知内容。
+      controller.logger?.error(
+        '账户提醒测试排程失败：${error.runtimeType}',
+        source: 'AccountEntryReminder',
+      );
+      if (!mounted) return;
+      unawaited(
+        feedback.showMessage(
+          message: l10n.accountEntryReminderTestFailed,
+          tone: VeriFeedbackTone.error,
+          duration: VeriFeedbackDuration.long,
+        ),
+      );
+    } finally {
+      if (mounted) setState(() => _testing = false);
+    }
+  }
+
   /// 使用统一实色页面、设置行和单选组件展示草稿；确认方式区分按钮文字与固定动作。
+  /// 测试按钮独立于启用状态与草稿保存，只验证系统通知，并说明强行停止的边界。
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -202,7 +267,9 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
                   showBack: true,
                   actions: [
                     SaveHeaderAction(
-                      onPressed: _isDirty && !_saving ? _saveAndExit : null,
+                      onPressed: _isDirty && !_saving && !_testing
+                          ? _saveAndExit
+                          : null,
                     ),
                   ],
                 ),
@@ -340,6 +407,17 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
                       Text(l10n.accountEntryReminderButtonHint),
                     ],
                   ),
+                ),
+                const SizedBox(height: 12),
+                OutlinedButton.icon(
+                  key: const Key('account_entry_reminder_test'),
+                  onPressed: _testing || _saving ? null : _scheduleTest,
+                  icon: const Icon(Icons.notifications_outlined, size: 18),
+                  label: Text(l10n.accountEntryReminderTestButton),
+                ),
+                Text(
+                  l10n.accountEntryReminderTestHint,
+                  style: Theme.of(context).textTheme.bodySmall,
                 ),
                 if (_error != null)
                   Padding(
