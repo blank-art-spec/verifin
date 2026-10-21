@@ -86,10 +86,14 @@ class AccountEntryReminder {
               date.weekday <= DateTime.friday),
   };
 
-  /// [date] 所在年份是否缺少本模式需要的日历；用于前台主动说明暂停或降级。
-  bool hasMissingCalendar(DateTime date) =>
+  /// [date] 所在年份是否缺少本模式需要的日历；[calendar] 须传 Controller 合并后的
+  /// 有效缓存，用于前台说明暂停或降级，不能只检查内置兜底年份。
+  bool hasMissingCalendar(
+    DateTime date, {
+    ChinaWorkdayCalendar calendar = mainlandChinaWorkdayCalendar,
+  }) =>
       repeatMode == AccountReminderRepeatMode.chinaWorkdays &&
-      !mainlandChinaWorkdayCalendar.years.containsKey(date.year);
+      !calendar.years.containsKey(date.year);
 
   /// 复制草稿；未提供的字段保持原值，星期列表转成不可变集合以免被页面原地修改。
   /// 切换 [repeatMode] 不清空星期；[missingCalendarPolicy] 保留用户的明确选择。

@@ -10,7 +10,7 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 | 领域 | 源码与维护文档 |
 | --- | --- |
 | 根初始化、生命周期 | `lib/main.dart`；备份、周期补记、提醒、小组件与应用锁挂钩 |
-| Controller | `veri_fin_controller.dart`、`veri_fin_controller_state.dart`、`veri_fin_controller_ops.dart` |
+| Controller | 核心 `veri_fin_controller.dart` / `state` / `ops`；领域 part：`veri_fin_controller_account_reminders.dart`、`veri_fin_controller_workday_calendar.dart`、`veri_fin_controller_credit_hierarchy.dart`；生产 `create` 异步载入本地状态，日历客户端可注入测试 |
 | 父子账户与汇率 | Controller part `veri_fin_controller_credit_hierarchy.dart`；纯归并 `credit_hierarchy.dart`、只读统计 `statistics_currency.dart`、联网 `frankfurter_client.dart`；[当前金额及统一还款口径](credit-hierarchy-currency.md) |
 | SQLite 与持久化 | `lib/data/`；[技术决策](tech-decisions.md)、repository contract 与 migration matrix 测试 |
 | 模型 | `lib/app/models/`，`models.dart` 稳定导出；信用主体在 `credit_account.dart`，具体币种子账户仍是 `Account`；JSON/SQLite 映射须同步 |
@@ -22,6 +22,7 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 | AI | `lib/app/ai/`；[只读查询工具](ai-tools.md)、[主动采集](auto-capture-plan.md) |
 | Android 系统能力 | `platform_bridge*.dart`、`android/`；单一 MethodChannel 分发，真实权限与冷启动验收 |
 | 账户记账提醒 | `reminder/account_entry_reminder.dart`、`reminder/china_workday_calendar.dart`、`veri_fin_controller_account_reminders.dart`、`account_entry_reminder_page.dart`、原生 `AccountEntryReminderReceiver` / `AccountReminderSchedule`；全部账本投影、自定义星期或大陆工作日（含调休）、用户确认才落账；[设计与验收](account-entry-reminders.md) |
+| 工作日日历联网更新 | `reminder/workday_calendar_client.dart` / `workday_calendar_sync.dart`、`veri_fin_controller_workday_calendar.dart`、`workday_calendar_page.dart`；默认关闭，只请求公共年份文件，校验后落设备 KV，独立通知源驱动原生提醒重排；网络不占账目写队列 |
 | 自动采集 | `models/auto_capture.dart`、`auto_capture/capture_parser.dart`、`platform_bridge_auto_capture.dart`、原生 `AutoCaptureBridge` / `PaymentNotificationListenerService` / `SmsCaptureReceiver`；原始事件先落 SQLite，再解析、去重和置信度分流 |
 | 异常治理 | `attention_center.dart` 纯投影 + `attention_center_page.dart`；从交易对账状态、自动采集、退款关系、还款分配与缺失汇率实时汇总，不另建异常状态表 |
 | 交易审计 | `entry_audit.dart` 比较提交前后字段；`LedgerEntry.auditHistory` 经 SQLite v23 `entries.audit_history` 保存并纳入备份 v8，交易详情只读展示；旧交易不补造历史 |

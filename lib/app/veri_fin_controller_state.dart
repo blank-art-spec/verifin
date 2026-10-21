@@ -12,6 +12,7 @@ mixin _ControllerState on ChangeNotifier {
   LedgerRepository get _repository;
   AppLogger? get _logger;
   bool get _systemIsEnglish;
+  HolidayCalendarClient get _workdayCalendarClient;
 
   /// SQLite 落库失败时回调（由 UI 层挂钩弹出「保存失败」提示）。
   void Function(Object error)? onPersistError;
@@ -164,6 +165,31 @@ mixin _ControllerState on ChangeNotifier {
   WebdavConfig _webdavConfig = const WebdavConfig();
   ReminderSettings _reminderSettings = ReminderSettings.disabled;
 
+  /// 全设备共用的联网日历与缓存；独立通知源只刷新日历设置页和提醒排程。
+  final ValueNotifier<WorkdayCalendarSettings> workdayCalendarListenable =
+      ValueNotifier<WorkdayCalendarSettings>(const WorkdayCalendarSettings());
+  int _workdayCalendarGeneration = 0;
+  int _workdayCalendarResetGeneration = 0;
+  // 关闭请求一入队就拦截后续网络，不必等待其他账目或 KV 写入完成。
+  int _workdayCalendarPendingRevokes = 0;
+  bool _workdayCalendarBusy = false;
+
+  /// 当前有效离线日历，合并内置年度与已完整校验、成功落盘的下载年度。
+  ChinaWorkdayCalendar get workdayCalendar =>
+      workdayCalendarListenable.value.calendar;
+
+  /// 冷启动只读设备缓存，不触发联网；损坏时关闭联网并保留内置日历。
+  void _loadWorkdayCalendarSettings() {
+    try {
+      workdayCalendarListenable.value = WorkdayCalendarSettings.decode(
+        _store.read(_workdayCalendarKey),
+      );
+    } catch (error) {
+      // 受损授权不能继续联网；这是安全降级，工具页会显示关闭状态和内置年份。
+      _logger?.warning('工作日日历配置或缓存损坏，已停用联网并保留内置日历', source: 'workday-calendar');
+    }
+  }
+
   /// 账户提醒使用独立通知源，编辑配置不触发整个账目树重建。
   final ValueNotifier<List<AccountEntryReminder>>
   accountEntryRemindersListenable = ValueNotifier<List<AccountEntryReminder>>(
@@ -302,6 +328,7 @@ mixin _ControllerState on ChangeNotifier {
     _backupPassphrase = _store.read(_backupPassphraseKey) ?? '';
     _webdavConfig = WebdavConfig.decode(_store.read(_webdavKey));
     _reminderSettings = ReminderSettings.decode(_store.read(_reminderKey));
+    _loadWorkdayCalendarSettings();
     try {
       final raw = _store.read(_accountEntryReminderKey);
       if (raw != null) {

@@ -1,4 +1,5 @@
 import 'dart:async';
+import 'dart:convert';
 
 import 'package:flutter/foundation.dart';
 import 'package:flutter/material.dart';
@@ -13,6 +14,7 @@ import 'app/models.dart';
 import 'app/platform_bridge.dart';
 import 'app/reminder/notification_scheduler.dart';
 import 'app/reminder/account_entry_reminder.dart';
+import 'app/reminder/workday_calendar_sync.dart';
 import 'app/reminder/reminder_settings.dart';
 import 'app/veri_fin_controller.dart';
 import 'app/veri_fin_scope.dart';
@@ -189,6 +191,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   bool _notificationSyncQueued = false;
   // 同一次应用会话内按年份、缺失策略和语言去重，不在每次通知同步时反复弹提示。
   String? _accountCalendarWarningKey;
+  String _workdayCalendarSnapshot = '';
   bool _autoCaptureDraining = false;
   bool _autoCaptureDrainQueued = false;
 
@@ -211,6 +214,11 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     _controller.accountEntryRemindersListenable.addListener(
       _handleAccountRemindersChanged,
     );
+    _workdayCalendarSnapshot = jsonEncode(_controller.workdayCalendar.toJson());
+    _controller.workdayCalendarListenable.addListener(
+      _handleWorkdayCalendarChanged,
+    );
+    unawaited(_refreshWorkdayCalendar());
     unawaited(_syncNotifications());
     BackupCoordinator.maybeBackupOnOpen(_controller);
     // 自动采集原生层只保存原文；Flutter 启动/回前台后先同步开关，再把队列写入
@@ -241,6 +249,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     _billingDateTimer = Timer(midnight.difference(now), () {
       if (!mounted) return;
       _controller.refreshCreditBillingDate();
+      unawaited(_refreshWorkdayCalendar());
       unawaited(_syncNotifications());
       _scheduleBillingDateRefresh();
     });
@@ -286,6 +295,36 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   /// 账户提醒独立偏好变化时重排全部账本；不会随当前浏览账本缩小通知范围。
   void _handleAccountRemindersChanged() {
     unawaited(_syncNotifications());
+  }
+
+  /// 只在有效离线日期变化时重排提醒；开关、加载进度和检查时间变化不重复操作闹钟。
+  void _handleWorkdayCalendarChanged() {
+    final snapshot = jsonEncode(_controller.workdayCalendar.toJson());
+    if (snapshot == _workdayCalendarSnapshot) return;
+    _workdayCalendarSnapshot = snapshot;
+    unawaited(_syncNotifications());
+  }
+
+  /// 启动、回前台和前台跨日时尝试受每日节流约束的日历检查；关闭开关时不会联网。
+  /// 后台没有常驻下载服务，失败保留已有缓存并给前台用户明确反馈。
+  Future<void> _refreshWorkdayCalendar() async {
+    final result = await _controller.syncWorkdayCalendar();
+    if (!mounted) return;
+    final l10n = l10nForPreference(_controller.localePreference);
+    _warnMissingAccountReminderCalendars(l10n);
+    if (result == WorkdayCalendarSyncResult.failed ||
+        result == WorkdayCalendarSyncResult.partial) {
+      unawaited(
+        _feedbackController.showMessage(
+          message: result == WorkdayCalendarSyncResult.partial
+              ? l10n.workdayCalendarPartial
+              : l10n.workdayCalendarFailed,
+          tone: VeriFeedbackTone.warning,
+          duration: VeriFeedbackDuration.long,
+          dedupeKey: 'workday-calendar-auto-check',
+        ),
+      );
+    }
   }
 
   /// 把每日提醒、账单日期提醒和预算跨档通知同步到系统。
@@ -345,9 +384,13 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   /// 按当前年度检查所有已启用的工作日提醒；[l10n] 提供暂停/降级的本地化说明。
   /// 启动、回前台和前台跨年都检查；状态变化后重新提示，不把未知日历当作排程成功。
   void _warnMissingAccountReminderCalendars(AppLocalizations l10n) {
+    // 先等待本轮前台检查，避免元旦首次打开时刚提示“暂停”又立即下载到可用日历。
+    if (_controller.workdayCalendarListenable.value.updating) return;
     final now = DateTime.now();
     final affected = _controller.accountEntryRemindersListenable.value.where(
-      (rule) => rule.enabled && rule.hasMissingCalendar(now),
+      (rule) =>
+          rule.enabled &&
+          rule.hasMissingCalendar(now, calendar: _controller.workdayCalendar),
     );
     final paused = affected.any(
       (rule) =>
@@ -421,6 +464,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   @override
   void didChangeAppLifecycleState(AppLifecycleState state) {
     if (state == AppLifecycleState.resumed) {
+      unawaited(_refreshWorkdayCalendar());
       unawaited(_controller.syncExchangeRates(force: false));
       _controller.refreshCreditBillingDate();
       _scheduleBillingDateRefresh();
@@ -449,6 +493,9 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
 
   @override
   void dispose() {
+    _controller.workdayCalendarListenable.removeListener(
+      _handleWorkdayCalendarChanged,
+    );
     _controller.accountEntryRemindersListenable.removeListener(
       _handleAccountRemindersChanged,
     );

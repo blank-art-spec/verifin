@@ -40,11 +40,14 @@ import 'recurring.dart';
 import 'reminder/reminder_settings.dart';
 import 'reminder/account_entry_reminder.dart';
 import 'reminder/china_workday_calendar.dart';
+import 'reminder/workday_calendar_client.dart';
+import 'reminder/workday_calendar_sync.dart';
 import 'reminder/financial_reminder.dart';
 
 part 'veri_fin_controller_state.dart';
 part 'veri_fin_controller_ops.dart';
 part 'veri_fin_controller_account_reminders.dart';
+part 'veri_fin_controller_workday_calendar.dart';
 part 'veri_fin_controller_credit_hierarchy.dart';
 
 /// 导入校验用的已知备份数据键：`data` 里出现其一即认定为本应用备份（配合 `app`
@@ -102,6 +105,7 @@ const String _backupPassphraseKey = 'verifin.backup_passphrase.v1';
 const String _webdavKey = 'verifin.webdav.v1';
 const String _reminderKey = 'verifin.reminder.v1';
 const String _accountEntryReminderKey = 'verifin.account_entry_reminders.v1';
+const String _workdayCalendarKey = 'verifin.workday_calendar.v1';
 const String _reminderDeliveryKey = 'verifin.reminder_delivery.v1';
 const String _fabActionKey = 'verifin.fab_action.v1';
 const String _numberPadLayoutKey = 'verifin.number_pad_layout.v1';
@@ -178,10 +182,13 @@ class VeriFinController extends ChangeNotifier
         _ControllerState,
         _ControllerOps,
         _AccountEntryReminderOps,
+        _WorkdayCalendarOps,
         _CreditHierarchyOps {
+  /// 注入设备 KV、账目仓储及日历客户端；构造仅载入本地状态，联网须后续显式授权。
   VeriFinController._(
     this._store,
-    this._repository, {
+    this._repository,
+    this._workdayCalendarClient, {
     AppLogger? logger,
     bool systemIsEnglish = false,
     // ignore: prefer_initializing_formals
@@ -202,15 +209,18 @@ class VeriFinController extends ChangeNotifier
 
   /// 唯一的构造入口：同步载入偏好类 KV 数据后，从 SQLite 载入账目类数据
   /// （全新数据库首启动写入默认数据）。账目类数据只以 SQLite 为准。
+  /// [workdayCalendarClient] 允许测试注入公开日历响应；创建阶段只读缓存，不自动联网。
   static Future<VeriFinController> create(
     LocalKeyValueStore store, {
     required LedgerRepository repository,
     AppLogger? logger,
     bool systemIsEnglish = false,
+    HolidayCalendarClient workdayCalendarClient = const HolidayCalendarClient(),
   }) async {
     final controller = VeriFinController._(
       store,
       repository,
+      workdayCalendarClient,
       logger: logger,
       systemIsEnglish: systemIsEnglish,
     );
@@ -234,6 +244,8 @@ class VeriFinController extends ChangeNotifier
   final AppLogger? _logger;
   @override
   final bool _systemIsEnglish;
+  @override
+  final HolidayCalendarClient _workdayCalendarClient;
 
   /// 软件日志入口，供「软件日志」页读取；未注入时为 null。
   AppLogger? get logger => _logger;
@@ -245,6 +257,8 @@ class VeriFinController extends ChangeNotifier
     localePreferenceListenable.dispose();
     aiCapabilityListenable.dispose();
     accountEntryRemindersListenable.dispose();
+    _workdayCalendarGeneration++;
+    workdayCalendarListenable.dispose();
     super.dispose();
   }
 }

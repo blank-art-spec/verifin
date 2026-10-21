@@ -34,7 +34,7 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 
 ## 产品原则
 
-- **本地优先、数据自主**：无账号、无自有服务端、无广告、无联网遥测。权威账目数据存于用户设备；导出、WebDAV、AI 与每日汇率须用户主动启用。Frankfurter 请求只带币种/日期，不发账目；WebDAV 不是账号云同步。
+- **本地优先、数据自主**：无账号、无自有服务端、无广告、无联网遥测。权威账目数据存于用户设备；导出、WebDAV、AI、每日汇率与节假日日历联网更新须用户主动启用。Frankfurter 请求只带币种/日期，节假日日历只请求公共年份文件，均不发账目；WebDAV 不是账号云同步。
 - **隐私优先**：AI 使用用户自己配置的 OpenAI 兼容端点。AI 记账只生成草稿，必须经用户确认后落账；AI 查询工具全部只读，绝不提供写数据能力。
 - **自动采集必须显式授权且原始事件优先**：通知监听与“仅接收新短信”默认关闭，用户逐项启用后只把原文先写入 `CaptureEvent`，再经本地规则、去重和置信度分流；禁止外部文本绕过中间层直接写 `LedgerEntry`。不使用无障碍、常驻录屏，也不读取历史短信；截图仍在端上 OCR，原图不上传。
 - **Android 能力必须真实可用**：测试 stub 不能被当作生产实现。本地存储、图片、文件、通知、生物识别、安装包、桌面小组件或系统入口都要核对 Android 权限、持久化、进程重启和生命周期行为。
@@ -57,7 +57,7 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 ### 状态与持久化
 
 - 应用权威状态集中在 `VeriFinController`（`ChangeNotifier`），经 `VeriFinScope`（`InheritedNotifier`）注入；不使用 Provider、Riverpod 或 Bloc。
-- Controller 物理拆为 `veri_fin_controller.dart`、`veri_fin_controller_state.dart`、`veri_fin_controller_ops.dart`。`VeriFinController.create()` 是生产异步创建入口。
+- Controller 核心拆为 `veri_fin_controller.dart`、`veri_fin_controller_state.dart`、`veri_fin_controller_ops.dart`，账户提醒、工作日日历和信用父子账户操作分别放在对应领域 part 中。`VeriFinController.create()` 是生产异步创建入口；日历客户端可注入测试，创建阶段不自动联网。
 - UI 只调用 Controller 的公共读取/操作 API，不直接访问 repository、SQLite 或 KV；Controller 内部再经 `_persistX` 等路径持久化。
 - 账本、交易、账户、分组、分类、标签、附件、周期规则和预算等核心数据只认 SQLite。Controller 的内存集合是运行时读取源，不存在 KV 回退。
 - `LedgerRepository.saveX` 的对外语义是“落库后该表内容等于传入集合”。生产实现把“读取行快照、计算 `_incrementalReplace` 差分、事务写入、更新快照”整体串行化；单次失败不得阻塞后续写。附件大 blob 与小型预算表仍可整表覆盖；导入、恢复、重置、删账本及跨表删除走 `replaceAllLedgerData` 原子整替，显式删除命令落库成功后才替换 Controller 内存。

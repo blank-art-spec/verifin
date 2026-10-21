@@ -83,7 +83,7 @@ mixin _AccountEntryReminderOps on _ControllerState, _ControllerOps {
 
   /// 投影全部账本有效且已启用的提醒；[l10n] 决定默认按钮及通知文案。
   /// 金额在原生侧仅作为展示文本，实际落账永远读取 Controller 的最新配置。
-  /// 工作日模式额外携带同源离线日历，原生重启和进程回收后仍可独立判断。
+  /// 工作日模式携带内置与已落盘下载年度合并的日历，原生重启后仍可独立判断。
   List<Map<String, Object?>> accountEntryReminderNotifications(
     AppLocalizations l10n,
   ) => [
@@ -93,7 +93,7 @@ mixin _AccountEntryReminderOps on _ControllerState, _ControllerOps {
           ...rule.toJson(),
           // 仅工作日模式携带公共日历，Android 落盘后可在无 Flutter 进程时独立判断。
           if (rule.repeatMode == AccountReminderRepeatMode.chinaWorkdays)
-            'workdayCalendar': mainlandChinaWorkdayCalendar.toJson(),
+            'workdayCalendar': workdayCalendar.toJson(),
           'title': rule.name.isEmpty
               ? l10n.accountEntryReminderTitle
               : rule.name,
@@ -133,7 +133,7 @@ mixin _AccountEntryReminderOps on _ControllerState, _ControllerOps {
         !rule.enabled ||
         !_validAccountEntryReminder(rule) ||
         date != currencyDateKey(today) ||
-        !rule.matchesDate(today)) {
+        !rule.matchesDate(today, calendar: workdayCalendar)) {
       return AccountReminderResult.expired;
     }
     final entryId = 'entry_account_reminder_${rule.accountId}_$date';

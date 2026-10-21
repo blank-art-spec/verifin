@@ -50,21 +50,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String accountEntryReminderCalendarCoverage(String years) {
-    return '已内置 $years 年全国放假与调休日历，离线可用。';
+    return '本机已有 $years 年全国放假与调休日历，离线可用。';
   }
 
   @override
   String get accountEntryReminderWorkdayHint =>
-      '放假日跳过，周末补班日照常提醒，不受自定义星期影响。按手机本地日期和时间判断，不包含单位排班或个人请假；新年度日历随应用更新。缺少日历时默认暂停，也可明确选择按周一至周五提醒（不含调休）。';
+      '放假日跳过，周末补班日照常提醒，不受自定义星期影响。按手机本地日期和时间判断，不包含单位排班或个人请假；可在「工作日日历」主动开启联网更新。缺少日历时默认暂停，也可明确选择按周一至周五提醒（不含调休）。';
 
   @override
   String accountEntryReminderCalendarMissingPause(int year) {
-    return '缺少 $year 年调休日历，工作日提醒已暂停。请更新应用获取日历，或在对应账户中更改缺失处理方式。';
+    return '缺少 $year 年调休日历，工作日提醒已暂停。请在「工作日日历」检查更新，或更改缺失处理方式。';
   }
 
   @override
   String accountEntryReminderCalendarMissingWeekdays(int year) {
-    return '缺少 $year 年调休日历，已按你的选择临时使用周一至周五，无法跳过节假日或包含周末补班。请更新应用获取日历。';
+    return '缺少 $year 年调休日历，暂按周一至周五提醒，无法跳过假期或包含补班。可在「工作日日历」检查更新。';
   }
 
   @override
@@ -116,6 +116,67 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountEntryReminderTestButton => '1 分钟后测试提醒';
+
+  @override
+  String get workdayCalendarTitle => '工作日日历';
+
+  @override
+  String get workdayCalendarManage => '联网更新与缓存';
+
+  @override
+  String get workdayCalendarAutoUpdate => '联网更新节假日日历';
+
+  @override
+  String get workdayCalendarAutoUpdateHint =>
+      '默认关闭。开启后，打开应用或回到前台时每天检查一次当前及下一年度，跨年重新检查。';
+
+  @override
+  String get workdayCalendarPrivacy =>
+      '所有账户共用，开关即时保存。仅向 GitHub / jsDelivr 请求公共年份文件，不发送账目、账户或设备标识；服务方可见 IP 等常规连接信息。关闭后停止后续请求，已缓存日历仍可离线使用。';
+
+  @override
+  String get workdayCalendarNeverChecked => '尚未联网检查，仍可使用已有离线日历。';
+
+  @override
+  String workdayCalendarCheckedAt(String date, String time) {
+    return '上次检查：$date $time';
+  }
+
+  @override
+  String workdayCalendarPendingYears(String years) {
+    return '这些年度尚无完整可用数据：$years。已有缓存保留，缺失年度按账户设置处理。';
+  }
+
+  @override
+  String workdayCalendarFailedYears(String years) {
+    return '这些年度检查失败：$years。可能是网络不可用或数据校验未通过，原日历已保留，可稍后重试。';
+  }
+
+  @override
+  String get workdayCalendarCheckNow => '立即检查';
+
+  @override
+  String get workdayCalendarChecking => '正在检查日历…';
+
+  @override
+  String get workdayCalendarUpdated => '已检查并保存可用日历。';
+
+  @override
+  String get workdayCalendarPending => '部分年度尚无完整数据，已有日历已保留。';
+
+  @override
+  String get workdayCalendarPartial => '部分年度更新失败，原日历已保留。详情见「工作日日历」。';
+
+  @override
+  String get workdayCalendarFailed => '日历更新失败，已有日历已保留。请稍后重试。';
+
+  @override
+  String get workdayCalendarOfflineHint =>
+      '提前缓存后，跨年无需再次更新应用。没有后台常驻下载；断网、未公布或无效数据不会覆盖已有日历。';
+
+  @override
+  String get workdayCalendarSource =>
+      '数据来源：NateScarlet/holiday-cn，经 GitHub / jsDelivr 获取；该项目整理国务院公告，并非官方在线接口。第三方可能延迟更新或停止服务。';
 
   @override
   String get accountEntryReminderTestHint =>

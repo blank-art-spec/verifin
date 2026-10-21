@@ -101,7 +101,10 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
             context.getSharedPreferences(STORE, Context.MODE_PRIVATE).getString("rules", "[]"),
         )
 
-        /** 同步 Dart 投影 [rules]；提交成功后撤销旧闹钟并重排，不依赖当前账本。 */
+        /**
+         * 同步 Dart 投影 [rules]；提交成功后撤销旧闹钟并重排，不依赖当前账本。
+         * 日历联网更新可能把今天改为休息日或未知年度暂停，此时同时撤销旧的正式通知。
+         */
         fun sync(context: Context, rules: JSONArray) {
             val preferences = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
             val old = readRules(context)
@@ -119,7 +122,8 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
             }
             for (index in 0 until rules.length()) {
                 val rule = rules.getJSONObject(index)
-                if (rule.optString("handledDate") == dateKey(System.currentTimeMillis())) {
+                if (rule.optString("handledDate") == dateKey(System.currentTimeMillis()) ||
+                    !AccountReminderSchedule.matches(rule, Calendar.getInstance())) {
                     requireNotNull(context.getSystemService(NotificationManager::class.java)).cancel(rule.getString("id"), 0)
                 }
                 schedule(context, rule)

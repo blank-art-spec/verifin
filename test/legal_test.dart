@@ -1,6 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/local_storage/local_storage.dart';
+import 'package:verifin/app/legal_content.dart';
 import 'package:verifin/main.dart';
 import 'package:verifin/pages/home_page.dart';
 import 'package:verifin/pages/onboarding_page.dart';
@@ -9,6 +10,13 @@ import 'support/test_harness.dart';
 
 void main() {
   useTestDatabases();
+
+  test('隐私政策说明节假日日历默认关闭、第三方来源和请求范围', () {
+    expect(privacyPolicyBody, contains('NateScarlet/holiday-cn'));
+    expect(privacyPolicyBody, contains('开关默认关闭'));
+    expect(privacyPolicyBody, contains('请求只包含公共年份文件路径'));
+    expect(privacyPolicyBody, contains('IP 等常规连接信息'));
+  });
 
   testWidgets('同意后直接进入引导，过渡帧不构建首页', (tester) async {
     await pumpApp(tester, null, false);

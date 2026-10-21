@@ -51,21 +51,21 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String accountEntryReminderCalendarCoverage(String years) {
-    return 'Offline national holiday and adjusted workday calendars included: $years.';
+    return 'National holiday and adjusted workday calendars available offline: $years.';
   }
 
   @override
   String get accountEntryReminderWorkdayHint =>
-      'Skip holidays and include weekend make-up workdays, independently of custom weekdays. Uses the phone\'s local date and time; employer schedules and personal leave are excluded. New calendars arrive with app updates. Missing years pause reminders by default; you can explicitly choose Monday to Friday without holiday adjustments.';
+      'Skip holidays and include weekend make-up workdays, independently of custom weekdays. Uses the phone\'s local date and time; employer schedules and personal leave are excluded. You can opt into online updates in Workday calendar. Missing years pause reminders by default; you can explicitly choose Monday to Friday without holiday adjustments.';
 
   @override
   String accountEntryReminderCalendarMissingPause(int year) {
-    return 'No adjusted workday calendar for $year. Workday reminders are paused. Update the app for calendar data, or change the missing-calendar policy for the relevant account.';
+    return 'No adjusted workday calendar for $year. Workday reminders are paused. Check for updates in Workday calendar or change the missing-calendar policy.';
   }
 
   @override
   String accountEntryReminderCalendarMissingWeekdays(int year) {
-    return 'No adjusted workday calendar for $year. Your selected Monday-to-Friday fallback is active; holidays and weekend make-up days cannot be accounted for. Update the app for calendar data.';
+    return 'No adjusted workday calendar for $year. Your Monday-to-Friday fallback is active, without holiday or make-up day adjustments. Check for updates in Workday calendar.';
   }
 
   @override
@@ -124,6 +124,71 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accountEntryReminderTestButton => 'Test reminder in 1 minute';
+
+  @override
+  String get workdayCalendarTitle => 'Workday calendar';
+
+  @override
+  String get workdayCalendarManage => 'Online updates and cache';
+
+  @override
+  String get workdayCalendarAutoUpdate => 'Update holiday calendars online';
+
+  @override
+  String get workdayCalendarAutoUpdateHint =>
+      'Off by default. When enabled, opening or resuming the app checks the current and next year once a day, with a new check at year rollover.';
+
+  @override
+  String get workdayCalendarPrivacy =>
+      'Shared by all accounts; the switch saves immediately. Only public year files are requested from GitHub / jsDelivr. No entries, accounts or device identifiers are sent; the services can see routine connection information such as your IP address. Turning this off stops further requests and keeps cached calendars available offline.';
+
+  @override
+  String get workdayCalendarNeverChecked =>
+      'Not checked online yet. Existing offline calendars remain available.';
+
+  @override
+  String workdayCalendarCheckedAt(String date, String time) {
+    return 'Last checked: $date $time';
+  }
+
+  @override
+  String workdayCalendarPendingYears(String years) {
+    return 'No complete data is available for: $years. Existing caches are kept; missing years follow each account\'s policy.';
+  }
+
+  @override
+  String workdayCalendarFailedYears(String years) {
+    return 'Could not check: $years. The network may be unavailable or validation failed. Existing calendars were kept; try again later.';
+  }
+
+  @override
+  String get workdayCalendarCheckNow => 'Check now';
+
+  @override
+  String get workdayCalendarChecking => 'Checking calendars…';
+
+  @override
+  String get workdayCalendarUpdated => 'Available calendars checked and saved.';
+
+  @override
+  String get workdayCalendarPending =>
+      'Complete data is unavailable for some years. Existing calendars were kept.';
+
+  @override
+  String get workdayCalendarPartial =>
+      'Some years could not be updated. Existing calendars were kept. See Workday calendar for details.';
+
+  @override
+  String get workdayCalendarFailed =>
+      'Calendar update failed. Existing calendars were kept. Try again later.';
+
+  @override
+  String get workdayCalendarOfflineHint =>
+      'Cache next year\'s calendar in advance to use it without an app update. There is no persistent background downloader. Offline, unpublished or invalid responses never replace existing calendars.';
+
+  @override
+  String get workdayCalendarSource =>
+      'Source: NateScarlet/holiday-cn via GitHub / jsDelivr. It compiles State Council announcements and is not an official online API. Third-party updates may be delayed or the service may stop.';
 
   @override
   String get accountEntryReminderTestHint =>

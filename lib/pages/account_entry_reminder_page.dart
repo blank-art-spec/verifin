@@ -9,11 +9,12 @@ import '../app/feedback.dart';
 import '../app/models.dart';
 import '../app/platform_bridge.dart';
 import '../app/reminder/account_entry_reminder.dart';
-import '../app/reminder/china_workday_calendar.dart';
+import '../app/reminder/workday_calendar_sync.dart';
 import '../app/reminder/notification_scheduler.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
+import 'workday_calendar_page.dart';
 
 /// 所有账户共用的记账提醒编辑页；保存前只修改本页草稿，默认提醒关闭。
 class AccountEntryReminderPage extends StatefulWidget {
@@ -390,38 +391,55 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
                             onTap: openMenu,
                           ),
                         ),
+                        const Divider(height: 1),
+                        SettingsRow(
+                          key: const Key('account_reminder_workday_calendar'),
+                          icon: Icons.calendar_month_outlined,
+                          title: l10n.workdayCalendarTitle,
+                          trailing: l10n.workdayCalendarManage,
+                          trailingIcon: Icons.chevron_right,
+                          onTap: _openWorkdayCalendar,
+                        ),
                         Padding(
                           padding: const EdgeInsets.symmetric(vertical: 10),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                l10n.accountEntryReminderCalendarCoverage(
-                                  mainlandChinaWorkdayCalendar.supportedYears
-                                      .join(' / '),
-                                ),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(l10n.accountEntryReminderWorkdayHint),
-                              if (_draft.hasMissingCalendar(
-                                DateTime.now(),
-                              )) ...[
-                                const SizedBox(height: 8),
+                          child: ValueListenableBuilder<WorkdayCalendarSettings>(
+                            valueListenable:
+                                controller.workdayCalendarListenable,
+                            builder: (context, settings, _) => Column(
+                              crossAxisAlignment: CrossAxisAlignment.start,
+                              children: [
                                 Text(
-                                  _draft.missingCalendarPolicy ==
-                                          MissingWorkdayCalendarPolicy.pause
-                                      ? l10n.accountEntryReminderCalendarMissingPause(
-                                          DateTime.now().year,
-                                        )
-                                      : l10n.accountEntryReminderCalendarMissingWeekdays(
-                                          DateTime.now().year,
-                                        ),
-                                  style: TextStyle(
-                                    color: Theme.of(context).colorScheme.error,
+                                  l10n.accountEntryReminderCalendarCoverage(
+                                    settings.calendar.supportedYears.join(
+                                      ' / ',
+                                    ),
                                   ),
                                 ),
+                                const SizedBox(height: 8),
+                                Text(l10n.accountEntryReminderWorkdayHint),
+                                if (_draft.hasMissingCalendar(
+                                  DateTime.now(),
+                                  calendar: settings.calendar,
+                                )) ...[
+                                  const SizedBox(height: 8),
+                                  Text(
+                                    _draft.missingCalendarPolicy ==
+                                            MissingWorkdayCalendarPolicy.pause
+                                        ? l10n.accountEntryReminderCalendarMissingPause(
+                                            DateTime.now().year,
+                                          )
+                                        : l10n.accountEntryReminderCalendarMissingWeekdays(
+                                            DateTime.now().year,
+                                          ),
+                                    style: TextStyle(
+                                      color: Theme.of(
+                                        context,
+                                      ).colorScheme.error,
+                                    ),
+                                  ),
+                                ],
                               ],
-                            ],
+                            ),
                           ),
                         ),
                       ],
@@ -514,6 +532,15 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// 打开所有账户共用的日历工具页；本页账户草稿保留，不在导航时自动保存。
+  void _openWorkdayCalendar() {
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute<void>(builder: (_) => const WorkdayCalendarPage()),
       ),
     );
   }

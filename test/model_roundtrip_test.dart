@@ -4,8 +4,10 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/reminder/account_entry_reminder.dart';
+import 'package:verifin/app/reminder/workday_calendar_sync.dart';
 import 'package:verifin/data/app_database.dart';
 import 'package:verifin/data/ledger_repository.dart';
+import 'support/workday_calendar_fixture.dart';
 
 /// 模型字段往返测试：防「四处手写映射」漂移。
 ///
@@ -21,6 +23,27 @@ import 'package:verifin/data/ledger_repository.dart';
 ///   不是映射 bug）。
 void main() {
   setUpAll(sqfliteFfiInit);
+
+  test('工作日日历授权、有效缓存与检查状态完整往返，运行中标记不持久化', () {
+    final settings = WorkdayCalendarSettings(
+      enabled: true,
+      documents: {2026: workdayCalendarDocument()},
+      checkedAt: DateTime(2026, 10, 21, 12, 30),
+      pendingYears: const {2027},
+      failedYears: const {2028},
+      updating: true,
+    );
+    final restored = WorkdayCalendarSettings.decode(
+      jsonEncode(settings.toJson()),
+    );
+    expect(restored.toJson(), settings.toJson());
+    expect(restored.updating, isFalse);
+    expect(restored.calendar.toJson(), settings.calendar.toJson());
+    expect(
+      () => WorkdayCalendarSettings.decode('{"version":99}'),
+      throwsFormatException,
+    );
+  });
 
   test('账户提醒设备 KV 保留工作日模式、缺失策略与原有字段，旧版默认不变', () {
     const rule = AccountEntryReminder(
