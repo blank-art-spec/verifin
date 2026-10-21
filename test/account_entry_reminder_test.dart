@@ -9,14 +9,15 @@ import 'package:verifin/l10n/app_localizations_zh.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
 import 'support/test_harness.dart';
+import 'support/account_reminder_harness.dart';
 
-/// 账户提醒回归用例；本次按用户要求仅纳入静态分析，不执行测试程序。
+/// 账户提醒回归：显式种入账户，验证真实领域与持久化语义。
 void main() {
   useTestDatabases();
 
   test('工作日提醒允许不选星期，冷启动保留模式，原生快照含同源年度日历', () async {
     final store = LocalKeyValueStore();
-    var controller = await makeController(store);
+    var controller = await makeReminderController(store);
     final account = controller.accounts.first;
     final category = controller.categories.firstWhere(
       (item) => item.type == EntryType.expense,
@@ -35,7 +36,7 @@ void main() {
     expect(await controller.saveAccountEntryReminder(draft), isTrue);
     await controller.flushPendingWrites();
     controller.dispose();
-    controller = await makeController(store);
+    controller = await makeReminderController(store);
     final rule = controller.accountEntryReminder(account.id)!;
     expect(rule.repeatMode, AccountReminderRepeatMode.chinaWorkdays);
     expect(rule.missingCalendarPolicy, MissingWorkdayCalendarPolicy.pause);
@@ -85,7 +86,7 @@ void main() {
 
   test('切换账本不丢失提醒，确认固定写回原账户，并发点击和冷启动不重复', () async {
     final store = LocalKeyValueStore();
-    var controller = await makeController(store);
+    var controller = await makeReminderController(store);
     final account = controller.accounts.first;
     final category = controller.categories.firstWhere(
       (item) => item.type == EntryType.expense,
@@ -134,7 +135,7 @@ void main() {
     expect(entry.accountAmount, 12.5);
     await controller.flushPendingWrites();
     controller.dispose();
-    controller = await makeController(store);
+    controller = await makeReminderController(store);
     expect(
       await controller.handleAccountEntryReminder(
         id: rule.id,
@@ -149,7 +150,7 @@ void main() {
 
   test('取消零落账，重启与重新配置都不能再处理当天', () async {
     final store = LocalKeyValueStore();
-    var controller = await makeController(store);
+    var controller = await makeReminderController(store);
     final account = controller.accounts.first;
     final category = controller.categories.firstWhere(
       (item) => item.type == EntryType.expense,
@@ -172,7 +173,7 @@ void main() {
     expect(controller.entries.length, beforeCount);
     await controller.flushPendingWrites();
     controller.dispose();
-    controller = await makeController(store);
+    controller = await makeReminderController(store);
     expect(
       await controller.saveAccountEntryReminder(rule.copyWith(amount: 20)),
       isTrue,
@@ -192,7 +193,7 @@ void main() {
   });
 
   test('过期日期和编辑前旧通知不落账，提醒配置不进入账本备份', () async {
-    final controller = await makeController();
+    final controller = await makeReminderController();
     final account = controller.accounts.first;
     final category = controller.categories.firstWhere(
       (item) => item.type == EntryType.expense,
@@ -234,7 +235,7 @@ void main() {
   });
 
   test('删除无流水账户清除提醒，初始化清除提醒且旧通知失效', () async {
-    final controller = await makeController();
+    final controller = await makeReminderController();
     final original = controller.accounts.first;
     final account = original.copyWith(
       id: 'reminder-empty-account',

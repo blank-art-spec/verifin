@@ -15,19 +15,30 @@ import java.io.File
  */
 class FixedWidgetRenderingTest : Instrumentation() {
     private var accountReminderSuite = false
+    private var accountRecoverySuite = false
+    private var reminderLiveSuite = false
 
     /** 读取 [arguments] 的 suite 参数；默认保持原桌面组件验收，仅显式选择才测提醒。 */
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         accountReminderSuite = arguments?.getString("suite") == "account-reminder"
+        accountRecoverySuite = arguments?.getString("suite") == "reminder-recovery"
+        reminderLiveSuite = arguments?.getString("suite") == "reminder-live"
         start()
     }
 
-    /** 执行选定套件并返回中文诊断；账户提醒套件不接触用户数据或系统闹钟。 */
+    /** 日期套件只读；恢复/送达套件仅限隔离应用，绝不操作正式包数据。 */
     override fun onStart() {
         val result = Bundle()
         try {
-            if (accountReminderSuite) {
+            if (reminderLiveSuite) {
+                check(targetContext.packageName.endsWith(".graphicsdiagnostic")) { "只能在隔离应用安排真机测试" }
+                AccountEntryReminderReceiver.scheduleTest(targetContext, "提醒恢复验证", "隔离测试，不会记账", "账户记账提醒")
+                result.putString("stream", "已安排：${AccountEntryReminderReceiver.deliveryStatus(targetContext)}\n")
+            } else if (accountRecoverySuite) {
+                AccountReminderRecoveryChecks.runAll(targetContext)
+                result.putString("stream", "通过：测试提醒持久化恢复、旧广播、重复发布、过期和损坏状态\n")
+            } else if (accountReminderSuite) {
                 AccountReminderScheduleChecks.runAll()
                 result.putString("stream", "通过：账户提醒工作日、长假、跨年和夏令时规则\n")
             } else {

@@ -54,6 +54,12 @@ class MainActivity : FlutterFragmentActivity() {
         super.onCreate(savedInstanceState)
     }
 
+    /** 原进程解冻后回前台也独立恢复，不依赖 Flutter 其他通知插件初始化成功。 */
+    override fun onResume() {
+        super.onResume()
+        AccountEntryReminderReceiver.restore(this)
+    }
+
     /**
      * 为 [flutterEngine] 注册本应用的单一平台通道，按方法名转发到各领域原生桥。
      * 账户提醒测试也从这里分发，复用正式提醒 Receiver，不另建通道或常驻服务。
@@ -63,6 +69,19 @@ class MainActivity : FlutterFragmentActivity() {
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_NAME)
         channel?.setMethodCallHandler { call, result ->
             when (call.method) {
+                "getAccountReminderDeliveryStatus", "openAccountReminderSettings" -> {
+                    try {
+                        if (call.method == "getAccountReminderDeliveryStatus") {
+                            result.success(AccountEntryReminderReceiver.deliveryStatus(this))
+                        } else {
+                            startActivity(AccountEntryReminderReceiver.settingsIntent(this,
+                                requireNotNull(call.argument<String>("kind"))))
+                            result.success(null)
+                        }
+                    } catch (error: Exception) {
+                        result.error("ACCOUNT_REMINDER_SETTINGS_FAILED", error.javaClass.simpleName, null)
+                    }
+                }
                 "syncAccountEntryReminders", "consumeAccountReminderAction", "acknowledgeAccountReminderAction", "scheduleAccountEntryReminderTest" -> {
                     try {
                         when (call.method) {

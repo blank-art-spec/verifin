@@ -192,7 +192,68 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accountEntryReminderTestHint =>
-      'No need to save or enable the reminder. After tapping, go Home, dismiss the app from Recents, or lock the screen and wait. Testing records no entries and does not affect regular reminders. Force stop in system settings blocks reminders.';
+      'No need to save or enable the reminder; the test never records an entry. Check the conditions above, then go home or lock the phone. A valid test is restored when the system restarts the app. Force stop prevents delivery, and dismissing the recent task may also clear reminders.';
+
+  @override
+  String get accountReminderDeliveryTitle => 'Reminder delivery checks';
+
+  @override
+  String get accountReminderNotifications => 'Notifications and category';
+
+  @override
+  String get accountReminderExact => 'Exact reminder permission';
+
+  @override
+  String get accountReminderBackground => 'Background battery use';
+
+  @override
+  String get accountReminderAllowed => 'Allowed';
+
+  @override
+  String get accountReminderNeedsAttention => 'Needs permission';
+
+  @override
+  String get accountReminderStatusUnknown =>
+      'Unavailable; retry or check settings';
+
+  @override
+  String get accountReminderBatteryExempt => 'Battery exemption granted';
+
+  @override
+  String get accountReminderBatteryManaged => 'Battery management applies';
+
+  @override
+  String get accountReminderBackgroundRestricted =>
+      'Background activity restricted';
+
+  @override
+  String get accountReminderBackgroundHint =>
+      'Allow background battery use and, if required by your phone, auto-start or locking the recent task. Battery exemption does not prevent every task cleaner. Also check lock-screen visibility, sound and vibration in notification settings.';
+
+  @override
+  String get accountReminderLastTest => 'Latest test (tap to refresh)';
+
+  @override
+  String get accountReminderTestNone => 'Not tested yet';
+
+  @override
+  String get accountReminderTestPending => 'Waiting for the system';
+
+  @override
+  String get accountReminderTestPosted => 'Notification posted by system';
+
+  @override
+  String get accountReminderTestExpired => 'Expired; no further retry';
+
+  @override
+  String get accountReminderTestFailed => 'Scheduling failed; test again';
+
+  @override
+  String get accountReminderTestBlocked => 'Notifications blocked at delivery';
+
+  @override
+  String get accountReminderSettingsFailed =>
+      'Could not open settings. Find this app in your phone\'s settings.';
 
   @override
   String accountEntryReminderTestTitle(String name) {
@@ -201,11 +262,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accountEntryReminderTestBody =>
-      'This is an account entry reminder test. No entry will be recorded. Receiving this notification means the system triggered the reminder.';
+      'This is an account entry reminder test; no entry is recorded. A late notification may have been delayed or restored by the system.';
 
   @override
   String get accountEntryReminderTestScheduled =>
-      'Reminder scheduled for 1 minute from now. Go Home or lock the screen to test.';
+      'The system accepted the test for 1 minute from now. Check background settings, then go Home or lock the screen.';
 
   @override
   String get accountEntryReminderTestInexact =>

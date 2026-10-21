@@ -28,13 +28,73 @@ class AccountEntryReminderPage extends StatefulWidget {
       _AccountEntryReminderPageState();
 }
 
-class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
+class _AccountEntryReminderPageState extends State<AccountEntryReminderPage>
+    with WidgetsBindingObserver {
   final EditorExitController _exitController = EditorExitController();
   AccountEntryReminder? _initial;
   late AccountEntryReminder _draft;
   String? _error;
   bool _saving = false;
   bool _testing = false;
+  bool _readingStatus = false;
+  AccountReminderDeliveryStatus? _deliveryStatus;
+
+  @override
+  void initState() {
+    super.initState();
+    WidgetsBinding.instance.addObserver(this);
+  }
+
+  @override
+  void dispose() {
+    WidgetsBinding.instance.removeObserver(this);
+    super.dispose();
+  }
+
+  /// 从系统设置回来重新核对真实条件，不把打开设置页当作授权成功。
+  @override
+  void didChangeAppLifecycleState(AppLifecycleState state) {
+    if (state == AppLifecycleState.resumed) unawaited(_refreshDeliveryStatus());
+  }
+
+  Future<void> _refreshDeliveryStatus() async {
+    if (_readingStatus) return;
+    _readingStatus = true;
+    final logger = VeriFinScope.of(context).logger;
+    try {
+      final status = await AppAccountReminderBridge.deliveryStatus();
+      if (mounted) setState(() => _deliveryStatus = status);
+    } catch (error) {
+      logger?.error(
+        '提醒运行状态读取失败：${error.runtimeType}',
+        source: 'AccountEntryReminder',
+      );
+      if (mounted) setState(() => _deliveryStatus = null);
+    } finally {
+      _readingStatus = false;
+    }
+  }
+
+  Future<void> _openReminderSettings(String kind) async {
+    final feedback = VeriFeedbackHost.of(context);
+    final l10n = AppLocalizations.of(context);
+    final logger = VeriFinScope.of(context).logger;
+    try {
+      await AppAccountReminderBridge.openSettings(kind);
+    } catch (error) {
+      logger?.error(
+        '提醒系统设置打开失败：${error.runtimeType}',
+        source: 'AccountEntryReminder',
+      );
+      if (!mounted) return;
+      unawaited(
+        feedback.showMessage(
+          message: l10n.accountReminderSettingsFailed,
+          tone: VeriFeedbackTone.error,
+        ),
+      );
+    }
+  }
 
   /// 首次进入读取本机配置；依赖变化不覆盖用户正在编辑的草稿。
   @override
@@ -51,6 +111,7 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
           currencyCode: account.currencyCode,
         );
     _initial = _draft;
+    unawaited(_refreshDeliveryStatus());
   }
 
   /// 比较完整配置快照，判断离开时是否需要通过现有草稿保护组件提示保存。
@@ -207,6 +268,8 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
         body: l10n.accountEntryReminderTestBody,
         channelName: l10n.accountEntryReminderTitle,
       );
+      if (!mounted) return;
+      await _refreshDeliveryStatus();
       if (!mounted) return;
       unawaited(
         feedback.showMessage(
@@ -508,6 +571,8 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
                   ),
                 ),
                 const SizedBox(height: 12),
+                _deliveryChecks(context),
+                const SizedBox(height: 12),
                 OutlinedButton.icon(
                   key: const Key('account_entry_reminder_test'),
                   onPressed: _testing || _saving ? null : _scheduleTest,
@@ -532,6 +597,81 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
             ),
           ),
         ),
+      ),
+    );
+  }
+
+  /// 展示系统可核实的条件和最近测试阶段；厂商清理限制单独说明，避免假报后台已就绪。
+  Widget _deliveryChecks(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final status = _deliveryStatus;
+    final unknown = l10n.accountReminderStatusUnknown;
+    final testLabel = switch (status?.testState) {
+      'none' => l10n.accountReminderTestNone,
+      'pending' => l10n.accountReminderTestPending,
+      'posted' => l10n.accountReminderTestPosted,
+      'expired' => l10n.accountReminderTestExpired,
+      'failed' => l10n.accountReminderTestFailed,
+      'blocked' => l10n.accountReminderTestBlocked,
+      _ => unknown,
+    };
+    return VeriCard(
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(l10n.accountReminderDeliveryTitle),
+          SettingsRow(
+            key: const Key('account_reminder_notification_settings'),
+            icon: Icons.notifications_outlined,
+            title: l10n.accountReminderNotifications,
+            trailing: status == null
+                ? unknown
+                : status.notificationsEnabled && status.channelEnabled
+                ? l10n.accountReminderAllowed
+                : l10n.accountReminderNeedsAttention,
+            trailingMaxLines: null,
+            onTap: () => _openReminderSettings('notifications'),
+          ),
+          SettingsRow(
+            key: const Key('account_reminder_exact_settings'),
+            icon: Icons.alarm_outlined,
+            title: l10n.accountReminderExact,
+            trailing: status == null
+                ? unknown
+                : status.exactAlarmsAllowed
+                ? l10n.accountReminderAllowed
+                : l10n.accountReminderNeedsAttention,
+            trailingMaxLines: null,
+            onTap: () => _openReminderSettings('exact'),
+          ),
+          SettingsRow(
+            key: const Key('account_reminder_background_settings'),
+            icon: Icons.battery_saver_outlined,
+            title: l10n.accountReminderBackground,
+            trailing: status == null
+                ? unknown
+                : status.backgroundRestricted
+                ? l10n.accountReminderBackgroundRestricted
+                : status.batteryExempt
+                ? l10n.accountReminderBatteryExempt
+                : l10n.accountReminderBatteryManaged,
+            trailingMaxLines: null,
+            onTap: () => _openReminderSettings('background'),
+          ),
+          Text(
+            l10n.accountReminderBackgroundHint,
+            style: Theme.of(context).textTheme.bodySmall,
+          ),
+          SettingsRow(
+            key: const Key('account_reminder_test_status'),
+            icon: Icons.fact_check_outlined,
+            title: l10n.accountReminderLastTest,
+            trailing: testLabel,
+            trailingMaxLines: null,
+            trailingIcon: Icons.refresh,
+            onTap: _refreshDeliveryStatus,
+          ),
+        ],
       ),
     );
   }

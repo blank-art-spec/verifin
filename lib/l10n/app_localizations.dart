@@ -401,8 +401,122 @@ abstract class AppLocalizations {
   /// No description provided for @accountEntryReminderTestHint.
   ///
   /// In zh, this message translates to:
-  /// **'无需保存或启用提醒。点击后可返回桌面、划掉最近任务或锁屏等待；测试不会记账，也不影响正式提醒。系统设置中的「强行停止」会阻止提醒。'**
+  /// **'无需保存或启用提醒，测试不会记账。先检查上方运行条件，再返回桌面或锁屏等待。系统重新唤起应用时会恢复有效期内的测试；强行停止期间无法提醒，划掉应用也可能触发系统清理。'**
   String get accountEntryReminderTestHint;
+
+  /// No description provided for @accountReminderDeliveryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'提醒运行检查'**
+  String get accountReminderDeliveryTitle;
+
+  /// No description provided for @accountReminderNotifications.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知与提醒类别'**
+  String get accountReminderNotifications;
+
+  /// No description provided for @accountReminderExact.
+  ///
+  /// In zh, this message translates to:
+  /// **'准时提醒权限'**
+  String get accountReminderExact;
+
+  /// No description provided for @accountReminderBackground.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台耗电管理'**
+  String get accountReminderBackground;
+
+  /// No description provided for @accountReminderAllowed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已允许'**
+  String get accountReminderAllowed;
+
+  /// No description provided for @accountReminderNeedsAttention.
+  ///
+  /// In zh, this message translates to:
+  /// **'需要开启'**
+  String get accountReminderNeedsAttention;
+
+  /// No description provided for @accountReminderStatusUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'未能读取，点击重试或检查设置'**
+  String get accountReminderStatusUnknown;
+
+  /// No description provided for @accountReminderBatteryExempt.
+  ///
+  /// In zh, this message translates to:
+  /// **'已获省电豁免'**
+  String get accountReminderBatteryExempt;
+
+  /// No description provided for @accountReminderBatteryManaged.
+  ///
+  /// In zh, this message translates to:
+  /// **'仍受省电管理'**
+  String get accountReminderBatteryManaged;
+
+  /// No description provided for @accountReminderBackgroundRestricted.
+  ///
+  /// In zh, this message translates to:
+  /// **'后台运行受限'**
+  String get accountReminderBackgroundRestricted;
+
+  /// No description provided for @accountReminderBackgroundHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请允许后台耗电，并按手机要求开启自启动或锁定最近任务。即使已获省电豁免，部分手机划掉应用仍会清除提醒；请在通知设置中另行检查锁屏显示、声音与振动。'**
+  String get accountReminderBackgroundHint;
+
+  /// No description provided for @accountReminderLastTest.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近测试（点击刷新）'**
+  String get accountReminderLastTest;
+
+  /// No description provided for @accountReminderTestNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未测试'**
+  String get accountReminderTestNone;
+
+  /// No description provided for @accountReminderTestPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'等待系统触发'**
+  String get accountReminderTestPending;
+
+  /// No description provided for @accountReminderTestPosted.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统已发布通知'**
+  String get accountReminderTestPosted;
+
+  /// No description provided for @accountReminderTestExpired.
+  ///
+  /// In zh, this message translates to:
+  /// **'测试已过期，未再补发'**
+  String get accountReminderTestExpired;
+
+  /// No description provided for @accountReminderTestFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'安排失败，请重新测试'**
+  String get accountReminderTestFailed;
+
+  /// No description provided for @accountReminderTestBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'发送时通知被关闭'**
+  String get accountReminderTestBlocked;
+
+  /// No description provided for @accountReminderSettingsFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法打开系统设置，请从手机设置中找到本应用检查。'**
+  String get accountReminderSettingsFailed;
 
   /// 一次性账户提醒测试的标题；name 为草稿提醒名，留空时使用账户名。
   ///
@@ -413,13 +527,13 @@ abstract class AppLocalizations {
   /// No description provided for @accountEntryReminderTestBody.
   ///
   /// In zh, this message translates to:
-  /// **'这是一条账户记账提醒测试通知，不会记账。收到此通知表示系统已触发提醒。'**
+  /// **'这是一条账户记账提醒测试通知，不会记账。如晚于预约时间收到，可能是系统延迟或恢复后补发。'**
   String get accountEntryReminderTestBody;
 
   /// No description provided for @accountEntryReminderTestScheduled.
   ///
   /// In zh, this message translates to:
-  /// **'已安排 1 分钟后提醒，现在可返回桌面或锁屏测试。'**
+  /// **'系统已接受 1 分钟后的测试，请确认后台设置后返回桌面或锁屏等待。'**
   String get accountEntryReminderTestScheduled;
 
   /// No description provided for @accountEntryReminderTestInexact.

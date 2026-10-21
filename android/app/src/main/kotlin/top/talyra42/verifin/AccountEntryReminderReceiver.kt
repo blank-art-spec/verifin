@@ -2,6 +2,7 @@ package top.talyra42.verifin
 
 import android.Manifest
 import android.app.AlarmManager
+import android.app.ActivityManager
 import android.app.NotificationChannel
 import android.app.NotificationManager
 import android.app.PendingIntent
@@ -11,6 +12,8 @@ import android.content.Intent
 import android.content.pm.PackageManager
 import android.net.Uri
 import android.os.Build
+import android.os.PowerManager
+import android.provider.Settings
 import android.util.Log
 import androidx.core.app.NotificationCompat
 import androidx.core.app.NotificationManagerCompat
@@ -27,21 +30,20 @@ import java.util.UUID
 class AccountEntryReminderReceiver : BroadcastReceiver() {
     /**
      * [context] 为广播执行环境，[intent] 区分正式提醒、一次性测试和系统重排。
-     * 测试从系统保存的 PendingIntent 读取文案，不依赖 Flutter 进程或正式提醒配置；
+     * 测试从私有持久记录读取文案，以修订令牌拒绝已被替换的旧广播；
      * 正式提醒过期至隔天时不补发，防止误认消费日期。
      */
     override fun onReceive(context: Context, intent: Intent) {
         try {
             if (intent.action == TEST_FIRE) {
-                val rule = JSONObject(intent.getStringExtra("testRule") ?: return)
-                show(context, rule, intent.getLongExtra("due", 0L), isTest = true)
+                fireTest(context, intent.getStringExtra("revision"))
+                return
+            }
+            if (intent.action != FIRE) {
+                restore(context)
                 return
             }
             val rules = readRules(context)
-            if (intent.action != FIRE) {
-                for (index in 0 until rules.length()) schedule(context, rules.getJSONObject(index))
-                return
-            }
             val rule = (0 until rules.length()).map { rules.getJSONObject(it) }
                 .firstOrNull { it.optString("id") == intent.getStringExtra("id") } ?: return
             schedule(context, rule)
@@ -65,6 +67,7 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
         // 固定测试身份：连续测试只替换上一条测试，不覆盖任一账户的正式闹钟或通知。
         private const val TEST_ID = "account_reminder_test"
         private const val TEST_DELAY_MILLIS = 60_000L
+        private const val TEST_RECORD = "test"
         private const val STORE = "verifin_account_entry_reminders"
         private const val CHANNEL = "verifin_account_entry_reminder"
 
@@ -72,8 +75,9 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
          * 安排一分钟后的一次性测试；[context] 提供系统服务，[title]、[body] 和
          * [channelName] 为 Flutter 传入的本地化通知文案及渠道名。
          * 返回是否使用精确闹钟；通知或渠道被禁用时抛错，不能向页面谎报成功。
-         * 文案随 PendingIntent 交给系统保存，进程被回收后仍可触发；重启不恢复测试。
+         * 先落盘再排程；系统重建进程或重启时可恢复有效期内的测试，不依赖通知监听授权。
          */
+        @Synchronized
         fun scheduleTest(context: Context, title: String, body: String, channelName: String): Boolean {
             val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
             ensureChannel(manager, channelName)
@@ -85,15 +89,136 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
             val due = System.currentTimeMillis() + TEST_DELAY_MILLIS
             val rule = JSONObject().put("id", TEST_ID).put("title", title)
                 .put("body", body).put("channelName", channelName)
-            val pending = PendingIntent.getBroadcast(context, 0,
+                .put("revision", UUID.randomUUID().toString()).put("due", due)
+                .put("state", "pending").put("expiresAt", due + 65 * 60_000L)
+            val pending = testIntent(context, rule)
+            requireNotNull(context.getSystemService(AlarmManager::class.java)).cancel(pending)
+            saveTest(context, rule)
+            manager.cancel(TEST_ID, 0)
+            try {
+                val exact = scheduleAlarm(context, due, pending)
+                // 精确测试最多补发五分钟；非精确模式保留系统可能延迟一小时的窗口。
+                rule.put("expiresAt", due + (if (exact) 5 else 65) * 60_000L)
+                saveTest(context, rule)
+                return exact
+            } catch (error: Exception) {
+                requireNotNull(context.getSystemService(AlarmManager::class.java)).cancel(pending)
+                saveTest(context, rule.put("state", "failed"))
+                throw error
+            }
+        }
+
+        /** 固定系统身份并携带 [rule] 修订；文案不再仅依赖可能被系统清理的 PendingIntent。 */
+        private fun testIntent(context: Context, rule: JSONObject): PendingIntent =
+            PendingIntent.getBroadcast(context, 0,
                 Intent(context, AccountEntryReminderReceiver::class.java).apply {
                     action = TEST_FIRE
                     data = Uri.parse("verifin://account-reminder/test/alarm")
-                    putExtra("testRule", rule.toString())
-                    putExtra("due", due)
+                    putExtra("revision", rule.getString("revision"))
                 }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
-            manager.cancel(TEST_ID, 0)
-            return scheduleAlarm(context, due, pending)
+
+        /** 同步提交设备本地测试状态；不进入账目备份或正式规则集合。 */
+        private fun saveTest(context: Context, rule: JSONObject) {
+            check(context.getSharedPreferences(STORE, Context.MODE_PRIVATE).edit()
+                .putString(TEST_RECORD, rule.toString()).commit()) { "测试提醒状态保存失败" }
+        }
+
+        private fun readTest(context: Context): JSONObject? {
+            val encoded = context.getSharedPreferences(STORE, Context.MODE_PRIVATE)
+                .getString(TEST_RECORD, null) ?: return null
+            val rule = JSONObject(encoded)
+            require(rule.getString("revision").isNotBlank() && rule.getLong("due") > 0 &&
+                rule.getLong("expiresAt") > rule.getLong("due") && rule.getString("id") == TEST_ID)
+            rule.getString("title")
+            rule.getString("body")
+            rule.getString("channelName")
+            require(rule.getString("state") in setOf("pending", "posted", "expired", "failed", "blocked"))
+            return rule
+        }
+
+        /**
+         * 任何合法进程启动、系统重排和 Flutter 同步都可恢复；不借用采集权限或常驻服务。
+         * 两类任务独立恢复，损坏的正式配置不能阻止有效测试；异常不使应用启动崩溃。
+         */
+        fun restore(context: Context) {
+            try {
+                val rules = readRules(context)
+                for (index in 0 until rules.length()) schedule(context, rules.getJSONObject(index))
+            } catch (error: Exception) {
+                Log.e("AccountEntryReminder", "正式提醒恢复失败：${error.javaClass.simpleName}")
+            }
+            try {
+                restoreTest(context)
+            } catch (error: Exception) {
+                Log.e("AccountEntryReminder", "测试提醒恢复失败：${error.javaClass.simpleName}")
+            }
+        }
+
+        @Synchronized
+        private fun restoreTest(context: Context) {
+            val rule = readTest(context) ?: return
+            if (rule.optString("state") != "pending") return
+            val now = System.currentTimeMillis()
+            val pending = testIntent(context, rule)
+            if (now > rule.getLong("expiresAt")) {
+                requireNotNull(context.getSystemService(AlarmManager::class.java)).cancel(pending)
+                saveTest(context, rule.put("state", "expired"))
+                return
+            }
+            // 闹钟唤起冷进程时 Application 先执行；留出广播执行机会，不提前把到点测试判为过期。
+            scheduleAlarm(context, maxOf(rule.getLong("due"), now + 1_000L), pending)
+        }
+
+        @Synchronized
+        private fun fireTest(context: Context, revision: String?) {
+            val rule = readTest(context) ?: return
+            if (rule.optString("state") != "pending" || rule.optString("revision") != revision) return
+            val now = System.currentTimeMillis()
+            if (now < rule.getLong("due")) return
+            val state = when {
+                now > rule.getLong("expiresAt") -> "expired"
+                show(context, rule, rule.getLong("due"), isTest = true) -> "posted"
+                else -> "blocked"
+            }
+            // 先让系统发布，再保存结果；固定 tag 和 onlyAlertOnce 限制中途退出后的重复提醒。
+            saveTest(context, rule.put("state", state))
+            requireNotNull(context.getSystemService(AlarmManager::class.java)).cancel(testIntent(context, rule))
+        }
+
+        /** 只读实际系统条件；没有标准 API 能确认厂商自启动或最近任务清理白名单。 */
+        fun deliveryStatus(context: Context): Map<String, Any> {
+            val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
+            val testState = try { readTest(context)?.optString("state") ?: "none" }
+                catch (_: Exception) { "failed" }
+            return mapOf(
+                "notificationsEnabled" to NotificationManagerCompat.from(context).areNotificationsEnabled(),
+                "channelEnabled" to (Build.VERSION.SDK_INT < Build.VERSION_CODES.O ||
+                    manager.getNotificationChannel(CHANNEL)?.importance != NotificationManager.IMPORTANCE_NONE),
+                "exactAlarmsAllowed" to (Build.VERSION.SDK_INT < Build.VERSION_CODES.S ||
+                    requireNotNull(context.getSystemService(AlarmManager::class.java)).canScheduleExactAlarms()),
+                "batteryExempt" to requireNotNull(context.getSystemService(PowerManager::class.java))
+                    .isIgnoringBatteryOptimizations(context.packageName),
+                "backgroundRestricted" to (Build.VERSION.SDK_INT >= Build.VERSION_CODES.P &&
+                    requireNotNull(context.getSystemService(ActivityManager::class.java)).isBackgroundRestricted),
+                "testState" to testState,
+            )
+        }
+
+        /** 只在用户点击时打开系统页面；不自动申请省电豁免或改变原有通知行为。 */
+        fun settingsIntent(context: Context, kind: String): Intent = when (kind) {
+            "notifications" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O)
+                if (context.getSystemService(NotificationManager::class.java)?.getNotificationChannel(CHANNEL) != null)
+                    Intent(Settings.ACTION_CHANNEL_NOTIFICATION_SETTINGS)
+                        .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                        .putExtra(Settings.EXTRA_CHANNEL_ID, CHANNEL)
+                else Intent(Settings.ACTION_APP_NOTIFICATION_SETTINGS)
+                    .putExtra(Settings.EXTRA_APP_PACKAGE, context.packageName)
+                else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+            "exact" -> if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.S)
+                Intent(Settings.ACTION_REQUEST_SCHEDULE_EXACT_ALARM, Uri.parse("package:${context.packageName}"))
+                else Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+            "background" -> Intent(Settings.ACTION_APPLICATION_DETAILS_SETTINGS, Uri.parse("package:${context.packageName}"))
+            else -> throw IllegalArgumentException("未知提醒设置")
         }
 
         /** 读取私有原生配置；内容损坏时交给同步入口报告，不猜测预设交易。 */
@@ -127,6 +252,11 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
                     requireNotNull(context.getSystemService(NotificationManager::class.java)).cancel(rule.getString("id"), 0)
                 }
                 schedule(context, rule)
+            }
+            try {
+                restoreTest(context)
+            } catch (error: Exception) {
+                Log.e("AccountEntryReminder", "测试提醒恢复失败：${error.javaClass.simpleName}")
             }
         }
 
@@ -181,11 +311,14 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
          * 正式提醒保留两个自定义动作；[isTest] 为 true 时只允许打开应用，
          * 不生成确认/取消操作，避免测试消耗正式提醒的当天次数或误写真实账目。
          */
-        private fun show(context: Context, rule: JSONObject, due: Long, isTest: Boolean = false) {
+        private fun show(context: Context, rule: JSONObject, due: Long, isTest: Boolean = false): Boolean {
             if (Build.VERSION.SDK_INT >= Build.VERSION_CODES.TIRAMISU &&
-                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return
+                ContextCompat.checkSelfPermission(context, Manifest.permission.POST_NOTIFICATIONS) != PackageManager.PERMISSION_GRANTED) return false
             val manager = requireNotNull(context.getSystemService(NotificationManager::class.java))
             ensureChannel(manager, rule.optString("channelName", context.getString(R.string.account_entry_reminder_channel)))
+            if (!NotificationManagerCompat.from(context).areNotificationsEnabled() ||
+                (Build.VERSION.SDK_INT >= Build.VERSION_CODES.O &&
+                    manager.getNotificationChannel(CHANNEL)?.importance == NotificationManager.IMPORTANCE_NONE)) return false
             val notification = NotificationCompat.Builder(context, CHANNEL)
                 .setSmallIcon(R.mipmap.ic_launcher)
                 .setContentTitle(rule.getString("title"))
@@ -193,6 +326,7 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
                 .setStyle(NotificationCompat.BigTextStyle().bigText(rule.getString("body")))
                 .setVisibility(NotificationCompat.VISIBILITY_PRIVATE)
                 .setAutoCancel(isTest)
+                .setOnlyAlertOnce(isTest)
                 .setWhen(due)
             if (isTest) {
                 // 测试点击仅普通启动 MainActivity，不携带正式提醒 ACTION、令牌或交易参数。
@@ -208,6 +342,7 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
                     .addAction(0, rule.getString("cancelLabel"), actionIntent(context, rule, due, "cancel"))
             }
             manager.notify(rule.getString("id"), 0, notification.build())
+            return true
         }
 
         /** 生成不可变操作 PendingIntent；私有随机令牌阻止其他应用伪造导出 Activity 操作。 */
