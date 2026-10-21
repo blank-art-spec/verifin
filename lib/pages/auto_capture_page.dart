@@ -675,7 +675,7 @@ class _AutoCapturePageState extends State<AutoCapturePage>
   ///
   /// [event] 是卡片构建时的解析快照。若金额或类型仍为空，先仅针对这条原文
   /// 重跑本地解析，再读取最新候选；重跑不会自动入账，已有交易关联也不会被清除。
-  /// 普通交易在记账页选账本；退款先选账本，再仅在目标账本匹配唯一原支出。
+  /// 普通交易在记账页选账本；退款先选账本，再由用户选择要冲减的原支出。
   Future<void> _reviewEvent(CaptureEvent event) async {
     final controller = VeriFinScope.of(context);
     var reviewEvent = event;
@@ -698,10 +698,37 @@ class _AutoCapturePageState extends State<AutoCapturePage>
         if (!mounted || selected == null) return;
         targetBook = selected;
       }
+      final candidates = controller.captureRefundCandidates(
+        reviewEvent.id,
+        sourceBookId: reviewEvent.bookId,
+        targetBookId: targetBook.id,
+      );
+      if (candidates.isEmpty) {
+        unawaited(
+          VeriFeedbackHost.of(context).showMessage(
+            message: l10n.autoCaptureNoRefundExpenseCandidate,
+            tone: VeriFeedbackTone.warning,
+          ),
+        );
+        return;
+      }
+      final original = await showRefundExpensePickerSheet(
+        context: context,
+        candidates: candidates,
+        accounts: controller.accountsForBook(targetBook.id),
+        categories: controller.categories,
+        baseCurrencyCode: targetBook.baseCurrencyCode,
+      );
+      if (!mounted || original == null) return;
+      final originalLabel = original.note.trim().isEmpty
+          ? controller.categoryPathLabel(original.categoryId)
+          : original.note.trim();
       final confirmed = await showConfirmDialog(
         context,
         title: '${l10n.autoCaptureConfirmRefundTitle} · ${targetBook.name}',
-        message: l10n.autoCaptureConfirmRefundMessage,
+        message:
+            '${l10n.autoCaptureConfirmRefundMessage}\n\n'
+            '$originalLabel · ${formatUserMoney(original.amount, original.currencyCode)}',
         confirmLabel: l10n.commonConfirm,
       );
       if (!confirmed || !mounted) return;
@@ -709,6 +736,7 @@ class _AutoCapturePageState extends State<AutoCapturePage>
         reviewEvent.id,
         sourceBookId: reviewEvent.bookId,
         targetBookId: targetBook.id,
+        refundExpenseId: original.id,
       );
       if (!mounted) return;
       if (entry != null) {

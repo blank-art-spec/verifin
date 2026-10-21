@@ -190,6 +190,102 @@ void main() {
     controller.dispose();
   });
 
+  testWidgets('退款复核选择指定原消费后创建关联退款', (tester) async {
+    final controller = await makeController();
+    expect(
+      await controller.saveAutoCaptureSettingsDraft(
+        controller.autoCaptureSettings.copyWith(autoPostHighConfidence: false),
+      ),
+      isTrue,
+    );
+    const account = Account(
+      id: 'refund-review-card',
+      bookId: 'default',
+      name: '中国银行信用卡',
+      type: AccountType.creditCard,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'credit',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+      cardLast4: '6312',
+    );
+    expect(await controller.addAccountDraft(account), isTrue);
+    final category = controller.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    final receivedAt = DateTime(2026, 10, 20, 17, 52);
+    controller.addEntry(
+      LedgerEntry(
+        id: 'refund-review-first',
+        bookId: controller.activeBook.id,
+        type: EntryType.expense,
+        amount: 180,
+        categoryId: category.id,
+        accountId: account.id,
+        note: '第一笔候选消费',
+        occurredAt: receivedAt.subtract(const Duration(days: 8)),
+      ),
+    );
+    controller.addEntry(
+      LedgerEntry(
+        id: 'refund-review-target',
+        bookId: controller.activeBook.id,
+        type: EntryType.expense,
+        amount: 260,
+        categoryId: category.id,
+        accountId: account.id,
+        note: '需要关联的消费',
+        occurredAt: receivedAt.subtract(const Duration(days: 2)),
+      ),
+    );
+    await controller.waitForPendingWrites();
+    expect(
+      await controller.ingestCaptureInputs(<RawCaptureInput>[
+        RawCaptureInput(
+          sourceKind: CaptureSourceKind.notification,
+          sourceId: 'bank-of-china',
+          sourceEventId: 'refund-review-widget',
+          rawText: '您的信用卡6312于2026年10月20日，在微信退货RMB100.00元。',
+          receivedAt: receivedAt,
+        ),
+      ]),
+      1,
+    );
+    await tester.pumpWidget(
+      VeriFinScope(
+        controller: controller,
+        child: zhMaterialApp(home: const AutoCapturePage()),
+      ),
+    );
+    await tester.pumpAndSettle();
+
+    await tester.scrollUntilVisible(
+      find.text('复核记账'),
+      180,
+      scrollable: firstVerticalScrollable(),
+    );
+    await tester.tap(find.text('复核记账'));
+    await tester.pumpAndSettle();
+
+    expect(find.text('选择原消费'), findsOneWidget);
+    expect(find.text('第一笔候选消费'), findsOneWidget);
+    expect(find.text('需要关联的消费'), findsOneWidget);
+    await tester.tap(find.text('需要关联的消费'));
+    await tester.pumpAndSettle();
+    expect(find.textContaining('确认创建退款'), findsOneWidget);
+    await tester.tap(find.text('确认'));
+    await tester.pumpAndSettle();
+
+    final refund = controller.entries.singleWhere(
+      (entry) => entry.type == EntryType.refund,
+    );
+    expect(refund.refundOf, 'refund-review-target');
+    expect(refund.amount, 100);
+    expect(controller.captureEvents.single.status, CaptureStatus.confirmed);
+  });
+
   testWidgets('冷启动会补解析已落库但尚未处理的通知', (tester) async {
     final store = LocalKeyValueStore();
     store.write('verifin.locale.v1', 'zh');

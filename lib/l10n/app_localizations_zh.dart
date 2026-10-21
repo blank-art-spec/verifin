@@ -5849,7 +5849,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get autoCaptureConfirmRefundMessage =>
-      '将把这条事件关联到唯一匹配的原支出并创建已到账退款。请确认金额、账户和商户均正确。';
+      '将把这条事件关联到所选原支出并创建已到账退款。请确认金额、账户和原消费均正确。';
+
+  @override
+  String get autoCaptureSelectRefundExpenseTitle => '选择原消费';
+
+  @override
+  String get autoCaptureSelectRefundExpenseHint =>
+      '请选择这笔退款对应的原消费；确认后会冲减该笔支出的净额。';
+
+  @override
+  String get autoCaptureNoRefundExpenseCandidate =>
+      '没有可关联的原消费，请确认目标账本中已记录原交易，且剩余可退金额足够。';
 
   @override
   String get autoCaptureRuleCreateTitle => '新增自动识别规则';

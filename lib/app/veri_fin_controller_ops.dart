@@ -831,6 +831,74 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     );
   }
 
+  /// 返回退款复核可关联的原支出，按“同到账账户、同金额、时间接近”排序。
+  ///
+  /// 候选必须属于目标账本、币种一致、发生在退款之前，并且剩余可退金额足够。
+  /// 不限制 90 天，避免较晚到账的退款无法由用户手动关联。
+  List<LedgerEntry> captureRefundCandidates(
+    String eventId, {
+    required String sourceBookId,
+    required String targetBookId,
+  }) {
+    final event = captureEventForReview(
+      eventId,
+      sourceBookId: sourceBookId,
+      targetBookId: targetBookId,
+    );
+    final amount = event?.parsedAmount;
+    if (event == null ||
+        event.kind != CaptureTransactionKind.refund ||
+        amount == null ||
+        amount <= 0) {
+      return const <LedgerEntry>[];
+    }
+    final tolerance = currencyAmountTolerance(event.currencyCode);
+    final merchant = event.merchant.trim().toLowerCase();
+    final parsedAccountAvailable = _accounts.any(
+      (account) =>
+          account.id == event.accountCandidateId &&
+          account.bookId == targetBookId,
+    );
+    final candidates = _entries
+        .where(
+          (entry) =>
+              entry.bookId == targetBookId &&
+              entry.type == EntryType.expense &&
+              entry.currencyCode == event.currencyCode &&
+              !entry.occurredAt.isAfter(event.receivedAt) &&
+              remainingRefundable(entry.id) + tolerance >= amount &&
+              (parsedAccountAvailable ||
+                  _accounts.any(
+                    (account) =>
+                        account.id == entry.accountId &&
+                        account.bookId == targetBookId,
+                  )),
+        )
+        .toList();
+    int rank(LedgerEntry entry) {
+      var value = 0;
+      final note = entry.note.trim().toLowerCase();
+      if (event.accountCandidateId != null &&
+          entry.accountId != event.accountCandidateId) {
+        value += 100;
+      }
+      if ((entry.amount - amount).abs() >= tolerance) value += 20;
+      if (merchant.isNotEmpty &&
+          (note.isEmpty ||
+              !note.contains(merchant) && !merchant.contains(note))) {
+        value += 5;
+      }
+      return value;
+    }
+
+    candidates.sort((a, b) {
+      final byRank = rank(a).compareTo(rank(b));
+      if (byRank != 0) return byRank;
+      return b.occurredAt.compareTo(a.occurredAt);
+    });
+    return List<LedgerEntry>.unmodifiable(candidates);
+  }
+
   /// 把待确认事件转换为标准记账页草稿。退款仍需关联原支出，因此返回 null，改走合并入口。
   AiEntryDraft? captureEntryDraft(String eventId) {
     final event = _captureEvents
@@ -881,20 +949,23 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     String eventId, {
     String? sourceBookId,
     String? targetBookId,
+    String? refundExpenseId,
   }) => _enqueueCaptureMutation(
     () => _confirmParsedCaptureEvent(
       eventId,
       sourceBookId: sourceBookId,
       targetBookId: targetBookId,
+      refundExpenseId: refundExpenseId,
     ),
   );
 
-  /// 串行确认退款：重新匹配目标账本的账户与原支出，成功才提交事件归属。
-  /// 参数与公共入口一致；找不到唯一原支出或持久化失败时返回 null。
+  /// 串行确认退款：重新匹配目标账本账户，并校验用户选择或自动唯一命中的原支出。
+  /// 参数与公共入口一致；原支出无效、可退金额不足或持久化失败时返回 null。
   Future<LedgerEntry?> _confirmParsedCaptureEvent(
     String eventId, {
     String? sourceBookId,
     String? targetBookId,
+    String? refundExpenseId,
   }) async {
     final eventIndex = _captureEvents.indexWhere(
       (event) =>
@@ -914,7 +985,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         .where((item) => item.id == event.bookId)
         .firstOrNull;
     if (book == null) return null;
-    final entry = _buildAutomaticCaptureEntry(event, _entries, book);
+    final entry = _buildAutomaticCaptureEntry(
+      event,
+      _entries,
+      book,
+      refundExpenseId: refundExpenseId,
+    );
     if (entry == null) return null;
     final nextEntries = _entriesWithSyncedRefundCache(<LedgerEntry>[
       ..._entries,
@@ -1264,17 +1340,18 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   LedgerEntry? _buildAutomaticCaptureEntry(
     CaptureEvent event,
     List<LedgerEntry> entries,
-    LedgerBook book,
-  ) {
+    LedgerBook book, {
+    String? refundExpenseId,
+  }) {
     final amount = event.parsedAmount;
     final type = event.kind.entryType;
-    final account = _accounts
+    final parsedAccount = _accounts
         .where(
           (item) =>
               item.id == event.accountCandidateId && item.bookId == book.id,
         )
         .firstOrNull;
-    if (amount == null || amount <= 0 || type == null || account == null) {
+    if (amount == null || amount <= 0 || type == null) {
       return null;
     }
     double? convert(String targetCode) {
@@ -1290,26 +1367,60 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       return result is ConvertedCurrencyAmount ? result.amount : null;
     }
 
-    final accountAmount = convert(account.currencyCode);
-    if (accountAmount == null) return null;
     final source = sourceRecordForCapture(event);
 
     if (type == EntryType.refund) {
-      final candidates = entries
+      final tolerance = currencyAmountTolerance(event.currencyCode);
+      LedgerEntry? original;
+      if (refundExpenseId != null) {
+        original = entries
+            .where(
+              (entry) =>
+                  entry.id == refundExpenseId &&
+                  entry.bookId == book.id &&
+                  entry.type == EntryType.expense &&
+                  entry.currencyCode == event.currencyCode &&
+                  !entry.occurredAt.isAfter(event.receivedAt),
+            )
+            .firstOrNull;
+      } else if (parsedAccount != null) {
+        final candidates = entries
+            .where(
+              (entry) =>
+                  entry.bookId == book.id &&
+                  entry.type == EntryType.expense &&
+                  entry.currencyCode == event.currencyCode &&
+                  entry.accountId == parsedAccount.id &&
+                  (entry.amount - amount).abs() < tolerance &&
+                  !entry.occurredAt.isAfter(event.receivedAt) &&
+                  calendarDaysBetween(entry.occurredAt, event.receivedAt) <= 90,
+            )
+            .toList();
+        if (candidates.length == 1) original = candidates.single;
+      }
+      if (original == null) return null;
+      final alreadyRefunded = entries
           .where(
             (entry) =>
-                entry.bookId == book.id &&
-                entry.type == EntryType.expense &&
-                entry.currencyCode == event.currencyCode &&
-                entry.accountId == account.id &&
-                (entry.amount - amount).abs() <
-                    currencyAmountTolerance(event.currencyCode) &&
-                !entry.occurredAt.isAfter(event.receivedAt) &&
-                calendarDaysBetween(entry.occurredAt, event.receivedAt) <= 90,
+                entry.type == EntryType.refund &&
+                entry.refundOf == original!.id,
           )
-          .toList();
-      if (candidates.length != 1) return null;
-      final original = candidates.single;
+          .fold<double>(0, (sum, entry) => sum + entry.amount);
+      final remaining = (original.amount - alreadyRefunded)
+          .clamp(0.0, original.amount)
+          .toDouble();
+      if (amount - remaining >= tolerance) return null;
+      final account =
+          parsedAccount ??
+          _accounts
+              .where(
+                (item) =>
+                    item.id == original!.accountId && item.bookId == book.id,
+              )
+              .firstOrNull;
+      if (account == null) return null;
+      final accountAmount = convert(account.currencyCode);
+      if (accountAmount == null) return null;
       final baseAmount = original.amount == 0
           ? null
           : normalizeCurrencyAmount(
@@ -1341,6 +1452,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         sourceRecords: <EntrySourceRecord>[source],
       );
     }
+
+    final account = parsedAccount;
+    if (account == null) return null;
+    final accountAmount = convert(account.currencyCode);
+    if (accountAmount == null) return null;
 
     if (type == EntryType.transfer) {
       final target = _accounts
@@ -1617,6 +1733,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
 
   List<Account> get accounts => _accountsView ??= List<Account>.unmodifiable(
     _accounts.where((account) => account.bookId == _activeBookId),
+  );
+
+  /// 指定账本的只读账户列表，供跨账本复核预览使用，不切换当前账本。
+  List<Account> accountsForBook(String bookId) => List<Account>.unmodifiable(
+    _accounts.where((account) => account.bookId == bookId),
   );
 
   /// 当前账本的信用主体。一个主体可关联多个不同币种的 [Account] 子账户。

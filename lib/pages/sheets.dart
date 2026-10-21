@@ -247,6 +247,83 @@ Future<LedgerBook?> showLedgerBookPickerSheet({
   labelOf: (book) => book.name,
 );
 
+/// 选择自动采集退款要关联的原消费。只返回选择，不写入交易。
+Future<LedgerEntry?> showRefundExpensePickerSheet({
+  required BuildContext context,
+  required List<LedgerEntry> candidates,
+  required List<Account> accounts,
+  required List<Category> categories,
+  required String baseCurrencyCode,
+}) {
+  final l10n = AppLocalizations.of(context);
+  return _showVeriModalSheet<LedgerEntry>(
+    context: context,
+    showDragHandle: true,
+    isScrollControlled: true,
+    backgroundColor: Theme.of(context).colorScheme.surface,
+    shape: const RoundedRectangleBorder(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(veriRadiusLg)),
+    ),
+    builder: (context) {
+      final maxHeight = MediaQuery.sizeOf(context).height * 0.78;
+      return SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.fromLTRB(14, 14, 14, 16),
+          child: ConstrainedBox(
+            constraints: BoxConstraints(maxHeight: maxHeight),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  l10n.autoCaptureSelectRefundExpenseTitle,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  l10n.autoCaptureSelectRefundExpenseHint,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(context).colorScheme.onSurfaceVariant,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                Flexible(
+                  child: ListView.separated(
+                    shrinkWrap: true,
+                    itemCount: candidates.length,
+                    separatorBuilder: (_, _) => Divider(
+                      indent: 19,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.06),
+                    ),
+                    itemBuilder: (context, index) {
+                      final entry = candidates[index];
+                      return TransactionTile(
+                        entry,
+                        key: ValueKey<String>(
+                          'capture_refund_candidate_${entry.id}',
+                        ),
+                        accounts: accounts,
+                        categories: categories,
+                        showDate: true,
+                        baseCurrencyCode: baseCurrencyCode,
+                        onTap: () => Navigator.of(context).pop(entry),
+                      );
+                    },
+                  ),
+                ),
+              ],
+            ),
+          ),
+        ),
+      );
+    },
+  );
+}
+
 /// 通用单选底部弹窗。[sectionOf] 非空时按其返回的分区标题给选项加小标题分组
 /// （相邻同分区归为一组、分区变化处插入小标题），供筛选场景把「快捷项」与
 /// 「具体项」分区展示（如标签筛选的「快捷筛选 / 标签」两组）。

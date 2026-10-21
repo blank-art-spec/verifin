@@ -6034,7 +6034,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get autoCaptureConfirmRefundMessage =>
-      'This event will be linked to the one matching expense and saved as a settled refund. Confirm the amount, account, and merchant are correct.';
+      'This event will be linked to the selected original expense and saved as a settled refund. Confirm the amount, account, and original expense are correct.';
+
+  @override
+  String get autoCaptureSelectRefundExpenseTitle => 'Select original expense';
+
+  @override
+  String get autoCaptureSelectRefundExpenseHint =>
+      'Select the expense this refund belongs to. Confirming will reduce that expense\'s net amount.';
+
+  @override
+  String get autoCaptureNoRefundExpenseCandidate =>
+      'No eligible original expense was found. Check that the original transaction exists in the selected ledger and has enough refundable amount remaining.';
 
   @override
   String get autoCaptureRuleCreateTitle => 'New capture rule';

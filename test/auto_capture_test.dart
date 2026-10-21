@@ -840,6 +840,96 @@ void main() {
     );
   });
 
+  test('退款复核可在多个候选中指定原支出并支持部分退款', () async {
+    final controller = await makeController();
+    expect(
+      await controller.saveAutoCaptureSettingsDraft(
+        controller.autoCaptureSettings.copyWith(autoPostHighConfidence: false),
+      ),
+      isTrue,
+    );
+    const account = Account(
+      id: 'refund-card-6312',
+      bookId: 'default',
+      name: '中国银行信用卡',
+      type: AccountType.creditCard,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'credit',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
+      cardLast4: '6312',
+    );
+    expect(await controller.addAccountDraft(account), isTrue);
+    final category = controller.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    final receivedAt = DateTime(2026, 10, 20, 17, 52);
+    for (final item in <(String, double, String, int)>[
+      ('refund-candidate-a', 180, '较早消费', 12),
+      ('refund-candidate-b', 260, '需要关联的消费', 3),
+    ]) {
+      controller.addEntry(
+        LedgerEntry(
+          id: item.$1,
+          bookId: controller.activeBook.id,
+          type: EntryType.expense,
+          amount: item.$2,
+          categoryId: category.id,
+          accountId: account.id,
+          note: item.$3,
+          occurredAt: receivedAt.subtract(Duration(days: item.$4)),
+        ),
+      );
+    }
+    await controller.waitForPendingWrites();
+    expect(
+      await controller.ingestCaptureInputs(<RawCaptureInput>[
+        RawCaptureInput(
+          sourceKind: CaptureSourceKind.notification,
+          sourceId: 'bank-of-china',
+          sourceEventId: 'refund-review-selection',
+          rawText: '您的信用卡6312于2026年10月20日，在微信退货RMB100.00元。',
+          receivedAt: receivedAt,
+        ),
+      ]),
+      1,
+    );
+    final event = controller.captureEvents.single;
+
+    final candidates = controller.captureRefundCandidates(
+      event.id,
+      sourceBookId: controller.activeBook.id,
+      targetBookId: controller.activeBook.id,
+    );
+    expect(candidates.map((entry) => entry.id), <String>[
+      'refund-candidate-b',
+      'refund-candidate-a',
+    ]);
+
+    final refund = await controller.confirmParsedCaptureEvent(
+      event.id,
+      refundExpenseId: 'refund-candidate-b',
+    );
+
+    expect(refund, isNotNull);
+    expect(refund!.amount, 100);
+    expect(refund.refundOf, 'refund-candidate-b');
+    expect(
+      controller.entries
+          .singleWhere((entry) => entry.id == 'refund-candidate-b')
+          .refundedBaseAmount,
+      100,
+    );
+    expect(
+      controller.entries
+          .singleWhere((entry) => entry.id == 'refund-candidate-a')
+          .refundedBaseAmount,
+      0,
+    );
+  });
+
   test('跨账本退款只匹配目标账本的账户和原支出', () async {
     final controller = await makeController();
     final sourceBookId = controller.activeBook.id;
