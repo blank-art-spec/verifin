@@ -3,6 +3,8 @@ part of 'common_widgets.dart';
 // 表单域：设置行、选择字段、紧凑开关行、交易标签选择、卡号输入组。
 
 class SettingsRow extends StatelessWidget {
+  /// 构造统一设置行；[title] 为字段名，[trailing] 为当前值，点击调用 [onTap]。
+  /// [trailingMaxLines] 默认一行；长规则名称可传 null 自然换行，避免窄屏省略关键信息。
   const SettingsRow({
     super.key,
     this.icon,
@@ -12,6 +14,7 @@ class SettingsRow extends StatelessWidget {
     this.onTap,
     this.trailingIcon,
     this.contentColor,
+    this.trailingMaxLines = 1,
   }) : assert(icon != null || leading != null, '需要提供 icon 或 leading');
 
   final IconData? icon;
@@ -21,7 +24,9 @@ class SettingsRow extends StatelessWidget {
   final VoidCallback? onTap;
   final IconData? trailingIcon;
   final Color? contentColor;
+  final int? trailingMaxLines;
 
+  /// 按当前主题绘制设置行；值文本遵循 trailingMaxLines，长规则允许自然增高。
   @override
   Widget build(BuildContext context) {
     final iconColor = contentColor ?? veriRoyal;
@@ -45,8 +50,10 @@ class SettingsRow extends StatelessWidget {
             child: Text(
               trailing,
               textAlign: TextAlign.end,
-              maxLines: 1,
-              overflow: TextOverflow.ellipsis,
+              maxLines: trailingMaxLines,
+              overflow: trailingMaxLines == null
+                  ? TextOverflow.clip
+                  : TextOverflow.ellipsis,
               style: Theme.of(context).textTheme.bodySmall?.copyWith(
                 color:
                     contentColor ??

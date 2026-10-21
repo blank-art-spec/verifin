@@ -10,6 +10,7 @@ mixin _AccountEntryReminderOps on _ControllerState, _ControllerOps {
           .firstOrNull;
 
   /// 验证预设交易与时间范围；[rule] 不允许绑定无账户、转账、退款或已删除的实体。
+  /// 仅自定义星期要求至少选一天，工作日模式允许空星期以包含全部调休补班。
   bool _validAccountEntryReminder(AccountEntryReminder rule) {
     if (!_accounts.any(
           (account) =>
@@ -22,7 +23,8 @@ mixin _AccountEntryReminderOps on _ControllerState, _ControllerOps {
         rule.hour > 23 ||
         rule.minute < 0 ||
         rule.minute > 59 ||
-        rule.weekdays.isEmpty ||
+        (rule.repeatMode == AccountReminderRepeatMode.weekdays &&
+            rule.weekdays.isEmpty) ||
         rule.weekdays.any((day) => day < 1 || day > 7) ||
         rule.confirmLabel.length > 12 ||
         rule.cancelLabel.length > 12 ||
@@ -81,6 +83,7 @@ mixin _AccountEntryReminderOps on _ControllerState, _ControllerOps {
 
   /// 投影全部账本有效且已启用的提醒；[l10n] 决定默认按钮及通知文案。
   /// 金额在原生侧仅作为展示文本，实际落账永远读取 Controller 的最新配置。
+  /// 工作日模式额外携带同源离线日历，原生重启和进程回收后仍可独立判断。
   List<Map<String, Object?>> accountEntryReminderNotifications(
     AppLocalizations l10n,
   ) => [
@@ -88,6 +91,9 @@ mixin _AccountEntryReminderOps on _ControllerState, _ControllerOps {
       if (rule.enabled && _validAccountEntryReminder(rule))
         <String, Object?>{
           ...rule.toJson(),
+          // 仅工作日模式携带公共日历，Android 落盘后可在无 Flutter 进程时独立判断。
+          if (rule.repeatMode == AccountReminderRepeatMode.chinaWorkdays)
+            'workdayCalendar': mainlandChinaWorkdayCalendar.toJson(),
           'title': rule.name.isEmpty
               ? l10n.accountEntryReminderTitle
               : rule.name,
@@ -113,6 +119,7 @@ mixin _AccountEntryReminderOps on _ControllerState, _ControllerOps {
   /// 处理原生通知的显式选择。[id] 必须匹配当前修订；[date] 是通知实际触发日期，
   /// 只接受当天，避免点击昨天的通知误记到今天。[confirm] 为 false 只保存跳过标记。
   /// 确认交易 id 固定为账户＋日期；KV 标记写入失败或进程重建后仍由 SQLite 阻止重复。
+  /// 按 matchesDate 重查日期规则，拒绝假期或未知年度暂停期间的过时通知操作。
   Future<AccountReminderResult> handleAccountEntryReminder({
     required String id,
     required String date,
@@ -126,7 +133,7 @@ mixin _AccountEntryReminderOps on _ControllerState, _ControllerOps {
         !rule.enabled ||
         !_validAccountEntryReminder(rule) ||
         date != currencyDateKey(today) ||
-        !rule.weekdays.contains(today.weekday)) {
+        !rule.matchesDate(today)) {
       return AccountReminderResult.expired;
     }
     final entryId = 'entry_account_reminder_${rule.accountId}_$date';

@@ -140,6 +140,66 @@ abstract class AppLocalizations {
   /// **'重复星期'**
   String get accountEntryReminderRepeat;
 
+  /// No description provided for @accountEntryReminderRepeatMode.
+  ///
+  /// In zh, this message translates to:
+  /// **'重复日期'**
+  String get accountEntryReminderRepeatMode;
+
+  /// No description provided for @accountEntryReminderCustomWeekdays.
+  ///
+  /// In zh, this message translates to:
+  /// **'自定义星期'**
+  String get accountEntryReminderCustomWeekdays;
+
+  /// No description provided for @accountEntryReminderChinaWorkdays.
+  ///
+  /// In zh, this message translates to:
+  /// **'中国大陆工作日（含调休）'**
+  String get accountEntryReminderChinaWorkdays;
+
+  /// No description provided for @accountEntryReminderCalendarPolicy.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少年度日历时'**
+  String get accountEntryReminderCalendarPolicy;
+
+  /// No description provided for @accountEntryReminderCalendarPause.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂停提醒（默认）'**
+  String get accountEntryReminderCalendarPause;
+
+  /// No description provided for @accountEntryReminderCalendarWeekdays.
+  ///
+  /// In zh, this message translates to:
+  /// **'按周一至周五提醒'**
+  String get accountEntryReminderCalendarWeekdays;
+
+  /// 工作日日历已经核对的年份列表，不代表其他年份自动可用。
+  ///
+  /// In zh, this message translates to:
+  /// **'已内置 {years} 年全国放假与调休日历，离线可用。'**
+  String accountEntryReminderCalendarCoverage(String years);
+
+  /// No description provided for @accountEntryReminderWorkdayHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'放假日跳过，周末补班日照常提醒，不受自定义星期影响。按手机本地日期和时间判断，不包含单位排班或个人请假；新年度日历随应用更新。缺少日历时默认暂停，也可明确选择按周一至周五提醒（不含调休）。'**
+  String get accountEntryReminderWorkdayHint;
+
+  /// 当前年度缺少日历且用户选择暂停时的提示。
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 {year} 年调休日历，工作日提醒已暂停。请更新应用获取日历，或在对应账户中更改缺失处理方式。'**
+  String accountEntryReminderCalendarMissingPause(int year);
+
+  /// 用户明确选择缺失时按普通工作周提醒的降级提示。
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少 {year} 年调休日历，已按你的选择临时使用周一至周五，无法跳过节假日或包含周末补班。请更新应用获取日历。'**
+  String accountEntryReminderCalendarMissingWeekdays(int year);
+
   /// No description provided for @accountEntryReminderConfirmation.
   ///
   /// In zh, this message translates to:
@@ -173,7 +233,7 @@ abstract class AppLocalizations {
   /// No description provided for @accountEntryReminderValidation.
   ///
   /// In zh, this message translates to:
-  /// **'请选择至少一个星期；启用时须填写大于零的金额并选择分类。按钮文字最多 12 个字符。'**
+  /// **'自定义星期须至少选择一天；启用时须填写大于零的金额并选择分类。按钮文字最多 12 个字符。'**
   String get accountEntryReminderValidation;
 
   /// No description provided for @accountEntryReminderOn.

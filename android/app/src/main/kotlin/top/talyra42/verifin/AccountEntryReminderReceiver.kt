@@ -18,12 +18,11 @@ import androidx.core.content.ContextCompat
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.Calendar
-import java.util.Locale
 import java.util.UUID
 
 /**
  * 账户记账确认提醒：原生持久化排程，闹钟只展示通知，绝不写账目。
- * 每次触发按本地日历安排下次选定星期；冷启动、开机、升级和时区变化后可恢复。
+ * 每次触发按本地日历安排下次选定星期或大陆工作日；开机、升级和时区变化后可恢复。
  */
 class AccountEntryReminderReceiver : BroadcastReceiver() {
     /**
@@ -49,6 +48,9 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
             val due = intent.getLongExtra("due", 0L)
             if (due <= 0 || dateKey(due) != dateKey(System.currentTimeMillis()) ||
                 rule.optString("handledDate") == dateKey(due)) return
+            // 送达前重查日期规则，拒绝日历更新或系统日期调整后已不符合条件的旧闹钟。
+            val day = Calendar.getInstance().apply { timeInMillis = due }
+            if (!AccountReminderSchedule.matches(rule, day)) return
             show(context, rule, due)
         } catch (error: Exception) {
             // 广播没有 Flutter UI；仅记录阶段与异常类型，不记录账户名、金额或原文。
@@ -135,27 +137,12 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
                 }, PendingIntent.FLAG_UPDATE_CURRENT or PendingIntent.FLAG_IMMUTABLE)
 
         /**
-         * 为 [rule] 的选定星期及本地时刻寻找下一次提醒，用 [context] 交给系统排程。
-         * Calendar 按日历递增，避免夏令时的 23/25 小时偏移；跳过当天已处理的提醒。
+         * 按 [rule] 的星期或工作日口径寻找下一次本地时刻，由 [context] 交给系统排程。
+         * 搜索覆盖完整日历年，支持长假；未知年度默认暂停，不依赖 Flutter 进程常驻。
          */
         private fun schedule(context: Context, rule: JSONObject) {
-            val now = System.currentTimeMillis()
-            val days = rule.getJSONArray("weekdays")
-            val selected = (0 until days.length()).map { days.getInt(it) }.toSet()
-            val candidate = Calendar.getInstance()
-            for (offset in 0..7) {
-                if (offset > 0) candidate.add(Calendar.DAY_OF_MONTH, 1)
-                candidate.set(Calendar.HOUR_OF_DAY, rule.getInt("hour"))
-                candidate.set(Calendar.MINUTE, rule.getInt("minute"))
-                candidate.set(Calendar.SECOND, 0)
-                candidate.set(Calendar.MILLISECOND, 0)
-                val weekday = (candidate.get(Calendar.DAY_OF_WEEK) + 5) % 7 + 1
-                if (weekday !in selected || candidate.timeInMillis <= now ||
-                    rule.optString("handledDate") == dateKey(candidate.timeInMillis)) continue
-                val pending = alarmIntent(context, rule, candidate.timeInMillis)
-                scheduleAlarm(context, candidate.timeInMillis, pending)
-                return
-            }
+            val due = AccountReminderSchedule.nextTime(rule, System.currentTimeMillis()) ?: return
+            scheduleAlarm(context, due, alarmIntent(context, rule, due))
         }
 
         /**
@@ -279,8 +266,7 @@ class AccountEntryReminderReceiver : BroadcastReceiver() {
         /** 将时间戳格式化为本地日期键；仅用于持久幂等标识，不作为用户可见日期。 */
         private fun dateKey(time: Long): String {
             val calendar = Calendar.getInstance().apply { timeInMillis = time }
-            return String.format(Locale.ROOT, "%04d-%02d-%02d", calendar.get(Calendar.YEAR),
-                calendar.get(Calendar.MONTH) + 1, calendar.get(Calendar.DAY_OF_MONTH))
+            return AccountReminderSchedule.dateKey(calendar)
         }
     }
 }

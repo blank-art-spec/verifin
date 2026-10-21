@@ -4,6 +4,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/ledger_math.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/reminder/account_entry_reminder.dart';
+import 'package:verifin/app/reminder/china_workday_calendar.dart';
 import 'package:verifin/l10n/app_localizations_zh.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
@@ -12,6 +13,59 @@ import 'support/test_harness.dart';
 /// 账户提醒回归用例；本次按用户要求仅纳入静态分析，不执行测试程序。
 void main() {
   useTestDatabases();
+
+  test('工作日提醒允许不选星期，冷启动保留模式，原生快照含同源年度日历', () async {
+    final store = LocalKeyValueStore();
+    var controller = await makeController(store);
+    final account = controller.accounts.first;
+    final category = controller.categories.firstWhere(
+      (item) => item.type == EntryType.expense,
+    );
+    final draft = AccountEntryReminder(
+      id: '',
+      accountId: account.id,
+      bookId: account.bookId,
+      currencyCode: account.currencyCode,
+      enabled: true,
+      amount: 12,
+      categoryId: category.id,
+      weekdays: const [],
+      repeatMode: AccountReminderRepeatMode.chinaWorkdays,
+    );
+    expect(await controller.saveAccountEntryReminder(draft), isTrue);
+    await controller.flushPendingWrites();
+    controller.dispose();
+    controller = await makeController(store);
+    final rule = controller.accountEntryReminder(account.id)!;
+    expect(rule.repeatMode, AccountReminderRepeatMode.chinaWorkdays);
+    expect(rule.missingCalendarPolicy, MissingWorkdayCalendarPolicy.pause);
+    final projection = controller
+        .accountEntryReminderNotifications(AppLocalizationsZh())
+        .single;
+    expect(projection['repeatMode'], 'chinaWorkdays');
+    expect(
+      projection['workdayCalendar'],
+      mainlandChinaWorkdayCalendar.toJson(),
+    );
+    // 即使原生队列送来了动作，确认端仍校验当天规则；空星期列表不能挡住有效工作日。
+    final now = DateTime.now();
+    final expected = mainlandChinaWorkdayCalendar.isWorkday(now) == true;
+    final beforeCount = controller.entries.length;
+    expect(
+      await controller.handleAccountEntryReminder(
+        id: rule.id,
+        date: currencyDateKey(now),
+        confirm: true,
+      ),
+      expected ? AccountReminderResult.recorded : AccountReminderResult.expired,
+    );
+    expect(controller.entries.length, beforeCount + (expected ? 1 : 0));
+    expect(
+      jsonEncode(controller.exportDataJson()),
+      isNot(contains('workdayCalendar')),
+    );
+    controller.dispose();
+  });
 
   /// 为 [account] 构造每天可触发的固定支出草稿，避免测试依赖执行当天是周几。
   AccountEntryReminder draftFor(Account account, String categoryId) =>

@@ -3,6 +3,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:verifin/app/models.dart';
+import 'package:verifin/app/reminder/account_entry_reminder.dart';
 import 'package:verifin/data/app_database.dart';
 import 'package:verifin/data/ledger_repository.dart';
 
@@ -20,6 +21,54 @@ import 'package:verifin/data/ledger_repository.dart';
 ///   不是映射 bug）。
 void main() {
   setUpAll(sqfliteFfiInit);
+
+  test('账户提醒设备 KV 保留工作日模式、缺失策略与原有字段，旧版默认不变', () {
+    const rule = AccountEntryReminder(
+      id: 'reminder-revision',
+      accountId: 'account',
+      bookId: 'book',
+      currencyCode: 'USD',
+      enabled: true,
+      name: '饭堂',
+      type: EntryType.income,
+      amount: 19.5,
+      categoryId: 'category',
+      hour: 18,
+      minute: 45,
+      weekdays: [6, 7],
+      repeatMode: AccountReminderRepeatMode.chinaWorkdays,
+      missingCalendarPolicy: MissingWorkdayCalendarPolicy.weekdays,
+      confirmLabel: '记一笔',
+      cancelLabel: '跳过',
+      handledDate: '2026-10-10',
+    );
+    final encoded =
+        jsonDecode(jsonEncode(rule.toJson())) as Map<String, Object?>;
+    expect(AccountEntryReminder.fromJson(encoded).toJson(), rule.toJson());
+    expect(rule.copyWith().toJson(), rule.toJson());
+    final legacy = {...encoded}
+      ..remove('repeatMode')
+      ..remove('missingCalendarPolicy');
+    final restored = AccountEntryReminder.fromJson(legacy);
+    expect(restored.enabled, isTrue);
+    expect(restored.repeatMode, AccountReminderRepeatMode.weekdays);
+    expect(restored.missingCalendarPolicy, MissingWorkdayCalendarPolicy.pause);
+    expect(restored.weekdays, [6, 7]);
+    expect(
+      AccountEntryReminder.fromJson({
+        ...encoded,
+        'repeatMode': 'unknown',
+      }).enabled,
+      isFalse,
+    );
+    expect(
+      AccountEntryReminder.fromJson({
+        ...encoded,
+        'missingCalendarPolicy': 'unknown',
+      }).missingCalendarPolicy,
+      MissingWorkdayCalendarPolicy.pause,
+    );
+  });
 
   // ---- 全字段非默认值夹具 ----
 

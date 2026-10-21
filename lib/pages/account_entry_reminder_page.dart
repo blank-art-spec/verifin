@@ -9,6 +9,7 @@ import '../app/feedback.dart';
 import '../app/models.dart';
 import '../app/platform_bridge.dart';
 import '../app/reminder/account_entry_reminder.dart';
+import '../app/reminder/china_workday_calendar.dart';
 import '../app/reminder/notification_scheduler.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
@@ -130,7 +131,8 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
     if (_saving || _testing) return false;
     final controller = VeriFinScope.of(context);
     final l10n = AppLocalizations.of(context);
-    if (_draft.weekdays.isEmpty ||
+    if ((_draft.repeatMode == AccountReminderRepeatMode.weekdays &&
+            _draft.weekdays.isEmpty) ||
         _draft.confirmLabel.length > 12 ||
         _draft.cancelLabel.length > 12 ||
         _draft.enabled &&
@@ -235,6 +237,7 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
 
   /// 使用统一实色页面、设置行和单选组件展示草稿；确认方式区分按钮文字与固定动作。
   /// 测试按钮独立于启用状态与草稿保存，只验证系统通知，并说明强行停止的边界。
+  /// 工作日模式展示日历覆盖年份和缺失策略；旧的自定义星期留在草稿中，切回不丢失。
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -346,36 +349,114 @@ class _AccountEntryReminderPageState extends State<AccountEntryReminderPage> {
                         onTap: _pickTime,
                       ),
                       const Divider(height: 1),
-                      Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 10),
-                        child: Column(
-                          crossAxisAlignment: CrossAxisAlignment.start,
-                          children: [
-                            Text(l10n.accountEntryReminderRepeat),
-                            const SizedBox(height: 8),
-                            Wrap(
-                              spacing: 6,
-                              runSpacing: 6,
-                              children: [
-                                for (var day = 1; day <= 7; day++)
-                                  FilterChip(
-                                    label: Text(weekdays[day - 1]),
-                                    selected: _draft.weekdays.contains(day),
-                                    onSelected: (selected) => _update(
-                                      _draft.copyWith(
-                                        weekdays: [
-                                          for (final value in _draft.weekdays)
-                                            if (value != day) value,
-                                          if (selected) day,
-                                        ],
-                                      ),
-                                    ),
-                                  ),
-                              ],
-                            ),
-                          ],
+                      VeriAnchoredChoice<AccountReminderRepeatMode>(
+                        values: AccountReminderRepeatMode.values,
+                        selected: _draft.repeatMode,
+                        semanticLabel: l10n.accountEntryReminderRepeatMode,
+                        idOf: (value) => value.name,
+                        labelOf: (value) => value.label(l10n),
+                        onSelected: (value) =>
+                            _update(_draft.copyWith(repeatMode: value)),
+                        builder: (context, openMenu, menuOpen) => SettingsRow(
+                          key: const Key('account_reminder_repeat_mode'),
+                          icon: Icons.event_repeat,
+                          title: l10n.accountEntryReminderRepeatMode,
+                          trailing: _draft.repeatMode.label(l10n),
+                          trailingMaxLines: null,
+                          trailingIcon: Icons.chevron_right,
+                          onTap: openMenu,
                         ),
                       ),
+                      if (_draft.repeatMode ==
+                          AccountReminderRepeatMode.chinaWorkdays) ...[
+                        const Divider(height: 1),
+                        VeriAnchoredChoice<MissingWorkdayCalendarPolicy>(
+                          values: MissingWorkdayCalendarPolicy.values,
+                          selected: _draft.missingCalendarPolicy,
+                          semanticLabel:
+                              l10n.accountEntryReminderCalendarPolicy,
+                          idOf: (value) => value.name,
+                          labelOf: (value) => value.label(l10n),
+                          onSelected: (value) => _update(
+                            _draft.copyWith(missingCalendarPolicy: value),
+                          ),
+                          builder: (context, openMenu, menuOpen) => SettingsRow(
+                            key: const Key('account_reminder_calendar_policy'),
+                            icon: Icons.event_busy_outlined,
+                            title: l10n.accountEntryReminderCalendarPolicy,
+                            trailing: _draft.missingCalendarPolicy.label(l10n),
+                            trailingMaxLines: null,
+                            trailingIcon: Icons.chevron_right,
+                            onTap: openMenu,
+                          ),
+                        ),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                l10n.accountEntryReminderCalendarCoverage(
+                                  mainlandChinaWorkdayCalendar.supportedYears
+                                      .join(' / '),
+                                ),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(l10n.accountEntryReminderWorkdayHint),
+                              if (_draft.hasMissingCalendar(
+                                DateTime.now(),
+                              )) ...[
+                                const SizedBox(height: 8),
+                                Text(
+                                  _draft.missingCalendarPolicy ==
+                                          MissingWorkdayCalendarPolicy.pause
+                                      ? l10n.accountEntryReminderCalendarMissingPause(
+                                          DateTime.now().year,
+                                        )
+                                      : l10n.accountEntryReminderCalendarMissingWeekdays(
+                                          DateTime.now().year,
+                                        ),
+                                  style: TextStyle(
+                                    color: Theme.of(context).colorScheme.error,
+                                  ),
+                                ),
+                              ],
+                            ],
+                          ),
+                        ),
+                      ],
+                      if (_draft.repeatMode ==
+                          AccountReminderRepeatMode.weekdays)
+                        Padding(
+                          padding: const EdgeInsets.symmetric(vertical: 10),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(l10n.accountEntryReminderRepeat),
+                              const SizedBox(height: 8),
+                              Wrap(
+                                spacing: 6,
+                                runSpacing: 6,
+                                children: [
+                                  for (var day = 1; day <= 7; day++)
+                                    FilterChip(
+                                      label: Text(weekdays[day - 1]),
+                                      selected: _draft.weekdays.contains(day),
+                                      onSelected: (selected) => _update(
+                                        _draft.copyWith(
+                                          weekdays: [
+                                            for (final value in _draft.weekdays)
+                                              if (value != day) value,
+                                            if (selected) day,
+                                          ],
+                                        ),
+                                      ),
+                                    ),
+                                ],
+                              ),
+                            ],
+                          ),
+                        ),
                     ],
                   ),
                 ),

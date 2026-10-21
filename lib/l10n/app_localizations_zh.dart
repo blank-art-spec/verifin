@@ -31,6 +31,43 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountEntryReminderRepeat => '重复星期';
 
   @override
+  String get accountEntryReminderRepeatMode => '重复日期';
+
+  @override
+  String get accountEntryReminderCustomWeekdays => '自定义星期';
+
+  @override
+  String get accountEntryReminderChinaWorkdays => '中国大陆工作日（含调休）';
+
+  @override
+  String get accountEntryReminderCalendarPolicy => '缺少年度日历时';
+
+  @override
+  String get accountEntryReminderCalendarPause => '暂停提醒（默认）';
+
+  @override
+  String get accountEntryReminderCalendarWeekdays => '按周一至周五提醒';
+
+  @override
+  String accountEntryReminderCalendarCoverage(String years) {
+    return '已内置 $years 年全国放假与调休日历，离线可用。';
+  }
+
+  @override
+  String get accountEntryReminderWorkdayHint =>
+      '放假日跳过，周末补班日照常提醒，不受自定义星期影响。按手机本地日期和时间判断，不包含单位排班或个人请假；新年度日历随应用更新。缺少日历时默认暂停，也可明确选择按周一至周五提醒（不含调休）。';
+
+  @override
+  String accountEntryReminderCalendarMissingPause(int year) {
+    return '缺少 $year 年调休日历，工作日提醒已暂停。请更新应用获取日历，或在对应账户中更改缺失处理方式。';
+  }
+
+  @override
+  String accountEntryReminderCalendarMissingWeekdays(int year) {
+    return '缺少 $year 年调休日历，已按你的选择临时使用周一至周五，无法跳过节假日或包含周末补班。请更新应用获取日历。';
+  }
+
+  @override
   String get accountEntryReminderConfirmation => '确认方式';
 
   @override
@@ -48,7 +85,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountEntryReminderValidation =>
-      '请选择至少一个星期；启用时须填写大于零的金额并选择分类。按钮文字最多 12 个字符。';
+      '自定义星期须至少选择一天；启用时须填写大于零的金额并选择分类。按钮文字最多 12 个字符。';
 
   @override
   String get accountEntryReminderOn => '已启用';

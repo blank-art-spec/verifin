@@ -1,6 +1,18 @@
 # 账户记账确认提醒
 
-每个真实账户（不限账户类型）在账户详情中提供「账户记账提醒」。默认关闭，一条配置固定归属账户及其账本，不跟随当前浏览账本。支持提醒名称、收入/支出、账户币种金额、分类、本地时刻、重复星期，以及「确认方式」中的确认/取消按钮文字；留空使用当前语言的默认「确定 / 取消」，自定义文字最多 12 个字符。
+每个真实账户（不限账户类型）在账户详情中提供「账户记账提醒」。默认关闭，一条配置固定归属账户及其账本，不跟随当前浏览账本。支持提醒名称、收入/支出、账户币种金额、分类、本地时刻、重复日期，以及「确认方式」中的确认/取消按钮文字；留空使用当前语言的默认「确定 / 取消」，自定义文字最多 12 个字符。
+
+## 中国大陆工作日（含调休）
+
+「重复日期」可选「自定义星期」或「中国大陆工作日（含调休）」。旧配置缺少 `repeatMode` 时保留自定义星期；切换模式保留原星期选择，工作日模式不与星期选择取交集。`matchesDate` 用于确认记账前校验，原生 `AccountReminderSchedule.matches` 以同一日历核对通知发送日期。
+
+- 日历使用**设备本地日期和时刻**：周末补班优先为工作日，全部放假日期跳过，其余按周一至周五。只覆盖中国大陆全国统一安排，不含地方节日、单位排班和个人请假；没有新增联网或日历读取权限。
+- 生产年度数据唯一来源为 `lib/app/reminder/china_workday_calendar.dart`，当前只内置 **2026 年**。依据[国办发明电〔2025〕7号政府转载](https://www.beijing.gov.cn/zhengce/zhengcefagui/202511/t20251104_4258873.html)：放假共 33 天，周末补班为 1/4、2/14、2/28、5/9、9/20、10/10。不能仅根据农历推算调休。
+- 默认 `missingCalendarPolicy: pause`，缺失年份不安排提醒；用户可明确选择 `weekdays`，只在缺失年份按周一至周五降级（此时无法跳过假期或加入周末补班）。未知策略按暂停，未知重复模式停用。设置页展示覆盖年份、处理方式和当前缺失状态；启动、回前台及前台跨年时用根级轻提示说明暂停/降级，同状态在本次应用会话内去重。
+- Flutter 投影把版本化 `workdayCalendar`（`version: 1`、`years`、`holidays`/`workdays`）和配置一起交给原生私有存储，月日编码为 `月 × 100 + 日`。重启、进程回收后由原生独立查表，不依赖 Flutter 常驻或网络请求。日历不写入账本备份，没有第二套生产调休表或新增依赖。
+- 下一次排程按日历日向后查找最多 366 天，覆盖超过一周的春节长假；送达前与用户确认时再次核对日期规则，未知年度不会按普通工作周静默继续。每次日历快照同步都撤销旧闹钟并重排。
+
+新年度通知公布后，在同一数据文件补充全年日期和官方来源，更新逐日回归用例、页面覆盖年份及本文；**更新应用并打开一次**后同步最新原生快照。当前不提供在线日历更新或个人例外日期编辑。若将来增加在线数据源，须单独设计用户主动启用、完整校验和更新失败保留旧数据的流程。
 
 ## 交互与账务口径
 
@@ -13,9 +25,11 @@
 
 ## 存储与原生生命周期
 
-`AccountEntryReminder` 和当天处理标记存于 KV `verifin.account_entry_reminders.v1`，使用可等待保存，并通过独立 `ValueNotifier` 更新；属于设备提醒偏好，不进入 JSON/ZIP 备份，旧备份无需新增字段或 SQLite 迁移。恢复备份保留本机仍有有效实体引用的配置，清理失效引用；换机需要重新设置。
+`AccountEntryReminder`（含 `repeatMode`、`missingCalendarPolicy`）和当天处理标记存于 KV `verifin.account_entry_reminders.v1`，使用可等待保存，并通过独立 `ValueNotifier` 更新；属于设备提醒偏好，不进入 JSON/ZIP 备份，旧备份无需新增字段或 SQLite 迁移。恢复备份保留本机仍有有效实体引用的配置，清理失效引用；换机需要重新设置。初始化及删除实体时沿用既有清理路径。
 
-`AppAccountReminderBridge` 复用 `verifin/app` 单一入站分发器。根组件同步全部账本的有效配置，原生 `AccountEntryReminderReceiver` 保存私有配置、按日历选定星期安排下一次闹钟，每次触发继续排下一次；开机、升级、系统时间/时区和精确闹钟授权变化后重排，不依赖 Flutter 进程常驻。无精确闹钟权限时回退 `setAndAllowWhileIdle`。系统强行停止应用仍遵循 Android 既有限制，重新打开应用后对齐排程。
+`AppAccountReminderBridge` 复用 `verifin/app` 单一入站分发器。根组件同步全部账本的有效配置，原生 `AccountEntryReminderReceiver` 保存私有配置、按星期或工作日日历安排下一次闹钟，每次触发继续排下一次；开机、升级、系统时间/时区和精确闹钟授权变化后重排，不依赖 Flutter 进程常驻。无精确闹钟权限时回退 `setAndAllowWhileIdle`。系统强行停止应用仍遵循 Android 既有限制，重新打开应用后对齐排程。
+
+时间来自系统时钟和时区，排程沿用 `AlarmManager.RTC_WAKEUP`，不调用手机时钟应用。读取时间没有授权弹窗；Android 13+ 须允许发送通知并开启对应渠道。精确闹钟沿用 GitHub/Play 既有权限差异，无权限则降级；开机接收权限已声明，无新增授权。声音遵循渠道、静音和勿扰设置。
 
 确认/取消点击先存原生队列，Dart 业务成功或判定过期后才确认消费；同一提醒日期以用户最后一次尚未处理的选择为准，缺率后的取消可以覆盖待重试确认。私有随机令牌与不可变 `PendingIntent` 防止外部应用伪造导出 Activity 的记账操作。原生日志只记录阶段和异常类型，不输出配置、账户名或金额。
 
@@ -51,6 +65,23 @@
 依据：[系统闹钟可跨应用进程生命周期运行](https://developer.android.com/develop/background-work/services/alarms)、[`am kill` 仅终止可安全结束的进程](https://developer.android.com/tools/adb#am)、[Android 15 的停止状态及 PendingIntent 规则](https://developer.android.com/about/versions/15/behavior-changes-all#stopped-state)。
 
 ## 后续回归验收
+
+2026-10-21 工作日开发按用户要求**不自动编译或执行测试程序**，只运行格式化、国际化生成和静态分析。以下用例已编写，留给用户手动执行；未执行的用例不能作为通过证据。
+
+```powershell
+flutter test test/china_workday_calendar_test.dart test/account_entry_reminder_test.dart test/account_entry_reminder_page_test.dart test/model_roundtrip_test.dart
+flutter test
+```
+
+日期回归覆盖官方七段连休逐日检查、六个周末补班、普通周末、未知年份暂停/显式降级、旧设置兼容、KV 冷启动、确认端校验、原生同源快照和不进入备份。页面用例覆盖草稿切换、原星期保留、缺失策略、关闭草稿保存、360dp 大字号和长名称换行。
+
+Android 日期计算增加不依赖 Flutter stub 的 `AccountReminderScheduleChecks`，沿用已有 Instrumentation，通过 `-e suite account-reminder` 选择，不创建真实闹钟、不写设备数据。用户手动构建、安装 **diagnostic 应用及配套 androidTest APK** 后执行：
+
+```powershell
+adb -s <设备序列号> shell am instrument -w -e suite account-reminder top.talyra42.verifin.graphicsdiagnostic.test/top.talyra42.verifin.FixedWidgetRenderingTest
+```
+
+该套件核验原生跨九天春节长假、周六补班、快照重载、跨年暂停/降级、当日处理去重、损坏日历及美国洛杉矶夏令时开始/结束。还须由用户在隔离设备验证：长假后恢复、修改系统时间/时区后重排、跨入 2027 年暂停与前台提示、允许降级后仅周一至周五、更新并打开应用后日历同步，以及后台/进程被杀/开机/升级和 release/R8 通知送达。不要更改有真实账目的设备日期进行验收，也不要清除应用数据。
 
 回归用例见 `test/account_entry_reminder_test.dart`（跨账本、重复点击、冷启动、取消、旧通知、删除和初始化）与 `test/account_entry_reminder_page_test.dart`（未启用时仍可测试、拒绝权限不排程/不写账、精确/非精确结果及平台失败）；由用户手动运行。
 

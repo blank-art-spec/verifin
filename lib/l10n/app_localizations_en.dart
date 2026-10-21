@@ -31,6 +31,44 @@ class AppLocalizationsEn extends AppLocalizations {
   String get accountEntryReminderRepeat => 'Repeat on';
 
   @override
+  String get accountEntryReminderRepeatMode => 'Repeat dates';
+
+  @override
+  String get accountEntryReminderCustomWeekdays => 'Custom weekdays';
+
+  @override
+  String get accountEntryReminderChinaWorkdays =>
+      'Mainland China workdays (adjusted)';
+
+  @override
+  String get accountEntryReminderCalendarPolicy => 'When calendar is missing';
+
+  @override
+  String get accountEntryReminderCalendarPause => 'Pause reminders (default)';
+
+  @override
+  String get accountEntryReminderCalendarWeekdays => 'Use Monday to Friday';
+
+  @override
+  String accountEntryReminderCalendarCoverage(String years) {
+    return 'Offline national holiday and adjusted workday calendars included: $years.';
+  }
+
+  @override
+  String get accountEntryReminderWorkdayHint =>
+      'Skip holidays and include weekend make-up workdays, independently of custom weekdays. Uses the phone\'s local date and time; employer schedules and personal leave are excluded. New calendars arrive with app updates. Missing years pause reminders by default; you can explicitly choose Monday to Friday without holiday adjustments.';
+
+  @override
+  String accountEntryReminderCalendarMissingPause(int year) {
+    return 'No adjusted workday calendar for $year. Workday reminders are paused. Update the app for calendar data, or change the missing-calendar policy for the relevant account.';
+  }
+
+  @override
+  String accountEntryReminderCalendarMissingWeekdays(int year) {
+    return 'No adjusted workday calendar for $year. Your selected Monday-to-Friday fallback is active; holidays and weekend make-up days cannot be accounted for. Update the app for calendar data.';
+  }
+
+  @override
   String get accountEntryReminderConfirmation => 'Confirmation';
 
   @override
@@ -48,7 +86,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get accountEntryReminderValidation =>
-      'Select at least one weekday. When enabled, enter a positive amount and choose a category. Button text supports up to 12 characters.';
+      'Custom weekdays require at least one day. When enabled, enter a positive amount and choose a category. Button text supports up to 12 characters.';
 
   @override
   String get accountEntryReminderOn => 'Enabled';

@@ -39,6 +39,7 @@ import 'models.dart';
 import 'recurring.dart';
 import 'reminder/reminder_settings.dart';
 import 'reminder/account_entry_reminder.dart';
+import 'reminder/china_workday_calendar.dart';
 import 'reminder/financial_reminder.dart';
 
 part 'veri_fin_controller_state.dart';

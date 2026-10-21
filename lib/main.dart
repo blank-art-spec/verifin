@@ -12,6 +12,7 @@ import 'app/logging/app_logger.dart';
 import 'app/models.dart';
 import 'app/platform_bridge.dart';
 import 'app/reminder/notification_scheduler.dart';
+import 'app/reminder/account_entry_reminder.dart';
 import 'app/reminder/reminder_settings.dart';
 import 'app/veri_fin_controller.dart';
 import 'app/veri_fin_scope.dart';
@@ -186,6 +187,8 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
   Timer? _billingDateTimer;
   bool _notificationSyncing = false;
   bool _notificationSyncQueued = false;
+  // 同一次应用会话内按年份、缺失策略和语言去重，不在每次通知同步时反复弹提示。
+  String? _accountCalendarWarningKey;
   bool _autoCaptureDraining = false;
   bool _autoCaptureDrainQueued = false;
 
@@ -229,7 +232,8 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     BackupCoordinator.maybeBackupAfterEntry(_controller);
   }
 
-  /// 前台跨过午夜也要切换账期；每次回前台重新对齐本地日期和时区。
+  /// 前台跨过午夜切换账期并同步提醒；跨年时主动说明年度日历缺失。
+  /// 每次回前台重新对齐本地日期和时区，后台正式提醒仍由 Android 独立排程。
   void _scheduleBillingDateRefresh() {
     _billingDateTimer?.cancel();
     final now = DateTime.now();
@@ -237,6 +241,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
     _billingDateTimer = Timer(midnight.difference(now), () {
       if (!mounted) return;
       _controller.refreshCreditBillingDate();
+      unawaited(_syncNotifications());
       _scheduleBillingDateRefresh();
     });
   }
@@ -307,6 +312,7 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
           await AppAccountReminderBridge.sync(
             _controller.accountEntryReminderNotifications(l10n),
           );
+          _warnMissingAccountReminderCalendars(l10n);
         } catch (error) {
           _controller.logger?.error(
             '账户记账提醒排程失败',
@@ -333,6 +339,46 @@ class _VeriFinAppState extends State<VeriFinApp> with WidgetsBindingObserver {
       } while (_notificationSyncQueued);
     } finally {
       _notificationSyncing = false;
+    }
+  }
+
+  /// 按当前年度检查所有已启用的工作日提醒；[l10n] 提供暂停/降级的本地化说明。
+  /// 启动、回前台和前台跨年都检查；状态变化后重新提示，不把未知日历当作排程成功。
+  void _warnMissingAccountReminderCalendars(AppLocalizations l10n) {
+    final now = DateTime.now();
+    final affected = _controller.accountEntryRemindersListenable.value.where(
+      (rule) => rule.enabled && rule.hasMissingCalendar(now),
+    );
+    final paused = affected.any(
+      (rule) =>
+          rule.missingCalendarPolicy == MissingWorkdayCalendarPolicy.pause,
+    );
+    final fallback = affected.any(
+      (rule) =>
+          rule.missingCalendarPolicy == MissingWorkdayCalendarPolicy.weekdays,
+    );
+    if (!paused && !fallback) {
+      _accountCalendarWarningKey = null;
+      return;
+    }
+    final key = '${now.year}:$paused:$fallback:${_controller.localePreference}';
+    if (key == _accountCalendarWarningKey) return;
+    _accountCalendarWarningKey = key;
+    final messages = {
+      if (paused)
+        'pause': l10n.accountEntryReminderCalendarMissingPause(now.year),
+      if (fallback)
+        'weekdays': l10n.accountEntryReminderCalendarMissingWeekdays(now.year),
+    };
+    for (final entry in messages.entries) {
+      unawaited(
+        _feedbackController.showMessage(
+          message: entry.value,
+          tone: VeriFeedbackTone.warning,
+          duration: VeriFeedbackDuration.long,
+          dedupeKey: 'account-reminder-calendar-${entry.key}',
+        ),
+      );
     }
   }
 

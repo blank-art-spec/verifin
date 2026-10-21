@@ -6,12 +6,34 @@
   "accountEntryReminderAmount": "预设金额",
   "accountEntryReminderTime": "提醒时间",
   "accountEntryReminderRepeat": "重复星期",
+  "accountEntryReminderRepeatMode": "重复日期",
+  "accountEntryReminderCustomWeekdays": "自定义星期",
+  "accountEntryReminderChinaWorkdays": "中国大陆工作日（含调休）",
+  "accountEntryReminderCalendarPolicy": "缺少年度日历时",
+  "accountEntryReminderCalendarPause": "暂停提醒（默认）",
+  "accountEntryReminderCalendarWeekdays": "按周一至周五提醒",
+  "accountEntryReminderCalendarCoverage": "已内置 {years} 年全国放假与调休日历，离线可用。",
+  "@accountEntryReminderCalendarCoverage": {
+    "description": "工作日日历已经核对的年份列表，不代表其他年份自动可用。",
+    "placeholders": {"years": {"type": "String"}}
+  },
+  "accountEntryReminderWorkdayHint": "放假日跳过，周末补班日照常提醒，不受自定义星期影响。按手机本地日期和时间判断，不包含单位排班或个人请假；新年度日历随应用更新。缺少日历时默认暂停，也可明确选择按周一至周五提醒（不含调休）。",
+  "accountEntryReminderCalendarMissingPause": "缺少 {year} 年调休日历，工作日提醒已暂停。请更新应用获取日历，或在对应账户中更改缺失处理方式。",
+  "@accountEntryReminderCalendarMissingPause": {
+    "description": "当前年度缺少日历且用户选择暂停时的提示。",
+    "placeholders": {"year": {"type": "int"}}
+  },
+  "accountEntryReminderCalendarMissingWeekdays": "缺少 {year} 年调休日历，已按你的选择临时使用周一至周五，无法跳过节假日或包含周末补班。请更新应用获取日历。",
+  "@accountEntryReminderCalendarMissingWeekdays": {
+    "description": "用户明确选择缺失时按普通工作周提醒的降级提示。",
+    "placeholders": {"year": {"type": "int"}}
+  },
   "accountEntryReminderConfirmation": "确认方式",
   "accountEntryReminderConfirmLabel": "确认按钮文字",
   "accountEntryReminderCancelLabel": "取消按钮文字",
   "accountEntryReminderConfirmDefault": "确定",
   "accountEntryReminderButtonHint": "按钮文字可自定义，留空使用默认文字，最多 12 个字符。确认按钮始终记账，取消按钮只跳过本次。",
-  "accountEntryReminderValidation": "请选择至少一个星期；启用时须填写大于零的金额并选择分类。按钮文字最多 12 个字符。",
+  "accountEntryReminderValidation": "自定义星期须至少选择一天；启用时须填写大于零的金额并选择分类。按钮文字最多 12 个字符。",
   "accountEntryReminderOn": "已启用",
   "accountEntryReminderOff": "未启用",
   "accountEntryReminderRecorded": "已记入提醒对应的账户和账本。",

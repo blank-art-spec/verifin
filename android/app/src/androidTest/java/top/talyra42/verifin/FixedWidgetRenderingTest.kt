@@ -14,15 +14,26 @@ import java.io.File
  * preferences already on the device are never modified by these checks.
  */
 class FixedWidgetRenderingTest : Instrumentation() {
+    private var accountReminderSuite = false
+
+    /** 读取 [arguments] 的 suite 参数；默认保持原桌面组件验收，仅显式选择才测提醒。 */
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
+        accountReminderSuite = arguments?.getString("suite") == "account-reminder"
         start()
     }
+
+    /** 执行选定套件并返回中文诊断；账户提醒套件不接触用户数据或系统闹钟。 */
     override fun onStart() {
         val result = Bundle()
         try {
-            testEveryProviderInflatesAndExportsItsActualLayout()
-            result.putString("stream", "PASS: all four provider layouts rendered in both themes and languages\n")
+            if (accountReminderSuite) {
+                AccountReminderScheduleChecks.runAll()
+                result.putString("stream", "通过：账户提醒工作日、长假、跨年和夏令时规则\n")
+            } else {
+                testEveryProviderInflatesAndExportsItsActualLayout()
+                result.putString("stream", "PASS: all four provider layouts rendered in both themes and languages\n")
+            }
             finish(Activity.RESULT_OK, result)
         } catch (error: Throwable) {
             result.putString("stream", error.stackTraceToString())

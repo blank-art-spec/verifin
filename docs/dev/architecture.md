@@ -21,7 +21,7 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 | 导入、备份 | `lib/app/backup/import/`、`lib/app/backup/`；只在预览确认后落库，字节格式仅由 BackupService 编解码 |
 | AI | `lib/app/ai/`；[只读查询工具](ai-tools.md)、[主动采集](auto-capture-plan.md) |
 | Android 系统能力 | `platform_bridge*.dart`、`android/`；单一 MethodChannel 分发，真实权限与冷启动验收 |
-| 账户记账提醒 | `reminder/account_entry_reminder.dart`、`veri_fin_controller_account_reminders.dart`、`account_entry_reminder_page.dart`、原生 `AccountEntryReminderReceiver`；全部账本投影、用户确认才落账；[设计与验收](account-entry-reminders.md) |
+| 账户记账提醒 | `reminder/account_entry_reminder.dart`、`reminder/china_workday_calendar.dart`、`veri_fin_controller_account_reminders.dart`、`account_entry_reminder_page.dart`、原生 `AccountEntryReminderReceiver` / `AccountReminderSchedule`；全部账本投影、自定义星期或大陆工作日（含调休）、用户确认才落账；[设计与验收](account-entry-reminders.md) |
 | 自动采集 | `models/auto_capture.dart`、`auto_capture/capture_parser.dart`、`platform_bridge_auto_capture.dart`、原生 `AutoCaptureBridge` / `PaymentNotificationListenerService` / `SmsCaptureReceiver`；原始事件先落 SQLite，再解析、去重和置信度分流 |
 | 异常治理 | `attention_center.dart` 纯投影 + `attention_center_page.dart`；从交易对账状态、自动采集、退款关系、还款分配与缺失汇率实时汇总，不另建异常状态表 |
 | 交易审计 | `entry_audit.dart` 比较提交前后字段；`LedgerEntry.auditHistory` 经 SQLite v23 `entries.audit_history` 保存并纳入备份 v8，交易详情只读展示；旧交易不补造历史 |
