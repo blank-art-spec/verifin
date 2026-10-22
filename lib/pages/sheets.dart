@@ -983,8 +983,8 @@ const Account _accountPickerAllSentinel = Account(
 /// 哨兵 [Account]（调用方用 `selected.id.isEmpty` 判别「只记金额、不计入账户」）。
 /// 传入 [allLabel] 时（筛选场景），列首额外提供「全部」项，选它返回 id 为
 /// [accountPickerAllId] 的哨兵 [Account]（调用方用 `selected.id == accountPickerAllId` 判别）。
-/// [includeCreditParents] 为 true 时，同一信用主体只展示父账户，隐藏已被代表的
-/// 币种子账户；没有有效父主体的临时账户仍保留，避免导入草稿无账户可选。
+/// [includeCreditParents] 为 true 时，信用、银行和证券主体只展示主账户，隐藏已被代表的
+/// 币种子账户；参数和哨兵沿用历史名称。没有有效主体的临时账户仍保留。
 /// [showCreditChildren] 仅在父账户模式下生效，供「入账账户」次级入口同时展示
 /// 自动匹配的父账户与具体币种子账户；普通记账无需开启，转账保持默认的具体账户模式。
 Future<Account?> showAccountPickerSheet({
@@ -1010,7 +1010,7 @@ Future<Account?> showAccountPickerSheet({
       final controller = VeriFinScope.of(context);
       final l10n = AppLocalizations.of(context);
       final parents = includeCreditParents
-          ? controller.creditAccounts
+          ? controller.accountParents
                 .where(
                   (parent) =>
                       accounts.any((a) => a.creditAccountId == parent.id),

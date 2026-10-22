@@ -6710,4 +6710,29 @@ class AppLocalizationsEn extends AppLocalizations {
   String assetTrendMissingRateDetails(String currency, String date) {
     return 'Missing a $currency rate effective on or before $date. Add it in Currencies & rates; automatic updates do not backfill historical rates.';
   }
+
+  @override
+  String get accountParentLabel => 'Parent account';
+
+  @override
+  String get accountParentCreateNew => 'Create parent account';
+
+  @override
+  String get accountParentSettings => 'Parent account settings';
+
+  @override
+  String get accountParentNameLabel => 'Parent account name';
+
+  @override
+  String get accountParentEnable => 'Enable currency subaccounts';
+
+  @override
+  String get accountPrimaryCurrency => 'Parent account currency';
+
+  @override
+  String get accountParentValuation => 'Value in parent account currency';
+
+  @override
+  String get accountCurrencyChildExists =>
+      'This parent account already has this currency. Choose another currency.';
 }

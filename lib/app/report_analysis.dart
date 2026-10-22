@@ -448,8 +448,8 @@ List<LedgerEntry> filterEntriesByTagDimensions(
 
 /// 按账户维度聚合后的统计项。
 ///
-/// 信用子账户会按 [creditAccountId] 合并为一个真实信用主体，因此人民币、美元等
-/// 子账户不会在排行中重复出现。普通账户仍保持一账户一行；[accountIds] 记录该行
+/// 有主体关联的银行、证券和信用子账户按 [creditAccountId] 合并，避免币种重复排行。
+/// 独立账户仍保持一账户一行；[accountIds] 记录该行
 /// 实际覆盖的子账户，供后续筛选或下钻复用。
 @immutable
 class ReportAccountStat {
@@ -474,7 +474,8 @@ class ReportAccountStat {
   final int count;
 }
 
-/// 按普通账户 / 信用主体聚合指定类型的净额并降序返回。
+/// 按独立账户或多币种主账户聚合 [entries] 中 [type] 的净额并降序返回。
+/// [accounts] 是真实账户，[creditAccounts] 沿用历史参数名并接收全部主账户。
 ///
 /// [noAccountLabel] 由调用方按当前语言传入；空账户 id 作为真实的“无账户”分组，
 /// 不得回退为首个账户。悬空账户引用保留为独立“已删除账户”组，便于发现脏数据。

@@ -1,5 +1,7 @@
 # 架构导览
 
+2026-10-22：多币种主体扩展至银行储蓄与证券投资账户，复用已有主体表和关联字段；公共读取 `accountParents`，信用专用读取 `creditAccounts`，禁止普通主体进入信用投影。详情见 [父子账户与币种](credit-hierarchy-currency.md)。
+
 执行规则以 [AGENTS.md](../../AGENTS.md) 为准；这里仅提供源码导航，不重复维护规则。
 
 Veri Fin 仅交付 Android，权威账目在本机 SQLite，无账号或自有服务端。

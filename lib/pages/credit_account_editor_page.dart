@@ -1,4 +1,4 @@
-// 信用主体编辑页：维护共享额度、动态账期规则和账期预算。
+// 主账户编辑页：普通主体维护展示币种，信用主体维护共享额度、账期规则和预算。
 import 'dart:async';
 
 import 'package:flutter/material.dart';
@@ -12,7 +12,7 @@ import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
 
-/// 编辑一个信用主体，而不是某个具体币种子账户。
+/// 编辑主账户公共资料；普通主体维护展示主币种，信用主体维护额度与账期。
 ///
 /// [creditAccount] 是进入页面时的持久化快照；保存时通过 Controller 原子更新主体和
 /// 所有子账户的兼容镜像字段，避免人民币/美元子账户出现两套额度或账期规则。
@@ -77,6 +77,7 @@ class _CreditAccountEditorPageState extends State<CreditAccountEditorPage> {
             widget.creditAccount.institution ||
         cardLast4Of(_cardLast4Controller.text) !=
             widget.creditAccount.cardLast4 ||
+        _draft.currencyCode != widget.creditAccount.currencyCode ||
         _draft.creditLimit != widget.creditAccount.creditLimit ||
         _draft.statementDay != widget.creditAccount.statementDay ||
         _draft.dueRuleType != widget.creditAccount.dueRuleType ||
@@ -85,14 +86,13 @@ class _CreditAccountEditorPageState extends State<CreditAccountEditorPage> {
         _draft.cycleBudget != widget.creditAccount.cycleBudget;
   }
 
-  /// 构建标准编辑页。规则选择使用锚点单选，金额/日期分别复用数字键盘与选项弹层。
+  /// 构建标准编辑页。按子账户能力分开普通展示币种与信用账期设置。
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
-    final children = VeriFinScope.of(
-      context,
-    ).accountsForCreditAccount(_draft.id);
+    final children = VeriFinScope.of(context).accountsForParent(_draft.id);
     final currency = CurrencyCatalog.require(_draft.currencyCode);
+    final isCredit = children.any((account) => account.type.supportsCredit);
     return UnsavedChangesGuard(
       isDirty: _isDirty,
       onSave: _save,
@@ -106,7 +106,9 @@ class _CreditAccountEditorPageState extends State<CreditAccountEditorPage> {
                 padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
                 children: <Widget>[
                   VeriHeader(
-                    title: l10n.creditAccountEditTitle,
+                    title: isCredit
+                        ? l10n.creditAccountEditTitle
+                        : l10n.accountParentSettings,
                     subtitle: l10n.creditChildAccountsSummary(
                       children.length,
                       children.map((item) => item.currencyCode).join(' · '),
@@ -122,7 +124,9 @@ class _CreditAccountEditorPageState extends State<CreditAccountEditorPage> {
                   TextFormField(
                     controller: _nameController,
                     decoration: InputDecoration(
-                      labelText: l10n.creditAccountNameLabel,
+                      labelText: isCredit
+                          ? l10n.creditAccountNameLabel
+                          : l10n.accountParentNameLabel,
                     ),
                     validator: (value) => value == null || value.trim().isEmpty
                         ? l10n.accountNameRequired
@@ -136,83 +140,95 @@ class _CreditAccountEditorPageState extends State<CreditAccountEditorPage> {
                     ),
                   ),
                   const SizedBox(height: 10),
-                  TextField(
-                    controller: _cardLast4Controller,
-                    keyboardType: TextInputType.number,
-                    maxLength: 4,
-                    decoration: InputDecoration(labelText: l10n.cardLast4Label),
-                  ),
-                  SelectField(
-                    label: l10n.creditLimitLabel,
-                    value: _draft.creditLimit == null
-                        ? l10n.notSet
-                        : formatUserMoney(
-                            _draft.creditLimit!,
-                            _draft.currencyCode,
-                          ),
-                    icon: Icons.speed_outlined,
-                    onTap: () => _pickAmount(isBudget: false),
-                  ),
-                  const SizedBox(height: 10),
-                  SelectField(
-                    label: l10n.statementDay,
-                    value: _draft.statementDay == null
-                        ? l10n.notSet
-                        : l10n.monthlyDayLabel(_draft.statementDay!),
-                    icon: Icons.event_note_outlined,
-                    onTap: () => _pickDay(isStatement: true),
-                  ),
-                  const SizedBox(height: 10),
-                  VeriAnchoredChoice<CreditDueRuleType>(
-                    values: CreditDueRuleType.values,
-                    selected: _draft.dueRuleType,
-                    idOf: (value) => 'credit_due_rule_${value.name}',
-                    labelOf: (value) => value == CreditDueRuleType.fixedDay
-                        ? l10n.creditDueRuleFixedDay
-                        : l10n.creditDueRuleDaysAfter,
-                    onSelected: (value) {
-                      setState(() {
-                        var next = _draft.copyWith(dueRuleType: value);
-                        if (value == CreditDueRuleType.daysAfterStatement &&
-                            next.daysAfterStatement == null) {
-                          // 20 天是常见相对还款周期；切换规则时补默认值，避免出现
-                          // “已选择相对规则但没有间隔”的不可保存中间状态。
-                          next = next.copyWith(daysAfterStatement: 20);
-                        }
-                        _draft = next;
-                      });
-                    },
-                    semanticLabel: l10n.creditDueRuleLabel,
-                    builder: (context, openMenu, menuOpen) => SelectField(
-                      label: l10n.creditDueRuleLabel,
-                      value: _draft.dueRuleType == CreditDueRuleType.fixedDay
+                  if (!isCredit)
+                    SelectField(
+                      label: l10n.accountPrimaryCurrency,
+                      value:
+                          '${currency.code} · ${currency.nameForLocale(Localizations.localeOf(context).toLanguageTag())}',
+                      icon: Icons.currency_exchange,
+                      onTap: _pickParentCurrency,
+                    ),
+                  if (isCredit) ...<Widget>[
+                    TextField(
+                      controller: _cardLast4Controller,
+                      keyboardType: TextInputType.number,
+                      maxLength: 4,
+                      decoration: InputDecoration(
+                        labelText: l10n.cardLast4Label,
+                      ),
+                    ),
+                    SelectField(
+                      label: l10n.creditLimitLabel,
+                      value: _draft.creditLimit == null
+                          ? l10n.notSet
+                          : formatUserMoney(
+                              _draft.creditLimit!,
+                              _draft.currencyCode,
+                            ),
+                      icon: Icons.speed_outlined,
+                      onTap: () => _pickAmount(isBudget: false),
+                    ),
+                    const SizedBox(height: 10),
+                    SelectField(
+                      label: l10n.statementDay,
+                      value: _draft.statementDay == null
+                          ? l10n.notSet
+                          : l10n.monthlyDayLabel(_draft.statementDay!),
+                      icon: Icons.event_note_outlined,
+                      onTap: () => _pickDay(isStatement: true),
+                    ),
+                    const SizedBox(height: 10),
+                    VeriAnchoredChoice<CreditDueRuleType>(
+                      values: CreditDueRuleType.values,
+                      selected: _draft.dueRuleType,
+                      idOf: (value) => 'credit_due_rule_${value.name}',
+                      labelOf: (value) => value == CreditDueRuleType.fixedDay
                           ? l10n.creditDueRuleFixedDay
                           : l10n.creditDueRuleDaysAfter,
-                      icon: Icons.event_available_outlined,
-                      onTap: openMenu,
+                      onSelected: (value) {
+                        setState(() {
+                          var next = _draft.copyWith(dueRuleType: value);
+                          if (value == CreditDueRuleType.daysAfterStatement &&
+                              next.daysAfterStatement == null) {
+                            // 20 天是常见相对还款周期；切换规则时补默认值，避免出现
+                            // “已选择相对规则但没有间隔”的不可保存中间状态。
+                            next = next.copyWith(daysAfterStatement: 20);
+                          }
+                          _draft = next;
+                        });
+                      },
+                      semanticLabel: l10n.creditDueRuleLabel,
+                      builder: (context, openMenu, menuOpen) => SelectField(
+                        label: l10n.creditDueRuleLabel,
+                        value: _draft.dueRuleType == CreditDueRuleType.fixedDay
+                            ? l10n.creditDueRuleFixedDay
+                            : l10n.creditDueRuleDaysAfter,
+                        icon: Icons.event_available_outlined,
+                        onTap: openMenu,
+                      ),
                     ),
-                  ),
-                  const SizedBox(height: 10),
-                  SelectField(
-                    label: _draft.dueRuleType == CreditDueRuleType.fixedDay
-                        ? l10n.dueDay
-                        : l10n.creditDaysAfterStatementLabel,
-                    value: _dueRuleValue(l10n),
-                    icon: Icons.calendar_month_outlined,
-                    onTap: () => _pickDay(isStatement: false),
-                  ),
-                  const SizedBox(height: 10),
-                  SelectField(
-                    label: l10n.creditCycleBudgetLabel,
-                    value: _draft.cycleBudget == null
-                        ? l10n.notSet
-                        : formatUserMoney(
-                            _draft.cycleBudget!,
-                            _draft.currencyCode,
-                          ),
-                    icon: Icons.donut_large_outlined,
-                    onTap: () => _pickAmount(isBudget: true),
-                  ),
+                    const SizedBox(height: 10),
+                    SelectField(
+                      label: _draft.dueRuleType == CreditDueRuleType.fixedDay
+                          ? l10n.dueDay
+                          : l10n.creditDaysAfterStatementLabel,
+                      value: _dueRuleValue(l10n),
+                      icon: Icons.calendar_month_outlined,
+                      onTap: () => _pickDay(isStatement: false),
+                    ),
+                    const SizedBox(height: 10),
+                    SelectField(
+                      label: l10n.creditCycleBudgetLabel,
+                      value: _draft.cycleBudget == null
+                          ? l10n.notSet
+                          : formatUserMoney(
+                              _draft.cycleBudget!,
+                              _draft.currencyCode,
+                            ),
+                      icon: Icons.donut_large_outlined,
+                      onTap: () => _pickAmount(isBudget: true),
+                    ),
+                  ],
                   const SizedBox(height: 8),
                   Text(
                     '${currency.code} · ${currency.nameForLocale(Localizations.localeOf(context).toLanguageTag())}',
@@ -229,6 +245,17 @@ class _CreditAccountEditorPageState extends State<CreditAccountEditorPage> {
         ),
       ),
     );
+  }
+
+  /// 选择普通主账户的展示币种；只改变估值单位，不重解释子账户的原币余额。
+  Future<void> _pickParentCurrency() async {
+    final selected = await showCurrencyPickerSheet(
+      context: context,
+      title: AppLocalizations.of(context).accountPrimaryCurrency,
+      selectedCode: _draft.currencyCode,
+    );
+    if (!mounted || selected == null) return;
+    setState(() => _draft = _draft.copyWith(currencyCode: selected.code));
   }
 
   /// 格式化还款规则的当前数值；未设置时保持统一的“未设置”文案。
@@ -329,7 +356,7 @@ class _CreditAccountEditorPageState extends State<CreditAccountEditorPage> {
     }
   }
 
-  /// 校验文本字段并提交完整信用主体草稿；返回值供未保存离开保护决定是否退出。
+  /// 校验文本字段并提交完整主账户草稿；返回值供未保存离开保护决定是否退出。
   Future<bool> _save() async {
     if (!_formKey.currentState!.validate()) return false;
     final next = _draft.copyWith(
@@ -337,8 +364,17 @@ class _CreditAccountEditorPageState extends State<CreditAccountEditorPage> {
       institution: _institutionController.text.trim(),
       cardLast4: cardLast4Of(_cardLast4Controller.text),
     );
-    final saved = await VeriFinScope.of(context).saveCreditAccountDraft(next);
-    if (!mounted || !saved) return false;
+    final saved = await VeriFinScope.of(context).saveAccountParentDraft(next);
+    if (!mounted) return false;
+    if (!saved) {
+      unawaited(
+        VeriFeedbackHost.of(context).showMessage(
+          message: AppLocalizations.of(context).saveFailed,
+          tone: VeriFeedbackTone.error,
+        ),
+      );
+      return false;
+    }
     unawaited(
       VeriFeedbackHost.of(context).showMessage(
         message: AppLocalizations.of(context).creditAccountSaved,

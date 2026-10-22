@@ -348,7 +348,8 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     final accountStats = reportAccountStats(
       entries,
       controller.accounts,
-      controller.creditAccounts,
+      // 账户排行合并银行、证券和信用主体；账期选择器仍只读取信用主体。
+      controller.accountParents,
       _dimension,
       noAccountLabel: l10n.noAccountLabel,
       deletedAccountLabel: l10n.deletedAccountLabel,

@@ -1740,14 +1740,46 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _accounts.where((account) => account.bookId == bookId),
   );
 
-  /// 当前账本的信用主体。一个主体可关联多个不同币种的 [Account] 子账户。
-  List<CreditAccount> get creditAccounts =>
+  /// 当前账本全部主账户。沿用已有主体表与关联字段，不迁移或改写旧账户。
+  List<CreditAccount> get accountParents =>
       _creditAccountsView ??= List<CreditAccount>.unmodifiable(
         _creditAccounts.where((item) => item.bookId == _activeBookId),
       );
 
+  /// 只读取信用主体，供首页账期、报表、提醒和 AI 信用分析使用。
+  /// 普通银行与证券主账户不进入信用计算，即使其余额为负也不会生成账单。
+  List<CreditAccount> get creditAccounts => List<CreditAccount>.unmodifiable(
+    accountParents.where(
+      (parent) => accountsForCreditAccount(
+        parent.id,
+      ).any((account) => account.type.supportsCredit),
+    ),
+  );
+
+  /// 按 [type] 返回允许挂接的主账户：信用类型可共享，普通类型必须完全一致。
+  List<CreditAccount> accountParentsForType(AccountType type) =>
+      List<CreditAccount>.unmodifiable(
+        accountParents.where((parent) {
+          final children = accountsForCreditAccount(parent.id);
+          return type.supportsCurrencyChildren &&
+              children.isNotEmpty &&
+              children.every(
+                (child) => type.supportsCredit
+                    ? child.type.supportsCredit
+                    : child.type == type,
+              );
+        }),
+      );
+
   /// 查找账户所属的信用主体；普通账户或未迁移的异常数据返回 null。
   CreditAccount? creditAccountForAccount(Account account) {
+    if (!account.type.supportsCredit) return null;
+    return parentForAccount(account);
+  }
+
+  /// 查找 [account] 所属主账户，兼容页面仍持有创建前旧快照的情况。
+  /// 同时校验账本，禁止跨账本解析到同名机构或其他账户。
+  CreditAccount? parentForAccount(Account account) {
     // 页面可能仍持有创建前的 Account 快照（其中尚无 parent id）；优先从 Controller
     // 当前账户集合补取关联，避免刚创建后进入详情页看不到主体，或保存时重复建主体。
     final persistedId = _accounts
@@ -1762,13 +1794,19 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         .firstOrNull;
   }
 
-  /// 返回信用主体下的币种子账户，保持账户列表中的用户排序。
+  /// 返回 [creditAccountId] 主账户下的币种子账户；历史方法名兼容原信用调用点。
+  /// 所有读取限定当前账本，并保持真实账户的用户排序。
   List<Account> accountsForCreditAccount(String creditAccountId) =>
+      accountsForParent(creditAccountId);
+
+  /// 返回 [parentId] 主账户下的真实币种账户，只读取当前账本。
+  /// 主体本身不属于此列表，不能把其 id 当作交易账户保存。
+  List<Account> accountsForParent(String parentId) =>
       List<Account>.unmodifiable(
         _accounts.where(
           (account) =>
               account.bookId == _activeBookId &&
-              account.creditAccountId == creditAccountId,
+              account.creditAccountId == parentId,
         ),
       );
 
@@ -1930,9 +1968,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         '${cycleEnd.year}-$month-$day';
   }
 
-  /// 保存信用主体草稿，并把额度/日期同步到子账户的兼容镜像字段。
-  /// 主体和子账户在同一事务落库，保存失败时内存保持原状。
-  Future<bool> saveCreditAccountDraft(CreditAccount creditAccount) async {
+  /// 兼容既有信用编辑调用；[creditAccount] 仍由统一主账户入口校验和保存。
+  Future<bool> saveCreditAccountDraft(CreditAccount creditAccount) =>
+      saveAccountParentDraft(creditAccount);
+
+  /// 保存 [creditAccount] 主账户草稿；普通主体只允许公共资料和展示币种。
+  /// 信用主体同步额度/日期镜像；所有记录在同一事务落库，失败时内存保持原状。
+  Future<bool> saveAccountParentDraft(CreditAccount creditAccount) async {
     final index = _creditAccounts.indexWhere(
       (item) => item.id == creditAccount.id,
     );
@@ -1941,7 +1983,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final daysAfterStatement = creditAccount.daysAfterStatement;
     final creditLimit = creditAccount.creditLimit;
     final cycleBudget = creditAccount.cycleBudget;
+    final children = accountsForCreditAccount(creditAccount.id);
+    final ordinary = children.isNotEmpty && !children.first.type.supportsCredit;
     if (index == -1 ||
+        (ordinary &&
+            (creditLimit != null ||
+                statementDay != null ||
+                dueDay != null ||
+                daysAfterStatement != null ||
+                cycleBudget != null ||
+                creditAccount.dueRuleType != CreditDueRuleType.fixedDay)) ||
         creditAccount.bookId != _activeBookId ||
         creditAccount.name.trim().isEmpty ||
         !CurrencyCatalog.isSupported(creditAccount.currencyCode) ||
@@ -6037,8 +6088,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
             account.currencyCode == book.baseCurrencyCode);
   }
 
+  /// 归一化 [account] 的金额精度；类型变化时解除不相容的旧主体关系。
+  /// 普通账户编辑名称或备注时保留已有父子关系，不因历史字段名而清空它。
   Account _normalizeAccountCurrencyAmounts(Account account) {
     final creditLimit = account.creditLimit;
+    final previous = _accounts.where((a) => a.id == account.id).firstOrNull;
+    final incompatibleType =
+        previous != null &&
+        previous.type != account.type &&
+        !(previous.type.supportsCredit && account.type.supportsCredit);
     return account.copyWith(
       initialBalance: normalizeCurrencyAmount(
         account.initialBalance,
@@ -6048,18 +6106,32 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
           ? null
           : normalizeCurrencyAmount(creditLimit, account.currencyCode),
       clearCreditLimit: creditLimit == null,
-      // 普通账户不能保留信用主体引用；账户类型切换后在此统一清理，避免悬空父子关系。
-      clearCreditAccountId: !account.type.supportsCredit,
+      // 只有支持多币种的类型保留主体关系；信用能力仍单独判断。
+      clearCreditAccountId:
+          !account.type.supportsCurrencyChildren || incompatibleType,
     );
   }
 
-  /// 校验已有信用主体引用必须存在于同一账本；null 表示稍后自动新建主体。
+  /// 校验已有主账户位于同一账本、子账户类型相容且每种币种唯一。
+  /// [account] 没有主体引用时允许作为独立账户或由新建流程创建主账户。
   bool _hasValidCreditAccountLink(Account account) {
     final creditAccountId = account.creditAccountId;
-    if (!account.type.supportsCredit ||
-        creditAccountId == null ||
-        creditAccountId.isEmpty) {
+    if (creditAccountId == null || creditAccountId.isEmpty) {
       return true;
+    }
+    if (!account.type.supportsCurrencyChildren) return false;
+    final siblings = _accounts.where(
+      (item) =>
+          item.id != account.id && item.creditAccountId == creditAccountId,
+    );
+    if (siblings.any(
+      (item) =>
+          item.bookId != account.bookId ||
+          (account.type.supportsCredit
+              ? !item.type.supportsCredit
+              : item.type != account.type),
+    )) {
+      return false;
     }
     return !_accounts.any(
           (a) =>
@@ -6083,7 +6155,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     CreditAccount creditAccount,
   ) => accounts
       .map(
-        (account) => account.creditAccountId != creditAccount.id
+        (account) =>
+            account.creditAccountId != creditAccount.id ||
+                !account.type.supportsCredit
             ? account
             : account.copyWith(
                 cardLast4: creditAccount.cardLast4,
@@ -6110,6 +6184,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   /// 判断币种子账户编辑页是否真的改动了共享额度/日期；普通名称、备注和卡号编辑
   /// 不得反向覆盖信用主体，主体卡尾号只允许在专用编辑页修改。
   bool _creditMirrorsChanged(Account before, Account after) =>
+      after.type.supportsCredit &&
       before.creditAccountId == after.creditAccountId &&
       (before.creditLimit != after.creditLimit ||
           before.statementDay != after.statementDay ||
@@ -6152,7 +6227,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     notifyListeners();
   }
 
-  /// 编辑页提交新账户：只有 SQLite 写入成功后才更新内存并通知 UI。
+  /// 编辑页提交新账户 [account]：银行、证券和信用类型默认创建对应主账户。
+  /// 已指定主体时只添加该币种子账户；只有 SQLite 成功后才更新内存并通知 UI。
   Future<bool> addAccountDraft(Account account) async {
     if (!_isAccountCurrencyAllowed(account)) return false;
     var normalized = _normalizeAccountCurrencyAmounts(
@@ -6160,7 +6236,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     );
     if (!_hasValidCreditAccountLink(normalized)) return false;
     CreditAccount? createdCreditAccount;
-    if (normalized.type.supportsCredit &&
+    if (normalized.type.supportsCurrencyChildren &&
         (normalized.creditAccountId == null ||
             normalized.creditAccountId!.isEmpty)) {
       createdCreditAccount = _creditAccountFromLegacyAccount(normalized);
@@ -6200,7 +6276,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     return true;
   }
 
-  /// 用旧账户字段创建一对一信用主体。id 由账户 id 稳定派生，重复调用不会产生漂移。
+  /// 用 [account] 建立同币种主账户；id 稳定派生，不修改任何原币金额。
+  /// 普通主账户不复制信用字段，旧独立账户不会在载入或恢复时自动转换。
   CreditAccount _creditAccountFromLegacyAccount(Account account) =>
       CreditAccount(
         id: 'credit-account-${account.id}',
@@ -6209,14 +6286,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         institution: '',
         cardLast4: account.cardLast4,
         currencyCode: account.currencyCode,
-        creditLimit: account.creditLimit,
-        statementDay: account.statementDay,
+        creditLimit: account.type.supportsCredit ? account.creditLimit : null,
+        statementDay: account.type.supportsCredit ? account.statementDay : null,
         dueRuleType: CreditDueRuleType.fixedDay,
-        dueDay: account.dueDay,
+        dueDay: account.type.supportsCredit ? account.dueDay : null,
         daysAfterStatement: null,
         cycleBudget: null,
       );
 
+  /// 兼容同步调用方更新 [account]；保留普通主账户关联，类型变化时解除不相容关系。
+  /// 编辑页应使用 [saveAccountDraft] 等待原子写入结果，避免失败后草稿提前退出。
   void updateAccount(Account account) {
     final index = _accounts.indexWhere((item) => item.id == account.id);
     if (index == -1) {
@@ -6229,7 +6308,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       return;
     }
     final accountWithPersistedLink =
-        account.type.supportsCredit && account.creditAccountId == null
+        account.type.supportsCurrencyChildren &&
+            account.creditAccountId == null &&
+            current.type == account.type
         ? account.copyWith(creditAccountId: current.creditAccountId)
         : account;
     var normalized = _normalizeAccountCurrencyAmounts(
@@ -6313,7 +6394,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     notifyListeners();
   }
 
-  /// 编辑页提交已有账户：只有 SQLite 写入成功后才替换内存快照。
+  /// 编辑页提交已有账户 [account]：保留 id、币种约束和相容的父子关系。
+  /// 主体清理或信用镜像变化与账户一起原子落库，失败不替换内存快照。
   Future<bool> saveAccountDraft(Account account) async {
     final index = _accounts.indexWhere((item) => item.id == account.id);
     if (index == -1) {
@@ -6326,7 +6408,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       return false;
     }
     final accountWithPersistedLink =
-        account.type.supportsCredit && account.creditAccountId == null
+        account.type.supportsCurrencyChildren &&
+            account.creditAccountId == null &&
+            current.type == account.type
         ? account.copyWith(creditAccountId: current.creditAccountId)
         : account;
     var normalized = _normalizeAccountCurrencyAmounts(
@@ -8489,8 +8573,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         if (creditAccount == null || creditAccount.bookId != account.bookId) {
           throw FormatException('账户 ${account.id} 引用了不存在或跨账本的信用账户主体');
         }
-        if (!account.type.supportsCredit) {
-          throw FormatException('非信用账户 ${account.id} 不能关联信用账户主体');
+        if (!account.type.supportsCurrencyChildren) {
+          throw FormatException('账户 ${account.id} 的类型不支持币种子账户');
         }
       }
     }
@@ -8499,6 +8583,27 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         (account) => account.creditAccountId == creditAccount.id,
       )) {
         throw FormatException('信用账户主体 ${creditAccount.id} 没有币种子账户');
+      }
+      final children = accounts
+          .where((a) => a.creditAccountId == creditAccount.id)
+          .toList();
+      final ordinary = !children.first.type.supportsCredit;
+      if (children.any(
+        (a) =>
+            ordinary ? a.type != children.first.type : !a.type.supportsCredit,
+      )) {
+        throw FormatException('主账户 ${creditAccount.id} 不能混合不同类型的子账户');
+      }
+      if (ordinary &&
+          (children.map((a) => a.currencyCode).toSet().length !=
+                  children.length ||
+              creditAccount.creditLimit != null ||
+              creditAccount.statementDay != null ||
+              creditAccount.dueDay != null ||
+              creditAccount.daysAfterStatement != null ||
+              creditAccount.cycleBudget != null ||
+              creditAccount.dueRuleType != CreditDueRuleType.fixedDay)) {
+        throw FormatException('普通主账户 ${creditAccount.id} 币种重复或包含信用设置');
       }
     }
 

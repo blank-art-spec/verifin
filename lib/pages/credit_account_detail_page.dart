@@ -28,6 +28,7 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
   _ParentEntryFilter _filter = _ParentEntryFilter.recent;
   bool _creating = false;
 
+  /// 为当前主账户选择尚未创建的币种；取消或跨账本时不写入，失败保留原子账户。
   Future<void> _addChild() async {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
     final bookId = c.activeBook.id;
@@ -35,7 +36,7 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
       context: context,
       title: l.creditAddCurrencyChild,
       excludedCodes: c
-          .accountsForCreditAccount(widget.parentId)
+          .accountsForParent(widget.parentId)
           .map((a) => a.currencyCode),
       preferredCodes: [
         c.activeBook.baseCurrencyCode,
@@ -47,10 +48,7 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
     );
     if (!mounted || selected == null || c.activeBook.id != bookId) return;
     setState(() => _creating = true);
-    final child = await c.ensureCreditCurrencyChild(
-      widget.parentId,
-      selected.code,
-    );
+    final child = await c.ensureCurrencyChild(widget.parentId, selected.code);
     if (!mounted) return;
     setState(() => _creating = false);
     unawaited(
@@ -63,10 +61,11 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
     );
   }
 
+  /// 展示主账户估值、真实币种子账户和合并流水；信用业务单独按能力显示。
   @override
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
-    final parent = c.creditAccounts
+    final parent = c.accountParents
         .where((p) => p.id == widget.parentId)
         .firstOrNull;
     if (parent == null) {
@@ -74,10 +73,14 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
         body: SafeArea(child: Center(child: Text(l.accountNameRequired))),
       );
     }
-    final children = c.accountsForCreditAccount(parent.id);
-    final valuation = c.accountBalancesInBase(accounts: children);
+    final children = c.accountsForParent(parent.id);
+    final isCredit = children.any((a) => a.type.supportsCredit);
+    final displayCode = isCredit
+        ? c.activeBook.baseCurrencyCode
+        : parent.currencyCode;
+    final valuation = c.parentAccountBalances(parent);
     final entries = c
-        .entriesForCreditParent(parent.id)
+        .entriesForParent(parent.id)
         .where(
           (e) => switch (_filter) {
             _ParentEntryFilter.expense => e.type == EntryType.expense,
@@ -107,7 +110,9 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
                   ),
                   HeaderAction(
                     icon: Icons.edit_outlined,
-                    tooltip: l.creditAccountEditTitle,
+                    tooltip: isCredit
+                        ? l.creditAccountEditTitle
+                        : l.accountParentSettings,
                     onPressed: () => Navigator.of(context).push<void>(
                       MaterialPageRoute(
                         builder: (_) =>
@@ -122,7 +127,9 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
                 child: Column(
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Text(l.creditNetValue),
+                    Text(
+                      isCredit ? l.creditNetValue : l.accountParentValuation,
+                    ),
                     Text(
                       valuation.isComplete
                           ? formatUserMoney(
@@ -130,14 +137,14 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
                                 0,
                                 (s, v) => s + v,
                               ),
-                              c.activeBook.baseCurrencyCode,
+                              displayCode,
                             )
                           : l.statisticsMissingRates(
                               valuation.missingCurrencyCodes.join(', '),
                             ),
                       style: Theme.of(context).textTheme.titleLarge,
                     ),
-                    if (parent.creditLimit != null)
+                    if (isCredit && parent.creditLimit != null)
                       Text(
                         '${l.creditLimitLabel}：${formatUserMoney(parent.creditLimit!, parent.currencyCode)}',
                       ),
@@ -145,18 +152,19 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
                     Wrap(
                       spacing: 8,
                       children: [
-                        FilledButton.tonal(
-                          onPressed: children.isEmpty
-                              ? null
-                              : () => Navigator.of(context).push<void>(
-                                  MaterialPageRoute(
-                                    builder: (_) => CreditRepaymentPage(
-                                      account: children.first,
+                        if (isCredit)
+                          FilledButton.tonal(
+                            onPressed: children.isEmpty
+                                ? null
+                                : () => Navigator.of(context).push<void>(
+                                    MaterialPageRoute(
+                                      builder: (_) => CreditRepaymentPage(
+                                        account: children.first,
+                                      ),
                                     ),
                                   ),
-                                ),
-                          child: Text(l.creditRepayTitle),
-                        ),
+                            child: Text(l.creditRepayTitle),
+                          ),
                         OutlinedButton(
                           onPressed: children.isEmpty
                               ? null

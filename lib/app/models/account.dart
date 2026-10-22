@@ -63,6 +63,15 @@ enum AccountType {
   bool get supportsCredit {
     return this == AccountType.creditCard || this == AccountType.creditAccount;
   }
+
+  /// 是否支持“一个主账户包含多个币种子账户”。
+  ///
+  /// 银行储蓄账户和投资账户只使用主体名称、主币种与子账户关系；
+  /// 额度、账期和还款能力仍只由 [supportsCredit] 决定，不能由父子关系推导。
+  bool get supportsCurrencyChildren =>
+      supportsCredit ||
+      this == AccountType.debitCard ||
+      this == AccountType.investment;
 }
 
 class Account {
@@ -118,8 +127,9 @@ class Account {
   /// 信用卡还款日（每月 1–28，可选）。设置后展示还款提醒。
   final int? dueDay;
 
-  /// 所属信用主体 id。仅信用类账户使用；为空表示尚未迁移或不参与主体聚合。
-  /// 额度、账期、还款规则和账期预算由对应的 `CreditAccount` 统一负责。
+  /// 所属主账户 id。信用、储蓄和投资账户均可关联；为空表示独立账户。
+  /// 为保持 SQLite 和备份结构不变，沿用历史字段名 `creditAccountId`。
+  /// 只有信用类子账户使用主体上的额度、账期和还款规则。
   final String? creditAccountId;
 
   Account copyWith({

@@ -11,6 +11,7 @@ import '../app/chart_painters.dart';
 import '../app/common_widgets.dart';
 import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
+import '../app/feedback.dart';
 import '../app/icon_catalog.dart';
 import '../app/image_cropper.dart';
 import '../app/image_sources.dart';
@@ -66,6 +67,7 @@ class _AssetsPageState extends State<AssetsPage> {
     ),
   ];
 
+  /// 展示真实子账户资产总额和主账户卡片；主账户不重复计入资产或列表分区。
   @override
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
@@ -144,7 +146,7 @@ class _AssetsPageState extends State<AssetsPage> {
                         (account) =>
                             _effectiveGroupId(account) == group.id &&
                             !account.hidden &&
-                            !account.type.supportsCredit,
+                            controller.parentForAccount(account) == null,
                       ),
                     ),
                   ),
@@ -162,7 +164,7 @@ class _AssetsPageState extends State<AssetsPage> {
                         (account) =>
                             account.type == type &&
                             !account.hidden &&
-                            !account.type.supportsCredit,
+                            controller.parentForAccount(account) == null,
                       ),
                     ),
                   ),
@@ -470,7 +472,7 @@ class _AssetsPageState extends State<AssetsPage> {
                 child: Text(AppLocalizations.of(context).creditHierarchyReview),
               ),
             ),
-          for (final parent in controller.creditAccounts)
+          for (final parent in controller.accountParents)
             if (controller
                 .accountsForCreditAccount(parent.id)
                 .any((a) => !a.hidden))
@@ -489,9 +491,13 @@ class _AssetsPageState extends State<AssetsPage> {
                           .accountsForCreditAccount(parent.id)
                           .where((a) => !a.hidden)
                           .toList();
-                      final value = controller.accountBalancesInBase(
-                        accounts: children,
+                      final value = controller.parentAccountBalances(
+                        parent,
+                        visibleOnly: true,
                       );
+                      final displayCode = children.first.type.supportsCredit
+                          ? baseCurrencyCode
+                          : parent.currencyCode;
                       return Material(
                         type: MaterialType.transparency,
                         child: ListTile(
@@ -509,7 +515,7 @@ class _AssetsPageState extends State<AssetsPage> {
                                 ? formatUserMoney(
                                     value.amountsByAccountId.values
                                         .fold<double>(0, (s, v) => s + v),
-                                    baseCurrencyCode,
+                                    displayCode,
                                   )
                                 : AppLocalizations.of(
                                     context,

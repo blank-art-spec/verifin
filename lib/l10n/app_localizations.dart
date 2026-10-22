@@ -11701,6 +11701,54 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'缺少 {currency} 在 {date} 或之前的历史汇率。请在“货币与汇率”中补充；自动更新不会补齐历史数据。'**
   String assetTrendMissingRateDetails(String currency, String date);
+
+  /// No description provided for @accountParentLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'所属主账户'**
+  String get accountParentLabel;
+
+  /// No description provided for @accountParentCreateNew.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建主账户'**
+  String get accountParentCreateNew;
+
+  /// No description provided for @accountParentSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'主账户设置'**
+  String get accountParentSettings;
+
+  /// No description provided for @accountParentNameLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'主账户名称'**
+  String get accountParentNameLabel;
+
+  /// No description provided for @accountParentEnable.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用多币种子账户'**
+  String get accountParentEnable;
+
+  /// No description provided for @accountPrimaryCurrency.
+  ///
+  /// In zh, this message translates to:
+  /// **'主账户币种'**
+  String get accountPrimaryCurrency;
+
+  /// No description provided for @accountParentValuation.
+  ///
+  /// In zh, this message translates to:
+  /// **'按主账户币种估值'**
+  String get accountParentValuation;
+
+  /// No description provided for @accountCurrencyChildExists.
+  ///
+  /// In zh, this message translates to:
+  /// **'该主账户已包含此币种，请选择其他币种。'**
+  String get accountCurrencyChildExists;
 }
 
 class _AppLocalizationsDelegate

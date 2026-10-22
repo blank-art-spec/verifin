@@ -1,5 +1,17 @@
 # 组件清单（Component Registry）
 
+2026-10-22 通用多币种主账户扩展：
+
+| 组件/函数 | 入口与约定 |
+| --- | --- |
+| `AccountType.supportsCurrencyChildren` | 区分银行/证券/信用的父子能力与 `supportsCredit`；不能由主账户关系推导信用能力 |
+| `accountParents` / `parentForAccount` / `accountParentsForType` | Controller 只读主账户入口；按账本与类型限定关联候选，`creditAccounts` 仍只列信用主体 |
+| `accountsForParent` / `entriesForParent` | 读取真实币种账户和合并去重流水；父 id 不可直接记账 |
+| `ensureCurrencyChild` / `enableCurrencyChildren` | 新增币种或显式为旧独立账户建主账户；原子保存，零新增流水；保留既有 id 与原币余额 |
+| `saveAccountParentDraft` / `parentAccountBalances` | 保存公共资料、普通主体的展示币种并估值；普通主体不允许信用配置，缺率不显示部分合计 |
+| `CreditAccountDetailPage` / `CreditAccountEditorPage` | 沿用既有页面骨架与历史类名，普通主体隐藏还款/额度/账期，展示主币种设置与币种子账户 |
+| `showAccountPickerSheet(includeCreditParents: true)` | 历史参数名保持兼容；银行、证券与信用主账户均去重展示，记账按币种解析，转账仍选真实子账户 |
+
 2026-10-18 父子账户与折算扩展：
 
 | 组件/函数 | 入口与约定 |

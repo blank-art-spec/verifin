@@ -3735,5 +3735,13 @@
   "creditCurrencyChildAdded": "已新增 {currency} 子账户",
   "@creditCurrencyChildAdded": {"placeholders": {"currency": {"type": "String"}}},
   "assetTrendMissingRateDetails": "缺少 {currency} 在 {date} 或之前的历史汇率。请在“货币与汇率”中补充；自动更新不会补齐历史数据。",
-  "@assetTrendMissingRateDetails": {"placeholders": {"currency": {"type": "String"}, "date": {"type": "String"}}}
+  "@assetTrendMissingRateDetails": {"placeholders": {"currency": {"type": "String"}, "date": {"type": "String"}}},
+    "accountParentLabel": "所属主账户",
+    "accountParentCreateNew": "新建主账户",
+    "accountParentSettings": "主账户设置",
+    "accountParentNameLabel": "主账户名称",
+    "accountParentEnable": "启用多币种子账户",
+    "accountPrimaryCurrency": "主账户币种",
+    "accountParentValuation": "按主账户币种估值",
+  "accountCurrencyChildExists": "该主账户已包含此币种，请选择其他币种。"
 }

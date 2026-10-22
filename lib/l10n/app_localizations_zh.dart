@@ -6491,4 +6491,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String assetTrendMissingRateDetails(String currency, String date) {
     return '缺少 $currency 在 $date 或之前的历史汇率。请在“货币与汇率”中补充；自动更新不会补齐历史数据。';
   }
+
+  @override
+  String get accountParentLabel => '所属主账户';
+
+  @override
+  String get accountParentCreateNew => '新建主账户';
+
+  @override
+  String get accountParentSettings => '主账户设置';
+
+  @override
+  String get accountParentNameLabel => '主账户名称';
+
+  @override
+  String get accountParentEnable => '启用多币种子账户';
+
+  @override
+  String get accountPrimaryCurrency => '主账户币种';
+
+  @override
+  String get accountParentValuation => '按主账户币种估值';
+
+  @override
+  String get accountCurrencyChildExists => '该主账户已包含此币种，请选择其他币种。';
 }

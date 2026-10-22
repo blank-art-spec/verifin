@@ -403,7 +403,7 @@ mixin _ControllerState on ChangeNotifier {
     }
   }
 
-  /// 当前活动账本是否实际涉及多个币种。账户、历史交易、周期规则或已维护汇率中
+  /// 当前活动账本是否实际涉及多个币种。账户、普通主账户展示币种、历史交易或汇率中
   /// 任一出现非本位币即视为多币种；这样删除/新增实体、切换账本后展示会自动更新。
   bool get activeBookUsesMultipleCurrencies {
     final book = _ledgerBooks
@@ -414,6 +414,17 @@ mixin _ControllerState on ChangeNotifier {
     return _accounts.any(
           (account) =>
               account.bookId == book.id && account.currencyCode != base,
+        ) ||
+        _creditAccounts.any(
+          (parent) =>
+              parent.bookId == book.id &&
+              parent.currencyCode != base &&
+              _accounts.any(
+                (account) =>
+                    account.bookId == book.id &&
+                    account.creditAccountId == parent.id &&
+                    !account.type.supportsCredit,
+              ),
         ) ||
         _entries.any(
           (entry) => entry.bookId == book.id && entry.currencyCode != base,

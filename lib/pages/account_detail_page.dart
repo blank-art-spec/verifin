@@ -24,6 +24,7 @@ import '../l10n/app_localizations.dart';
 import 'billing_statements_page.dart';
 import 'account_entry_reminder_page.dart';
 import 'credit_account_editor_page.dart';
+import 'credit_account_detail_page.dart';
 import 'credit_repayment_page.dart';
 import 'entry_detail_page.dart';
 import 'sheets.dart';
@@ -71,6 +72,8 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     _initialized = true;
   }
 
+  /// 展示账户草稿、原币余额和设置；普通主体关系与信用账期按各自能力显示。
+  /// 旧快照仅在账户类型相同时补齐主体 id，避免切换类型后串入旧主体。
   @override
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
@@ -81,7 +84,8 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     // 创建账户后调用方可能仍持有“尚未回填信用主体 id”的旧快照；渲染时用
     // Controller 的持久化关联补齐本地视图，避免主体选择器误显示为未选择。
     final currentAccount =
-        _draftAccount.type.supportsCredit &&
+        _draftAccount.type.supportsCurrencyChildren &&
+            _draftAccount.type == persistedAccount.type &&
             _draftAccount.creditAccountId == null &&
             persistedAccount.creditAccountId != null
         ? _draftAccount.copyWith(
@@ -474,6 +478,21 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                     ],
                   ),
                 ),
+                if (currentAccount.type.supportsCurrencyChildren &&
+                    !currentAccount.type.supportsCredit) ...<Widget>[
+                  const SizedBox(height: 12),
+                  VeriCard(
+                    child: SettingsRow(
+                      icon: Icons.account_balance_outlined,
+                      title: AppLocalizations.of(context).accountParentLabel,
+                      trailing:
+                          controller.parentForAccount(currentAccount)?.name ??
+                          AppLocalizations.of(context).accountParentEnable,
+                      trailingIcon: Icons.chevron_right,
+                      onTap: _openCurrencyParent,
+                    ),
+                  ),
+                ],
                 if (currentAccount.type.supportsCardLast4) ...<Widget>[
                   const SizedBox(height: 12),
                   SectionLabel(AppLocalizations.of(context).accountSectionCard),
@@ -1068,6 +1087,34 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     });
   }
 
+  /// 打开普通主账户详情；旧独立账户需经此显式入口才建立主体关系。
+  /// 建立主体只补充关联，不改变草稿中的名称、余额、备注及已有交易。
+  Future<void> _openCurrencyParent() async {
+    final c = VeriFinScope.of(context);
+    final parent =
+        c.parentForAccount(_draftAccount) ??
+        await c.enableCurrencyChildren(_draftAccount);
+    if (!mounted) return;
+    if (parent == null) {
+      unawaited(
+        VeriFeedbackHost.of(context).showMessage(
+          message: AppLocalizations.of(context).saveFailed,
+          tone: VeriFeedbackTone.error,
+        ),
+      );
+      return;
+    }
+    setState(() {
+      _draftAccount = _draftAccount.copyWith(creditAccountId: parent.id);
+      _initialAccount = _initialAccount.copyWith(creditAccountId: parent.id);
+    });
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute(
+        builder: (_) => CreditAccountDetailPage(parentId: parent.id),
+      ),
+    );
+  }
+
   /// 打开父主体编辑页。共享额度、卡尾号、账单规则与账期预算只在该页维护，
   /// 子账户详情不再各自保存一套容易互相覆盖的配置。
   Future<void> _openCreditAccountEditor(CreditAccount creditAccount) async {
@@ -1195,6 +1242,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
     }
   }
 
+  /// 保存当前子账户草稿及默认账户偏好；保留相容主账户关系，失败保留草稿。
   Future<bool> _save() async {
     final controller = VeriFinScope.of(context);
     final account = _draftAccount;
@@ -1204,7 +1252,7 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
       clearCreditLimit: !account.type.supportsCredit,
       clearStatementDay: !account.type.supportsCredit,
       clearDueDay: !account.type.supportsCredit,
-      clearCreditAccountId: !account.type.supportsCredit,
+      clearCreditAccountId: !account.type.supportsCurrencyChildren,
     );
     if (!await controller.saveAccountDraft(normalized)) {
       return false;

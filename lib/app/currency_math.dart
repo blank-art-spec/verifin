@@ -360,8 +360,11 @@ class ConvertedAccountBalances {
       : null;
 }
 
-/// Converts account-native balances to one ledger base currency. If any rate
-/// is missing, [completeTotal] is null; callers must not display a partial sum.
+/// 按账本汇率折算 [accounts] 的原币余额，默认目标为 [baseCurrencyCode]。
+/// [targetCurrencyCode] 可指定主账户的展示币种；只计算投影，不写回余额。
+/// [balanceOf] 提供真实原币余额，[bookId] 隔离汇率所属账本；
+/// [date] 限定估值日，[rates] 仍以账本本位币报价，用于来源到目标币种的交叉折算。
+/// 缺少来源或目标汇率时 [ConvertedAccountBalances.completeTotal] 为 null，禁止展示部分合计。
 ConvertedAccountBalances convertAccountBalancesToBase({
   required Iterable<Account> accounts,
   required double Function(Account account) balanceOf,
@@ -369,6 +372,7 @@ ConvertedAccountBalances convertAccountBalancesToBase({
   required String baseCurrencyCode,
   required DateTime date,
   required Iterable<ExchangeRate> rates,
+  String? targetCurrencyCode,
 }) {
   final amounts = <String, double>{};
   final missingCodes = <String>{};
@@ -384,7 +388,7 @@ ConvertedAccountBalances convertAccountBalancesToBase({
     final result = convertCurrencyAmount(
       amount: balance,
       sourceCurrencyCode: account.currencyCode,
-      targetCurrencyCode: baseCurrencyCode,
+      targetCurrencyCode: targetCurrencyCode ?? baseCurrencyCode,
       baseCurrencyCode: baseCurrencyCode,
       bookId: bookId,
       date: date,
@@ -392,7 +396,12 @@ ConvertedAccountBalances convertAccountBalancesToBase({
     );
     if (result is ConvertedCurrencyAmount) {
       amounts[account.id] = result.amount;
-      final rateDate = result.sourceRateDate;
+      // 交叉折算也依赖目标币种汇率，展示两端中更早的生效日。
+      final dates = [
+        if (result.sourceRateDate != null) result.sourceRateDate!,
+        if (result.targetRateDate != null) result.targetRateDate!,
+      ]..sort();
+      final rateDate = dates.firstOrNull;
       if (rateDate != null) {
         rateDates[account.id] = rateDate;
         if (calendarDaysBetween(rateDate, date) > 30) {

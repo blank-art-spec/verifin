@@ -719,7 +719,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     final selectedAccount = _noAccount
         ? null
         : _accountFor(accounts, _accountId);
-    final creditParent = controller.creditAccounts
+    final creditParent = controller.accountParents
         .where((parent) => parent.id == selectedAccount?.creditAccountId)
         .firstOrNull;
     // 大金额颜色跟随类型:支出红、收入青绿、转账保持蓝色。
@@ -1825,7 +1825,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       message: l.creditCreateCurrency(code),
     );
     if (!mounted || confirmed != true) return null;
-    return c.ensureCreditCurrencyChild(parentId, code);
+    return c.ensureCurrencyChild(parentId, code);
   }
 
   Future<void> _pickToAccount(List<Account> accounts) async {

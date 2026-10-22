@@ -2569,5 +2569,13 @@
   "creditCurrencyChildAdded": "Added {currency} subaccount",
   "@creditCurrencyChildAdded": {"placeholders": {"currency": {"type": "String"}}},
   "assetTrendMissingRateDetails": "Missing a {currency} rate effective on or before {date}. Add it in Currencies & rates; automatic updates do not backfill historical rates.",
-  "@assetTrendMissingRateDetails": {"placeholders": {"currency": {"type": "String"}, "date": {"type": "String"}}}
+  "@assetTrendMissingRateDetails": {"placeholders": {"currency": {"type": "String"}, "date": {"type": "String"}}},
+    "accountParentLabel": "Parent account",
+    "accountParentCreateNew": "Create parent account",
+    "accountParentSettings": "Parent account settings",
+    "accountParentNameLabel": "Parent account name",
+    "accountParentEnable": "Enable currency subaccounts",
+    "accountPrimaryCurrency": "Parent account currency",
+    "accountParentValuation": "Value in parent account currency",
+  "accountCurrencyChildExists": "This parent account already has this currency. Choose another currency."
 }

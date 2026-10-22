@@ -1,4 +1,4 @@
-/// 信用主体领域模型：一张真实信用卡或一个信用平台，以及它共享的额度、账期和预算。
+/// 多币种主账户模型：银行、证券与信用主体，沿用已有类名和存储结构。
 ///
 /// `Account` 继续表达具体币种子账户及其流水；多个子账户通过
 /// `Account.creditAccountId` 指向同一个 [CreditAccount]。这样人民币、美元等子账户
@@ -24,7 +24,10 @@ enum CreditDueRuleType {
       );
 }
 
-/// 信用主体（真实卡片或信用平台）。
+/// 主账户：真实信用卡、银行账户或证券账户的多币种容器。
+///
+/// 类名和存储字段沿用历史名称，保持 SQLite v27 / JSON v9 结构不变。
+/// 主体类型由子账户能力确定；普通主账户不设置任何额度、账单或还款字段。
 class CreditAccount {
   const CreditAccount({
     required this.id,
@@ -53,7 +56,7 @@ class CreditAccount {
   /// 主体共享的卡尾号。无实体卡的信用平台可为空。
   final String cardLast4;
 
-  /// 共享额度、账期预算和首页聚合金额使用的币种。
+  /// 主账户币种。普通主体用于余额估值；信用主体用于共享额度与账期预算。
   final String currencyCode;
 
   /// 共享额度；null 表示未设置。

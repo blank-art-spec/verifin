@@ -61,11 +61,12 @@ class _AddAccountPageState extends State<AddAccountPage> {
     super.dispose();
   }
 
+  /// 构建账户草稿页；多币种主体与信用额度分别按能力显示，保存前不落库。
   @override
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
     final groups = controller.accountGroups;
-    final creditAccounts = controller.creditAccounts;
+    final creditAccounts = controller.accountParentsForType(_type);
     final currencyCode =
         _currencyCode ?? controller.activeBook.baseCurrencyCode;
     final currency = CurrencyCatalog.require(currencyCode);
@@ -101,7 +102,11 @@ class _AddAccountPageState extends State<AddAccountPage> {
                         value.label(AppLocalizations.of(context)),
                     subtitleOf: (value) =>
                         value.capabilityHint(AppLocalizations.of(context)),
-                    onSelected: (value) => setState(() => _type = value),
+                    onSelected: (value) => setState(() {
+                      // 类型变化后重新选择主体，避免把证券账户挂到银行或信用账户下。
+                      _type = value;
+                      _creditAccountId = null;
+                    }),
                     semanticLabel: AppLocalizations.of(
                       context,
                     ).accountTypePickerTitle,
@@ -136,32 +141,31 @@ class _AddAccountPageState extends State<AddAccountPage> {
                     ),
                     const SizedBox(height: 10),
                   ],
-                  if (_type.supportsCredit) ...<Widget>[
+                  if (_type.supportsCurrencyChildren) ...<Widget>[
                     if (creditAccounts.isNotEmpty) ...<Widget>[
                       SelectField(
                         key: const Key('add_account_credit_parent'),
-                        label: AppLocalizations.of(
-                          context,
-                        ).creditAccountParentLabel,
-                        value: _creditAccountId == null
+                        label: _type.supportsCredit
                             ? AppLocalizations.of(
                                 context,
-                              ).creditAccountCreateNew
+                              ).creditAccountParentLabel
+                            : AppLocalizations.of(context).accountParentLabel,
+                        value: _creditAccountId == null
+                            ? _createParentLabel
                             : creditAccounts
                                       .where(
                                         (item) => item.id == _creditAccountId,
                                       )
                                       .map((item) => item.name)
                                       .firstOrNull ??
-                                  AppLocalizations.of(
-                                    context,
-                                  ).creditAccountCreateNew,
+                                  _createParentLabel,
                         icon: Icons.account_balance_outlined,
                         onTap: () => _pickCreditAccount(creditAccounts),
                       ),
                       const SizedBox(height: 10),
                     ],
-                    if (_creditAccountId == null) ...<Widget>[
+                    if (_type.supportsCredit &&
+                        _creditAccountId == null) ...<Widget>[
                       SelectField(
                         key: const Key('add_account_credit_limit'),
                         label: AppLocalizations.of(context).creditLimitLabel,
@@ -271,6 +275,8 @@ class _AddAccountPageState extends State<AddAccountPage> {
     }
   }
 
+  /// 选择当前子账户币种；已有主账户下的币种排除，避免在保存时重复创建。
+  /// 取消不改变草稿；旧账本未确认本位币时先复用已有确认流程。
   Future<void> _pickCurrency() async {
     var controller = VeriFinScope.of(context);
     if (controller.activeBook.currencySetupStatus ==
@@ -287,6 +293,9 @@ class _AddAccountPageState extends State<AddAccountPage> {
       context: context,
       title: AppLocalizations.of(context).selectAccountCurrency,
       selectedCode: _currencyCode,
+      excludedCodes: controller
+          .accountsForParent(_creditAccountId ?? '')
+          .map((account) => account.currencyCode),
       preferredCodes: controller.accounts.map(
         (account) => account.currencyCode,
       ),
@@ -358,6 +367,7 @@ class _AddAccountPageState extends State<AddAccountPage> {
         .name;
   }
 
+  /// 比较页面草稿与默认值，主账户选择也计入未保存离开保护。
   bool get _isDirty {
     final balanceText = _balanceController.text.trim();
     final parsedBalance = double.tryParse(balanceText);
@@ -376,9 +386,9 @@ class _AddAccountPageState extends State<AddAccountPage> {
                 (_cardNumberController.text.trim().isNotEmpty ||
                     cardLast4Of(_cardLast4Controller.text).isNotEmpty ||
                     !_cardLast4Follows)) ||
+            (_type.supportsCurrencyChildren && _creditAccountId != null) ||
             (_type.supportsCredit &&
-                (_creditAccountId != null ||
-                    _creditLimit != null ||
+                (_creditLimit != null ||
                     _statementDay != null ||
                     _dueDay != null)));
   }
@@ -399,25 +409,33 @@ class _AddAccountPageState extends State<AddAccountPage> {
     setState(() => _creditLimit = value <= 0 ? null : value);
   }
 
-  /// 选择信用主体。首项是“新建主体”哨兵；选择已有主体后，额度与账期由父实体统一
+  /// 普通主账户使用通用文案，信用主体继续保留既有名称与操作习惯。
+  String get _createParentLabel => _type.supportsCredit
+      ? AppLocalizations.of(context).creditAccountCreateNew
+      : AppLocalizations.of(context).accountParentCreateNew;
+
+  /// 选择同类型主账户。参数只包含能力相容的主体；空值表示新建，取消不改草稿。
+  /// 信用账户选择已有主体后，额度与账期由父实体统一
   /// 管理，本页只继续填写当前币种子账户自身的名称、币种和初始余额。
   Future<void> _pickCreditAccount(List<CreditAccount> creditAccounts) async {
     const createNewValue = '';
     final selected = await showOptionSheet<String>(
       context: context,
-      title: AppLocalizations.of(context).creditAccountParentLabel,
+      title: _type.supportsCredit
+          ? AppLocalizations.of(context).creditAccountParentLabel
+          : AppLocalizations.of(context).accountParentLabel,
       values: <String>[
         createNewValue,
         ...creditAccounts.map((item) => item.id),
       ],
       selected: _creditAccountId ?? createNewValue,
       labelOf: (value) => value == createNewValue
-          ? AppLocalizations.of(context).creditAccountCreateNew
+          ? _createParentLabel
           : creditAccounts
                     .where((item) => item.id == value)
                     .map((item) => item.name)
                     .firstOrNull ??
-                AppLocalizations.of(context).creditAccountCreateNew,
+                _createParentLabel,
     );
     if (!mounted || selected == null) return;
     final parent = creditAccounts
@@ -469,12 +487,26 @@ class _AddAccountPageState extends State<AddAccountPage> {
     }
   }
 
+  /// 校验并原子提交新账户；银行、证券可创建主账户或加入已有主账户。
   Future<bool> _save() async {
     if (!_formKey.currentState!.validate()) {
       return false;
     }
     final controller = VeriFinScope.of(context);
-    return controller.addAccountDraft(
+    final code = _currencyCode ?? controller.activeBook.baseCurrencyCode;
+    if (_creditAccountId != null &&
+        controller
+            .accountsForParent(_creditAccountId!)
+            .any((account) => account.currencyCode == code)) {
+      unawaited(
+        VeriFeedbackHost.of(context).showMessage(
+          message: AppLocalizations.of(context).accountCurrencyChildExists,
+          tone: VeriFeedbackTone.error,
+        ),
+      );
+      return false;
+    }
+    final saved = await controller.addAccountDraft(
       Account(
         id: DateTime.now().microsecondsSinceEpoch.toString(),
         bookId: controller.activeBook.id,
@@ -497,8 +529,20 @@ class _AddAccountPageState extends State<AddAccountPage> {
         creditLimit: _type.supportsCredit ? _creditLimit : null,
         statementDay: _type.supportsCredit ? _statementDay : null,
         dueDay: _type.supportsCredit ? _dueDay : null,
-        creditAccountId: _type.supportsCredit ? _creditAccountId : null,
+        creditAccountId: _type.supportsCurrencyChildren
+            ? _creditAccountId
+            : null,
       ),
     );
+    if (!mounted) return saved;
+    if (!saved) {
+      unawaited(
+        VeriFeedbackHost.of(context).showMessage(
+          message: AppLocalizations.of(context).saveFailed,
+          tone: VeriFeedbackTone.error,
+        ),
+      );
+    }
+    return saved;
   }
 }

@@ -184,10 +184,15 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
     return true;
   }
 
+  /// 兼容既有信用调用；[id] 是主体 id，[statistics] 决定是否读取统计折算投影。
   List<LedgerEntry> entriesForCreditParent(
     String id, {
     bool statistics = false,
-  }) {
+  }) => entriesForParent(id, statistics: statistics);
+
+  /// 合并 [id] 主账户下所有子账户流水，内部转账只出现一次。
+  /// [statistics] 为 true 时使用统计投影；读取不会改写交易或账户余额。
+  List<LedgerEntry> entriesForParent(String id, {bool statistics = false}) {
     final ids = accountsForCreditAccount(id).map((a) => a.id).toSet();
     final source = statistics ? statisticsEntries : entries;
     return source
@@ -196,33 +201,95 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
       ..sort(_compareEntriesLatestFirst);
   }
 
-  /// 父账户选择后解析到真实子账户；父主体 id 永远不能写入交易 accountId。
+  /// 为 [parentId] 确保币种 [currencyCode] 的真实子账户存在。
+  /// 银行、证券与信用主账户共用此入口；已有币种直接返回，新增初始余额为零。
+  /// 主体 id 永远不能写入交易 accountId，也不会因此创建任何流水。
+  Future<Account?> ensureCurrencyChild(String parentId, String currencyCode) =>
+      _enqueueCaptureMutation(() async {
+        final parent = accountParents
+            .where((p) => p.id == parentId)
+            .firstOrNull;
+        if (parent == null || !CurrencyCatalog.isSupported(currencyCode)) {
+          return null;
+        }
+        final existing = accountsForCreditAccount(
+          parentId,
+        ).where((a) => a.currencyCode == currencyCode).firstOrNull;
+        if (existing != null) return existing;
+        final template = accountsForCreditAccount(parentId).firstOrNull;
+        if (template == null) return null;
+        final child = template.copyWith(
+          id: _generateId('credit-child'),
+          name: '${parent.name}.$currencyCode',
+          currencyCode: currencyCode,
+          initialBalance: 0,
+          hidden: false,
+          cardNumber: '',
+          clearCreditLimit: currencyCode != parent.currencyCode,
+        );
+        return await addAccountDraft(child)
+            ? accounts.firstWhere((a) => a.id == child.id)
+            : null;
+      });
+
+  /// 兼容既有信用调用；[parentId] 与 [currencyCode] 转交统一币种子账户入口。
   Future<Account?> ensureCreditCurrencyChild(
     String parentId,
     String currencyCode,
-  ) => _enqueueCaptureMutation(() async {
-    final parent = creditAccounts.where((p) => p.id == parentId).firstOrNull;
-    if (parent == null || !CurrencyCatalog.isSupported(currencyCode)) {
-      return null;
-    }
-    final existing = accountsForCreditAccount(
-      parentId,
-    ).where((a) => a.currencyCode == currencyCode).firstOrNull;
-    if (existing != null) return existing;
-    final template = accountsForCreditAccount(parentId).firstOrNull;
-    if (template == null) return null;
-    final child = template.copyWith(
-      id: _generateId('credit-child'),
-      name: '${parent.name}.$currencyCode',
-      currencyCode: currencyCode,
-      initialBalance: 0,
-      hidden: false,
-      clearCreditLimit: currencyCode != parent.currencyCode,
+  ) => ensureCurrencyChild(parentId, currencyCode);
+
+  /// 为旧独立账户 [account] 启用多币种主体；只新增主体与关联，不更改账户 id、金额或流水。
+  /// 用户显式点击后才调用；主体与关联在同一事务保存，失败时不改变内存。
+  Future<CreditAccount?> enableCurrencyChildren(Account account) =>
+      _enqueueCaptureMutation(() async {
+        final current = accounts.where((a) => a.id == account.id).firstOrNull;
+        if (current == null || !current.type.supportsCurrencyChildren) {
+          return null;
+        }
+        final existing = parentForAccount(current);
+        if (existing != null) return existing;
+        final parent = _creditAccountFromLegacyAccount(current);
+        final next = [
+          for (final item in _accounts)
+            item.id == current.id
+                ? item.copyWith(creditAccountId: parent.id)
+                : item,
+        ];
+        if (!await _runTrackedWrite(
+          () => _repository.saveCreditAccountAggregate(
+            accounts: next,
+            creditAccounts: [..._creditAccounts, parent],
+          ),
+        )) {
+          return null;
+        }
+        _accounts
+          ..clear()
+          ..addAll(next);
+        _creditAccounts.add(parent);
+        notifyListeners();
+        return parent;
+      });
+
+  /// 按 [parent] 的展示币种估值；[visibleOnly] 为 true 时不包含已隐藏的子账户。
+  /// 普通主账户使用自身主币种，信用账户沿用账本本币；缺率时返回不完整结果。
+  ConvertedAccountBalances parentAccountBalances(
+    CreditAccount parent, {
+    bool visibleOnly = false,
+  }) {
+    final children = accountsForCreditAccount(parent.id);
+    return convertAccountBalancesToBase(
+      accounts: children.where((a) => !visibleOnly || !a.hidden),
+      balanceOf: accountBalance,
+      bookId: _activeBookId,
+      baseCurrencyCode: activeBook.baseCurrencyCode,
+      targetCurrencyCode: children.any((a) => a.type.supportsCredit)
+          ? activeBook.baseCurrencyCode
+          : parent.currencyCode,
+      date: DateTime.now(),
+      rates: _exchangeRates,
     );
-    return await addAccountDraft(child)
-        ? accounts.firstWhere((a) => a.id == child.id)
-        : null;
-  });
+  }
 
   /// 明确确认参考金额，原子修改原消费并保留审计与退款证据。
   Future<EntrySaveResult> confirmReferenceAmount(
