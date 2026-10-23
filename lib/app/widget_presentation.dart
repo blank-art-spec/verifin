@@ -4,6 +4,7 @@ import 'ledger_math.dart';
 import 'models.dart';
 import 'statistics_currency.dart';
 import 'widget_config.dart';
+import 'investments/investment_valuation.dart';
 
 /// Immutable input for widget previews. Reading another book never switches the
 /// active book or mutates the ledger.
@@ -15,6 +16,9 @@ class WidgetLedgerSnapshot {
     required this.rates,
     required this.budgetWindow,
     required this.budget,
+    this.investmentPortfolios = const [],
+    this.balanceAnchors = const [],
+    this.valuationEntries,
   });
 
   final LedgerBook book;
@@ -23,6 +27,14 @@ class WidgetLedgerSnapshot {
   final List<ExchangeRate> rates;
   final DateWindow budgetWindow;
   final double budget;
+
+  /// 已按所选账本隔离的证券聚合（当前参考价已选定）与现金锚点。
+  final List<InvestmentPortfolio> investmentPortfolios;
+  final List<BalanceAnchor> balanceAnchors;
+
+  /// 历史修订摘要必须使用原始账务，不能使用随最新汇率重新折算的统计副本。
+  /// 旧调用方省略时继续使用 [entries]。
+  final List<LedgerEntry>? valuationEntries;
 }
 
 class WidgetMetricValue {
@@ -98,7 +110,6 @@ WidgetPresentation buildWidgetPresentation({
   required DateTime now,
 }) {
   final today = dateOnly(now);
-  final endExclusive = addCalendarDays(today, 1);
   final window = switch (definition.dateRange) {
     WidgetDateRange.sevenDays => DateWindow(
       start: addCalendarDays(today, -6),
@@ -149,25 +160,26 @@ WidgetPresentation buildWidgetPresentation({
                 account.id == definition.accountId),
       )
       .toList();
-  double balanceAt(Account account, DateTime cutoff) =>
-      account.initialBalance +
-      snapshot.entries
-          .where((entry) => accountEffectDate(entry).isBefore(cutoff))
-          .fold<double>(
-            0,
-            (sum, entry) => sum + accountDeltaForEntry(entry, account.id),
-          );
-  ConvertedAccountBalances valuationAt(DateTime date) =>
-      convertAccountBalancesToBase(
+
+  /// 当前数字与首页共用分解；走势图的历史点必须读取当日保存的依据。
+  ConvertedAccountBalances valuationAt(DateTime date, {bool current = false}) =>
+      valueLedgerAccounts(
         accounts: visibleAccounts,
-        balanceOf: (account) =>
-            balanceAt(account, addCalendarDays(dateOnly(date), 1)),
+        entries: snapshot.valuationEntries ?? snapshot.entries,
+        anchors: snapshot.balanceAnchors,
+        portfolios: snapshot.investmentPortfolios,
         bookId: snapshot.book.id,
         baseCurrencyCode: snapshot.book.baseCurrencyCode,
-        date: date,
+        at: current
+            ? now
+            : addCalendarDays(
+                dateOnly(date),
+                1,
+              ).subtract(const Duration(microseconds: 1)),
+        current: current,
         rates: snapshot.rates,
       );
-  final valuation = valuationAt(today);
+  final valuation = valuationAt(today, current: true);
   final hasBudget = snapshot.budget > 0;
   double? metric(WidgetMetric metric) =>
       projection.missing.isNotEmpty &&
@@ -191,18 +203,8 @@ WidgetPresentation buildWidgetPresentation({
           WidgetMetric.budgetRate =>
             hasBudget ? budgetSpent / snapshot.budget : null,
           WidgetMetric.netWorth => valuation.completeTotal,
-          WidgetMetric.totalAssets =>
-            valuation.isComplete
-                ? valuation.amountsByAccountId.values
-                      .where((value) => value > 0)
-                      .fold<double>(0, (a, b) => a + b)
-                : null,
-          WidgetMetric.totalLiabilities =>
-            valuation.isComplete
-                ? -valuation.amountsByAccountId.values
-                      .where((value) => value < 0)
-                      .fold<double>(0, (a, b) => a + b)
-                : null,
+          WidgetMetric.totalAssets => valuation.completeAssets,
+          WidgetMetric.totalLiabilities => valuation.completeLiabilities,
           WidgetMetric.balance =>
             definition.accountId == null
                 ? valuation.completeTotal
@@ -210,12 +212,20 @@ WidgetPresentation buildWidgetPresentation({
                       .where((a) => a.id == definition.accountId)
                       .isEmpty
                 ? null
-                : balanceAt(
-                    snapshot.accounts.firstWhere(
+                : valueLedgerAccounts(
+                    accounts: snapshot.accounts.where(
                       (a) => a.id == definition.accountId,
                     ),
-                    endExclusive,
-                  ),
+                    entries: snapshot.valuationEntries ?? snapshot.entries,
+                    anchors: snapshot.balanceAnchors,
+                    portfolios: snapshot.investmentPortfolios,
+                    bookId: snapshot.book.id,
+                    baseCurrencyCode: snapshot.accounts
+                        .firstWhere((a) => a.id == definition.accountId)
+                        .currencyCode,
+                    rates: const [],
+                    at: now,
+                  ).completeTotal,
           WidgetMetric.transactionCount =>
             period
                 .where((entry) => entry.type != EntryType.refund)

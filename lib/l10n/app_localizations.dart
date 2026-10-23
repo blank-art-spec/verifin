@@ -12475,6 +12475,240 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'未保存或无法预览。请核对正整数张数、完整合约与乘数、结算确认、持仓/现金、参考价和后续事件；不支持的交割结构会保留待处理。'**
   String get optionValidationError;
+
+  /// No description provided for @marketTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考行情'**
+  String get marketTitle;
+
+  /// No description provided for @marketEnable.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启参考行情联网'**
+  String get marketEnable;
+
+  /// No description provided for @marketAutomatic.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅此页前台每 5 分钟刷新'**
+  String get marketAutomatic;
+
+  /// No description provided for @marketRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'刷新参考行情'**
+  String get marketRefresh;
+
+  /// No description provided for @marketConsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启后仅向已通过评审的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。离页、退后台或锁屏停止刷新。'**
+  String get marketConsent;
+
+  /// No description provided for @marketGatePending.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源尚未通过自动估值门禁，继续使用手填参考价。'**
+  String get marketGatePending;
+
+  /// No description provided for @marketSourceReview.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源使用条件与字段核对'**
+  String get marketSourceReview;
+
+  /// No description provided for @marketUseForValuation.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用合格行情估值（关闭为持续手填）'**
+  String get marketUseForValuation;
+
+  /// No description provided for @marketSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'行情设置未保存或来源不可用，请保留手填参考价。'**
+  String get marketSaveFailed;
+
+  /// No description provided for @marketManualFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'手填后备参考价'**
+  String get marketManualFallback;
+
+  /// No description provided for @marketNoQuote.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无合格报价，使用手填后备价。'**
+  String get marketNoQuote;
+
+  /// No description provided for @marketReady.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次合格报价已缓存'**
+  String get marketReady;
+
+  /// No description provided for @marketUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此来源/品种暂不可用，保留原参考价'**
+  String get marketUnavailable;
+
+  /// No description provided for @marketFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源失败或字段无效，保留旧缓存及其原时间'**
+  String get marketFailed;
+
+  /// No description provided for @marketCooldown.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源冷却中，请稍后刷新'**
+  String get marketCooldown;
+
+  /// No description provided for @marketNotCached.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次报价未缓存，当前结果仅在内存可用'**
+  String get marketNotCached;
+
+  /// No description provided for @marketIdle.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未刷新；联网默认关闭'**
+  String get marketIdle;
+
+  /// No description provided for @marketAttempt.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近尝试'**
+  String get marketAttempt;
+
+  /// No description provided for @marketNextRefresh.
+  ///
+  /// In zh, this message translates to:
+  /// **'最早下次刷新'**
+  String get marketNextRefresh;
+
+  /// No description provided for @marketQuoteTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源报价时间'**
+  String get marketQuoteTime;
+
+  /// No description provided for @marketStateUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易状态或延迟未确认；缓存不代表实时'**
+  String get marketStateUnknown;
+
+  /// No description provided for @marketEffectiveHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考净值使用行情缓存及手填后备价；报价不改变真实成交、持仓数量或现金。'**
+  String get marketEffectiveHint;
+
+  /// No description provided for @marketEffectivePrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'行情参考价'**
+  String get marketEffectivePrice;
+
+  /// No description provided for @marketSetManual.
+  ///
+  /// In zh, this message translates to:
+  /// **'改为手填参考价'**
+  String get marketSetManual;
+
+  /// No description provided for @investHistory.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史估值'**
+  String get investHistory;
+
+  /// No description provided for @investHistoryCapture.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存当前估值依据'**
+  String get investHistoryCapture;
+
+  /// No description provided for @investHistorySaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存当前估值依据'**
+  String get investHistorySaved;
+
+  /// No description provided for @investHistoryHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅记录主动保存的观察点及当时价格、汇率。缺失日期不补值；补录或修改此前账务后，受影响的记录需重新核对。'**
+  String get investHistoryHint;
+
+  /// No description provided for @investHistoryEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚无历史估值依据。保存当前观察点后可在这里查看。'**
+  String get investHistoryEmpty;
+
+  /// No description provided for @investHistoryGap.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分历史日期缺少有效价格、汇率或估值依据，无法绘制完整趋势。请在投资账户的历史估值中查看已保存的观察点。'**
+  String get investHistoryGap;
+
+  /// No description provided for @investHistoryInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'账务已修订或价格依据不完整，此观察点不可用于历史汇总。'**
+  String get investHistoryInvalid;
+
+  /// No description provided for @investHistoryBase.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存时本位币净值'**
+  String get investHistoryBase;
+
+  /// No description provided for @investHistoryRate.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存时参考汇率'**
+  String get investHistoryRate;
+
+  /// No description provided for @investLongValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'多头持仓价值'**
+  String get investLongValue;
+
+  /// No description provided for @investShortObligation.
+  ///
+  /// In zh, this message translates to:
+  /// **'空头持仓义务'**
+  String get investShortObligation;
+
+  /// No description provided for @marketOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源标记：交易中'**
+  String get marketOpen;
+
+  /// No description provided for @marketClosed.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源标记：休市'**
+  String get marketClosed;
+
+  /// No description provided for @marketHalted.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源标记：暂停交易'**
+  String get marketHalted;
+
+  /// No description provided for @marketDelayKnown.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源声明延迟：{minutes} 分钟'**
+  String marketDelayKnown(int minutes);
 }
 
 class _AppLocalizationsDelegate

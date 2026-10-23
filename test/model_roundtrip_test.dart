@@ -83,6 +83,24 @@ void main() {
             ),
           ],
         ).copyWith(
+          marketPriceIds: {avgoFixture.id},
+          valuationSnapshots: [
+            InvestmentValuationSnapshot(
+              capturedAt: DateTime(2026, 10, 24),
+              revision: 'a' * 64,
+              baseCurrencyCode: 'CNY',
+              rateToBase: 7,
+              rateDate: DateTime(2026, 10, 1),
+              prices: {
+                avgoFixture.id: InvestmentPriceFact(
+                  price: '330.00000001',
+                  quotedAt: DateTime(2026, 10, 24),
+                  source: '本地测试来源',
+                  manual: false,
+                ),
+              },
+            ),
+          ],
           anchorIncludedIds: {
             'anchor': ['stock:buy', 'entry:included'],
           },

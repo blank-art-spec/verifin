@@ -24,6 +24,100 @@ mixin _InvestmentOps on _ControllerOps {
     return value == null ? null : projectStocks(value);
   }
 
+  /// 返回当前账户原币资产分解；普通账户仍以现金/信用余额的正负拆分。
+  AccountAssetAmounts accountAssetAmounts(Account account) {
+    final p = _portfolioForAccount(account), cash = accountBalance(account);
+    return p == null
+        ? AccountAssetAmounts.balance(cash)
+        : valueInvestmentAccount(pricedInvestmentPortfolio(p), cash).amounts!;
+  }
+
+  /// 根据快照原价格重放该时点原币估值；账务/规格曾被修改时返回 null，提示重新核对。
+  InvestmentAccountValuation? investmentSnapshotValuation(
+    String accountId,
+    InvestmentValuationSnapshot snapshot,
+  ) {
+    final p = investmentFor(accountId),
+        account = accounts.where((a) => a.id == accountId).firstOrNull;
+    if (p == null ||
+        account == null ||
+        !p.valuationSnapshots.contains(snapshot) ||
+        snapshot.revision !=
+            investmentRevision(
+              p,
+              _entries,
+              _balanceAnchors,
+              snapshot.capturedAt,
+            )) {
+      return null;
+    }
+    final past = investmentAt(p, snapshot.capturedAt).copyWith(
+      manualPrices: snapshot.prices.map((id, f) => MapEntry(id, f.price)),
+    );
+    return valueInvestmentAccount(
+      past,
+      accountCashAt(
+        account: account,
+        entries: _entries,
+        anchors: _balanceAnchors,
+        at: snapshot.capturedAt,
+        portfolio: past,
+      ),
+    );
+  }
+
+  /// 主动记录实际当前时点的历史价格和汇率依据；不允许调用方伪造过去的快照日期。
+  /// 保存失败保留原聚合；同一时点重试只保留一条，旧历史不随今天的参考价更新。
+  Future<bool> captureInvestmentValuation(String accountId) =>
+      _runInvestmentCommand(() async {
+        final p = investmentFor(accountId);
+        if (p == null) return false;
+        final at = DateTime.now().toUtc(),
+            effective = pricedInvestmentPortfolio(p);
+        final quotes = investmentQuoteSync.quotesFor(p),
+            facts = <String, InvestmentPriceFact>{};
+        for (final position in projectStocks(investmentAt(p, at)).positions) {
+          final security = p.securities.firstWhere(
+            (s) => s.id == position.securityId,
+          );
+          final q = p.marketPriceIds.contains(security.id)
+              ? quotes[security.id]
+              : null;
+          final ref = q?.reference(MarketQuoteRequest(security), at);
+          final price = effective.manualPrices[security.id];
+          if (price == null) continue;
+          facts[security.id] = InvestmentPriceFact(
+            price: price,
+            quotedAt: ref?.time ?? at,
+            manual: ref == null,
+            source: ref == null ? '' : q!.source,
+          );
+        }
+        final rate = exchangeRateFor(p.currencyCode, at);
+        final s = InvestmentValuationSnapshot(
+          capturedAt: at,
+          revision: investmentRevision(p, _entries, _balanceAnchors, at),
+          baseCurrencyCode: activeBook.baseCurrencyCode,
+          prices: facts,
+          rateToBase: p.currencyCode == activeBook.baseCurrencyCode
+              ? 1
+              : rate?.rateToBase,
+          rateDate: rate?.effectiveDate,
+        );
+        final next = p.copyWith(
+          valuationSnapshots: [
+            ...p.valuationSnapshots.where(
+              (s) => !s.capturedAt.isAtSameMomentAs(at),
+            ),
+            s,
+          ],
+        );
+        return _saveInvestmentCandidates([
+          for (final value in _investmentPortfolios)
+            value.accountId == p.accountId ? next : value,
+        ]);
+      });
+
   /// 首次启用 [accountId]；[openingCash] 为核对后的真实现金，不是原总资产。
   /// [openingHoldings] 可包含未知成本；[manualPrices] 只用于参考估值，取消草稿无副作用。
   Future<bool> enableInvestment({
@@ -99,6 +193,10 @@ mixin _InvestmentOps on _ControllerOps {
         security,
       ],
       events: [...current.events.where((e) => e.id != event.id), event],
+      // 成交页明确填写的参考价也属于持续手填覆盖。
+      marketPriceIds: referencePrice == null
+          ? current.marketPriceIds
+          : current.marketPriceIds.where((id) => id != security.id).toSet(),
       manualPrices: {
         ...current.manualPrices,
         if (referencePrice != null)
@@ -137,6 +235,9 @@ mixin _InvestmentOps on _ControllerOps {
     final current = investmentFor(accountId);
     if (current == null) return false;
     final next = current.copyWith(
+      marketPriceIds: current.marketPriceIds
+          .where((id) => id != securityId)
+          .toSet(),
       manualPrices: {
         ...current.manualPrices,
         securityId: InvestmentDecimal.parse(price).toString(),
@@ -145,6 +246,34 @@ mixin _InvestmentOps on _ControllerOps {
     return _saveInvestmentCandidates([
       for (final p in _investmentPortfolios)
         p.accountId == accountId ? next : p,
+    ]);
+  });
+
+  /// 按证券显式切换参考价来源；开启仅对已准入来源生效，关闭保留原手填价格。
+  Future<bool> setInvestmentMarketPrice(
+    String accountId,
+    String securityId,
+    bool useMarket,
+  ) => _runInvestmentCommand(() async {
+    final p = investmentFor(accountId);
+    final s = p?.securities.where((s) => s.id == securityId).firstOrNull;
+    if (p == null ||
+        s == null ||
+        (useMarket &&
+            investmentQuoteSync.client.adapterFor(MarketQuoteRequest(s)) ==
+                null)) {
+      return false;
+    }
+    final ids = {...p.marketPriceIds};
+    if (useMarket) {
+      ids.add(securityId);
+    } else {
+      ids.remove(securityId);
+    }
+    final next = p.copyWith(marketPriceIds: ids);
+    return _saveInvestmentCandidates([
+      for (final v in _investmentPortfolios)
+        v.accountId == accountId ? next : v,
     ]);
   });
 
@@ -307,6 +436,13 @@ mixin _InvestmentOps on _ControllerOps {
         security,
       ],
       events: [...p.events.where((e) => e.id != event.id), event],
+      marketPriceIds: p.marketPriceIds
+          .where(
+            (id) =>
+                id != security.id &&
+                !(id == underlying.id && underlyingReferencePrice != null),
+          )
+          .toSet(),
       manualPrices: {
         ...p.manualPrices,
         security.id: InvestmentDecimal.parse(referencePrice).toString(),
@@ -487,6 +623,35 @@ void validateInvestmentPortfolios(
     }
     InvestmentDecimal.parse(p.openingCash).toDouble();
     final projection = projectStocks(p);
+    final times = <int>{};
+    for (final snapshot in p.valuationSnapshots) {
+      CurrencyCatalog.require(snapshot.baseCurrencyCode);
+      if (!times.add(snapshot.capturedAt.microsecondsSinceEpoch) ||
+          snapshot.capturedAt.isBefore(p.openedAt) ||
+          !RegExp(r'^[a-f0-9]{64}$').hasMatch(snapshot.revision) ||
+          (snapshot.rateToBase != null &&
+              !isValidExchangeRate(snapshot.rateToBase!)) ||
+          (snapshot.rateDate?.isAfter(snapshot.capturedAt) ?? false) ||
+          (p.currencyCode == snapshot.baseCurrencyCode &&
+              snapshot.rateToBase != 1)) {
+        throw const FormatException('历史估值依据不合法');
+      }
+      for (final fact in snapshot.prices.entries) {
+        final value = InvestmentDecimal.parse(fact.value.price);
+        if (!p.securities.any((s) => s.id == fact.key) ||
+            value.units < BigInt.zero ||
+            fact.value.quotedAt.isAfter(
+              snapshot.capturedAt.add(const Duration(minutes: 5)),
+            ) ||
+            (!fact.value.manual && fact.value.source.isEmpty)) {
+          throw const FormatException('历史参考价依据不合法');
+        }
+        value.toDouble();
+      }
+    }
+    if (p.marketPriceIds.any((id) => !p.securities.any((s) => s.id == id))) {
+      throw const FormatException('行情覆盖选择引用了不存在的证券');
+    }
     final valuation = valueStocks(p, projection);
     if (valuation.marketValue == null) {
       throw const FormatException('投资持仓需要明确的手填参考价');

@@ -250,3 +250,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 - 删除/重命名可复用件 → 同步改本表与所有调用点。
 
 - 期权投资：`models/option_contract.dart` 定义独立的权利金乘数、交割股数与每张行权现金；`stock_projection.dart` 的 part `option_projection.dart` 重放开平仓/到期/交割及保证金，`securityPositionValue` 统一股数/张数估值、`optionExpired` 只判断待确认。`OptionEditorPage` 复用现有组件并要求预览，Controller 的 `previewOptionEvent` 零写入，`saveOptionEvent` / `saveOptionSpecification` 原子校验提交。详见 [期权阶段](securities-stage03-implementation.md)。
+
+- 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与代码来源门禁；`InvestmentQuoteSync` 独立设备通知源及有界缓存/冷却/页面定时，`MarketQuotesPage` 复用应用解锁作用域暂停网络；`quote_format.dart` 的 `formatQuoteTime` 共用时间格式。当前没有通过自动估值门禁的生产适配器，不能将测试夹具当成真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
+
+- 证券资产与历史：`investment_valuation.dart` 的 `valueInvestmentAccount` / `valueLedgerAccounts` / `accountCashAt` / `investmentRevision` / `investmentSnapshotAt` 是纯计算入口；`currency_math.dart` 的 `AccountAssetAmounts` 和 `ConvertedAccountBalances` 保留总资产/负债分解。`models/investment_valuation_snapshot.dart` 保存实际观察点依据，`InvestmentHistoryPage` 复用 `InteractiveTrendChart`。详见 [阶段 5](securities-stage05-implementation.md)。

@@ -13,6 +13,40 @@ mixin _ControllerState on ChangeNotifier {
   AppLogger? get _logger;
   bool get _systemIsEnglish;
   HolidayCalendarClient get _workdayCalendarClient;
+  MarketQuoteClient get _marketQuoteClient;
+  InvestmentQuoteSync? _investmentQuoteSync;
+
+  /// 独立设备行情通知源；首次读取只恢复缓存，不联网，不发送账户资料。
+  InvestmentQuoteSync get investmentQuoteSync {
+    if (_investmentQuoteSync == null) {
+      final sync = InvestmentQuoteSync(
+        store: _store,
+        client: _marketQuoteClient,
+        logger: _logger,
+      );
+      _investmentQuoteSync = sync;
+      sync.reconcile(_investmentPortfolios);
+      sync.onPricesChanged = () => notifyListeners();
+    }
+    return _investmentQuoteSync!;
+  }
+
+  /// 返回只读有效估值依据；仅明确选择行情的项采用合格缓存，原手填事实不被覆盖。
+  InvestmentPortfolio pricedInvestmentPortfolio(InvestmentPortfolio p) {
+    if (p.marketPriceIds.isEmpty) return p;
+    final quotes = investmentQuoteSync.quotesFor(p),
+        prices = {...p.manualPrices};
+    for (final s in p.securities.where(
+      (s) => p.marketPriceIds.contains(s.id),
+    )) {
+      final value = quotes[s.id]?.reference(
+        MarketQuoteRequest(s),
+        investmentQuoteSync.clock(),
+      );
+      if (value != null) prices[s.id] = value.price;
+    }
+    return p.copyWith(manualPrices: prices);
+  }
 
   /// SQLite 落库失败时回调（由 UI 层挂钩弹出「保存失败」提示）。
   void Function(Object error)? onPersistError;
@@ -119,6 +153,7 @@ mixin _ControllerState on ChangeNotifier {
             a.type.supportsSecurities,
       ),
     );
+    _investmentQuoteSync?.reconcile(_investmentPortfolios);
     _statisticsProjection = null;
     _entriesView = null;
     _captureEventsView = null;

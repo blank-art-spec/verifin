@@ -11,6 +11,7 @@ import '../app/chart_painters.dart';
 import '../app/common_widgets.dart';
 import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
+import '../app/calendar_days.dart';
 import '../app/feedback.dart';
 import '../app/icon_catalog.dart';
 import '../app/image_cropper.dart';
@@ -87,28 +88,13 @@ class _AssetsPageState extends State<AssetsPage> {
     final valuationRateDates = valuation.rateDatesByAccountId.values.toList()
       ..sort();
     final oldestValuationRateDate = valuationRateDates.firstOrNull;
-    final assets = valuation.isComplete
-        ? valuedAccounts
-              .map((account) => valuation.amountsByAccountId[account.id] ?? 0)
-              .where((value) => value > 0)
-              .fold<double>(0, (sum, value) => sum + value)
-        : null;
-    final liabilities = valuation.isComplete
-        ? valuedAccounts
-              .map((account) => valuation.amountsByAccountId[account.id] ?? 0)
-              .where((value) => value < 0)
-              .fold<double>(0, (sum, value) => sum + value)
-        : null;
+    final assets = valuation.completeAssets;
+    final liabilities = valuation.completeLiabilities == null
+        ? null
+        : -valuation.completeLiabilities!;
     final assetTrend = _baseCurrencyAssetTrend(
-      accounts: valuedAccounts,
-      entries: controller.entries,
-      convert: ({required amount, required currencyCode, required date}) =>
-          controller.convertAmount(
-            amount: amount,
-            sourceCurrencyCode: currencyCode,
-            targetCurrencyCode: baseCurrencyCode,
-            date: date,
-          ),
+      valueAt: (at) =>
+          controller.accountBalancesAt(at, accounts: valuedAccounts),
     );
     final assetTrendValues = assetTrend.values;
     final hasAssetCover = controller.assetCoverUrl.isNotEmpty;
@@ -324,36 +310,43 @@ class _AssetsPageState extends State<AssetsPage> {
                               mainAxisSize: MainAxisSize.min,
                               children: [
                                 Text(
-                                  AppLocalizations.of(
-                                    context,
-                                  ).assetTrendMissingRateDetails(
-                                    assetTrend.missingCurrency!,
-                                    MaterialLocalizations.of(
-                                      context,
-                                    ).formatMediumDate(assetTrend.missingDate!),
-                                  ),
+                                  assetTrend.missingCurrency == null
+                                      ? AppLocalizations.of(
+                                          context,
+                                        ).investHistoryGap
+                                      : AppLocalizations.of(
+                                          context,
+                                        ).assetTrendMissingRateDetails(
+                                          assetTrend.missingCurrency!,
+                                          MaterialLocalizations.of(
+                                            context,
+                                          ).formatMediumDate(
+                                            assetTrend.missingDate!,
+                                          ),
+                                        ),
                                   textAlign: TextAlign.center,
                                   style: Theme.of(context).textTheme.bodySmall
                                       ?.copyWith(color: assetCardMutedColor),
                                 ),
-                                TextButton(
-                                  key: const Key('asset_trend_rates_action'),
-                                  style: TextButton.styleFrom(
-                                    foregroundColor: assetCardTextColor,
-                                  ),
-                                  onPressed: () =>
-                                      Navigator.of(context).push<void>(
-                                        MaterialPageRoute(
-                                          builder: (_) =>
-                                              const CurrencyRatesPage(),
+                                if (assetTrend.missingCurrency != null)
+                                  TextButton(
+                                    key: const Key('asset_trend_rates_action'),
+                                    style: TextButton.styleFrom(
+                                      foregroundColor: assetCardTextColor,
+                                    ),
+                                    onPressed: () =>
+                                        Navigator.of(context).push<void>(
+                                          MaterialPageRoute(
+                                            builder: (_) =>
+                                                const CurrencyRatesPage(),
+                                          ),
                                         ),
-                                      ),
-                                  child: Text(
-                                    AppLocalizations.of(
-                                      context,
-                                    ).currencyRatesTitle,
+                                    child: Text(
+                                      AppLocalizations.of(
+                                        context,
+                                      ).currencyRatesTitle,
+                                    ),
                                   ),
-                                ),
                               ],
                             ),
                           ),
@@ -670,43 +663,26 @@ class _AssetAccountSection {
   final List<Account> accounts;
 }
 
-typedef _AssetCurrencyConverter =
-    CurrencyConversionResult Function({
-      required num amount,
-      required String currencyCode,
-      required DateTime date,
-    });
-
+/// 年度趋势只在每个历史月末具备依据时绘制；缺价/修订与缺率分别提示。
 ({List<double>? values, String? missingCurrency, DateTime? missingDate})
 _baseCurrencyAssetTrend({
-  required List<Account> accounts,
-  required List<LedgerEntry> entries,
-  required _AssetCurrencyConverter convert,
+  required ConvertedAccountBalances Function(DateTime at) valueAt,
 }) {
-  final nativeSeries = accountMonthlyBalanceSeriesBatch(accounts, entries);
   final now = DateTime.now();
   final result = <double>[];
   for (var monthIndex = 0; monthIndex < 12; monthIndex += 1) {
     final monthEnd = DateTime(now.year, monthIndex + 2, 0);
-    var total = 0.0;
-    for (final account in accounts) {
-      final amount = nativeSeries[account.id]![monthIndex];
-      if (isZeroCurrencyAmount(amount, account.currencyCode)) continue;
-      final conversion = convert(
-        amount: amount,
-        currencyCode: account.currencyCode,
-        date: monthEnd,
+    final valuation = valueAt(
+      addCalendarDays(monthEnd, 1).subtract(const Duration(microseconds: 1)),
+    );
+    if (!valuation.isComplete) {
+      return (
+        values: null,
+        missingCurrency: valuation.missingCurrencyCodes.firstOrNull,
+        missingDate: monthEnd,
       );
-      if (conversion is! ConvertedCurrencyAmount) {
-        return (
-          values: null,
-          missingCurrency: account.currencyCode,
-          missingDate: monthEnd,
-        );
-      }
-      total += conversion.amount;
     }
-    result.add(total);
+    result.add(valuation.completeTotal!);
   }
   return (values: result, missingCurrency: null, missingDate: null);
 }

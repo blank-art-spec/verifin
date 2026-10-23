@@ -10,11 +10,16 @@ import '../app/feedback.dart';
 import '../app/investments/avgo_quote_probe.dart';
 import '../app/investments/investment_decimal.dart';
 import '../app/investments/stock_projection.dart';
+import '../app/investments/quote_format.dart';
+import '../app/investments/market_quote.dart';
 import '../app/models.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
 import 'option_editor_page.dart';
+import 'market_quotes_page.dart';
+import 'investment_history_page.dart';
+import '../app/investments/investment_valuation.dart';
 
 /// 指定币种账户的持仓与记录；父账户通过既有子账户列表进入。
 class InvestmentPage extends StatelessWidget {
@@ -97,12 +102,18 @@ class InvestmentPage extends StatelessWidget {
         body: SafeArea(child: Center(child: Text(l.accountNameRequired))),
       );
     }
-    final portfolio = c.investmentFor(accountId);
+    final originalPortfolio = c.investmentFor(accountId);
+    final portfolio = originalPortfolio == null
+        ? null
+        : c.pricedInvestmentPortfolio(originalPortfolio);
     final projection = c.investmentProjection(accountId);
     final valuation = portfolio == null
         ? null
         : valueStocks(portfolio, projection!);
     final cash = c.accountBalance(account);
+    final detail = portfolio == null
+        ? null
+        : valueInvestmentAccount(portfolio, cash);
     String money(double value) => formatUserMoney(value, account.currencyCode);
     final surfaceText = Theme.of(context).colorScheme.onSurface;
     return Scaffold(
@@ -120,11 +131,27 @@ class InvestmentPage extends StatelessWidget {
                 ),
                 showBack: true,
                 actions: [
+                  if (portfolio != null)
+                    HeaderAction(
+                      icon: Icons.history,
+                      tooltip: l.investHistory,
+                      onPressed: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              InvestmentHistoryPage(accountId: accountId),
+                        ),
+                      ),
+                    ),
                   HeaderAction(
                     icon: Icons.cloud_outlined,
-                    tooltip: l.investProbe,
+                    tooltip: l.marketTitle,
                     onPressed: () => Navigator.of(context).push<void>(
-                      MaterialPageRoute(builder: (_) => const AvgoProbePage()),
+                      MaterialPageRoute(
+                        builder: (_) => MarketQuotesPage(
+                          accountId: accountId,
+                          sourceProbeBuilder: (_) => const AvgoProbePage(),
+                        ),
+                      ),
                     ),
                   ),
                 ],
@@ -173,6 +200,21 @@ class InvestmentPage extends StatelessWidget {
                             value: valuation.marketValue == null
                                 ? l.investUnknown
                                 : money(valuation.marketValue!.toDouble()),
+                            color: surfaceText,
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 14),
+                      Row(
+                        children: [
+                          SummaryMetric(
+                            label: l.investLongValue,
+                            value: money(detail!.longValue!),
+                            color: surfaceText,
+                          ),
+                          SummaryMetric(
+                            label: l.investShortObligation,
+                            value: money(detail.shortObligation!),
                             color: surfaceText,
                           ),
                         ],
@@ -280,7 +322,9 @@ class InvestmentPage extends StatelessWidget {
                 ),
                 const SizedBox(height: 10),
                 Text(
-                  l.investManualHint,
+                  portfolio.marketPriceIds.isEmpty
+                      ? l.investManualHint
+                      : l.marketEffectiveHint,
                   style: Theme.of(context).textTheme.bodySmall,
                 ),
                 const SizedBox(height: 16),
@@ -373,6 +417,13 @@ class _StockPositionCard extends StatelessWidget {
       (s) => s.id == position.securityId,
     );
     final price = portfolio.manualPrices[position.securityId];
+    final quote = portfolio.marketPriceIds.contains(security.id)
+        ? c.investmentQuoteSync.quotesFor(portfolio)[security.id]
+        : null;
+    final quoteReference = quote?.reference(
+      MarketQuoteRequest(security),
+      c.investmentQuoteSync.clock(),
+    );
     final value = price == null
         ? null
         : securityPositionValue(
@@ -425,8 +476,14 @@ class _StockPositionCard extends StatelessWidget {
             '${l.investCost}：${position.cost == null ? l.investUnknown : formatUserMoney(position.cost!.toDouble(), portfolio.currencyCode)}',
           ),
           Text(
-            '${l.investReference}：${price == null ? l.investUnknown : formatUserSecurityPrice(price, portfolio.currencyCode)}',
+            '${quoteReference == null ? l.investReference : l.marketEffectivePrice}：${price == null ? l.investUnknown : formatUserSecurityPrice(price, portfolio.currencyCode)}',
           ),
+          if (quoteReference != null)
+            Text(
+              '${quote!.source} · ${l.marketQuoteTime}: ${formatQuoteTime(context, quoteReference.time)}',
+            )
+          else if (portfolio.marketPriceIds.contains(security.id))
+            Text(l.marketNoQuote),
           Text(
             '${l.investUnrealized}：${pnl == null ? l.investUnknown : formatSignedUserMoney(pnl.toDouble(), portfolio.currencyCode)}',
             style: TextStyle(
@@ -477,7 +534,9 @@ class _StockPositionCard extends StatelessWidget {
                     );
                   }
                 },
-                child: Text(l.investReprice),
+                child: Text(
+                  quoteReference == null ? l.investReprice : l.marketSetManual,
+                ),
               ),
               if (security.option == null)
                 TextButton(onPressed: onTransfer, child: Text(l.investTransfer))
@@ -1078,13 +1137,6 @@ class _AvgoProbePageState extends State<AvgoProbePage> {
     });
   }
 
-  /// 将来源/抓取时间按应用语言格式化；[time] 先转换到设备时区。
-  String _time(BuildContext context, DateTime time) {
-    final local = time.toLocal();
-    final material = MaterialLocalizations.of(context);
-    return '${material.formatFullDate(local)} ${material.formatTimeOfDay(TimeOfDay.fromDateTime(local))} ${local.timeZoneName}';
-  }
-
   /// 显示来源时间未知、不可用及发布条件待核对，避免把响应成功等同于实时权限。
   @override
   Widget build(BuildContext context) {
@@ -1127,10 +1179,10 @@ class _AvgoProbePageState extends State<AvgoProbePage> {
                       Text(
                         r.quoteTime == null
                             ? l.investProbeTimeUnknown
-                            : '${l.investTime}：${_time(context, r.quoteTime!)}',
+                            : '${l.investTime}：${formatQuoteTime(context, r.quoteTime!)}',
                       ),
                       Text(
-                        '${l.investFetchedAt}：${_time(context, r.fetchedAt)}',
+                        '${l.investFetchedAt}：${formatQuoteTime(context, r.fetchedAt)}',
                       ),
                     ],
                   ),

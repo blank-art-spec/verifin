@@ -6881,4 +6881,126 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get optionValidationError =>
       '未保存或无法预览。请核对正整数张数、完整合约与乘数、结算确认、持仓/现金、参考价和后续事件；不支持的交割结构会保留待处理。';
+
+  @override
+  String get marketTitle => '参考行情';
+
+  @override
+  String get marketEnable => '开启参考行情联网';
+
+  @override
+  String get marketAutomatic => '仅此页前台每 5 分钟刷新';
+
+  @override
+  String get marketRefresh => '刷新参考行情';
+
+  @override
+  String get marketConsent =>
+      '开启后仅向已通过评审的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。离页、退后台或锁屏停止刷新。';
+
+  @override
+  String get marketGatePending => '来源尚未通过自动估值门禁，继续使用手填参考价。';
+
+  @override
+  String get marketSourceReview => '来源使用条件与字段核对';
+
+  @override
+  String get marketUseForValuation => '使用合格行情估值（关闭为持续手填）';
+
+  @override
+  String get marketSaveFailed => '行情设置未保存或来源不可用，请保留手填参考价。';
+
+  @override
+  String get marketManualFallback => '手填后备参考价';
+
+  @override
+  String get marketNoQuote => '暂无合格报价，使用手填后备价。';
+
+  @override
+  String get marketReady => '本次合格报价已缓存';
+
+  @override
+  String get marketUnavailable => '此来源/品种暂不可用，保留原参考价';
+
+  @override
+  String get marketFailed => '来源失败或字段无效，保留旧缓存及其原时间';
+
+  @override
+  String get marketCooldown => '来源冷却中，请稍后刷新';
+
+  @override
+  String get marketNotCached => '本次报价未缓存，当前结果仅在内存可用';
+
+  @override
+  String get marketIdle => '尚未刷新；联网默认关闭';
+
+  @override
+  String get marketAttempt => '最近尝试';
+
+  @override
+  String get marketNextRefresh => '最早下次刷新';
+
+  @override
+  String get marketQuoteTime => '来源报价时间';
+
+  @override
+  String get marketStateUnknown => '交易状态或延迟未确认；缓存不代表实时';
+
+  @override
+  String get marketEffectiveHint => '参考净值使用行情缓存及手填后备价；报价不改变真实成交、持仓数量或现金。';
+
+  @override
+  String get marketEffectivePrice => '行情参考价';
+
+  @override
+  String get marketSetManual => '改为手填参考价';
+
+  @override
+  String get investHistory => '历史估值';
+
+  @override
+  String get investHistoryCapture => '保存当前估值依据';
+
+  @override
+  String get investHistorySaved => '已保存当前估值依据';
+
+  @override
+  String get investHistoryHint =>
+      '仅记录主动保存的观察点及当时价格、汇率。缺失日期不补值；补录或修改此前账务后，受影响的记录需重新核对。';
+
+  @override
+  String get investHistoryEmpty => '尚无历史估值依据。保存当前观察点后可在这里查看。';
+
+  @override
+  String get investHistoryGap =>
+      '部分历史日期缺少有效价格、汇率或估值依据，无法绘制完整趋势。请在投资账户的历史估值中查看已保存的观察点。';
+
+  @override
+  String get investHistoryInvalid => '账务已修订或价格依据不完整，此观察点不可用于历史汇总。';
+
+  @override
+  String get investHistoryBase => '保存时本位币净值';
+
+  @override
+  String get investHistoryRate => '保存时参考汇率';
+
+  @override
+  String get investLongValue => '多头持仓价值';
+
+  @override
+  String get investShortObligation => '空头持仓义务';
+
+  @override
+  String get marketOpen => '来源标记：交易中';
+
+  @override
+  String get marketClosed => '来源标记：休市';
+
+  @override
+  String get marketHalted => '来源标记：暂停交易';
+
+  @override
+  String marketDelayKnown(int minutes) {
+    return '来源声明延迟：$minutes 分钟';
+  }
 }

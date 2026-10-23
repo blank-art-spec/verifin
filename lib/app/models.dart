@@ -4,6 +4,7 @@ library;
 
 export 'models/account.dart';
 export 'models/investment.dart';
+export 'models/investment_valuation_snapshot.dart';
 export 'models/option_contract.dart';
 export 'models/auto_capture.dart';
 export 'models/category.dart';

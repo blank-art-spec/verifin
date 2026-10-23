@@ -3,6 +3,7 @@ library;
 
 import '../../l10n/app_localizations.dart';
 import 'option_contract.dart';
+import 'investment_valuation_snapshot.dart';
 
 enum StockMarket {
   us,
@@ -220,12 +221,16 @@ class InvestmentPortfolio {
     List<StockEvent> events = const [],
     Map<String, String> manualPrices = const {},
     Map<String, List<String>> anchorIncludedIds = const {},
+    Set<String> marketPriceIds = const {},
+    List<InvestmentValuationSnapshot> valuationSnapshots = const [],
     this.allowFinancing = false,
   }) : includedEntryIds = List.unmodifiable(includedEntryIds),
        securities = List.unmodifiable(securities),
        openingHoldings = List.unmodifiable(openingHoldings),
        events = List.unmodifiable(events),
        manualPrices = Map.unmodifiable(manualPrices),
+       marketPriceIds = Set.unmodifiable(marketPriceIds),
+       valuationSnapshots = List.unmodifiable(valuationSnapshots),
        anchorIncludedIds = Map.unmodifiable({
          for (final entry in anchorIncludedIds.entries)
            entry.key: List<String>.unmodifiable(entry.value),
@@ -238,6 +243,12 @@ class InvestmentPortfolio {
   final List<StockEvent> events;
   final Map<String, String> manualPrices;
 
+  /// 用户明确选择采用行情的证券 ID；默认全部手填，缓存不覆写原手填价格。
+  final Set<String> marketPriceIds;
+
+  /// 历史估值依据；不把临时缓存或当前参考价自动回填历史。
+  final List<InvestmentValuationSnapshot> valuationSnapshots;
+
   /// 现金锚点 id → 核对时已包含的同刻交易/投资事件，键带 entry:/stock: 前缀。
   final Map<String, List<String>> anchorIncludedIds;
   final bool allowFinancing;
@@ -249,6 +260,8 @@ class InvestmentPortfolio {
     Map<String, String>? manualPrices,
     Map<String, List<String>>? anchorIncludedIds,
     List<StockHolding>? openingHoldings,
+    Set<String>? marketPriceIds,
+    List<InvestmentValuationSnapshot>? valuationSnapshots,
   }) => InvestmentPortfolio(
     accountId: accountId,
     bookId: bookId,
@@ -262,9 +275,11 @@ class InvestmentPortfolio {
     manualPrices: manualPrices ?? this.manualPrices,
     allowFinancing: allowFinancing,
     anchorIncludedIds: anchorIncludedIds ?? this.anchorIncludedIds,
+    marketPriceIds: marketPriceIds ?? this.marketPriceIds,
+    valuationSnapshots: valuationSnapshots ?? this.valuationSnapshots,
   );
 
-  /// 完整用户投资数据进入 JSON v11；不含网络请求和临时行情缓存。
+  /// 完整用户投资数据进入 JSON v12；历史依据保存，临时行情缓存不进入备份。
   Map<String, Object?> toJson() => {
     'accountId': accountId,
     'bookId': bookId,
@@ -278,6 +293,8 @@ class InvestmentPortfolio {
     'manualPrices': manualPrices,
     'allowFinancing': allowFinancing,
     'anchorIncludedIds': anchorIncludedIds,
+    'marketPriceIds': marketPriceIds.toList()..sort(),
+    'valuationSnapshots': valuationSnapshots.map((v) => v.toJson()).toList(),
   };
 
   /// 读取聚合；数值语义及跨账户引用还需由投影器、Controller 统一校验。
@@ -301,6 +318,16 @@ class InvestmentPortfolio {
         .toList(),
     manualPrices: Map<String, String>.from(json['manualPrices'] as Map),
     allowFinancing: json['allowFinancing'] as bool,
+    marketPriceIds: Set<String>.from(
+      json['marketPriceIds'] as List? ?? const [],
+    ),
+    valuationSnapshots: (json['valuationSnapshots'] as List? ?? const [])
+        .map(
+          (v) => InvestmentValuationSnapshot.fromJson(
+            Map<String, Object?>.from(v as Map),
+          ),
+        )
+        .toList(),
     anchorIncludedIds: {
       for (final e in (json['anchorIncludedIds'] as Map? ?? {}).entries)
         e.key as String: List<String>.from(e.value as List),

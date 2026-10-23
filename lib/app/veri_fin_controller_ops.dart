@@ -1569,6 +1569,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final keyMonth = budgetCycleKeyMonthFor(now, startDay);
     return WidgetLedgerSnapshot(
       book: book,
+      valuationEntries: entriesForBook(id),
+      investmentPortfolios: List.unmodifiable(
+        _investmentPortfolios
+            .where((p) => p.bookId == id)
+            .map(pricedInvestmentPortfolio),
+      ),
+      balanceAnchors: List.unmodifiable(
+        _balanceAnchors.where((a) => a.bookId == id),
+      ),
       entries: projectStatisticsCurrency(
         entries: entriesForBook(id),
         book: book,
@@ -1667,15 +1676,34 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     Iterable<Account>? accounts,
     DateTime? date,
   }) {
-    return convertAccountBalancesToBase(
+    return valueLedgerAccounts(
       accounts: accounts ?? this.accounts,
-      balanceOf: accountAssetValue,
+      entries: _entries,
+      anchors: _balanceAnchors,
+      portfolios: _investmentPortfolios.map(pricedInvestmentPortfolio),
+      currentCashOf: accountBalance,
       bookId: _activeBookId,
       baseCurrencyCode: activeBook.baseCurrencyCode,
-      date: date ?? DateTime.now(),
+      at: date ?? DateTime.now(),
       rates: _exchangeRates,
     );
   }
+
+  /// 历史日的资产估值：投资账户必须有该日未失效快照，否则明确返回不完整。
+  ConvertedAccountBalances accountBalancesAt(
+    DateTime at, {
+    Iterable<Account>? accounts,
+  }) => valueLedgerAccounts(
+    accounts: accounts ?? this.accounts,
+    entries: _entries,
+    anchors: _balanceAnchors,
+    portfolios: _investmentPortfolios,
+    bookId: _activeBookId,
+    baseCurrencyCode: activeBook.baseCurrencyCode,
+    at: at,
+    rates: _exchangeRates,
+    current: false,
+  );
 
   bool ledgerBookHasFinancialData(String bookId) {
     bool hasBudget(Map<String, double> budgets) => budgets.entries.any(
@@ -7786,6 +7814,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   }
 
   void resetAllData() {
+    // 行情是设备派生缓存，初始化立即使在途响应失效；不把旧缓存带入新账户。
+    // 即使本次启动尚未打开行情页，也要清除上次启动留在设备上的缓存。
+    unawaited(investmentQuoteSync.clearCache());
     // 初始化撤销日历联网授权和下载缓存，并使尚未返回的网络请求失效。
     _workdayCalendarGeneration++;
     _workdayCalendarResetGeneration++;
@@ -7880,11 +7911,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     notifyListeners();
   }
 
-  /// 导出完整 JSON v10 用户数据，包含股票聚合与手填价，不导出单次行情响应或凭证。
+  /// 导出完整 JSON v12 用户数据，包含历史价格/汇率依据，不导出临时行情缓存或凭证。
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 11,
+      'version': 12,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'investmentPortfolios': _investmentPortfolios
@@ -7978,7 +8009,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 11) {
+    if (version < 1 || version > 12) {
       throw FormatException('不支持的备份版本：$version');
     }
 
@@ -8302,6 +8333,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       statements: nextBillingStatements,
     );
     if (dryRun) return preview;
+    // 真实恢复才清理缓存，预览仍保持零写入；本机授权偏好不从备份覆盖。
+    // 延迟创建的同步器也可能尚有磁盘缓存，真实恢复必须覆盖这条冷启动路径。
+    unawaited(investmentQuoteSync.clearCache());
 
     _investmentPortfolios
       ..clear()
@@ -8916,12 +8950,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     final cash = accountBalance(account);
     final portfolio = _portfolioForAccount(account);
     if (portfolio == null) return cash;
-    final value = valueStocks(portfolio, projectStocks(portfolio)).marketValue;
+    final value = valueInvestmentAccount(
+      pricedInvestmentPortfolio(portfolio),
+      cash,
+    ).amounts;
     if (value == null) throw const FormatException('投资持仓缺少参考价');
-    return normalizeCurrencyAmount(
-      cash + value.toDouble(),
-      account.currencyCode,
-    );
+    return normalizeCurrencyAmount(value.net, account.currencyCode);
   }
 
   /// 一次遍历算出全部账户余额，供 [accountBalance] 复用。

@@ -7126,4 +7126,138 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get optionValidationError =>
       'Not saved or preview unavailable. Check integer contracts, contract specifications, confirmation, holdings/cash, reference prices and later events. Unsupported deliverables remain pending.';
+
+  @override
+  String get marketTitle => 'Reference quotes';
+
+  @override
+  String get marketEnable => 'Enable reference quote requests';
+
+  @override
+  String get marketAutomatic =>
+      'Refresh every 5 minutes while this page is visible';
+
+  @override
+  String get marketRefresh => 'Refresh reference quotes';
+
+  @override
+  String get marketConsent =>
+      'When enabled, only security/contract codes go to approved sources, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. Refresh stops when leaving this page, backgrounding or locking.';
+
+  @override
+  String get marketGatePending =>
+      'No source has passed automatic valuation review. Manual reference prices remain available.';
+
+  @override
+  String get marketSourceReview => 'Source terms and field review';
+
+  @override
+  String get marketUseForValuation =>
+      'Use eligible quotes for valuation (off: persistent manual price)';
+
+  @override
+  String get marketSaveFailed =>
+      'Quote settings were not saved or the source is unavailable. Keep a manual reference price.';
+
+  @override
+  String get marketManualFallback => 'Manual fallback reference price';
+
+  @override
+  String get marketNoQuote =>
+      'No eligible quote. Using the manual fallback price.';
+
+  @override
+  String get marketReady => 'Eligible quotes cached';
+
+  @override
+  String get marketUnavailable =>
+      'This source/instrument is unavailable. Previous reference prices are retained.';
+
+  @override
+  String get marketFailed =>
+      'Source failure or invalid fields. Older cached quotes keep their original timestamps.';
+
+  @override
+  String get marketCooldown => 'Source cooldown. Refresh later.';
+
+  @override
+  String get marketNotCached =>
+      'Quotes were not cached. Current results are available only in memory.';
+
+  @override
+  String get marketIdle => 'Not refreshed; networking is off by default';
+
+  @override
+  String get marketAttempt => 'Last attempt';
+
+  @override
+  String get marketNextRefresh => 'Next allowed refresh';
+
+  @override
+  String get marketQuoteTime => 'Source quote time';
+
+  @override
+  String get marketStateUnknown =>
+      'Trading state or delay may be unknown; cached quotes are not guaranteed real-time';
+
+  @override
+  String get marketEffectiveHint =>
+      'Estimated net value uses cached quotes and manual fallback prices. Quotes never change actual trades, quantities or cash.';
+
+  @override
+  String get marketEffectivePrice => 'Market reference price';
+
+  @override
+  String get marketSetManual => 'Switch to a manual reference price';
+
+  @override
+  String get investHistory => 'Valuation history';
+
+  @override
+  String get investHistoryCapture => 'Save current valuation evidence';
+
+  @override
+  String get investHistorySaved => 'Current valuation evidence saved';
+
+  @override
+  String get investHistoryHint =>
+      'Only saved observations and their price and exchange-rate evidence are shown. Missing dates stay empty. Earlier ledger edits require affected observations to be reviewed.';
+
+  @override
+  String get investHistoryEmpty =>
+      'No saved valuation evidence yet. Save a current observation to view it here.';
+
+  @override
+  String get investHistoryGap =>
+      'Some historical dates lack valid prices, exchange rates or valuation evidence. View saved observations in the investment account valuation history.';
+
+  @override
+  String get investHistoryInvalid =>
+      'The ledger was revised or price evidence is incomplete. This observation cannot be used in historical totals.';
+
+  @override
+  String get investHistoryBase => 'Net value in the saved base currency';
+
+  @override
+  String get investHistoryRate => 'Saved reference exchange rate';
+
+  @override
+  String get investLongValue => 'Long position value';
+
+  @override
+  String get investShortObligation => 'Short position obligation';
+
+  @override
+  String get marketOpen => 'Source status: open';
+
+  @override
+  String get marketClosed => 'Source status: closed';
+
+  @override
+  String get marketHalted => 'Source status: halted';
+
+  @override
+  String marketDelayKnown(int minutes) {
+    return 'Source-declared delay: $minutes minutes';
+  }
 }

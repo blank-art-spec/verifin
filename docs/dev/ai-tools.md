@@ -16,7 +16,7 @@
 
 - **Agent 同时支持两种协议**：优先使用 OpenAI 兼容的原生 Tool Calls；端点明确不支持时，自动模式在本次请求内安全降级到带边界标记的兼容提示词协议。用户也可在 AI 设置中固定协议。
 - **工具 schema 是单一事实来源**：每个工具通过 `AiToolSchema` / `AiToolParameter` 声明参数，同时生成原生 function definition 和兼容协议说明，避免两套协议的参数约定漂移。
-- **工具全部只读、纯函数**：输入 `AiToolContext` 数据快照（当前活动账本的交易 / 账户 / 汇率 + 全局分类 / 标签 + 余额查询 + 账本本位币 + `l10n` 语言 + `currencyDisplay` 币种显示口径 + 预算回调 + 当前时间），不触达 controller，便于单测。**绝不提供任何写数据的工具。**
+- **工具全部只读、纯函数**：输入 `AiToolContext` 数据快照（当前活动账本的交易 / 账户 / 汇率 / 证券资产分解 + 全局分类 / 标签 + 余额查询 + 账本本位币 + `l10n` 语言 + `currencyDisplay` 币种显示口径 + 预算回调 + 当前时间），不触达 controller，便于单测。**绝不提供任何写数据的工具。**
 - **新增 `AiToolContext` 字段**：① 同步更新上一条的输入清单；② 在「变更记录」补一行，写明字段含义、默认值（默认值须保留改动前的行为，供只关心金额口径的单测使用）与注入点（`lib/pages/ai_chat_page.dart` 的 `_send`，从 controller 快照组装）；③ 若字段影响展示或回喂文本，补一条单测钉住两种形态（多币种 / 单币种隐藏单位）。
 - **每个工具产出 `AiToolResult`**：
   - `summary`：紧凑的结构化文本，**回喂模型**继续推理（含关键数字）。
@@ -84,3 +84,5 @@
 - 信用主体聚合（v18）：`AiToolContext` 额外接收信用主体、正式账单和还款分配的只读快照；`creditCardBill` 对同一主体只返回一行，额度与欠款使用主体币种，账期净消费和动态到期日复用首页同一计算函数。缺少换算率时金额显示为不可用并附提示，不再把外币子账户的兼容额度当成独立额度。
 - `budgetStatus`：预算聚合与「超支 / 接近上限」判定抽到 `lib/app/budget_status.dart` 的纯函数 `computeBudgetStatus`；预算键月、单期覆盖等口径仍留在 controller，通过 `AiToolContext.budget`（`AiBudgetContext`）以回调注入，避免两处各写一套 key 规则。
 - i18n：`AiToolContext` 新增 `required AppLocalizations l10n`（聊天页传 `AppLocalizations.of(context)`，单测传 `lookupAppLocalizations(const Locale('zh'))`）。工具产出的卡片标题、统计项标签、表头与回喂模型的 summary 全部改为按当前语言解析，新增键统一加 `ai` 前缀并同步写入 `app_zh.arb` / `app_en.arb`。工具 `description` 与参数 schema 仍为中文（给模型看，不随界面语言变化）。
+
+- 证券阶段 5（2026-10-24）：`AiToolContext.assetAmounts` 为当前账户原币资产/负债分解的不可变快照，默认空保留旧余额行为；`ai_chat_page.dart` 同时复制当前现金后注入。`accountsOverview` 对证券显示参考净值，`netWorth` 分别折算多头/正现金资产与空头/融资负债，信用工具继续使用真实余额。工具仍只读、不访问 Controller；多币种及隐藏单位由 `investment_valuation_test.dart` 覆盖。

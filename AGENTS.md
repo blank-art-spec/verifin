@@ -22,7 +22,7 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 - `docs/ui-guidelines.md`：页面骨架、交互、图表和视觉规范。
 - `docs/dev/tech-decisions.md`：数据口径、备份范围和关键技术取舍；个别历史背景可能已被新实现取代，仍需与代码和测试核对。
 - `docs/dev/known-limitations.md`：已接受技术债及触发整改的阈值。
-- `docs/dev/securities-trading-plan.md`、`docs/dev/securities-trading-acceptance.md`：证券交易、期权与参考行情的待实施方案、任务分阶段及手动验收操作；首个测试标的是博通 AVGO 股票及其认购/认沽（B01–B08），保留三地全面验收 A01–A23。股票阶段见 `docs/dev/securities-stage02-implementation.md`，期权开平仓、保证金与结算见 `docs/dev/securities-stage03-implementation.md`；其余提案不得当作已实现功能或已完成的行情覆盖承诺。
+- `docs/dev/securities-trading-plan.md`、`docs/dev/securities-trading-acceptance.md`：证券交易、期权与参考行情的待实施方案、任务分阶段及手动验收操作；首个测试标的是博通 AVGO 股票及其认购/认沽（B01–B08），保留三地全面验收 A01–A23。股票阶段见 `docs/dev/securities-stage02-implementation.md`，期权开平仓、保证金与结算见 `docs/dev/securities-stage03-implementation.md`，参考行情机制与来源门禁见 `docs/dev/securities-stage04-implementation.md`，资产分解、历史依据与 JSON v12 恢复见 `docs/dev/securities-stage05-implementation.md`；其余提案不得当作已实现功能或已完成的行情覆盖承诺。
 - `docs/dev/ai-tools.md`：AI 账目查询工具的注册和维护约定。
 - `docs/dev/category-budget-override-design.md`：分类默认预算与单期覆盖的职责、Issue #28 兼容方案和验收范围。
 - `docs/dev/multi-currency-design.md`：多币种基础设计；2026-10-18 的当前父子账户、参考折算、联网汇率和统一还款口径见 `docs/dev/credit-hierarchy-currency.md`，覆盖旧文档的全部统计冻结约定。原币及账户实际金额保持不变；统计优先明确参考额，否则用最新汇率。

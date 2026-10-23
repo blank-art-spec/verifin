@@ -26,6 +26,9 @@ import 'frankfurter_client.dart';
 import 'investments/investment_decimal.dart';
 import 'investments/stock_projection.dart';
 import 'investments/stock_cash_math.dart';
+import 'investments/market_quote.dart';
+import 'investments/investment_quote_sync.dart';
+import 'investments/investment_valuation.dart';
 import 'credit_card.dart';
 import 'demo_data.dart';
 import 'entry_audit.dart';
@@ -196,11 +199,15 @@ class VeriFinController extends ChangeNotifier
     this._repository,
     this._workdayCalendarClient, {
     AppLogger? logger,
+    MarketQuoteClient marketQuoteClient = const MarketQuoteClient(),
     bool systemIsEnglish = false,
     // ignore: prefer_initializing_formals
   }) : _systemIsEnglish = systemIsEnglish,
        // ignore: prefer_initializing_formals
-       _logger = logger {
+       _logger = logger,
+       // 私有字段保留公开注入参数名，避免把实现细节暴露给 create 调用者。
+       // ignore: prefer_initializing_formals
+       _marketQuoteClient = marketQuoteClient {
     _loadPreferences();
     themePreferenceListenable = ValueNotifier<ThemePreference>(
       _themePreference,
@@ -222,12 +229,14 @@ class VeriFinController extends ChangeNotifier
     AppLogger? logger,
     bool systemIsEnglish = false,
     HolidayCalendarClient workdayCalendarClient = const HolidayCalendarClient(),
+    MarketQuoteClient marketQuoteClient = const MarketQuoteClient(),
   }) async {
     final controller = VeriFinController._(
       store,
       repository,
       workdayCalendarClient,
       logger: logger,
+      marketQuoteClient: marketQuoteClient,
       systemIsEnglish: systemIsEnglish,
     );
     await controller._loadFromRepository();
@@ -252,6 +261,8 @@ class VeriFinController extends ChangeNotifier
   final bool _systemIsEnglish;
   @override
   final HolidayCalendarClient _workdayCalendarClient;
+  @override
+  final MarketQuoteClient _marketQuoteClient;
 
   /// 软件日志入口，供「软件日志」页读取；未注入时为 null。
   AppLogger? get logger => _logger;
@@ -259,6 +270,7 @@ class VeriFinController extends ChangeNotifier
   @override
   void dispose() {
     _controllerDisposed = true;
+    _investmentQuoteSync?.dispose();
     themePreferenceListenable.dispose();
     localePreferenceListenable.dispose();
     aiCapabilityListenable.dispose();
