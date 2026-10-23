@@ -61,6 +61,22 @@ List<Map<String, Object?>> _jsonOf(Iterable<dynamic> items) => items
 
 void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
   group('仓储契约 · $name', () {
+    test('期权交割及保证金作为完整聚合一次保存，原样读取与清理', () async {
+      final repo = await openRepo(), s = optionFixture();
+      final p = optionPortfolioFixture(
+        s,
+        events: [
+          optionEventFixture(s, StockEventKind.optionSellOpen, margin: '1000'),
+        ],
+      );
+      await repo.saveInvestmentPortfolios([p]);
+      expect(
+        (await repo.loadInvestmentPortfolios()).single.toJson(),
+        p.toJson(),
+      );
+      await repo.saveInvestmentPortfolios([]);
+      expect(await repo.loadInvestmentPortfolios(), isEmpty);
+    });
     test('投资聚合原子整替、读取隔离及失败后的差分基线一致', () async {
       final repo = await openRepo();
       expect(await repo.loadInvestmentPortfolios(), isEmpty);

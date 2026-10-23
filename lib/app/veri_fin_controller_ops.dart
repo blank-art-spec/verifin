@@ -7884,7 +7884,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 10,
+      'version': 11,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'investmentPortfolios': _investmentPortfolios
@@ -7978,7 +7978,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 10) {
+    if (version < 1 || version > 11) {
       throw FormatException('不支持的备份版本：$version');
     }
 

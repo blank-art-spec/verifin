@@ -14,6 +14,7 @@ import '../app/models.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
+import 'option_editor_page.dart';
 
 /// 指定币种账户的持仓与记录；父账户通过既有子账户列表进入。
 class InvestmentPage extends StatelessWidget {
@@ -33,6 +34,17 @@ class InvestmentPage extends StatelessWidget {
         '${l.investSplitNew} ${event.quantity} : ${l.investSplitOld} ${event.price}',
       StockEventKind.transferIn ||
       StockEventKind.transferOut => '${l.investQuantity} ${event.quantity}',
+      StockEventKind.optionMargin =>
+        '${l.optionMargin}: ${event.marginAfter == null ? l.investUnknown : formatUserMoney(InvestmentDecimal.parse(event.marginAfter!).toDouble(), currency)}',
+      StockEventKind.optionPhysicalSettle || StockEventKind.optionExpire =>
+        '${l.optionContracts} ${event.quantity} · ${event.kind.label(l)} · $fees',
+      StockEventKind.optionCashSettle =>
+        '${l.optionContracts} ${event.quantity} · ${l.optionActualSettlement} ${formatUserMoney(InvestmentDecimal.parse(event.price).toDouble(), currency)} · $fees',
+      StockEventKind.optionBuyOpen ||
+      StockEventKind.optionSellClose ||
+      StockEventKind.optionSellOpen ||
+      StockEventKind.optionBuyClose =>
+        '${l.optionContracts} ${event.quantity} · ${l.optionPremium} ${formatUserSecurityPrice(event.price, currency)} · $fees',
       _ =>
         '${l.investQuantity} ${event.quantity} × ${formatUserSecurityPrice(event.price, currency)} · $fees',
     };
@@ -47,17 +59,29 @@ class InvestmentPage extends StatelessWidget {
     bool transfer = false,
     bool short = false,
   }) {
+    final p = VeriFinScope.of(context).investmentFor(accountId);
+    final isOption =
+        p?.securities.any(
+          (s) => s.id == (event?.securityId ?? securityId) && s.option != null,
+        ) ??
+        false;
     unawaited(
       Navigator.of(context).push<void>(
         MaterialPageRoute(
-          builder: (_) => StockEditorPage(
-            accountId: accountId,
-            event: event,
-            securityId: securityId,
-            setup: setup,
-            transfer: transfer,
-            initialShort: short,
-          ),
+          builder: (_) => isOption
+              ? OptionEditorPage(
+                  accountId: accountId,
+                  event: event,
+                  securityId: securityId,
+                )
+              : StockEditorPage(
+                  accountId: accountId,
+                  event: event,
+                  securityId: securityId,
+                  setup: setup,
+                  transfer: transfer,
+                  initialShort: short,
+                ),
         ),
       ),
     );
@@ -184,6 +208,20 @@ class InvestmentPage extends StatelessWidget {
                       Text(
                         '${l.investIncome}：${money(projection.income.toDouble())}',
                       ),
+                      if (portfolio.securities.any(
+                        (s) => s.option != null,
+                      )) ...[
+                        Text(
+                          '${l.optionMargin}: ${money(projection.frozenMargin.toDouble())}',
+                        ),
+                        Text(
+                          '${l.optionAvailableCash}: ${money(cash - projection.frozenMargin.toDouble())}',
+                        ),
+                        Text(
+                          l.optionMarginHint,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                      ],
                     ],
                   ),
                 ),
@@ -196,6 +234,15 @@ class InvestmentPage extends StatelessWidget {
                       onPressed: () => _edit(context),
                       icon: const Icon(Icons.add),
                       label: Text(l.investNewTrade),
+                    ),
+                    OutlinedButton(
+                      onPressed: () => Navigator.of(context).push<void>(
+                        MaterialPageRoute(
+                          builder: (_) =>
+                              OptionEditorPage(accountId: accountId),
+                        ),
+                      ),
+                      child: Text(l.optionTitle),
                     ),
                     OutlinedButton(
                       onPressed: () async {
@@ -328,7 +375,9 @@ class _StockPositionCard extends StatelessWidget {
     final price = portfolio.manualPrices[position.securityId];
     final value = price == null
         ? null
-        : position.quantity.moneyProduct(
+        : securityPositionValue(
+            security,
+            position.quantity,
             InvestmentDecimal.parse(price),
             CurrencyCatalog.require(portfolio.currencyCode).minorUnit,
           );
@@ -354,8 +403,24 @@ class _StockPositionCard extends StatelessWidget {
           ),
           const SizedBox(height: 6),
           Text(
-            '${security.market.label(l)} · ${l.investQuantity} ${position.quantity}',
+            '${security.market.label(l)} · ${security.option == null ? l.investQuantity : l.optionContracts} ${position.quantity}',
           ),
+          if (security.option != null) ...[
+            Text(
+              '${security.option!.right.label(l)} · ${l.optionExpiry}: ${MaterialLocalizations.of(context).formatFullDate(DateTime.parse(security.option!.expiry))}',
+            ),
+            Text(
+              '${l.optionMultiplier}: ${security.option!.premiumMultiplier}',
+            ),
+            if (!security.option!.confirmed ||
+                security.option!.settlement == OptionSettlement.unsupported ||
+                optionExpired(security.option!, DateTime.now()) ||
+                c
+                    .investmentProjection(accountId)!
+                    .optionReviews
+                    .contains(security.id))
+              Text(l.optionPending),
+          ],
           Text(
             '${l.investCost}：${position.cost == null ? l.investUnknown : formatUserMoney(position.cost!.toDouble(), portfolio.currencyCode)}',
           ),
@@ -414,7 +479,34 @@ class _StockPositionCard extends StatelessWidget {
                 },
                 child: Text(l.investReprice),
               ),
-              TextButton(onPressed: onTransfer, child: Text(l.investTransfer)),
+              if (security.option == null)
+                TextButton(onPressed: onTransfer, child: Text(l.investTransfer))
+              else ...[
+                TextButton(
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => OptionEditorPage(
+                        accountId: accountId,
+                        securityId: security.id,
+                        initialShort: position.short,
+                      ),
+                    ),
+                  ),
+                  child: Text(l.optionTitle),
+                ),
+                TextButton(
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute(
+                      builder: (_) => OptionEditorPage(
+                        accountId: accountId,
+                        securityId: security.id,
+                        specificationOnly: true,
+                      ),
+                    ),
+                  ),
+                  child: Text(l.optionVerifySpec),
+                ),
+              ],
               if (position.cost == null)
                 TextButton(
                   onPressed: () async {

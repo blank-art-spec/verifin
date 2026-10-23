@@ -6737,10 +6737,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'This parent account already has this currency. Choose another currency.';
 
   @override
-  String get investTitle => 'Stock investments';
+  String get investTitle => 'Securities investments';
 
   @override
-  String get investEnable => 'Enable stock holdings';
+  String get investEnable => 'Enable securities holdings';
 
   @override
   String get investSetupHint =>
@@ -6774,7 +6774,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investNewTrade => 'Record stock transaction';
 
   @override
-  String get investEmpty => 'No stock holdings';
+  String get investEmpty => 'No securities holdings';
 
   @override
   String get investManualHint =>
@@ -6990,7 +6990,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investNoOptions =>
-      'This stage supports stock bookkeeping. Options are queried only to validate sources.';
+      'Stock and option bookkeeping use manual reference prices. Public quotes are used only to validate sources.';
 
   @override
   String get investFetchedAt => 'Fetched at';
@@ -6998,4 +6998,132 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get investProbeSpecsUnknown =>
       'Option multipliers, deliverables and quote timestamps still need verification. This page does not create option positions.';
+
+  @override
+  String get optionTitle => 'Option trades and settlement';
+
+  @override
+  String get optionCall => 'Call';
+
+  @override
+  String get optionPut => 'Put';
+
+  @override
+  String get optionPhysical => 'Physical exercise / assignment';
+
+  @override
+  String get optionCashSettlement => 'Cash settlement';
+
+  @override
+  String get optionUnsupported => 'Nonstandard / incomplete';
+
+  @override
+  String get optionBuyOpen => 'Buy to open';
+
+  @override
+  String get optionSellClose => 'Sell to close';
+
+  @override
+  String get optionSellOpen => 'Sell to open';
+
+  @override
+  String get optionBuyClose => 'Buy to close';
+
+  @override
+  String get optionExpire => 'Confirm worthless expiry';
+
+  @override
+  String get optionMargin => 'Frozen cash margin';
+
+  @override
+  String get optionMarginAfter =>
+      'Confirmed frozen total after this action (blank: unchanged; 0: release)';
+
+  @override
+  String get optionMarginHint =>
+      'Frozen funds remain in cash. Cash less frozen funds is a reference, not broker buying power. Closing does not release funds automatically.';
+
+  @override
+  String get optionAvailableCash => 'Reference available cash';
+
+  @override
+  String get optionManualHint =>
+      'Record actual option activity manually. Verify the contract code, expiry, multiplier and deliverables. Quote queries do not create contracts.';
+
+  @override
+  String get optionSelect => 'Select an existing contract';
+
+  @override
+  String get optionCode => 'Full contract code';
+
+  @override
+  String get optionUnderlying => 'Underlying stock symbol';
+
+  @override
+  String get optionUnderlyingName => 'Underlying stock name';
+
+  @override
+  String get optionExpiry => 'Contract expiry date';
+
+  @override
+  String get optionStrike => 'Strike price (contract identity)';
+
+  @override
+  String get optionMultiplier => 'Premium multiplier per unit';
+
+  @override
+  String get optionDeliverableShares => 'Actual shares delivered per contract';
+
+  @override
+  String get optionExerciseCash => 'Total exercise cash per contract';
+
+  @override
+  String get optionSpecification => 'Specification source / missing details';
+
+  @override
+  String get optionSpecConfirmed =>
+      'I have verified settlement, deliverables and currency amounts';
+
+  @override
+  String get optionContracts => 'Contracts (positive integer)';
+
+  @override
+  String get optionPremium => 'Premium per unit';
+
+  @override
+  String get optionActualSettlement => 'Actual total cash settlement';
+
+  @override
+  String get optionSettlementConfirmed =>
+      'I confirm the actual settlement / worthless expiry';
+
+  @override
+  String get optionUncoveredConsent =>
+      'For a call assignment, allow uncovered shares to become a stock short position with a repurchase obligation';
+
+  @override
+  String get optionUnderlyingReference =>
+      'Manual reference price for delivered stock';
+
+  @override
+  String get optionPreview => 'Preview resulting cash and holdings';
+
+  @override
+  String get optionAdjustmentHint =>
+      'Enter premium multiplier, delivered shares and exercise cash independently. Do not infer adjusted-contract cash from strike times delivered shares.';
+
+  @override
+  String get optionVerifySpec => 'Verify contract specifications';
+
+  @override
+  String get optionSpecOnlyHint =>
+      'Completes specifications without creating trades or cash movements. Pricing identity and settled deliverables are locked.';
+
+  @override
+  String get optionPending =>
+      'Pending: expiry, unverified specifications or underlying adjustment. Holdings are retained.';
+
+  @override
+  String get optionValidationError =>
+      'Not saved or preview unavailable. Check integer contracts, contract specifications, confirmation, holdings/cash, reference prices and later events. Unsupported deliverables remain pending.';
 }

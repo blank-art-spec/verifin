@@ -3,7 +3,9 @@ library;
 
 import '../currency_catalog.dart';
 import '../models/investment.dart';
+import '../models/option_contract.dart';
 import 'investment_decimal.dart';
+part 'option_projection.dart';
 
 /// 单个证券方向的重放结果；成本未知时不制造零成本盈利。
 class StockPosition {
@@ -24,11 +26,23 @@ class StockProjection {
     required this.realized,
     required this.income,
     required this.realizedComplete,
+    this.frozenMargins = const {},
+    this.optionReviews = const {},
   });
   final List<StockPosition> positions;
   final Map<String, InvestmentDecimal> cashMovements;
   final InvestmentDecimal realized, income;
   final bool realizedComplete;
+  final Map<String, InvestmentDecimal> frozenMargins;
+
+  /// 标的发生拆股后，原期权交割资料需要重新处理，不自动按股票比例改合约。
+  final Set<String> optionReviews;
+
+  /// 合计已确认但尚未明确释放的现金冻结额；不从净值再次扣除。
+  InvestmentDecimal get frozenMargin => frozenMargins.values.fold(
+    InvestmentDecimal.zero,
+    (sum, value) => sum + value,
+  );
 }
 
 /// 按业务时间及稳定序号计算整个账户；非法事件、悬空证券或超量平仓直接抛错。
@@ -47,6 +61,7 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
         security.currencyCode != portfolio.currencyCode) {
       throw const FormatException('证券或结算币种不合法');
     }
+    if (security.option != null) _validateOptionContract(security, securities);
   }
   final cash = <String, InvestmentDecimal>{};
   final positions = <String, StockPosition>{};
@@ -54,6 +69,8 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
   var complete = true;
   final ids = <String>{};
   final sequences = <int>{};
+  final margins = <String, InvestmentDecimal>{};
+  final reviews = <String>{};
 
   // 相同证券的多空方向分别核算，不隐式抵销或穿越零仓位。
   StockPosition position(String id, bool short) => positions.putIfAbsent(
@@ -77,6 +94,9 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
         quantity.units <= BigInt.zero ||
         (cost != null && cost.units < BigInt.zero)) {
       throw const FormatException('期初持仓不合法');
+    }
+    if (securities[holding.securityId]!.option != null) {
+      _requireOptionQuantity(quantity);
     }
     positions[key] = StockPosition(
       holding.securityId,
@@ -105,6 +125,28 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
       throw const FormatException('数量、报价或费用不合法');
     }
     final kind = event.kind;
+    final security = securities[event.securityId]!;
+    if (security.option != null) {
+      final result = _applyOptionEvent(
+        event,
+        security,
+        digits,
+        position,
+        margins,
+        needsReview: reviews.contains(security.id),
+      );
+      cash[event.id] = result.cash;
+      result.cash.toDouble();
+      realized = realized + result.realized;
+      complete = complete && result.complete;
+      continue;
+    }
+    if (kind.index >= StockEventKind.optionBuyOpen.index ||
+        event.marginAfter != null ||
+        event.settlementConfirmed ||
+        event.allowUncoveredAssignment) {
+      throw const FormatException('股票不能使用期权事件或结算字段');
+    }
     if ({
           StockEventKind.split,
           StockEventKind.transferIn,
@@ -176,6 +218,15 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
         movement = -p.rounded(digits) - fee;
         income = income + movement;
       case StockEventKind.split:
+        for (final option in securities.values.where(
+          (s) => s.option?.underlyingId == security.id,
+        )) {
+          if ([false, true].any(
+            (side) => position(option.id, side).quantity.units > BigInt.zero,
+          )) {
+            reviews.add(option.id);
+          }
+        }
         // 同一股票的多空都随拆股调整，成本总额与现金不变。
         for (final direction in [false, true]) {
           final holding = position(event.securityId, direction);
@@ -197,6 +248,15 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
           pos.cost = pos.cost == null || cost == null ? null : pos.cost! + cost;
         }
         pos.quantity = pos.quantity + q;
+      case StockEventKind.optionBuyOpen:
+      case StockEventKind.optionSellClose:
+      case StockEventKind.optionSellOpen:
+      case StockEventKind.optionBuyClose:
+      case StockEventKind.optionExpire:
+      case StockEventKind.optionCashSettle:
+      case StockEventKind.optionPhysicalSettle:
+      case StockEventKind.optionMargin:
+        throw const FormatException('期权事件缺少合约');
     }
     movement.toDouble();
     cash[event.id] = movement;
@@ -215,6 +275,8 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
     realized: realized,
     income: income,
     realizedComplete: complete,
+    frozenMargins: Map.unmodifiable(margins),
+    optionReviews: Set.unmodifiable(reviews),
   );
 }
 
@@ -236,7 +298,12 @@ int compareStockEvents(StockEvent a, StockEvent b) {
   for (final p in projection.positions) {
     final price = portfolio.manualPrices[p.securityId];
     if (price == null) return (marketValue: null, unrealized: null);
-    final value = p.quantity.moneyProduct(
+    final security = portfolio.securities.firstWhere(
+      (s) => s.id == p.securityId,
+    );
+    final value = securityPositionValue(
+      security,
+      p.quantity,
       InvestmentDecimal.parse(price),
       digits,
     );
@@ -249,3 +316,19 @@ int compareStockEvents(StockEvent a, StockEvent b) {
   }
   return (marketValue: market, unrealized: knownCost ? unrealized : null);
 }
+
+/// [quantity] 为股票股数或期权张数；期权先乘显式权利金乘数，再按原币现金精度舍入。
+/// 持仓卡和账户估值共用本函数，禁止一处乘 100、另一处按股数计价。
+InvestmentDecimal securityPositionValue(
+  StockSecurity security,
+  InvestmentDecimal quantity,
+  InvestmentDecimal price,
+  int digits,
+) =>
+    (security.option == null
+            ? quantity
+            : quantity.split(
+                InvestmentDecimal.parse(security.option!.premiumMultiplier),
+                InvestmentDecimal.parse('1'),
+              ))
+        .moneyProduct(price, digits);

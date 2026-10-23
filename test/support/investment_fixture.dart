@@ -1,5 +1,81 @@
 import 'package:verifin/app/models.dart';
 
+/// 明确的本地验收合约，不能发送到真实行情接口；股数、乘数与行权现金独立指定。
+StockSecurity optionFixture({
+  OptionRight right = OptionRight.call,
+  OptionSettlement settlement = OptionSettlement.physical,
+  String multiplier = '100',
+  String shares = '100',
+  String exercise = '5000',
+  bool confirmed = true,
+  String expiry = '2026-12-18',
+}) => StockSecurity(
+  symbol: 'TEST-AVGO-${right.name}-$expiry-50',
+  name: '博通期权验收示例',
+  market: StockMarket.us,
+  currencyCode: 'USD',
+  option: OptionContract(
+    underlyingId: avgoFixture.id,
+    expiry: expiry,
+    right: right,
+    strike: '50',
+    premiumMultiplier: multiplier,
+    settlement: settlement,
+    deliverableShares: shares,
+    exerciseCash: exercise,
+    specification: '本地固定验收规格，非真实合约',
+    confirmed: confirmed,
+  ),
+);
+
+/// 创建不同动作的稳定测试事实；[settled] 是显式确认而非由系统到期自动生成。
+StockEvent optionEventFixture(
+  StockSecurity security,
+  StockEventKind kind, {
+  String id = 'option-event',
+  String quantity = '1',
+  String price = '2',
+  String fee = '0',
+  int sequence = 1,
+  bool short = false,
+  String? margin,
+  bool settled = false,
+  bool uncovered = false,
+  DateTime? date,
+}) => StockEvent(
+  id: id,
+  securityId: security.id,
+  kind: kind,
+  occurredAt: date ?? DateTime(2026, 10, 2 + sequence, 10),
+  sequence: sequence,
+  quantity: quantity,
+  price: price,
+  fee: fee,
+  short: short,
+  marginAfter: margin,
+  settlementConfirmed: settled,
+  allowUncoveredAssignment: uncovered,
+  note: '本地验收示例',
+);
+
+/// 构造股票与期权同账户的不可变聚合；[opening] 用于覆盖股票交割及未知期初成本。
+InvestmentPortfolio optionPortfolioFixture(
+  StockSecurity security, {
+  List<StockEvent> events = const [],
+  List<StockHolding> opening = const [],
+  String price = '3',
+}) => InvestmentPortfolio(
+  accountId: 'stock-usd',
+  bookId: defaultLedgerBookId,
+  currencyCode: 'USD',
+  openedAt: DateTime(2026, 10, 1),
+  openingCash: '10000',
+  securities: [avgoFixture, security],
+  openingHoldings: opening,
+  events: events,
+  manualPrices: {avgoFixture.id: '50', security.id: price},
+);
+
 /// 所有金额都是固定测试值，不是博通历史成交或当前行情。
 const avgoFixture = StockSecurity(
   symbol: 'AVGO',

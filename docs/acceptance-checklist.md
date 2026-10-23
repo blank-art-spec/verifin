@@ -2,7 +2,7 @@
 
 ## 证券交易、期权与参考行情（待开发）
 
-总体方案及后续 P0–P7 见 [开发方案](dev/securities-trading-plan.md)，完整操作与数字见 [专项验收](dev/securities-trading-acceptance.md)。当前股票阶段已编写精确持仓、独立事件、手填估值及显式博通来源验证，实际已运行/未运行项目见 [阶段 0–2 当前实现](dev/securities-stage02-implementation.md)。博通股票、认购/认沽公开字段验证与真正期权记账分别判定；后续期权、自动刷新、历史与三地覆盖不能提前勾为完成。模拟器保留原数据及标为验收示例的股票交易，后续编译仍按用户手动操作约定。
+总体方案及后续 P0–P7 见 [开发方案](dev/securities-trading-plan.md)，完整操作与数字见 [专项验收](dev/securities-trading-acceptance.md)。当前股票及期权阶段已编写精确持仓、独立事件、手填估值及显式博通来源验证，实际已运行/未运行项目见 [阶段 0–2 当前实现](dev/securities-stage02-implementation.md)。博通股票、认购/认沽公开字段验证与真正期权记账分别判定；期权当前验收见 [阶段 3](dev/securities-stage03-implementation.md)；自动刷新、历史与三地覆盖不能提前勾为完成。模拟器保留原数据及标为验收示例的股票交易，后续编译仍按用户手动操作约定。
 
 ## 银行与证券多币种主账户（2026-10-22）
 

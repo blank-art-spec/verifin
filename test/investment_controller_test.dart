@@ -396,7 +396,7 @@ void main() {
     expect(c.accountAssetValue(account) + c.accountAssetValue(target), 10000);
   });
 
-  test('v10 预览零写入、JSON 往返、未知事件拒绝及旧备份兼容', () async {
+  test('v11 预览零写入、JSON 往返、未知事件拒绝及旧备份兼容', () async {
     await enable();
     expect(
       await save(
@@ -406,7 +406,7 @@ void main() {
     );
     final raw = c.exportDataJson(),
         snapshot = jsonDecode(c.exportDataJson()) as Map<String, dynamic>;
-    expect(snapshot['version'], 10);
+    expect(snapshot['version'], 11);
     c.importDataJson(raw, dryRun: true);
     expect(c.investmentFor(account.id)!.events, hasLength(1));
     c.importDataJson(raw);

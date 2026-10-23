@@ -80,12 +80,19 @@ mixin _InvestmentOps on _ControllerOps {
   }) => _runInvestmentCommand(() async {
     final current = investmentFor(accountId);
     if (current == null ||
+        security.option != null ||
+        event.kind.index >= StockEventKind.optionBuyOpen.index ||
         event.securityId != security.id ||
         security.currencyCode != current.currencyCode) {
       return false;
     }
     final old = current.events.where((e) => e.id == event.id).firstOrNull;
-    if (old?.batchId != null || event.batchId != null) return false;
+    // 同一幂等 ID 只能编辑原证券，不能借股票入口替换已存在的期权事实。
+    if (old?.batchId != null ||
+        event.batchId != null ||
+        (old != null && old.securityId != event.securityId)) {
+      return false;
+    }
     final next = current.copyWith(
       securities: [
         ...current.securities.where((s) => s.id != security.id),
@@ -200,7 +207,7 @@ mixin _InvestmentOps on _ControllerOps {
     final security = from.securities
         .where((s) => s.id == securityId)
         .firstOrNull;
-    if (security == null) return false;
+    if (security == null || security.option != null) return false;
     // 历史转移会改变后续成本分配；先只接受位于两端现有记录之后的真实转移。
     if ([
       ...from.events,
@@ -266,6 +273,168 @@ mixin _InvestmentOps on _ControllerOps {
     0,
     (value, e) => e.sequence >= value ? e.sequence + 1 : value,
   );
+
+  /// 生成期权候选聚合；证券规格变更不能追溯篡改历史权利金或已结算交割腿。
+  /// [underlying] 必须是同币种股票；[underlyingReferencePrice] 供实物交割后的股票估值。
+  InvestmentPortfolio _optionCandidate({
+    required String accountId,
+    required StockSecurity security,
+    required StockSecurity underlying,
+    required StockEvent event,
+    required String referencePrice,
+    String? underlyingReferencePrice,
+  }) {
+    final p = investmentFor(accountId);
+    if (p == null ||
+        security.option == null ||
+        underlying.option != null ||
+        security.option!.underlyingId != underlying.id ||
+        event.securityId != security.id ||
+        event.kind.index < StockEventKind.optionBuyOpen.index ||
+        event.batchId != null ||
+        p.events.any(
+          (e) => e.id == event.id && e.securityId != event.securityId,
+        )) {
+      throw const FormatException('期权、标的或事件引用不一致');
+    }
+    _validateOptionDefinitionChange(p, security);
+    return p.copyWith(
+      securities: [
+        ...p.securities.where(
+          (s) => s.id != security.id && s.id != underlying.id,
+        ),
+        underlying,
+        security,
+      ],
+      events: [...p.events.where((e) => e.id != event.id), event],
+      manualPrices: {
+        ...p.manualPrices,
+        security.id: InvestmentDecimal.parse(referencePrice).toString(),
+        if (underlyingReferencePrice != null)
+          underlying.id: InvestmentDecimal.parse(
+            underlyingReferencePrice,
+          ).toString(),
+      },
+    );
+  }
+
+  /// 预览与保存共用候选校验；返回现金/冻结额和全部持仓，预览不写 SQLite 或 Controller。
+  /// 失败返回 null；页面保留草稿并提示核对，异常原文不向用户泄露账户内容。
+  ({InvestmentPortfolio portfolio, StockProjection projection, double cash})?
+  previewOptionEvent({
+    required String accountId,
+    required StockSecurity security,
+    required StockSecurity underlying,
+    required StockEvent event,
+    required String referencePrice,
+    String? underlyingReferencePrice,
+  }) {
+    try {
+      final next = _optionCandidate(
+        accountId: accountId,
+        security: security,
+        underlying: underlying,
+        event: event,
+        referencePrice: referencePrice,
+        underlyingReferencePrice: underlyingReferencePrice,
+      );
+      validateInvestmentPortfolios([
+        for (final p in _investmentPortfolios)
+          p.accountId == accountId ? next : p,
+      ], _accounts);
+      final cash = investmentCashBalance(
+        portfolio: next,
+        entries: _entries,
+        anchor: latestBalanceAnchor(accountId),
+        rejectUnfundedHistory: !next.allowFinancing,
+      );
+      return (portfolio: next, projection: projectStocks(next), cash: cash);
+    } on FormatException {
+      // 草稿预览失败是可接受的字段校验，页面显示本地化错误且不产生保存日志。
+      return null;
+    }
+  }
+
+  /// 原子保存期权事实及全部隐含交割腿；[event.id] 保持重试幂等，成功后才发布状态。
+  /// 冻结保证金按用户确认的绝对值记载，不充当券商保证金或购买力计算器。
+  Future<bool> saveOptionEvent({
+    required String accountId,
+    required StockSecurity security,
+    required StockSecurity underlying,
+    required StockEvent event,
+    required String referencePrice,
+    String? underlyingReferencePrice,
+  }) => _runInvestmentCommand(() async {
+    final next = _optionCandidate(
+      accountId: accountId,
+      security: security,
+      underlying: underlying,
+      event: event,
+      referencePrice: referencePrice,
+      underlyingReferencePrice: underlyingReferencePrice,
+    );
+    return _saveInvestmentCandidates([
+      for (final p in _investmentPortfolios)
+        p.accountId == accountId ? next : p,
+    ]);
+  });
+
+  /// 补齐待核对合约的交割资料；不伪造成交、不改变冻结额或现金。
+  Future<bool> saveOptionSpecification(
+    String accountId,
+    StockSecurity security,
+  ) => _runInvestmentCommand(() async {
+    final p = investmentFor(accountId);
+    if (p == null ||
+        security.option == null ||
+        !p.securities.any((s) => s.id == security.id)) {
+      return false;
+    }
+    _validateOptionDefinitionChange(p, security);
+    final next = p.copyWith(
+      securities: [
+        for (final s in p.securities) s.id == security.id ? security : s,
+      ],
+    );
+    return _saveInvestmentCandidates([
+      for (final v in _investmentPortfolios)
+        v.accountId == accountId ? next : v,
+    ]);
+  });
+
+  /// 已发生成交后锁定定价身份；交割股数/现金等仅在尚无结算时允许补全。
+  /// [security] 不能借同一个代码替换到期日、权利或乘数，从而重算出不同历史现金。
+  void _validateOptionDefinitionChange(
+    InvestmentPortfolio p,
+    StockSecurity security,
+  ) {
+    final old = p.securities.where((s) => s.id == security.id).firstOrNull;
+    if (old == null) return;
+    if (old.option == null ||
+        old.market != security.market ||
+        old.currencyCode != security.currencyCode) {
+      throw const FormatException('已有证券身份不能修改');
+    }
+    final a = old.option!.toJson(), b = security.option!.toJson();
+    final settled = p.events.any(
+      (e) =>
+          e.securityId == security.id &&
+          {
+            StockEventKind.optionPhysicalSettle,
+            StockEventKind.optionCashSettle,
+          }.contains(e.kind),
+    );
+    for (final field in [
+      'underlyingId',
+      'expiry',
+      'right',
+      'strike',
+      'premiumMultiplier',
+      if (settled) ...['settlement', 'deliverableShares', 'exerciseCash'],
+    ]) {
+      if (a[field] != b[field]) throw const FormatException('已有合约定价及已结算规格不能改写');
+    }
+  }
 
   /// 保存所有候选聚合；先检查引用、重放及融资，再在一个事务内替换。
   Future<bool> _saveInvestmentCandidates(List<InvestmentPortfolio> next) async {

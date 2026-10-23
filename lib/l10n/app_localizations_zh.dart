@@ -6517,10 +6517,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get accountCurrencyChildExists => '该主账户已包含此币种，请选择其他币种。';
 
   @override
-  String get investTitle => '股票投资';
+  String get investTitle => '证券投资';
 
   @override
-  String get investEnable => '启用股票持仓';
+  String get investEnable => '启用证券持仓';
 
   @override
   String get investSetupHint => '请确认期初现金。若原余额包含股票，请将现金与持仓分别填写，避免重复计入。';
@@ -6553,7 +6553,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investNewTrade => '记录股票交易';
 
   @override
-  String get investEmpty => '暂无股票持仓';
+  String get investEmpty => '暂无证券持仓';
 
   @override
   String get investManualHint => '当前使用手填参考价。行情验证只查询公开数据，不自动改写成交或估值。';
@@ -6756,11 +6756,129 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investCurrentCash => '当前账面现金';
 
   @override
-  String get investNoOptions => '本阶段支持股票记账；期权仅验证数据来源。';
+  String get investNoOptions => '支持股票与期权手工记账；公开行情仍只作来源验证。';
 
   @override
   String get investFetchedAt => '抓取时间';
 
   @override
   String get investProbeSpecsUnknown => '期权乘数、交割规格及各报价时间仍待核对，此页不据此创建期权持仓。';
+
+  @override
+  String get optionTitle => '期权交易与结算';
+
+  @override
+  String get optionCall => '认购';
+
+  @override
+  String get optionPut => '认沽';
+
+  @override
+  String get optionPhysical => '实物行权 / 指派';
+
+  @override
+  String get optionCashSettlement => '现金交割';
+
+  @override
+  String get optionUnsupported => '非标准 / 待补全';
+
+  @override
+  String get optionBuyOpen => '买入开仓';
+
+  @override
+  String get optionSellClose => '卖出平仓';
+
+  @override
+  String get optionSellOpen => '卖出开仓';
+
+  @override
+  String get optionBuyClose => '买入平仓';
+
+  @override
+  String get optionExpire => '确认无价值到期';
+
+  @override
+  String get optionMargin => '冻结保证金';
+
+  @override
+  String get optionMarginAfter => '确认操作后冻结总额（留空不变，填 0 释放）';
+
+  @override
+  String get optionMarginHint => '冻结额仍在现金内，可用参考现金仅为现金减冻结额，不代表券商购买力；平仓不会自动释放。';
+
+  @override
+  String get optionAvailableCash => '可用参考现金';
+
+  @override
+  String get optionManualHint => '手工记录实际期权账务。合约代码、到期日、乘数及交割资料须自行核对；不会从行情页自动创建。';
+
+  @override
+  String get optionSelect => '选择已有合约';
+
+  @override
+  String get optionCode => '完整合约代码';
+
+  @override
+  String get optionUnderlying => '标的股票代码';
+
+  @override
+  String get optionUnderlyingName => '标的股票名称';
+
+  @override
+  String get optionExpiry => '合约到期交易日';
+
+  @override
+  String get optionStrike => '行权价（身份资料）';
+
+  @override
+  String get optionMultiplier => '每单位权利金乘数';
+
+  @override
+  String get optionDeliverableShares => '每张实际交割股数';
+
+  @override
+  String get optionExerciseCash => '每张行权现金总额';
+
+  @override
+  String get optionSpecification => '规格核对依据 / 待补事项';
+
+  @override
+  String get optionSpecConfirmed => '已核对结算方式、交割规格及原币金额';
+
+  @override
+  String get optionContracts => '数量（张，正整数）';
+
+  @override
+  String get optionPremium => '每单位权利金';
+
+  @override
+  String get optionActualSettlement => '实际现金交割总额';
+
+  @override
+  String get optionSettlementConfirmed => '已确认实际结算 / 无价值到期结果';
+
+  @override
+  String get optionUncoveredConsent => '认购被指派时允许不足部分形成股票空头，并承担回补义务';
+
+  @override
+  String get optionUnderlyingReference => '交割后股票的手填参考价';
+
+  @override
+  String get optionPreview => '预览结算后现金与持仓';
+
+  @override
+  String get optionAdjustmentHint => '权利金乘数、交割股数和行权现金分别填写；调整合约不能用行权价乘股数猜结算额。';
+
+  @override
+  String get optionVerifySpec => '核对合约规格';
+
+  @override
+  String get optionSpecOnlyHint => '只补全规格，不生成成交或现金；已有定价身份及已结算交割参数不可改写。';
+
+  @override
+  String get optionPending => '待确认：到期、规格未核实或标的调整；持仓仍保留';
+
+  @override
+  String get optionValidationError =>
+      '未保存或无法预览。请核对正整数张数、完整合约与乘数、结算确认、持仓/现金、参考价和后续事件；不支持的交割结构会保留待处理。';
 }

@@ -11753,13 +11753,13 @@ abstract class AppLocalizations {
   /// No description provided for @investTitle.
   ///
   /// In zh, this message translates to:
-  /// **'股票投资'**
+  /// **'证券投资'**
   String get investTitle;
 
   /// No description provided for @investEnable.
   ///
   /// In zh, this message translates to:
-  /// **'启用股票持仓'**
+  /// **'启用证券持仓'**
   String get investEnable;
 
   /// No description provided for @investSetupHint.
@@ -11825,7 +11825,7 @@ abstract class AppLocalizations {
   /// No description provided for @investEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'暂无股票持仓'**
+  /// **'暂无证券持仓'**
   String get investEmpty;
 
   /// No description provided for @investManualHint.
@@ -12227,7 +12227,7 @@ abstract class AppLocalizations {
   /// No description provided for @investNoOptions.
   ///
   /// In zh, this message translates to:
-  /// **'本阶段支持股票记账；期权仅验证数据来源。'**
+  /// **'支持股票与期权手工记账；公开行情仍只作来源验证。'**
   String get investNoOptions;
 
   /// No description provided for @investFetchedAt.
@@ -12241,6 +12241,240 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'期权乘数、交割规格及各报价时间仍待核对，此页不据此创建期权持仓。'**
   String get investProbeSpecsUnknown;
+
+  /// No description provided for @optionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'期权交易与结算'**
+  String get optionTitle;
+
+  /// No description provided for @optionCall.
+  ///
+  /// In zh, this message translates to:
+  /// **'认购'**
+  String get optionCall;
+
+  /// No description provided for @optionPut.
+  ///
+  /// In zh, this message translates to:
+  /// **'认沽'**
+  String get optionPut;
+
+  /// No description provided for @optionPhysical.
+  ///
+  /// In zh, this message translates to:
+  /// **'实物行权 / 指派'**
+  String get optionPhysical;
+
+  /// No description provided for @optionCashSettlement.
+  ///
+  /// In zh, this message translates to:
+  /// **'现金交割'**
+  String get optionCashSettlement;
+
+  /// No description provided for @optionUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'非标准 / 待补全'**
+  String get optionUnsupported;
+
+  /// No description provided for @optionBuyOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'买入开仓'**
+  String get optionBuyOpen;
+
+  /// No description provided for @optionSellClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖出平仓'**
+  String get optionSellClose;
+
+  /// No description provided for @optionSellOpen.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖出开仓'**
+  String get optionSellOpen;
+
+  /// No description provided for @optionBuyClose.
+  ///
+  /// In zh, this message translates to:
+  /// **'买入平仓'**
+  String get optionBuyClose;
+
+  /// No description provided for @optionExpire.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认无价值到期'**
+  String get optionExpire;
+
+  /// No description provided for @optionMargin.
+  ///
+  /// In zh, this message translates to:
+  /// **'冻结保证金'**
+  String get optionMargin;
+
+  /// No description provided for @optionMarginAfter.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认操作后冻结总额（留空不变，填 0 释放）'**
+  String get optionMarginAfter;
+
+  /// No description provided for @optionMarginHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'冻结额仍在现金内，可用参考现金仅为现金减冻结额，不代表券商购买力；平仓不会自动释放。'**
+  String get optionMarginHint;
+
+  /// No description provided for @optionAvailableCash.
+  ///
+  /// In zh, this message translates to:
+  /// **'可用参考现金'**
+  String get optionAvailableCash;
+
+  /// No description provided for @optionManualHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'手工记录实际期权账务。合约代码、到期日、乘数及交割资料须自行核对；不会从行情页自动创建。'**
+  String get optionManualHint;
+
+  /// No description provided for @optionSelect.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择已有合约'**
+  String get optionSelect;
+
+  /// No description provided for @optionCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'完整合约代码'**
+  String get optionCode;
+
+  /// No description provided for @optionUnderlying.
+  ///
+  /// In zh, this message translates to:
+  /// **'标的股票代码'**
+  String get optionUnderlying;
+
+  /// No description provided for @optionUnderlyingName.
+  ///
+  /// In zh, this message translates to:
+  /// **'标的股票名称'**
+  String get optionUnderlyingName;
+
+  /// No description provided for @optionExpiry.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约到期交易日'**
+  String get optionExpiry;
+
+  /// No description provided for @optionStrike.
+  ///
+  /// In zh, this message translates to:
+  /// **'行权价（身份资料）'**
+  String get optionStrike;
+
+  /// No description provided for @optionMultiplier.
+  ///
+  /// In zh, this message translates to:
+  /// **'每单位权利金乘数'**
+  String get optionMultiplier;
+
+  /// No description provided for @optionDeliverableShares.
+  ///
+  /// In zh, this message translates to:
+  /// **'每张实际交割股数'**
+  String get optionDeliverableShares;
+
+  /// No description provided for @optionExerciseCash.
+  ///
+  /// In zh, this message translates to:
+  /// **'每张行权现金总额'**
+  String get optionExerciseCash;
+
+  /// No description provided for @optionSpecification.
+  ///
+  /// In zh, this message translates to:
+  /// **'规格核对依据 / 待补事项'**
+  String get optionSpecification;
+
+  /// No description provided for @optionSpecConfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已核对结算方式、交割规格及原币金额'**
+  String get optionSpecConfirmed;
+
+  /// No description provided for @optionContracts.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量（张，正整数）'**
+  String get optionContracts;
+
+  /// No description provided for @optionPremium.
+  ///
+  /// In zh, this message translates to:
+  /// **'每单位权利金'**
+  String get optionPremium;
+
+  /// No description provided for @optionActualSettlement.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际现金交割总额'**
+  String get optionActualSettlement;
+
+  /// No description provided for @optionSettlementConfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已确认实际结算 / 无价值到期结果'**
+  String get optionSettlementConfirmed;
+
+  /// No description provided for @optionUncoveredConsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'认购被指派时允许不足部分形成股票空头，并承担回补义务'**
+  String get optionUncoveredConsent;
+
+  /// No description provided for @optionUnderlyingReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'交割后股票的手填参考价'**
+  String get optionUnderlyingReference;
+
+  /// No description provided for @optionPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'预览结算后现金与持仓'**
+  String get optionPreview;
+
+  /// No description provided for @optionAdjustmentHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'权利金乘数、交割股数和行权现金分别填写；调整合约不能用行权价乘股数猜结算额。'**
+  String get optionAdjustmentHint;
+
+  /// No description provided for @optionVerifySpec.
+  ///
+  /// In zh, this message translates to:
+  /// **'核对合约规格'**
+  String get optionVerifySpec;
+
+  /// No description provided for @optionSpecOnlyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'只补全规格，不生成成交或现金；已有定价身份及已结算交割参数不可改写。'**
+  String get optionSpecOnlyHint;
+
+  /// No description provided for @optionPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'待确认：到期、规格未核实或标的调整；持仓仍保留'**
+  String get optionPending;
+
+  /// No description provided for @optionValidationError.
+  ///
+  /// In zh, this message translates to:
+  /// **'未保存或无法预览。请核对正整数张数、完整合约与乘数、结算确认、持仓/现金、参考价和后续事件；不支持的交割结构会保留待处理。'**
+  String get optionValidationError;
 }
 
 class _AppLocalizationsDelegate

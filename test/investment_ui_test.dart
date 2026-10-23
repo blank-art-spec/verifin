@@ -43,13 +43,13 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    await tester.tap(find.text('启用股票持仓'));
+    await tester.tap(find.text('启用证券持仓'));
     await tester.pumpAndSettle();
     await tester.enterText(find.byKey(const ValueKey('stock-cash')), '5000');
     Navigator.of(tester.element(find.byType(StockEditorPage))).pop();
     await tester.pumpAndSettle();
     expect(c.investmentFor(account.id), isNull);
-    await tester.tap(find.text('启用股票持仓'));
+    await tester.tap(find.text('启用证券持仓'));
     await tester.pumpAndSettle();
     final save = find.widgetWithText(FilledButton, '保存');
     await tester.scrollUntilVisible(
@@ -66,7 +66,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(c.investmentFor(account.id), isNotNull);
     expect(find.text('参考净值'), findsOneWidget);
-    expect(find.text('暂无股票持仓'), findsOneWidget);
+    expect(find.text('暂无证券持仓'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });
 

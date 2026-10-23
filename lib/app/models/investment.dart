@@ -2,6 +2,7 @@
 library;
 
 import '../../l10n/app_localizations.dart';
+import 'option_contract.dart';
 
 enum StockMarket {
   us,
@@ -25,7 +26,15 @@ enum StockEventKind {
   fee,
   split,
   transferIn,
-  transferOut;
+  transferOut,
+  optionBuyOpen,
+  optionSellClose,
+  optionSellOpen,
+  optionBuyClose,
+  optionExpire,
+  optionCashSettle,
+  optionPhysicalSettle,
+  optionMargin;
 
   /// 返回事件动作名称，投资事件不映射为日常收入/支出。
   String label(AppLocalizations l) => switch (this) {
@@ -38,10 +47,18 @@ enum StockEventKind {
     split => l.investSplit,
     transferIn => l.investTransferIn,
     transferOut => l.investTransferOut,
+    optionBuyOpen => l.optionBuyOpen,
+    optionSellClose => l.optionSellClose,
+    optionSellOpen => l.optionSellOpen,
+    optionBuyClose => l.optionBuyClose,
+    optionExpire => l.optionExpire,
+    optionCashSettle => l.optionCashSettlement,
+    optionPhysicalSettle => l.optionPhysical,
+    optionMargin => l.optionMargin,
   };
 }
 
-/// 一只股票或 ETF 的稳定身份；期权生命周期在后续阶段单独扩展。
+/// 证券稳定身份，沿用股票阶段命名；[option] 非空时表示独立期权合约。
 class StockSecurity {
   /// [symbol] 为来源代码（港股保留前导零），[currencyCode] 为实际结算币种。
   const StockSecurity({
@@ -49,12 +66,15 @@ class StockSecurity {
     required this.name,
     required this.market,
     required this.currencyCode,
+    this.option,
   });
   final String symbol, name, currencyCode;
   final StockMarket market;
+  final OptionContract? option;
 
   /// 市场、品种及原始代码共同构成身份，港股前导零不丢失。
-  String get id => '${market.name}:stock:$symbol';
+  String get id =>
+      '${market.name}:${option == null ? 'stock' : 'option'}:$symbol';
 
   /// 序列化证券身份，价格和数量不放入静态证券定义。
   Map<String, Object?> toJson() => {
@@ -62,6 +82,7 @@ class StockSecurity {
     'name': name,
     'market': market.name,
     'currencyCode': currencyCode,
+    if (option != null) 'option': option!.toJson(),
   };
 
   /// 严格解析身份；未知市场不能回落为美股。
@@ -70,6 +91,11 @@ class StockSecurity {
     name: json['name'] as String,
     market: StockMarket.values.byName(json['market'] as String),
     currencyCode: json['currencyCode'] as String,
+    option: json['option'] == null
+        ? null
+        : OptionContract.fromJson(
+            Map<String, Object?>.from(json['option'] as Map),
+          ),
   );
 }
 
@@ -121,6 +147,9 @@ class StockEvent {
     this.carriedCost,
     this.short = false,
     this.batchId,
+    this.marginAfter,
+    this.settlementConfirmed = false,
+    this.allowUncoveredAssignment = false,
   });
   final String id, securityId, quantity, price, fee, note;
   final StockEventKind kind;
@@ -128,6 +157,12 @@ class StockEvent {
   final int sequence;
   final String? carriedCost, batchId;
   final bool short;
+
+  /// 用户确认该事件完成后此合约的现金冻结总额，null 表示未变更，不自动释放。
+  final String? marginAfter;
+
+  /// 到期/现金/实物结算必须显式确认；裸认购指派另需确认股票空头义务。
+  final bool settlementConfirmed, allowUncoveredAssignment;
 
   /// 导出成交的完整事实；不保存可与事件不一致的第二份现金余额。
   Map<String, Object?> toJson() => {
@@ -143,6 +178,9 @@ class StockEvent {
     'carriedCost': carriedCost,
     'short': short,
     'batchId': batchId,
+    'marginAfter': marginAfter,
+    'settlementConfirmed': settlementConfirmed,
+    'allowUncoveredAssignment': allowUncoveredAssignment,
   };
 
   /// 严格读取事件，未知动作直接拒绝，不默认为买入。
@@ -159,6 +197,10 @@ class StockEvent {
     carriedCost: json['carriedCost'] as String?,
     short: json['short'] as bool,
     batchId: json['batchId'] as String?,
+    marginAfter: json['marginAfter'] as String?,
+    settlementConfirmed: json['settlementConfirmed'] as bool? ?? false,
+    allowUncoveredAssignment:
+        json['allowUncoveredAssignment'] as bool? ?? false,
   );
 }
 
@@ -222,7 +264,7 @@ class InvestmentPortfolio {
     anchorIncludedIds: anchorIncludedIds ?? this.anchorIncludedIds,
   );
 
-  /// 完整用户投资数据进入 JSON v10；不含网络请求和临时行情缓存。
+  /// 完整用户投资数据进入 JSON v11；不含网络请求和临时行情缓存。
   Map<String, Object?> toJson() => {
     'accountId': accountId,
     'bookId': bookId,

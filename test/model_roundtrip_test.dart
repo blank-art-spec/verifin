@@ -24,6 +24,45 @@ import 'support/investment_fixture.dart';
 ///   不是映射 bug）。
 void main() {
   setUpAll(sqfliteFfiInit);
+  test('期权规格、显式结算及保证金 JSON/SQLite 四向映射完整保留', () async {
+    final s = optionFixture(
+      shares: '10',
+      multiplier: '12.5',
+      exercise: '5000.01',
+    );
+    final source = optionPortfolioFixture(
+      s,
+      events: [
+        optionEventFixture(
+          s,
+          StockEventKind.optionPhysicalSettle,
+          short: true,
+          price: '0',
+          settled: true,
+          uncovered: true,
+          margin: '123.45',
+        ),
+      ],
+    );
+    final decoded = InvestmentPortfolio.fromJson(
+      Map<String, Object?>.from(jsonDecode(jsonEncode(source.toJson())) as Map),
+    );
+    expect(decoded.toJson(), source.toJson());
+    final db = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    try {
+      final repo = SqliteLedgerRepository(db);
+      await repo.saveInvestmentPortfolios([source]);
+      expect(
+        (await repo.loadInvestmentPortfolios()).single.toJson(),
+        source.toJson(),
+      );
+    } finally {
+      await db.close();
+    }
+  });
   test('股票聚合 JSON 与 SQLite 四向映射保留精确量价、未知成本和现金边界', () async {
     final source =
         portfolioFixture(

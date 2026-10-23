@@ -4,7 +4,7 @@
 
 执行规则以 [AGENTS.md](../../AGENTS.md) 为准；这里仅提供源码导航，不重复维护规则。
 
-股票阶段现已实现精确持仓、独立事件、手填估值及显式博通来源验证，见 [阶段 0–2 当前实现](securities-stage02-implementation.md)。SQLite v28 投资聚合、JSON v10 备份及 `veri_fin_controller_investments.dart` 为当前代码；期权生命周期、自动行情估值和历史快照等仍属后续提案，见 [总体方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。
+股票阶段现已实现精确持仓、独立事件、手填估值及显式博通来源验证，见 [阶段 0–2 当前实现](securities-stage02-implementation.md)。SQLite v28 投资聚合、JSON v10 备份及 `veri_fin_controller_investments.dart` 为当前代码；期权生命周期已扩展至 [阶段 3](securities-stage03-implementation.md)，完整备份 JSON v11；自动行情估值和历史快照等仍属后续提案，见 [总体方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。
 
 Veri Fin 仅交付 Android，权威账目在本机 SQLite，无账号或自有服务端。
 正式入口为 `lib/main.dart`；UI 通过 `VeriFinScope` 读取 `VeriFinController`，
