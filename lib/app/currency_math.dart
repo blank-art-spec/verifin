@@ -4,6 +4,7 @@ import 'amount_format.dart' as amount_format;
 import 'calendar_days.dart';
 import 'currency_catalog.dart';
 import 'models.dart';
+import 'investments/investment_decimal.dart';
 
 /// 将金额规整到 [currencyCode] 的 ISO 4217 minor unit，并消除 `-0`。
 double normalizeCurrencyAmount(num value, String currencyCode) {
@@ -79,6 +80,18 @@ String formatUserMoney(
         : amount_format.activeMoneyCodeDisplay,
     style: style,
   );
+}
+
+/// 精确显示证券每股价格，不按现金 minor unit 截断合法的八位小数。
+/// [value] 是领域层校验过的十进制文本；[currencyCode] 遵守现有单位样式和单币种隐藏偏好。
+String formatUserSecurityPrice(String value, String currencyCode) {
+  final number = InvestmentDecimal.parse(value).toString();
+  final currency = CurrencyCatalog.require(currencyCode);
+  return switch (amount_format.activeMoneyCodeDisplay) {
+    MoneyCodeDisplay.none => number,
+    MoneyCodeDisplay.code => '${currency.code} $number',
+    MoneyCodeDisplay.symbol => '$number ${_compactCurrencySymbol(currency)}',
+  };
 }
 
 String formatSignedUserMoney(

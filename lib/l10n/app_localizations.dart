@@ -11749,6 +11749,498 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'该主账户已包含此币种，请选择其他币种。'**
   String get accountCurrencyChildExists;
+
+  /// No description provided for @investTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'股票投资'**
+  String get investTitle;
+
+  /// No description provided for @investEnable.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用股票持仓'**
+  String get investEnable;
+
+  /// No description provided for @investSetupHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请确认期初现金。若原余额包含股票，请将现金与持仓分别填写，避免重复计入。'**
+  String get investSetupHint;
+
+  /// No description provided for @investCash.
+  ///
+  /// In zh, this message translates to:
+  /// **'现金'**
+  String get investCash;
+
+  /// No description provided for @investNetValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考净值'**
+  String get investNetValue;
+
+  /// No description provided for @investMarketValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓净值'**
+  String get investMarketValue;
+
+  /// No description provided for @investRealized.
+  ///
+  /// In zh, this message translates to:
+  /// **'已实现盈亏'**
+  String get investRealized;
+
+  /// No description provided for @investUnrealized.
+  ///
+  /// In zh, this message translates to:
+  /// **'未实现盈亏'**
+  String get investUnrealized;
+
+  /// No description provided for @investIncome.
+  ///
+  /// In zh, this message translates to:
+  /// **'净股息与费用'**
+  String get investIncome;
+
+  /// No description provided for @investPositions.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓'**
+  String get investPositions;
+
+  /// No description provided for @investRecords.
+  ///
+  /// In zh, this message translates to:
+  /// **'投资记录'**
+  String get investRecords;
+
+  /// No description provided for @investNewTrade.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录股票交易'**
+  String get investNewTrade;
+
+  /// No description provided for @investEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无股票持仓'**
+  String get investEmpty;
+
+  /// No description provided for @investManualHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前使用手填参考价。行情验证只查询公开数据，不自动改写成交或估值。'**
+  String get investManualHint;
+
+  /// No description provided for @investSymbol.
+  ///
+  /// In zh, this message translates to:
+  /// **'证券代码'**
+  String get investSymbol;
+
+  /// No description provided for @investName.
+  ///
+  /// In zh, this message translates to:
+  /// **'证券名称'**
+  String get investName;
+
+  /// No description provided for @investMarket.
+  ///
+  /// In zh, this message translates to:
+  /// **'市场'**
+  String get investMarket;
+
+  /// No description provided for @investMarketUS.
+  ///
+  /// In zh, this message translates to:
+  /// **'美股'**
+  String get investMarketUS;
+
+  /// No description provided for @investMarketCN.
+  ///
+  /// In zh, this message translates to:
+  /// **'A 股'**
+  String get investMarketCN;
+
+  /// No description provided for @investMarketHK.
+  ///
+  /// In zh, this message translates to:
+  /// **'港股'**
+  String get investMarketHK;
+
+  /// No description provided for @investBuy.
+  ///
+  /// In zh, this message translates to:
+  /// **'买入'**
+  String get investBuy;
+
+  /// No description provided for @investSell.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖出'**
+  String get investSell;
+
+  /// No description provided for @investShort.
+  ///
+  /// In zh, this message translates to:
+  /// **'卖空'**
+  String get investShort;
+
+  /// No description provided for @investCover.
+  ///
+  /// In zh, this message translates to:
+  /// **'回补'**
+  String get investCover;
+
+  /// No description provided for @investDividend.
+  ///
+  /// In zh, this message translates to:
+  /// **'股息'**
+  String get investDividend;
+
+  /// No description provided for @investFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'费用'**
+  String get investFee;
+
+  /// No description provided for @investSplit.
+  ///
+  /// In zh, this message translates to:
+  /// **'拆股 / 合股'**
+  String get investSplit;
+
+  /// No description provided for @investTransferIn.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓转入'**
+  String get investTransferIn;
+
+  /// No description provided for @investTransferOut.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓转出'**
+  String get investTransferOut;
+
+  /// No description provided for @investQuantity.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量（股）'**
+  String get investQuantity;
+
+  /// No description provided for @investPrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'成交价'**
+  String get investPrice;
+
+  /// No description provided for @investTotalAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'总额'**
+  String get investTotalAmount;
+
+  /// No description provided for @investSplitNew.
+  ///
+  /// In zh, this message translates to:
+  /// **'新股数'**
+  String get investSplitNew;
+
+  /// No description provided for @investSplitOld.
+  ///
+  /// In zh, this message translates to:
+  /// **'原股数'**
+  String get investSplitOld;
+
+  /// No description provided for @investFees.
+  ///
+  /// In zh, this message translates to:
+  /// **'手续费 / 税费'**
+  String get investFees;
+
+  /// No description provided for @investReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'手填参考价'**
+  String get investReference;
+
+  /// No description provided for @investCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'剩余总成本'**
+  String get investCost;
+
+  /// No description provided for @investUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'未知 / 不完整'**
+  String get investUnknown;
+
+  /// No description provided for @investLong.
+  ///
+  /// In zh, this message translates to:
+  /// **'多头'**
+  String get investLong;
+
+  /// No description provided for @investShortPosition.
+  ///
+  /// In zh, this message translates to:
+  /// **'空头'**
+  String get investShortPosition;
+
+  /// No description provided for @investOpeningCash.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初现金'**
+  String get investOpeningCash;
+
+  /// No description provided for @investOpeningQuantity.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初持仓数量（可留空）'**
+  String get investOpeningQuantity;
+
+  /// No description provided for @investOpeningCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初总成本（留空表示未知）'**
+  String get investOpeningCost;
+
+  /// No description provided for @investFinance.
+  ///
+  /// In zh, this message translates to:
+  /// **'已确认此账户允许真实融资 / 负现金'**
+  String get investFinance;
+
+  /// No description provided for @investSaveError.
+  ///
+  /// In zh, this message translates to:
+  /// **'未保存：请核对数字、币种、现金、期初日期及后续持仓数量。'**
+  String get investSaveError;
+
+  /// No description provided for @investDelete.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除此投资记录'**
+  String get investDelete;
+
+  /// No description provided for @investDeleteHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除后将重算成本、现金及后续持仓。跨账户转移须整体处理。'**
+  String get investDeleteHint;
+
+  /// No description provided for @investDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'成交时间'**
+  String get investDate;
+
+  /// No description provided for @investNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'备注'**
+  String get investNote;
+
+  /// No description provided for @investSplitHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'拆股时：数量填新股数、价格填旧股数；总成本不变，参考价另行确认。股息/费用时：价格填实际总额。'**
+  String get investSplitHint;
+
+  /// No description provided for @investOpeningDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初生效时间'**
+  String get investOpeningDate;
+
+  /// No description provided for @investReprice.
+  ///
+  /// In zh, this message translates to:
+  /// **'修改参考价'**
+  String get investReprice;
+
+  /// No description provided for @investTransfer.
+  ///
+  /// In zh, this message translates to:
+  /// **'转移持仓'**
+  String get investTransfer;
+
+  /// No description provided for @investTarget.
+  ///
+  /// In zh, this message translates to:
+  /// **'转入账户'**
+  String get investTarget;
+
+  /// No description provided for @investCostEdit.
+  ///
+  /// In zh, this message translates to:
+  /// **'补充期初成本'**
+  String get investCostEdit;
+
+  /// No description provided for @investCashCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'核对现金'**
+  String get investCashCheck;
+
+  /// No description provided for @investCashHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'只校准现金，不改写股票数量与成本。'**
+  String get investCashHint;
+
+  /// No description provided for @investProbe.
+  ///
+  /// In zh, this message translates to:
+  /// **'博通行情验证'**
+  String get investProbe;
+
+  /// No description provided for @investProbeConsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击查询将向 Yahoo、Nasdaq 发送 AVGO 代码，服务方可见 IP；不会发送账户或持仓。数据仅用于验证，不代表可成交价格。'**
+  String get investProbeConsent;
+
+  /// No description provided for @investProbeRun.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询公开行情'**
+  String get investProbeRun;
+
+  /// No description provided for @investProbePending.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未查询'**
+  String get investProbePending;
+
+  /// No description provided for @investProbeError.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源暂不可用'**
+  String get investProbeError;
+
+  /// No description provided for @investProbeTimeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'有效报价时间未知，不能标为实时'**
+  String get investProbeTimeUnknown;
+
+  /// No description provided for @investProbeNetworkError.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法连接来源，请检查网络连接'**
+  String get investProbeNetworkError;
+
+  /// No description provided for @investProbeTimeout.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源请求超时，可稍后重试'**
+  String get investProbeTimeout;
+
+  /// No description provided for @investProbeInvalidData.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源数据不完整或格式已变化'**
+  String get investProbeInvalidData;
+
+  /// No description provided for @investProbeNoContracts.
+  ///
+  /// In zh, this message translates to:
+  /// **'未取得满足条件的合约'**
+  String get investProbeNoContracts;
+
+  /// No description provided for @investSource.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源'**
+  String get investSource;
+
+  /// No description provided for @investProbeResearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'此查询用于来源可行性验证；发布适用条件仍需核对。'**
+  String get investProbeResearch;
+
+  /// No description provided for @investShortHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'空头有回补义务，收到卖空款不会立即增加净资产。'**
+  String get investShortHint;
+
+  /// No description provided for @investEnableOpening.
+  ///
+  /// In zh, this message translates to:
+  /// **'启用与期初'**
+  String get investEnableOpening;
+
+  /// No description provided for @investCurrency.
+  ///
+  /// In zh, this message translates to:
+  /// **'结算币种'**
+  String get investCurrency;
+
+  /// No description provided for @investTransferHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'两端必须是同账本同币种的已启用投资账户。'**
+  String get investTransferHint;
+
+  /// No description provided for @investSave.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存'**
+  String get investSave;
+
+  /// No description provided for @investNoQuotes.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考价缺失，净值不完整'**
+  String get investNoQuotes;
+
+  /// No description provided for @investEventType.
+  ///
+  /// In zh, this message translates to:
+  /// **'操作类型'**
+  String get investEventType;
+
+  /// No description provided for @investTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'时间'**
+  String get investTime;
+
+  /// No description provided for @investReferenceConsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'新证券以本次确认的参考价估值，后续可手动修改。'**
+  String get investReferenceConsent;
+
+  /// No description provided for @investCurrentCash.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账面现金'**
+  String get investCurrentCash;
+
+  /// No description provided for @investNoOptions.
+  ///
+  /// In zh, this message translates to:
+  /// **'本阶段支持股票记账；期权仅验证数据来源。'**
+  String get investNoOptions;
+
+  /// No description provided for @investFetchedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'抓取时间'**
+  String get investFetchedAt;
+
+  /// No description provided for @investProbeSpecsUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'期权乘数、交割规格及各报价时间仍待核对，此页不据此创建期权持仓。'**
+  String get investProbeSpecsUnknown;
 }
 
 class _AppLocalizationsDelegate

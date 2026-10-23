@@ -6515,4 +6515,252 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountCurrencyChildExists => '该主账户已包含此币种，请选择其他币种。';
+
+  @override
+  String get investTitle => '股票投资';
+
+  @override
+  String get investEnable => '启用股票持仓';
+
+  @override
+  String get investSetupHint => '请确认期初现金。若原余额包含股票，请将现金与持仓分别填写，避免重复计入。';
+
+  @override
+  String get investCash => '现金';
+
+  @override
+  String get investNetValue => '参考净值';
+
+  @override
+  String get investMarketValue => '持仓净值';
+
+  @override
+  String get investRealized => '已实现盈亏';
+
+  @override
+  String get investUnrealized => '未实现盈亏';
+
+  @override
+  String get investIncome => '净股息与费用';
+
+  @override
+  String get investPositions => '持仓';
+
+  @override
+  String get investRecords => '投资记录';
+
+  @override
+  String get investNewTrade => '记录股票交易';
+
+  @override
+  String get investEmpty => '暂无股票持仓';
+
+  @override
+  String get investManualHint => '当前使用手填参考价。行情验证只查询公开数据，不自动改写成交或估值。';
+
+  @override
+  String get investSymbol => '证券代码';
+
+  @override
+  String get investName => '证券名称';
+
+  @override
+  String get investMarket => '市场';
+
+  @override
+  String get investMarketUS => '美股';
+
+  @override
+  String get investMarketCN => 'A 股';
+
+  @override
+  String get investMarketHK => '港股';
+
+  @override
+  String get investBuy => '买入';
+
+  @override
+  String get investSell => '卖出';
+
+  @override
+  String get investShort => '卖空';
+
+  @override
+  String get investCover => '回补';
+
+  @override
+  String get investDividend => '股息';
+
+  @override
+  String get investFee => '费用';
+
+  @override
+  String get investSplit => '拆股 / 合股';
+
+  @override
+  String get investTransferIn => '持仓转入';
+
+  @override
+  String get investTransferOut => '持仓转出';
+
+  @override
+  String get investQuantity => '数量（股）';
+
+  @override
+  String get investPrice => '成交价';
+
+  @override
+  String get investTotalAmount => '总额';
+
+  @override
+  String get investSplitNew => '新股数';
+
+  @override
+  String get investSplitOld => '原股数';
+
+  @override
+  String get investFees => '手续费 / 税费';
+
+  @override
+  String get investReference => '手填参考价';
+
+  @override
+  String get investCost => '剩余总成本';
+
+  @override
+  String get investUnknown => '未知 / 不完整';
+
+  @override
+  String get investLong => '多头';
+
+  @override
+  String get investShortPosition => '空头';
+
+  @override
+  String get investOpeningCash => '期初现金';
+
+  @override
+  String get investOpeningQuantity => '期初持仓数量（可留空）';
+
+  @override
+  String get investOpeningCost => '期初总成本（留空表示未知）';
+
+  @override
+  String get investFinance => '已确认此账户允许真实融资 / 负现金';
+
+  @override
+  String get investSaveError => '未保存：请核对数字、币种、现金、期初日期及后续持仓数量。';
+
+  @override
+  String get investDelete => '删除此投资记录';
+
+  @override
+  String get investDeleteHint => '删除后将重算成本、现金及后续持仓。跨账户转移须整体处理。';
+
+  @override
+  String get investDate => '成交时间';
+
+  @override
+  String get investNote => '备注';
+
+  @override
+  String get investSplitHint =>
+      '拆股时：数量填新股数、价格填旧股数；总成本不变，参考价另行确认。股息/费用时：价格填实际总额。';
+
+  @override
+  String get investOpeningDate => '期初生效时间';
+
+  @override
+  String get investReprice => '修改参考价';
+
+  @override
+  String get investTransfer => '转移持仓';
+
+  @override
+  String get investTarget => '转入账户';
+
+  @override
+  String get investCostEdit => '补充期初成本';
+
+  @override
+  String get investCashCheck => '核对现金';
+
+  @override
+  String get investCashHint => '只校准现金，不改写股票数量与成本。';
+
+  @override
+  String get investProbe => '博通行情验证';
+
+  @override
+  String get investProbeConsent =>
+      '点击查询将向 Yahoo、Nasdaq 发送 AVGO 代码，服务方可见 IP；不会发送账户或持仓。数据仅用于验证，不代表可成交价格。';
+
+  @override
+  String get investProbeRun => '查询公开行情';
+
+  @override
+  String get investProbePending => '尚未查询';
+
+  @override
+  String get investProbeError => '来源暂不可用';
+
+  @override
+  String get investProbeTimeUnknown => '有效报价时间未知，不能标为实时';
+
+  @override
+  String get investProbeNetworkError => '无法连接来源，请检查网络连接';
+
+  @override
+  String get investProbeTimeout => '来源请求超时，可稍后重试';
+
+  @override
+  String get investProbeInvalidData => '来源数据不完整或格式已变化';
+
+  @override
+  String get investProbeNoContracts => '未取得满足条件的合约';
+
+  @override
+  String get investSource => '来源';
+
+  @override
+  String get investProbeResearch => '此查询用于来源可行性验证；发布适用条件仍需核对。';
+
+  @override
+  String get investShortHint => '空头有回补义务，收到卖空款不会立即增加净资产。';
+
+  @override
+  String get investEnableOpening => '启用与期初';
+
+  @override
+  String get investCurrency => '结算币种';
+
+  @override
+  String get investTransferHint => '两端必须是同账本同币种的已启用投资账户。';
+
+  @override
+  String get investSave => '保存';
+
+  @override
+  String get investNoQuotes => '参考价缺失，净值不完整';
+
+  @override
+  String get investEventType => '操作类型';
+
+  @override
+  String get investTime => '时间';
+
+  @override
+  String get investReferenceConsent => '新证券以本次确认的参考价估值，后续可手动修改。';
+
+  @override
+  String get investCurrentCash => '当前账面现金';
+
+  @override
+  String get investNoOptions => '本阶段支持股票记账；期权仅验证数据来源。';
+
+  @override
+  String get investFetchedAt => '抓取时间';
+
+  @override
+  String get investProbeSpecsUnknown => '期权乘数、交割规格及各报价时间仍待核对，此页不据此创建期权持仓。';
 }

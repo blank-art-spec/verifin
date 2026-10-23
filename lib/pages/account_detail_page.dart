@@ -22,6 +22,7 @@ import '../app/series_math.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'billing_statements_page.dart';
+import 'investment_page.dart';
 import 'account_entry_reminder_page.dart';
 import 'credit_account_editor_page.dart';
 import 'credit_account_detail_page.dart';
@@ -141,7 +142,10 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                       tooltip: AppLocalizations.of(
                         context,
                       ).balanceAdjustTooltip,
-                      onPressed: () => currentAccount.type.supportsCredit
+                      onPressed: () =>
+                          (currentAccount.type.supportsCredit ||
+                              controller.investmentFor(currentAccount.id) !=
+                                  null)
                           ? _confirmBalanceAnchor(persistedAccount, balance)
                           : _editBalance(persistedAccount, balance),
                     ),
@@ -149,13 +153,36 @@ class _AccountDetailPageState extends State<AccountDetailPage> {
                   ],
                 ),
                 const SizedBox(height: 10),
+                if (currentAccount.type.supportsSecurities) ...[
+                  VeriCard(
+                    onTap: () => Navigator.of(context).push<void>(
+                      MaterialPageRoute(
+                        builder: (_) =>
+                            InvestmentPage(accountId: currentAccount.id),
+                      ),
+                    ),
+                    child: Row(
+                      children: [
+                        const Icon(Icons.show_chart),
+                        const SizedBox(width: 12),
+                        Expanded(
+                          child: Text(AppLocalizations.of(context).investTitle),
+                        ),
+                        const Icon(Icons.chevron_right),
+                      ],
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                ],
                 if (currentAccount.type.supportsCredit &&
                     creditDueDate != null) ...<Widget>[
                   _CreditCardDueBanner(dueDate: creditDueDate),
                   const SizedBox(height: 10),
                 ],
                 VeriCard(
-                  onTap: () => currentAccount.type.supportsCredit
+                  onTap: () =>
+                      (currentAccount.type.supportsCredit ||
+                          controller.investmentFor(currentAccount.id) != null)
                       ? _confirmBalanceAnchor(persistedAccount, balance)
                       : _editBalance(persistedAccount, balance),
                   child: Row(

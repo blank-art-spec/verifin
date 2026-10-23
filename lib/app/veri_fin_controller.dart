@@ -23,6 +23,9 @@ import 'currency_math.dart';
 import 'credit_hierarchy.dart';
 import 'statistics_currency.dart';
 import 'frankfurter_client.dart';
+import 'investments/investment_decimal.dart';
+import 'investments/stock_projection.dart';
+import 'investments/stock_cash_math.dart';
 import 'credit_card.dart';
 import 'demo_data.dart';
 import 'entry_audit.dart';
@@ -49,6 +52,7 @@ part 'veri_fin_controller_ops.dart';
 part 'veri_fin_controller_account_reminders.dart';
 part 'veri_fin_controller_workday_calendar.dart';
 part 'veri_fin_controller_credit_hierarchy.dart';
+part 'veri_fin_controller_investments.dart';
 
 /// 导入校验用的已知备份数据键：`data` 里出现其一即认定为本应用备份（配合 `app`
 /// 标记）。用于拦截「格式合法却非本应用」的 JSON，避免其把数据静默覆盖为初始态。
@@ -59,6 +63,7 @@ const Set<String> _knownBackupDataKeys = <String>{
   'accounts',
   'accountGroups',
   'creditAccounts',
+  'investmentPortfolios',
   'categories',
   'tags',
   'tagGroups',
@@ -181,6 +186,7 @@ class VeriFinController extends ChangeNotifier
     with
         _ControllerState,
         _ControllerOps,
+        _InvestmentOps,
         _AccountEntryReminderOps,
         _WorkdayCalendarOps,
         _CreditHierarchyOps {

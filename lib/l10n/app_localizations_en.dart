@@ -6735,4 +6735,267 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get accountCurrencyChildExists =>
       'This parent account already has this currency. Choose another currency.';
+
+  @override
+  String get investTitle => 'Stock investments';
+
+  @override
+  String get investEnable => 'Enable stock holdings';
+
+  @override
+  String get investSetupHint =>
+      'Confirm opening cash. If the old balance includes stocks, enter cash and holdings separately to avoid double counting.';
+
+  @override
+  String get investCash => 'Cash';
+
+  @override
+  String get investNetValue => 'Estimated net value';
+
+  @override
+  String get investMarketValue => 'Net holdings value';
+
+  @override
+  String get investRealized => 'Realized P/L';
+
+  @override
+  String get investUnrealized => 'Unrealized P/L';
+
+  @override
+  String get investIncome => 'Net dividends and expenses';
+
+  @override
+  String get investPositions => 'Holdings';
+
+  @override
+  String get investRecords => 'Investment records';
+
+  @override
+  String get investNewTrade => 'Record stock transaction';
+
+  @override
+  String get investEmpty => 'No stock holdings';
+
+  @override
+  String get investManualHint =>
+      'Manual reference prices are in use. Quote validation only queries public data and does not change trades or valuations.';
+
+  @override
+  String get investSymbol => 'Symbol';
+
+  @override
+  String get investName => 'Security name';
+
+  @override
+  String get investMarket => 'Market';
+
+  @override
+  String get investMarketUS => 'US';
+
+  @override
+  String get investMarketCN => 'Mainland China';
+
+  @override
+  String get investMarketHK => 'Hong Kong';
+
+  @override
+  String get investBuy => 'Buy';
+
+  @override
+  String get investSell => 'Sell';
+
+  @override
+  String get investShort => 'Sell short';
+
+  @override
+  String get investCover => 'Buy to cover';
+
+  @override
+  String get investDividend => 'Dividend';
+
+  @override
+  String get investFee => 'Expense';
+
+  @override
+  String get investSplit => 'Stock split / consolidation';
+
+  @override
+  String get investTransferIn => 'Transfer in';
+
+  @override
+  String get investTransferOut => 'Transfer out';
+
+  @override
+  String get investQuantity => 'Quantity (shares)';
+
+  @override
+  String get investPrice => 'Trade price';
+
+  @override
+  String get investTotalAmount => 'Total amount';
+
+  @override
+  String get investSplitNew => 'New shares';
+
+  @override
+  String get investSplitOld => 'Old shares';
+
+  @override
+  String get investFees => 'Fees / taxes';
+
+  @override
+  String get investReference => 'Manual reference price';
+
+  @override
+  String get investCost => 'Remaining total cost';
+
+  @override
+  String get investUnknown => 'Unknown / incomplete';
+
+  @override
+  String get investLong => 'Long';
+
+  @override
+  String get investShortPosition => 'Short';
+
+  @override
+  String get investOpeningCash => 'Opening cash';
+
+  @override
+  String get investOpeningQuantity => 'Opening shares (optional)';
+
+  @override
+  String get investOpeningCost => 'Opening total cost (blank if unknown)';
+
+  @override
+  String get investFinance =>
+      'This account is confirmed to allow actual financing / negative cash';
+
+  @override
+  String get investSaveError =>
+      'Not saved. Check numbers, currency, cash, opening date and subsequent holdings.';
+
+  @override
+  String get investDelete => 'Delete investment record';
+
+  @override
+  String get investDeleteHint =>
+      'Cash, costs and later holdings will be recalculated. Transfers must be handled as a complete batch.';
+
+  @override
+  String get investDate => 'Trade time';
+
+  @override
+  String get investNote => 'Note';
+
+  @override
+  String get investSplitHint =>
+      'For a split, enter new shares as quantity and old shares as price. Total cost stays unchanged; confirm the reference price separately. For dividends or expenses, price is the total amount.';
+
+  @override
+  String get investOpeningDate => 'Opening effective time';
+
+  @override
+  String get investReprice => 'Change reference price';
+
+  @override
+  String get investTransfer => 'Transfer holdings';
+
+  @override
+  String get investTarget => 'Destination account';
+
+  @override
+  String get investCostEdit => 'Complete opening cost';
+
+  @override
+  String get investCashCheck => 'Confirm cash';
+
+  @override
+  String get investCashHint =>
+      'Adjusts cash only; stock quantities and costs remain unchanged.';
+
+  @override
+  String get investProbe => 'Broadcom quote validation';
+
+  @override
+  String get investProbeConsent =>
+      'Querying sends the AVGO symbol to Yahoo and Nasdaq, which can see your IP. Account and holding details are never sent. Quotes are for validation and do not guarantee execution prices.';
+
+  @override
+  String get investProbeRun => 'Query public quotes';
+
+  @override
+  String get investProbePending => 'Not queried';
+
+  @override
+  String get investProbeError => 'Source unavailable';
+
+  @override
+  String get investProbeTimeUnknown =>
+      'Valid quote time unknown; not real-time';
+
+  @override
+  String get investProbeNetworkError =>
+      'Cannot connect to the source. Check your network.';
+
+  @override
+  String get investProbeTimeout => 'Source request timed out. Try again later.';
+
+  @override
+  String get investProbeInvalidData =>
+      'Source data is incomplete or its format has changed.';
+
+  @override
+  String get investProbeNoContracts => 'No qualifying contracts returned';
+
+  @override
+  String get investSource => 'Source';
+
+  @override
+  String get investProbeResearch =>
+      'This query evaluates source feasibility. Release suitability still needs review.';
+
+  @override
+  String get investShortHint =>
+      'Short positions carry a repurchase obligation. Short-sale proceeds do not immediately increase net assets.';
+
+  @override
+  String get investEnableOpening => 'Enable and opening position';
+
+  @override
+  String get investCurrency => 'Settlement currency';
+
+  @override
+  String get investTransferHint =>
+      'Both accounts must be enabled investments in the same book and currency.';
+
+  @override
+  String get investSave => 'Save';
+
+  @override
+  String get investNoQuotes => 'Missing reference prices; net value incomplete';
+
+  @override
+  String get investEventType => 'Action';
+
+  @override
+  String get investTime => 'Time';
+
+  @override
+  String get investReferenceConsent =>
+      'A new security uses the reference price you confirm here; you can change it later.';
+
+  @override
+  String get investCurrentCash => 'Current book cash';
+
+  @override
+  String get investNoOptions =>
+      'This stage supports stock bookkeeping. Options are queried only to validate sources.';
+
+  @override
+  String get investFetchedAt => 'Fetched at';
+
+  @override
+  String get investProbeSpecsUnknown =>
+      'Option multipliers, deliverables and quote timestamps still need verification. This page does not create option positions.';
 }

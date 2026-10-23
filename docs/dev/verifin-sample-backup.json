@@ -1,8 +1,9 @@
 {
   "app": "verifin",
-  "version": 9,
+  "version": 10,
   "exportedAt": "2026-07-03T16:00:00.000",
   "data": {
+    "investmentPortfolios": [],
     "ledgerBooks": [
       {
         "id": "default",

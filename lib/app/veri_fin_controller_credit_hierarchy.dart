@@ -280,7 +280,7 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
     final children = accountsForCreditAccount(parent.id);
     return convertAccountBalancesToBase(
       accounts: children.where((a) => !visibleOnly || !a.hidden),
-      balanceOf: accountBalance,
+      balanceOf: accountAssetValue,
       bookId: _activeBookId,
       baseCurrencyCode: activeBook.baseCurrencyCode,
       targetCurrencyCode: children.any((a) => a.type.supportsCredit)

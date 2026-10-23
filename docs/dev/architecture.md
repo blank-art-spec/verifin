@@ -4,7 +4,7 @@
 
 执行规则以 [AGENTS.md](../../AGENTS.md) 为准；这里仅提供源码导航，不重复维护规则。
 
-证券持仓、期权与参考行情目前仍在方案阶段，先以博通 AVGO 股票及认购/认沽验证完整流程，三地范围保留，见 [开发方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。其中拟建模型、接口和页面尚未实现，不属于下表的当前架构。
+股票阶段现已实现精确持仓、独立事件、手填估值及显式博通来源验证，见 [阶段 0–2 当前实现](securities-stage02-implementation.md)。SQLite v28 投资聚合、JSON v10 备份及 `veri_fin_controller_investments.dart` 为当前代码；期权生命周期、自动行情估值和历史快照等仍属后续提案，见 [总体方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。
 
 Veri Fin 仅交付 Android，权威账目在本机 SQLite，无账号或自有服务端。
 正式入口为 `lib/main.dart`；UI 通过 `VeriFinScope` 读取 `VeriFinController`，

@@ -1661,13 +1661,15 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     );
   }
 
+  /// 按账本本币折算当前资产：投资账户包含持仓，其余账户沿用现金/信用余额。
+  /// [accounts] 默认当前账本账户，[date] 限定参考汇率日；缺率返回不完整结果。
   ConvertedAccountBalances accountBalancesInBase({
     Iterable<Account>? accounts,
     DateTime? date,
   }) {
     return convertAccountBalancesToBase(
       accounts: accounts ?? this.accounts,
-      balanceOf: accountBalance,
+      balanceOf: accountAssetValue,
       bookId: _activeBookId,
       baseCurrencyCode: activeBook.baseCurrencyCode,
       date: date ?? DateTime.now(),
@@ -1680,7 +1682,8 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       (entry) => entry.key.startsWith('$bookId:') && entry.value != 0,
     );
 
-    return _entries.any((entry) => entry.bookId == bookId) ||
+    return _investmentPortfolios.any((p) => p.bookId == bookId) ||
+        _entries.any((entry) => entry.bookId == bookId) ||
         _accounts.any(
           (account) =>
               account.bookId == bookId &&
@@ -1702,6 +1705,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   }
 
   bool accountCurrencyLocked(Account account) {
+    if (_portfolioForAccount(account) != null) return true;
     return account.initialBalance != 0 ||
         account.creditLimit != null ||
         _balanceAnchors.any((anchor) => anchor.accountId == account.id) ||
@@ -2191,13 +2195,14 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
         now: now ?? DateTime.now(),
       );
 
-  /// 保存一个“该时点余额已确认”的锚点。它不会创建校准交易，也不会改写历史流水。
+  /// 保存一个“该时点余额已确认”的锚点，不创建校准交易、不改写历史流水。
+  /// 与投资/交易命令共用串行队列，现金核对不会用旧聚合覆盖正在保存的成交。
   Future<bool> saveBalanceAnchor({
     required Account account,
     required DateTime effectiveAt,
     required double balance,
     String note = '',
-  }) async {
+  }) => _enqueueCaptureMutation(() async {
     if (!balance.isFinite ||
         !_accounts.any(
           (item) => item.id == account.id && item.bookId == account.bookId,
@@ -2227,15 +2232,59 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     } else {
       next[sameMoment] = anchor;
     }
-    if (!await _runTrackedWrite(() => _repository.saveBalanceAnchors(next))) {
+    final portfolio = _portfolioForAccount(account);
+    // 现金核对仍遵守用户已确认的融资能力，不能从另一入口静默形成负现金。
+    if (portfolio != null && !portfolio.allowFinancing && normalized < 0) {
       return false;
+    }
+    final nextPortfolios = [
+      for (final p in _investmentPortfolios)
+        if (p.accountId != account.id) p,
+    ];
+    if (portfolio != null) {
+      nextPortfolios.add(
+        portfolio.copyWith(
+          anchorIncludedIds: {
+            ...portfolio.anchorIncludedIds,
+            anchor.id: [
+              for (final e in _entries)
+                if (e.bookId == account.bookId &&
+                    entryTouchesAccount(e, account.id) &&
+                    accountEffectDate(e).millisecondsSinceEpoch ==
+                        effectiveAt.millisecondsSinceEpoch)
+                  'entry:${e.id}',
+              for (final e in portfolio.events)
+                if (e.occurredAt.millisecondsSinceEpoch ==
+                    effectiveAt.millisecondsSinceEpoch)
+                  'stock:${e.id}',
+            ],
+          },
+        ),
+      );
+    }
+    if (!await _runTrackedWrite(
+      () => portfolio == null
+          ? _repository.saveBalanceAnchors(next)
+          : _repository.replaceAllLedgerData(
+              _ledgerDataSnapshot(
+                balanceAnchors: next,
+                investmentPortfolios: nextPortfolios,
+              ),
+            ),
+    )) {
+      return false;
+    }
+    if (portfolio != null) {
+      _investmentPortfolios
+        ..clear()
+        ..addAll(nextPortfolios);
     }
     _balanceAnchors
       ..clear()
       ..addAll(next);
     notifyListeners();
     return true;
-  }
+  });
 
   /// 新建或更新一期正式账单。同一来源账单 id 会幂等更新，不会重复新增。
   Future<bool> saveBillingStatement(BillingStatement statement) async {
@@ -6302,6 +6351,10 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       return;
     }
     final current = _accounts[index];
+    if (_portfolioForAccount(current) != null &&
+        (current.type != account.type || current.bookId != account.bookId)) {
+      return;
+    }
     if (!_isAccountCurrencyAllowed(account) ||
         (current.currencyCode != account.currencyCode &&
             accountCurrencyLocked(current))) {
@@ -6396,12 +6449,19 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
 
   /// 编辑页提交已有账户 [account]：保留 id、币种约束和相容的父子关系。
   /// 主体清理或信用镜像变化与账户一起原子落库，失败不替换内存快照。
-  Future<bool> saveAccountDraft(Account account) async {
+  /// 与投资启用共用队列，避免检查能力后又被并发启用留下不兼容账户。
+  Future<bool> saveAccountDraft(
+    Account account,
+  ) => _enqueueCaptureMutation(() async {
     final index = _accounts.indexWhere((item) => item.id == account.id);
     if (index == -1) {
       return false;
     }
     final current = _accounts[index];
+    if (_portfolioForAccount(current) != null &&
+        (current.type != account.type || current.bookId != account.bookId)) {
+      return false;
+    }
     if (!_isAccountCurrencyAllowed(account) ||
         (current.currencyCode != account.currencyCode &&
             accountCurrencyLocked(current))) {
@@ -6493,7 +6553,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     }
     notifyListeners();
     return true;
-  }
+  });
 
   /// 删除账户。成功返回被停用的周期规则数，落库失败/账户仍有流水时返回 null。
   Future<int?> deleteAccount(String accountId) {
@@ -6505,14 +6565,21 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     return _deleteAccount(accountId, deleteRelatedEntries: true);
   }
 
+  /// 在交易/投资共用队列内删除账户及引用；内部清理使用 Now 入口避免嵌套排队。
   Future<int?> _deleteAccount(
     String accountId, {
     required bool deleteRelatedEntries,
-  }) async {
+  }) => _enqueueCaptureMutation(() async {
     final removedAccount = _accounts
         .where((account) => account.id == accountId)
         .firstOrNull;
     if (removedAccount == null) {
+      return null;
+    }
+    // 转移批次涉及另一账户的成本；先禁止单边删除，避免留下无法解释的半个批次。
+    if (_investmentPortfolios.any(
+      (p) => p.accountId == accountId && p.events.any((e) => e.batchId != null),
+    )) {
       return null;
     }
     final directlyRelatedIds = _entries
@@ -6635,13 +6702,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       ..clear()
       ..addAll(nextDefaults);
     await _persistAccountDeletionPreferences();
-    await _sanitizeAutoCaptureReferences(
+    await _sanitizeAutoCaptureReferencesNow(
       removedEntryIds: removeIds,
       removedAccountIds: <String>{accountId},
     );
     notifyListeners();
     return affected;
-  }
+  });
 
   Future<void> _persistAccountDeletionPreferences() async {
     try {
@@ -7754,6 +7821,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       _store.delete('$_exchangeRateAttemptPrefix${book.id}.v1');
     }
     _entries.clear();
+    _investmentPortfolios.clear();
     _captureEvents.clear();
     _autoCaptureRules.clear();
     _accounts
@@ -7812,12 +7880,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     notifyListeners();
   }
 
+  /// 导出完整 JSON v10 用户数据，包含股票聚合与手填价，不导出单次行情响应或凭证。
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 9,
+      'version': 10,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
+        'investmentPortfolios': _investmentPortfolios
+            .map((p) => p.toJson())
+            .toList(),
         'ledgerBooks': _ledgerBooks.map((book) => book.toJson()).toList(),
         'activeBookId': _activeBookId,
         'entries': _entries.map((entry) => entry.toJson()).toList(),
@@ -7906,7 +7978,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 9) {
+    if (version < 1 || version > 10) {
       throw FormatException('不支持的备份版本：$version');
     }
 
@@ -8207,6 +8279,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       billingStatements: nextBillingStatements,
       statementRepaymentAllocations: nextStatementRepaymentAllocations,
     );
+    final nextInvestments = _decodeModelList<InvestmentPortfolio>(
+      data['investmentPortfolios'],
+      InvestmentPortfolio.fromJson,
+    );
+    validateInvestmentPortfolios(nextInvestments, nextAccounts);
     final ledgerIssue = validateLedgerEntries(
       books: nextLedgerBooks,
       accounts: nextAccounts,
@@ -8226,6 +8303,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     );
     if (dryRun) return preview;
 
+    _investmentPortfolios
+      ..clear()
+      ..addAll(nextInvestments);
     _ledgerBooks
       ..clear()
       ..addAll(nextLedgerBooks);
@@ -8830,6 +8910,20 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     return normalizeCurrencyAmount(balance, account.currencyCode);
   }
 
+  /// 资产汇总读取入口：[account] 的普通余额仍表示现金；启用股票后另加多头值减空头义务。
+  /// 手填价缺失的聚合会在保存/导入时被拒绝，因此不会把未知持仓误当成零资产。
+  double accountAssetValue(Account account) {
+    final cash = accountBalance(account);
+    final portfolio = _portfolioForAccount(account);
+    if (portfolio == null) return cash;
+    final value = valueStocks(portfolio, projectStocks(portfolio)).marketValue;
+    if (value == null) throw const FormatException('投资持仓缺少参考价');
+    return normalizeCurrencyAmount(
+      cash + value.toDouble(),
+      account.currencyCode,
+    );
+  }
+
   /// 一次遍历算出全部账户余额，供 [accountBalance] 复用。
   ///
   /// 逐账户调用是 O(账户数 × 交易数)，而首页、资产页、个人页和桌面小组件每次
@@ -8880,7 +8974,13 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     return <String, double>{
       for (final account in _accounts)
         account.id: normalizeCurrencyAmount(
-          balances[account.id]!,
+          _portfolioForAccount(account) != null
+              ? investmentCashBalance(
+                  portfolio: _portfolioForAccount(account)!,
+                  entries: _entries,
+                  anchor: latestAnchors[account.id],
+                )
+              : balances[account.id]!,
           account.currencyCode,
         ),
     };

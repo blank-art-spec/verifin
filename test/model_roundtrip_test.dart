@@ -8,6 +8,7 @@ import 'package:verifin/app/reminder/workday_calendar_sync.dart';
 import 'package:verifin/data/app_database.dart';
 import 'package:verifin/data/ledger_repository.dart';
 import 'support/workday_calendar_fixture.dart';
+import 'support/investment_fixture.dart';
 
 /// 模型字段往返测试：防「四处手写映射」漂移。
 ///
@@ -23,6 +24,49 @@ import 'support/workday_calendar_fixture.dart';
 ///   不是映射 bug）。
 void main() {
   setUpAll(sqfliteFfiInit);
+  test('股票聚合 JSON 与 SQLite 四向映射保留精确量价、未知成本和现金边界', () async {
+    final source =
+        portfolioFixture(
+          events: [
+            stockEventFixture(
+              'buy',
+              StockEventKind.buy,
+              '0.125',
+              '80.00000001',
+              fee: '0.01',
+            ),
+          ],
+          opening: [
+            StockHolding(
+              securityId: avgoFixture.id,
+              short: true,
+              quantity: '0.5',
+            ),
+          ],
+        ).copyWith(
+          anchorIncludedIds: {
+            'anchor': ['stock:buy', 'entry:included'],
+          },
+        );
+    final fromJson = InvestmentPortfolio.fromJson(
+      Map<String, Object?>.from(jsonDecode(jsonEncode(source.toJson())) as Map),
+    );
+    expect(fromJson.toJson(), source.toJson());
+    final db = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    try {
+      final repo = SqliteLedgerRepository(db);
+      await repo.saveInvestmentPortfolios([source]);
+      expect(
+        (await repo.loadInvestmentPortfolios()).single.toJson(),
+        source.toJson(),
+      );
+    } finally {
+      await db.close();
+    }
+  });
 
   test('工作日日历授权、有效缓存与检查状态完整往返，运行中标记不持久化', () {
     final settings = WorkdayCalendarSettings(

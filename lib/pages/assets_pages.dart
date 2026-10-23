@@ -75,7 +75,7 @@ class _AssetsPageState extends State<AssetsPage> {
     final groups = controller.accountGroups;
     final balances = <Account, double>{
       for (final account in accounts)
-        account: controller.accountBalance(account),
+        account: controller.accountAssetValue(account),
     };
     final valuedAccounts = accounts
         .where((account) => account.includeInAssets && !account.hidden)

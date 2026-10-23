@@ -60,6 +60,20 @@ mixin _ControllerState on ChangeNotifier {
 
   final List<AutoCaptureRule> _autoCaptureRules = <AutoCaptureRule>[];
   final List<LedgerBook> _ledgerBooks = <LedgerBook>[];
+  final List<InvestmentPortfolio> _investmentPortfolios = [];
+
+  /// 跨账本内部读取，只允许当前仍存在且类型/币种一致的真实账户引用。
+  InvestmentPortfolio? _portfolioForAccount(Account account) =>
+      _investmentPortfolios
+          .where(
+            (p) =>
+                p.accountId == account.id &&
+                p.bookId == account.bookId &&
+                account.type.supportsSecurities &&
+                p.currencyCode == account.currencyCode,
+          )
+          .firstOrNull;
+
   final List<Account> _accounts = <Account>[];
   final List<AccountGroup> _accountGroups = <AccountGroup>[];
   final List<CreditAccount> _creditAccounts = <CreditAccount>[];
@@ -96,6 +110,15 @@ mixin _ControllerState on ChangeNotifier {
   int _rateSyncGeneration = 0;
 
   void _invalidateDerivedViews() {
+    // 实体删除后的聚合与同一事务快照使用相同过滤，避免备份重新带回孤儿账户。
+    _investmentPortfolios.removeWhere(
+      (p) => !_accounts.any(
+        (a) =>
+            a.id == p.accountId &&
+            a.bookId == p.bookId &&
+            a.type.supportsSecurities,
+      ),
+    );
     _statisticsProjection = null;
     _entriesView = null;
     _captureEventsView = null;
@@ -496,6 +519,10 @@ mixin _ControllerState on ChangeNotifier {
       _activeBookId = defaultLedgerBookId;
       _store.write(_activeBookKey, _activeBookId);
     }
+    _investmentPortfolios
+      ..clear()
+      ..addAll(await _repository.loadInvestmentPortfolios());
+    validateInvestmentPortfolios(_investmentPortfolios, _accounts);
     final entries = await _repository.loadEntries();
     entries.sort(_compareEntriesLatestFirst);
     _entries
@@ -1078,7 +1105,10 @@ mixin _ControllerState on ChangeNotifier {
     );
   }
 
+  /// 构建跨表原子保存快照；可选集合表示本次候选变更，其余沿用当前状态。
+  /// 投资聚合仅保留候选账户内仍存在的真实账户，删除/恢复不留下孤儿持仓。
   LedgerDataSnapshot _ledgerDataSnapshot({
+    List<InvestmentPortfolio>? investmentPortfolios,
     List<LedgerBook>? books,
     List<Account>? accounts,
     List<AccountGroup>? accountGroups,
@@ -1100,6 +1130,16 @@ mixin _ControllerState on ChangeNotifier {
     List<StatementRepaymentAllocation>? statementRepaymentAllocations,
   }) {
     return LedgerDataSnapshot(
+      investmentPortfolios: (investmentPortfolios ?? _investmentPortfolios)
+          .where(
+            (p) => (accounts ?? _accounts).any(
+              (a) =>
+                  a.id == p.accountId &&
+                  a.bookId == p.bookId &&
+                  a.type.supportsSecurities,
+            ),
+          )
+          .toList(),
       books: books ?? List<LedgerBook>.of(_ledgerBooks),
       accounts: accounts ?? List<Account>.of(_accounts),
       accountGroups: accountGroups ?? List<AccountGroup>.of(_accountGroups),

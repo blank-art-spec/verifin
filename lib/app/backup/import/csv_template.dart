@@ -88,7 +88,7 @@ const List<String> transactionCsvExportColumns = <String>[
 ];
 
 /// 导出可重新识别币种语义的交易 CSV。退款子条目折叠回原支出的退款列，避免重复；
-/// 完整备份/恢复（含统一还款批次）以 JSON v9 为准。
+/// 完整备份/恢复（含统一还款批次）以 JSON v10 为准。
 String transactionCsvExport({
   required List<LedgerEntry> entries,
   required List<Account> accounts,

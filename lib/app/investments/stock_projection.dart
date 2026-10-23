@@ -1,0 +1,251 @@
+/// 只读股票重放：数量、成本、现金腿与盈亏的唯一计算入口。
+library;
+
+import '../currency_catalog.dart';
+import '../models/investment.dart';
+import 'investment_decimal.dart';
+
+/// 单个证券方向的重放结果；成本未知时不制造零成本盈利。
+class StockPosition {
+  /// [securityId] 和 [short] 共同标识持仓方向，[cost] 为剩余总成本/净开仓所得。
+  StockPosition(this.securityId, this.short, this.quantity, this.cost);
+  final String securityId;
+  final bool short;
+  InvestmentDecimal quantity;
+  InvestmentDecimal? cost;
+}
+
+/// 账户重放结果；现金腿按事件保存供现金锚点重算使用，持仓不受现金校准影响。
+class StockProjection {
+  /// 参数均为派生值，不应直接持久化为第二份可编辑账目。
+  StockProjection({
+    required this.positions,
+    required this.cashMovements,
+    required this.realized,
+    required this.income,
+    required this.realizedComplete,
+  });
+  final List<StockPosition> positions;
+  final Map<String, InvestmentDecimal> cashMovements;
+  final InvestmentDecimal realized, income;
+  final bool realizedComplete;
+}
+
+/// 按业务时间及稳定序号计算整个账户；非法事件、悬空证券或超量平仓直接抛错。
+/// [portfolio] 为不可变用户事实；返回值不修改原始数据，便于保存前完整预览/验证。
+StockProjection projectStocks(InvestmentPortfolio portfolio) {
+  final digits = CurrencyCatalog.require(portfolio.currencyCode).minorUnit;
+  final securities = {
+    for (final security in portfolio.securities) security.id: security,
+  };
+  if (securities.length != portfolio.securities.length) {
+    throw const FormatException('证券身份重复');
+  }
+  for (final security in securities.values) {
+    if (security.symbol.isEmpty ||
+        security.name.isEmpty ||
+        security.currencyCode != portfolio.currencyCode) {
+      throw const FormatException('证券或结算币种不合法');
+    }
+  }
+  final cash = <String, InvestmentDecimal>{};
+  final positions = <String, StockPosition>{};
+  var realized = InvestmentDecimal.zero, income = InvestmentDecimal.zero;
+  var complete = true;
+  final ids = <String>{};
+  final sequences = <int>{};
+
+  // 相同证券的多空方向分别核算，不隐式抵销或穿越零仓位。
+  StockPosition position(String id, bool short) => positions.putIfAbsent(
+    '$id:$short',
+    () => StockPosition(
+      id,
+      short,
+      InvestmentDecimal.zero,
+      InvestmentDecimal.zero,
+    ),
+  );
+
+  for (final holding in portfolio.openingHoldings) {
+    final quantity = InvestmentDecimal.parse(holding.quantity);
+    final cost = holding.cost == null
+        ? null
+        : InvestmentDecimal.parse(holding.cost!);
+    final key = '${holding.securityId}:${holding.short}';
+    if (!securities.containsKey(holding.securityId) ||
+        positions.containsKey(key) ||
+        quantity.units <= BigInt.zero ||
+        (cost != null && cost.units < BigInt.zero)) {
+      throw const FormatException('期初持仓不合法');
+    }
+    positions[key] = StockPosition(
+      holding.securityId,
+      holding.short,
+      quantity,
+      cost?.rounded(digits),
+    );
+  }
+  final events = [...portfolio.events]..sort(compareStockEvents);
+  for (final event in events) {
+    if (!ids.add(event.id) ||
+        !sequences.add(event.sequence) ||
+        event.sequence < 0 ||
+        event.id.isEmpty ||
+        !securities.containsKey(event.securityId) ||
+        event.occurredAt.isBefore(portfolio.openedAt)) {
+      throw const FormatException('成交身份、顺序或期初边界不合法');
+    }
+    final q = InvestmentDecimal.parse(event.quantity),
+        p = InvestmentDecimal.parse(event.price),
+        fee = InvestmentDecimal.parse(event.fee);
+    if (fee.units < BigInt.zero ||
+        p.units < BigInt.zero ||
+        q.units < BigInt.zero ||
+        fee.compareTo(fee.rounded(digits)) != 0) {
+      throw const FormatException('数量、报价或费用不合法');
+    }
+    final kind = event.kind;
+    if ({
+          StockEventKind.split,
+          StockEventKind.transferIn,
+          StockEventKind.transferOut,
+        }.contains(kind) &&
+        fee.units != BigInt.zero) {
+      throw const FormatException('拆股或持仓转移的费用请另记独立费用事件');
+    }
+    final trade = {
+      StockEventKind.buy,
+      StockEventKind.sell,
+      StockEventKind.shortSell,
+      StockEventKind.cover,
+    }.contains(kind);
+    if (trade && (q.units <= BigInt.zero || p.units <= BigInt.zero)) {
+      throw const FormatException('成交数量和价格必须大于零');
+    }
+    var movement = InvestmentDecimal.zero;
+    final short = trade
+        ? kind == StockEventKind.shortSell || kind == StockEventKind.cover
+        : event.short;
+    final pos = position(event.securityId, short);
+    final gross = q.moneyProduct(p, digits);
+    switch (kind) {
+      case StockEventKind.buy:
+      case StockEventKind.shortSell:
+        movement = kind == StockEventKind.buy ? -gross - fee : gross - fee;
+        if (kind == StockEventKind.shortSell && movement.units < BigInt.zero) {
+          throw const FormatException('卖空费用超过开仓所得');
+        }
+        pos.quantity = pos.quantity + q;
+        if (pos.cost != null) {
+          pos.cost = pos.cost! + (short ? movement : -movement);
+        }
+      case StockEventKind.sell:
+      case StockEventKind.cover:
+      case StockEventKind.transferOut:
+        if (q.units <= BigInt.zero || q.compareTo(pos.quantity) > 0) {
+          throw const FormatException('平仓或转出数量超过持仓');
+        }
+        final released = pos.cost == null
+            ? null
+            : q.compareTo(pos.quantity) == 0
+            ? pos.cost!
+            : pos.cost!.allocated(q, pos.quantity, digits);
+        if (kind == StockEventKind.transferOut) {
+          if (event.batchId == null ||
+              event.carriedCost != released?.toString()) {
+            throw const FormatException('持仓转移成本或批次不一致');
+          }
+        } else {
+          movement = kind == StockEventKind.sell ? gross - fee : -gross - fee;
+          if (released == null) {
+            complete = false;
+          } else {
+            realized =
+                realized + (short ? released + movement : movement - released);
+          }
+        }
+        pos.quantity = pos.quantity - q;
+        pos.cost = released == null ? null : pos.cost! - released;
+        if (pos.quantity.units == BigInt.zero) {
+          pos.cost = InvestmentDecimal.zero;
+        }
+      case StockEventKind.dividend:
+        movement = p.rounded(digits) - fee;
+        income = income + movement;
+      case StockEventKind.fee:
+        movement = -p.rounded(digits) - fee;
+        income = income + movement;
+      case StockEventKind.split:
+        // 同一股票的多空都随拆股调整，成本总额与现金不变。
+        for (final direction in [false, true]) {
+          final holding = position(event.securityId, direction);
+          holding.quantity = holding.quantity.split(q, p);
+        }
+      case StockEventKind.transferIn:
+        if (event.batchId == null || q.units <= BigInt.zero) {
+          throw const FormatException('持仓转入批次不合法');
+        }
+        final cost = event.carriedCost == null
+            ? null
+            : InvestmentDecimal.parse(event.carriedCost!);
+        if (cost != null && cost.units < BigInt.zero) {
+          throw const FormatException('转入成本不能为负');
+        }
+        if (pos.quantity.units == BigInt.zero) {
+          pos.cost = cost;
+        } else {
+          pos.cost = pos.cost == null || cost == null ? null : pos.cost! + cost;
+        }
+        pos.quantity = pos.quantity + q;
+    }
+    movement.toDouble();
+    cash[event.id] = movement;
+  }
+  for (final entry in portfolio.manualPrices.entries) {
+    if (!securities.containsKey(entry.key) ||
+        InvestmentDecimal.parse(entry.value).units < BigInt.zero) {
+      throw const FormatException('参考价引用或数值不合法');
+    }
+  }
+  return StockProjection(
+    positions: positions.values
+        .where((p) => p.quantity.units != BigInt.zero)
+        .toList(),
+    cashMovements: cash,
+    realized: realized,
+    income: income,
+    realizedComplete: complete,
+  );
+}
+
+/// 按业务时间再按稳定序号升序排列；重放和用户记录列表共用，补录不会打乱时间线。
+int compareStockEvents(StockEvent a, StockEvent b) {
+  final time = a.occurredAt.compareTo(b.occurredAt);
+  return time != 0 ? time : a.sequence.compareTo(b.sequence);
+}
+
+/// 按手填参考价估算所有多空持仓；缺价返回 null，未知成本只影响盈亏完整性。
+/// [projection] 是同一 [portfolio] 的重放结果，避免 UI 与资产汇总各写一套公式。
+({InvestmentDecimal? marketValue, InvestmentDecimal? unrealized}) valueStocks(
+  InvestmentPortfolio portfolio,
+  StockProjection projection,
+) {
+  final digits = CurrencyCatalog.require(portfolio.currencyCode).minorUnit;
+  var market = InvestmentDecimal.zero, unrealized = InvestmentDecimal.zero;
+  var knownCost = true;
+  for (final p in projection.positions) {
+    final price = portfolio.manualPrices[p.securityId];
+    if (price == null) return (marketValue: null, unrealized: null);
+    final value = p.quantity.moneyProduct(
+      InvestmentDecimal.parse(price),
+      digits,
+    );
+    market = market + (p.short ? -value : value);
+    if (p.cost == null) {
+      knownCost = false;
+    } else {
+      unrealized = unrealized + (p.short ? p.cost! - value : value - p.cost!);
+    }
+  }
+  return (marketValue: market, unrealized: knownCost ? unrealized : null);
+}

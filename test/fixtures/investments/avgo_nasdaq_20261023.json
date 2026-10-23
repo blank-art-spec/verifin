@@ -1,0 +1,20 @@
+{
+  "data": {
+    "lastTrade": "LAST TRADE: $323.24 (AS OF OCT 23, 2026)",
+    "table": {
+      "asOf": null,
+      "rows": [
+        {
+          "strike": "325.00",
+          "c_Last": "17.35",
+          "c_Bid": "14.00",
+          "c_Ask": "22.10",
+          "p_Last": "17.85",
+          "p_Bid": "13.95",
+          "p_Ask": "21.90",
+          "drillDownURL": "/market-activity/stocks/avgo/option-chain/call-put-options/avgo--261204c00325000"
+        }
+      ]
+    }
+  }
+}
