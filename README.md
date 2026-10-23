@@ -167,8 +167,8 @@ lib/
 | [`AGENTS.md`](AGENTS.md) | 贡献与 Agent 开发规范（含代码规范·组件化） |
 | [`docs/dev/components.md`](docs/dev/components.md) | 组件清单（写新组件前先查） |
 | [`docs/dev/tech-decisions.md`](docs/dev/tech-decisions.md) | 关键技术决策与选型理由 |
-| [`docs/dev/securities-trading-plan.md`](docs/dev/securities-trading-plan.md) | 证券交易、期权与参考行情开发方案（待实施，含分阶段任务） |
-| [`docs/dev/securities-trading-acceptance.md`](docs/dev/securities-trading-acceptance.md) | 证券功能验收操作与金额基准（待开发后执行） |
+| [`docs/dev/securities-trading-plan.md`](docs/dev/securities-trading-plan.md) | 证券交易、期权与参考行情开发方案（待实施，博通 AVGO 股票及期权优先） |
+| [`docs/dev/securities-trading-acceptance.md`](docs/dev/securities-trading-acceptance.md) | 博通专项流程 B01–B08、证券全面验收 A01–A23 与金额基准（待开发后执行） |
 | [`docs/dev/known-limitations.md`](docs/dev/known-limitations.md) | 已知限制与技术债台账 |
 | [`docs/dev/multi-currency-design.md`](docs/dev/multi-currency-design.md) | 多币种与离线汇率设计、实现结果及验收记录 |
 | [`docs/dev/feedback-system.md`](docs/dev/feedback-system.md) | 应用内轻提示组件、操作结果、队列与迁移规范 |
