@@ -22,6 +22,7 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 - `docs/ui-guidelines.md`：页面骨架、交互、图表和视觉规范。
 - `docs/dev/tech-decisions.md`：数据口径、备份范围和关键技术取舍；个别历史背景可能已被新实现取代，仍需与代码和测试核对。
 - `docs/dev/known-limitations.md`：已接受技术债及触发整改的阈值。
+- `docs/dev/securities-trading-plan.md`、`docs/dev/securities-trading-acceptance.md`：证券交易、期权与参考行情的待实施方案、任务分阶段及手动验收操作。尚未落地，不得当作当前实现或已完成的行情覆盖承诺。
 - `docs/dev/ai-tools.md`：AI 账目查询工具的注册和维护约定。
 - `docs/dev/category-budget-override-design.md`：分类默认预算与单期覆盖的职责、Issue #28 兼容方案和验收范围。
 - `docs/dev/multi-currency-design.md`：多币种基础设计；2026-10-18 的当前父子账户、参考折算、联网汇率和统一还款口径见 `docs/dev/credit-hierarchy-currency.md`，覆盖旧文档的全部统计冻结约定。原币及账户实际金额保持不变；统计优先明确参考额，否则用最新汇率。

@@ -4,6 +4,8 @@
 
 执行规则以 [AGENTS.md](../../AGENTS.md) 为准；这里仅提供源码导航，不重复维护规则。
 
+证券持仓、期权与参考行情目前仍在方案阶段，见 [开发方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。其中拟建模型、接口和页面尚未实现，不属于下表的当前架构。
+
 Veri Fin 仅交付 Android，权威账目在本机 SQLite，无账号或自有服务端。
 正式入口为 `lib/main.dart`；UI 通过 `VeriFinScope` 读取 `VeriFinController`，
 Controller 经 repository 写库。`VeriFinController.create()` 是生产初始化入口；
