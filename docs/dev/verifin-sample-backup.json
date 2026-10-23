@@ -19,6 +19,14 @@
         "isDefault": false,
         "baseCurrencyCode": "CNY",
         "currencySetupStatus": "confirmed"
+      },
+      {
+        "id": "book_investment",
+        "name": "投资账本",
+        "createdAt": "2026-10-23T09:00:00.000",
+        "isDefault": false,
+        "baseCurrencyCode": "CNY",
+        "currencySetupStatus": "confirmed"
       }
     ],
     "activeBookId": "default",
@@ -543,6 +551,48 @@
         "hidden": false,
         "cardLast4": "7788",
         "creditAccountId": "credit_travel_7788"
+      },
+      {
+        "id": "acc_investment_cny",
+        "bookId": "book_investment",
+        "name": "投资账户.CNY",
+        "type": "investment",
+        "groupId": null,
+        "initialBalance": 0.0,
+        "iconCode": "investment",
+        "note": "投资账户的人民币子账户，初始余额为零",
+        "includeInAssets": true,
+        "hidden": false,
+        "currencyCode": "CNY",
+        "creditAccountId": "parent_investment"
+      },
+      {
+        "id": "acc_investment_usd",
+        "bookId": "book_investment",
+        "name": "投资账户.USD",
+        "type": "investment",
+        "groupId": null,
+        "initialBalance": 0.0,
+        "iconCode": "investment",
+        "note": "投资账户的美元子账户，初始余额为零",
+        "includeInAssets": true,
+        "hidden": false,
+        "currencyCode": "USD",
+        "creditAccountId": "parent_investment"
+      },
+      {
+        "id": "acc_investment_hkd",
+        "bookId": "book_investment",
+        "name": "投资账户.HKD",
+        "type": "investment",
+        "groupId": null,
+        "initialBalance": 0.0,
+        "iconCode": "investment",
+        "note": "投资账户的港币子账户，初始余额为零",
+        "includeInAssets": true,
+        "hidden": false,
+        "currencyCode": "HKD",
+        "creditAccountId": "parent_investment"
       }
     ],
     "accountGroups": [
@@ -782,6 +832,15 @@
         "statementDay": 20,
         "dueRuleType": "fixedDay",
         "dueDay": 10
+      },
+      {
+        "id": "parent_investment",
+        "bookId": "book_investment",
+        "name": "投资账户",
+        "institution": "",
+        "cardLast4": "",
+        "currencyCode": "CNY",
+        "dueRuleType": "fixedDay"
       }
     ],
     "balanceAnchors": [
