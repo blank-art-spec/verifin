@@ -7003,4 +7003,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String marketDelayKnown(int minutes) {
     return '来源声明延迟：$minutes 分钟';
   }
+
+  @override
+  String get investHistorySingleObservation => '已保存 1 个观察点；至少保存 2 个有效观察点后显示趋势。';
 }

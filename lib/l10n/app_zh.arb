@@ -3904,5 +3904,6 @@
   "marketClosed": "来源标记：休市",
   "marketHalted": "来源标记：暂停交易",
   "marketDelayKnown": "来源声明延迟：{minutes} 分钟",
-  "@marketDelayKnown": {"placeholders": {"minutes": {"type": "int"}}}
+  "@marketDelayKnown": {"placeholders": {"minutes": {"type": "int"}}},
+  "investHistorySingleObservation": "已保存 1 个观察点；至少保存 2 个有效观察点后显示趋势。"
 }

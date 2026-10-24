@@ -7260,4 +7260,8 @@ class AppLocalizationsEn extends AppLocalizations {
   String marketDelayKnown(int minutes) {
     return 'Source-declared delay: $minutes minutes';
   }
+
+  @override
+  String get investHistorySingleObservation =>
+      'One observation saved. A trend appears after at least two valid observations are saved.';
 }

@@ -56,6 +56,28 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
           ? null
           : normalizeCurrencyAmount(value * s.rateToBase!, s.baseCurrencyCode);
     }).toList();
+    final complete =
+        values.isNotEmpty &&
+        values.every((v) => v != null) &&
+        snapshots.every(
+          (s) => s.baseCurrencyCode == snapshots.first.baseCurrencyCode,
+        );
+
+    /// [date] 是实际观察时点；同日用本地化时分、跨日用月日，完整时间仍留在点按详情中。
+    String axisLabel(DateTime date) {
+      final local = date.toLocal(),
+          first = snapshots.first.capturedAt.toLocal();
+      return DateUtils.isSameDay(local, first) &&
+              DateUtils.isSameDay(snapshots.last.capturedAt.toLocal(), first)
+          ? MaterialLocalizations.of(context).formatTimeOfDay(
+              TimeOfDay.fromDateTime(local),
+              alwaysUse24HourFormat: MediaQuery.alwaysUse24HourFormatOf(
+                context,
+              ),
+            )
+          : l.dateMonthDay(local);
+    }
+
     String money(double value) => formatUserMoney(value, p!.currencyCode);
     return Scaffold(
       body: SafeArea(
@@ -78,35 +100,37 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
                   padding: const EdgeInsets.all(16),
                   child: Text(l.investHistoryEmpty),
                 ),
-              if (values.isNotEmpty &&
-                  values.every((v) => v != null) &&
-                  snapshots.every(
-                    (s) =>
-                        s.baseCurrencyCode == snapshots.first.baseCurrencyCode,
-                  ))
+              // 单点没有趋势，不能交给折线面积图生成一条虚构的下降填充。
+              if (complete && values.length == 1)
+                VeriCard(child: Text(l.investHistorySingleObservation)),
+              if (complete && values.length >= 2)
                 VeriCard(
                   child: SizedBox(
                     height: 170,
-                    child: InteractiveTrendChart(
-                      color: veriRoyal,
-                      values: values.cast<double>(),
-                      xLabels: [
-                        formatQuoteTime(context, snapshots.first.capturedAt),
-                        formatQuoteTime(context, snapshots.last.capturedAt),
-                      ],
-                      tooltipOf: (i) => ChartTooltip(
-                        title: formatQuoteTime(
-                          context,
-                          snapshots[i].capturedAt,
-                        ),
-                        lines: [
-                          ChartTooltipLine(
-                            text: formatUserMoney(
-                              values[i]!,
-                              snapshots.first.baseCurrencyCode,
-                            ),
-                          ),
+                    child: Padding(
+                      // 给两端居中的轴标签留白，避免文字越过卡片边界。
+                      padding: const EdgeInsets.symmetric(horizontal: 16),
+                      child: InteractiveTrendChart(
+                        color: veriRoyal,
+                        values: values.cast<double>(),
+                        xLabels: [
+                          axisLabel(snapshots.first.capturedAt),
+                          axisLabel(snapshots.last.capturedAt),
                         ],
+                        tooltipOf: (i) => ChartTooltip(
+                          title: formatQuoteTime(
+                            context,
+                            snapshots[i].capturedAt,
+                          ),
+                          lines: [
+                            ChartTooltipLine(
+                              text: formatUserMoney(
+                                values[i]!,
+                                snapshots.first.baseCurrencyCode,
+                              ),
+                            ),
+                          ],
+                        ),
                       ),
                     ),
                   ),

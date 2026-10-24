@@ -2738,5 +2738,6 @@
   "marketClosed": "Source status: closed",
   "marketHalted": "Source status: halted",
   "marketDelayKnown": "Source-declared delay: {minutes} minutes",
-  "@marketDelayKnown": {"placeholders": {"minutes": {"type": "int"}}}
+  "@marketDelayKnown": {"placeholders": {"minutes": {"type": "int"}}},
+  "investHistorySingleObservation": "One observation saved. A trend appears after at least two valid observations are saved."
 }

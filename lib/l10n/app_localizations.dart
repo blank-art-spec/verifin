@@ -12709,6 +12709,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'来源声明延迟：{minutes} 分钟'**
   String marketDelayKnown(int minutes);
+
+  /// No description provided for @investHistorySingleObservation.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保存 1 个观察点；至少保存 2 个有效观察点后显示趋势。'**
+  String get investHistorySingleObservation;
 }
 
 class _AppLocalizationsDelegate
