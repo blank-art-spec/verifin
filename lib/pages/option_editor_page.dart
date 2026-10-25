@@ -174,14 +174,15 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     super.dispose();
   }
 
-  /// 构造带稳定测试键的输入；[number] 使用小数键盘，[locked] 保护已有定价身份。
+  /// [key] 定位草稿及测试输入框，[label] 独立占位，避免与前方说明重叠；
+  /// [number] 使用小数键盘，[locked] 保护已有定价身份，修改后仍须重新预览。
   Widget _field(
     String key,
     String label, {
     bool number = false,
     bool locked = false,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
+  }) => InvestmentInputField(
+    label: label,
     child: TextField(
       key: ValueKey('option-$key'),
       controller: _fields[key],
@@ -190,7 +191,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
           ? const TextInputType.numberWithOptions(decimal: true, signed: false)
           : TextInputType.text,
       onChanged: (_) => setState(_invalidate),
-      decoration: investmentInputDecoration(context, label),
+      decoration: investmentInputDecoration(context),
     ),
   );
 

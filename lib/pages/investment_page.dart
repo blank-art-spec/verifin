@@ -767,14 +767,15 @@ class _StockEditorPageState extends State<StockEditorPage> {
     super.dispose();
   }
 
-  /// 创建单个有标签的字段；数值使用小数键盘，参数 key 是草稿字段标识。
+  /// [key] 定位草稿及测试输入框，[label] 独立占位并允许完整换行；
+  /// [numeric] 使用带符号的小数键盘，[readOnly] 保持既有只读规则。
   Widget _field(
     String key,
     String label, {
     bool numeric = false,
     bool readOnly = false,
-  }) => Padding(
-    padding: const EdgeInsets.only(bottom: 12),
+  }) => InvestmentInputField(
+    label: label,
     child: TextField(
       key: ValueKey('stock-$key'),
       controller: _fields[key],
@@ -782,7 +783,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
       keyboardType: numeric
           ? const TextInputType.numberWithOptions(decimal: true, signed: true)
           : TextInputType.text,
-      decoration: investmentInputDecoration(context, label),
+      decoration: investmentInputDecoration(context),
     ),
   );
 

@@ -5,15 +5,49 @@ import 'package:flutter/material.dart';
 import '../app_theme.dart';
 import '../common_widgets.dart';
 
-/// [label] 为本地化字段名；给实色卡片中的输入区使用独立的画布底色，
-/// 固定浮动标签，空值时也能看清可输入范围。聚焦与错误边框沿用应用主题。
-InputDecoration investmentInputDecoration(BuildContext context, String label) =>
+/// [context] 提供当前主题；仅为输入区提供实色底色，聚焦与错误边框沿用主题。
+/// 字段名由 [InvestmentInputField] 单独布局，避免浮动标签越界覆盖上一行说明。
+InputDecoration investmentInputDecoration(BuildContext context) =>
     InputDecoration(
-      labelText: label,
-      floatingLabelBehavior: FloatingLabelBehavior.always,
       filled: true,
       fillColor: Theme.of(context).scaffoldBackgroundColor,
     );
+
+/// 证券表单的字段名与输入区各自占据实际高度，不把标签绘制在输入边界之外。
+class InvestmentInputField extends StatelessWidget {
+  /// [label] 是完整的本地化字段名，可随系统字号换行；[child] 为业务层构造的
+  /// 输入框，保留原控制器、测试键、只读状态、键盘和修改回调，不由展示层持有草稿。
+  const InvestmentInputField({
+    super.key,
+    required this.label,
+    required this.child,
+  });
+  final String label;
+  final TextField child;
+
+  /// 上留 8dp 与说明分隔，标签和输入区间隔 6dp；文字自然测量，禁止固定标签高度。
+  /// 可访问性名称挂在输入框上，视觉标签排除重复朗读，保留原输入编辑语义。
+  @override
+  Widget build(BuildContext context) => Padding(
+    padding: const EdgeInsets.only(top: 8, bottom: 12),
+    child: Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        ExcludeSemantics(
+          child: Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+              height: 1.4,
+            ),
+          ),
+        ),
+        const SizedBox(height: 6),
+        Semantics(label: label, child: child),
+      ],
+    ),
+  );
+}
 
 /// 证券页面的次要按钮与已有主按钮使用相同圆角、内边距和最小触控高度。
 /// [context] 用于继承当前主题；只覆盖形状与尺寸，不改变禁用态和回调。

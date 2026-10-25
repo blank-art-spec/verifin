@@ -79,3 +79,11 @@
 最终静态分析通过；手动构建 diagnostic debug 包成功（最后一轮 35.5 秒），APK SHA-256 为 `8ADA0E3A977355D331896D198A2CEB221EA0192B2764F0DF2E9EC57B83CBF4A2`。覆盖安装后的首次逐表对照确认 23 张表与安装前完全一致、SQLite `quick_check` 为 `ok`，股票及期权示例和原有两份观察点均保留。
 
 实屏复核另将历史图表的日期坐标改为主题次级文字色，提升浅色卡片上的可读性；最后追加的 3 项历史页回归通过。最终保留模拟器在历史估值页，实屏见 `final.png`，期权输入和参考行情见 `option-final.png` / `market-final.png`。
+
+### 同日补充：输入标签覆盖说明文字
+
+用户继续评审截图后确认，期权合约规格和保证金说明仍被下一字段的浮动标签覆盖。原布局测试仅检查溢出异常，未检查绘制区域相交；新增真实期权页面几何断言，在修复前测得标签上沿侵入说明区域 5.25dp。股票与期权共用 `InvestmentInputField`，将字段名作为独立文本测量并允许换行，输入框保留原控制器、只读、键盘、预览失效回调及可访问性名称。
+
+新增回归覆盖 360/393dp、浅/深色及 1.0/1.6 倍字号下说明末行、字段名和输入正文之间的实际间隔。21 项相关页面测试及完整 `lib test` 静态分析通过；本次窄范围修复不重复全量测试，上述 6 项既有失败仍未解决。日志见 `.toolchain/logs/investment-overlap-*.log`，模拟器证据保存到 `build/validation/investment-label-overlap-20261025/`。README、AGENTS、CLAUDE 无需修改；组件清单、设计规范和 CHANGELOG 已同步。
+
+追加可编辑节点读屏名称断言并复跑 2 项回归通过。手动构建 diagnostic debug（38.9 秒）并覆盖安装到既有 emulator-5556，实际复核股票表单、期权交易与合约规格说明，重叠已消除；停留在合约规格页。安装及浏览前后 23 张数据库表逐表一致，`quick_check=ok`，当前应用日志未发现 Flutter 溢出或致命异常，测试数据全部保留。APK SHA-256：`0DF1769D5E789F9B95EF1587016109968D58B93F15F46233C11DDB2CFFAF60B3`。截图见证据目录中的 `option-specification-fixed.png`、`option-trade-fixed.png` 与 `stock-fields-fixed.png`。
