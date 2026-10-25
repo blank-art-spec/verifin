@@ -4,6 +4,7 @@ library;
 import 'package:flutter/material.dart';
 import '../app/calendar_days.dart';
 import '../app/common_widgets.dart';
+import '../app/investments/investment_widgets.dart';
 import '../app/currency_math.dart';
 import '../app/investments/stock_projection.dart';
 import '../app/models.dart';
@@ -189,7 +190,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
           ? const TextInputType.numberWithOptions(decimal: true, signed: false)
           : TextInputType.text,
       onChanged: (_) => setState(_invalidate),
-      decoration: InputDecoration(labelText: label),
+      decoration: investmentInputDecoration(context, label),
     ),
   );
 
@@ -348,7 +349,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
           child: Material(
             color: Colors.transparent,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
                 VeriHeader(
                   title: widget.specificationOnly
@@ -357,267 +358,301 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                   showBack: true,
                 ),
                 const SizedBox(height: 12),
-                Text(l.optionManualHint),
+                InvestmentHint(l.optionManualHint),
                 const SizedBox(height: 12),
-                if (existing.isNotEmpty &&
-                    widget.event == null &&
-                    !widget.specificationOnly)
-                  OutlinedButton(
-                    onPressed: _busy
-                        ? null
-                        : () async {
-                            final selected = await showOptionSheet<String>(
-                              context: context,
-                              title: l.optionSelect,
-                              values: existing.map((s) => s.id).toList(),
-                              selected: _selected ?? existing.first.id,
-                              labelOf: (id) =>
-                                  existing.firstWhere((s) => s.id == id).symbol,
-                            );
-                            if (!mounted || selected == null) return;
-                            setState(
-                              () => _loadContract(
-                                existing.firstWhere((s) => s.id == selected),
-                                p,
-                              ),
-                            );
-                          },
-                    child: Text(l.optionSelect),
-                  ),
-                if (!widget.specificationOnly) ...[
-                  VeriAnchoredChoice<StockEventKind>(
-                    values: const [
-                      StockEventKind.optionBuyOpen,
-                      StockEventKind.optionSellClose,
-                      StockEventKind.optionSellOpen,
-                      StockEventKind.optionBuyClose,
-                      StockEventKind.optionExpire,
-                      StockEventKind.optionCashSettle,
-                      StockEventKind.optionPhysicalSettle,
-                      StockEventKind.optionMargin,
+                InvestmentSection(
+                  title: l.investSecurityDetails,
+                  children: [
+                    if (existing.isNotEmpty &&
+                        widget.event == null &&
+                        !widget.specificationOnly)
+                      OutlinedButton(
+                        style: investmentOutlineButtonStyle(context),
+                        onPressed: _busy
+                            ? null
+                            : () async {
+                                final selected = await showOptionSheet<String>(
+                                  context: context,
+                                  title: l.optionSelect,
+                                  values: existing.map((s) => s.id).toList(),
+                                  selected: _selected ?? existing.first.id,
+                                  labelOf: (id) => existing
+                                      .firstWhere((s) => s.id == id)
+                                      .symbol,
+                                );
+                                if (!mounted || selected == null) return;
+                                setState(
+                                  () => _loadContract(
+                                    existing.firstWhere(
+                                      (s) => s.id == selected,
+                                    ),
+                                    p,
+                                  ),
+                                );
+                              },
+                        child: Text(l.optionSelect),
+                      ),
+                    if (!widget.specificationOnly) ...[
+                      VeriAnchoredChoice<StockEventKind>(
+                        values: const [
+                          StockEventKind.optionBuyOpen,
+                          StockEventKind.optionSellClose,
+                          StockEventKind.optionSellOpen,
+                          StockEventKind.optionBuyClose,
+                          StockEventKind.optionExpire,
+                          StockEventKind.optionCashSettle,
+                          StockEventKind.optionPhysicalSettle,
+                          StockEventKind.optionMargin,
+                        ],
+                        selected: _kind,
+                        idOf: (v) => v.name,
+                        semanticLabel: l.investEventType,
+                        builder: (context, open, active) => SettingsRow(
+                          icon: Icons.swap_horiz,
+                          title: l.investEventType,
+                          trailing: _kind.label(l),
+                          trailingMaxLines: null,
+                          trailingIcon: Icons.unfold_more,
+                          onTap: _busy ? null : open,
+                        ),
+                        labelOf: (v) => v.label(l),
+                        onSelected: _busy
+                            ? (_) {}
+                            : (v) => setState(() {
+                                _kind = v;
+                                _invalidate();
+                              }),
+                      ),
+                      const SizedBox(height: 12),
                     ],
-                    selected: _kind,
-                    idOf: (v) => v.name,
-                    semanticLabel: l.investEventType,
-                    builder: (context, open, active) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(l.investEventType),
-                      trailing: TextButton(
-                        onPressed: _busy ? null : open,
-                        child: Text(_kind.label(l)),
-                      ),
-                    ),
-                    labelOf: (v) => v.label(l),
-                    onSelected: _busy
-                        ? (_) {}
-                        : (v) => setState(() {
-                            _kind = v;
-                            _invalidate();
-                          }),
-                  ),
-                  const SizedBox(height: 12),
-                ],
-                if (!locked)
-                  VeriAnchoredChoice<StockMarket>(
-                    values: StockMarket.values,
-                    selected: _market,
-                    idOf: (v) => v.name,
-                    semanticLabel: l.investMarket,
-                    builder: (context, open, active) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(l.investMarket),
-                      trailing: TextButton(
-                        onPressed: _busy ? null : open,
-                        child: Text(_market.label(l)),
-                      ),
-                    ),
-                    labelOf: (v) => v.label(l),
-                    onSelected: (v) => setState(() {
-                      _market = v;
-                      _invalidate();
-                    }),
-                  ),
-                _field('symbol', l.optionCode, locked: locked),
-                _field('name', l.investName),
-                _field('underlying', l.optionUnderlying, locked: locked),
-                _field('underlyingName', l.optionUnderlyingName),
-                Text(
-                  currencyUnitSubtitle(l, l.investCurrency, p.currencyCode) ??
-                      l.investCurrency,
-                ),
-                if (!locked)
-                  VeriAnchoredChoice<OptionRight>(
-                    values: OptionRight.values,
-                    selected: _right,
-                    idOf: (v) => v.name,
-                    semanticLabel: l.optionCall,
-                    builder: (context, open, active) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(l.optionCode),
-                      trailing: TextButton(
-                        onPressed: _busy ? null : open,
-                        child: Text(_right.label(l)),
-                      ),
-                    ),
-                    labelOf: (v) => v.label(l),
-                    onSelected: (v) => setState(() {
-                      _right = v;
-                      _invalidate();
-                    }),
-                  )
-                else
-                  Text(_right.label(l)),
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(l.optionExpiry),
-                  subtitle: Text(
-                    MaterialLocalizations.of(context).formatFullDate(_expiry),
-                  ),
-                  onTap: locked || _busy
-                      ? null
-                      : () async {
-                          final date = await showEntryDatePicker(
-                            context: context,
-                            initialDateTime: _expiry,
-                          );
-                          if (!mounted || date == null) return;
-                          setState(() {
-                            _expiry = date;
-                            _invalidate();
-                          });
-                        },
-                ),
-                _field('strike', l.optionStrike, number: true, locked: locked),
-                _field(
-                  'multiplier',
-                  l.optionMultiplier,
-                  number: true,
-                  locked: locked,
-                ),
-                VeriAnchoredChoice<OptionSettlement>(
-                  values: OptionSettlement.values,
-                  selected: _settlement,
-                  idOf: (v) => v.name,
-                  semanticLabel: l.optionVerifySpec,
-                  builder: (context, open, active) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l.optionVerifySpec),
-                    trailing: TextButton(
-                      onPressed: _busy ? null : open,
-                      child: Text(_settlement.label(l)),
-                    ),
-                  ),
-                  labelOf: (v) => v.label(l),
-                  onSelected: (v) => setState(() {
-                    _settlement = v;
-                    _invalidate();
-                  }),
-                ),
-                if (_settlement == OptionSettlement.physical) ...[
-                  _field('shares', l.optionDeliverableShares, number: true),
-                  _field('exercise', l.optionExerciseCash, number: true),
-                  Text(l.optionAdjustmentHint),
-                ],
-                _field('source', l.optionSpecification),
-                CheckboxListTile(
-                  contentPadding: EdgeInsets.zero,
-                  value: _specConfirmed,
-                  title: Text(l.optionSpecConfirmed),
-                  onChanged: _busy
-                      ? null
-                      : (v) => setState(() {
-                          _specConfirmed = v ?? false;
+                    if (!locked)
+                      VeriAnchoredChoice<StockMarket>(
+                        values: StockMarket.values,
+                        selected: _market,
+                        idOf: (v) => v.name,
+                        semanticLabel: l.investMarket,
+                        builder: (context, open, active) => SettingsRow(
+                          icon: Icons.public,
+                          title: l.investMarket,
+                          trailing: _market.label(l),
+                          trailingMaxLines: null,
+                          trailingIcon: Icons.unfold_more,
+                          onTap: _busy ? null : open,
+                        ),
+                        labelOf: (v) => v.label(l),
+                        onSelected: (v) => setState(() {
+                          _market = v;
                           _invalidate();
                         }),
+                      ),
+                    _field('symbol', l.optionCode, locked: locked),
+                    _field('name', l.investName),
+                    _field('underlying', l.optionUnderlying, locked: locked),
+                    _field('underlyingName', l.optionUnderlyingName),
+                  ],
                 ),
-                if (!widget.specificationOnly) ...[
-                  if (_kind != StockEventKind.optionMargin)
-                    _field('quantity', l.optionContracts, number: true),
-                  if (!{
-                    StockEventKind.optionExpire,
-                    StockEventKind.optionPhysicalSettle,
-                    StockEventKind.optionMargin,
-                  }.contains(_kind))
-                    _field(
-                      'price',
-                      _kind == StockEventKind.optionCashSettle
-                          ? l.optionActualSettlement
-                          : l.optionPremium,
-                      number: true,
+                const SizedBox(height: 12),
+                InvestmentSection(
+                  title: l.investContractTerms,
+                  children: [
+                    Text(
+                      currencyUnitSubtitle(
+                            l,
+                            l.investCurrency,
+                            p.currencyCode,
+                          ) ??
+                          l.investCurrency,
                     ),
-                  if (_kind != StockEventKind.optionMargin)
-                    _field('fee', l.investFees, number: true),
-                  if (settles) ...[
-                    SwitchListTile(
+                    if (!locked)
+                      VeriAnchoredChoice<OptionRight>(
+                        values: OptionRight.values,
+                        selected: _right,
+                        idOf: (v) => v.name,
+                        semanticLabel: l.optionCall,
+                        builder: (context, open, active) => SettingsRow(
+                          icon: Icons.description_outlined,
+                          title: l.optionRightType,
+                          trailing: _right.label(l),
+                          trailingMaxLines: null,
+                          trailingIcon: Icons.unfold_more,
+                          onTap: _busy ? null : open,
+                        ),
+                        labelOf: (v) => v.label(l),
+                        onSelected: (v) => setState(() {
+                          _right = v;
+                          _invalidate();
+                        }),
+                      )
+                    else
+                      Text(_right.label(l)),
+                    ListTile(
                       contentPadding: EdgeInsets.zero,
-                      value: _short,
-                      title: Text(l.investShortPosition),
-                      onChanged: _busy
+                      title: Text(l.optionExpiry),
+                      subtitle: Text(
+                        MaterialLocalizations.of(
+                          context,
+                        ).formatFullDate(_expiry),
+                      ),
+                      onTap: locked || _busy
                           ? null
-                          : (v) => setState(() {
-                              _short = v;
-                              _invalidate();
-                            }),
+                          : () async {
+                              final date = await showEntryDatePicker(
+                                context: context,
+                                initialDateTime: _expiry,
+                              );
+                              if (!mounted || date == null) return;
+                              setState(() {
+                                _expiry = date;
+                                _invalidate();
+                              });
+                            },
                     ),
+                    _field(
+                      'strike',
+                      l.optionStrike,
+                      number: true,
+                      locked: locked,
+                    ),
+                    _field(
+                      'multiplier',
+                      l.optionMultiplier,
+                      number: true,
+                      locked: locked,
+                    ),
+                    VeriAnchoredChoice<OptionSettlement>(
+                      values: OptionSettlement.values,
+                      selected: _settlement,
+                      idOf: (v) => v.name,
+                      semanticLabel: l.optionVerifySpec,
+                      builder: (context, open, active) => SettingsRow(
+                        icon: Icons.description_outlined,
+                        title: l.optionVerifySpec,
+                        trailing: _settlement.label(l),
+                        trailingMaxLines: null,
+                        trailingIcon: Icons.unfold_more,
+                        onTap: _busy ? null : open,
+                      ),
+                      labelOf: (v) => v.label(l),
+                      onSelected: (v) => setState(() {
+                        _settlement = v;
+                        _invalidate();
+                      }),
+                    ),
+                    if (_settlement == OptionSettlement.physical) ...[
+                      _field('shares', l.optionDeliverableShares, number: true),
+                      _field('exercise', l.optionExerciseCash, number: true),
+                      Text(l.optionAdjustmentHint),
+                    ],
+                    _field('source', l.optionSpecification),
                     CheckboxListTile(
                       contentPadding: EdgeInsets.zero,
-                      value: _confirmed,
-                      title: Text(l.optionSettlementConfirmed),
+                      value: _specConfirmed,
+                      title: Text(l.optionSpecConfirmed),
                       onChanged: _busy
                           ? null
                           : (v) => setState(() {
-                              _confirmed = v ?? false;
+                              _specConfirmed = v ?? false;
                               _invalidate();
                             }),
                     ),
                   ],
-                  if (_kind == StockEventKind.optionPhysicalSettle)
-                    CheckboxListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: _uncovered,
-                      title: Text(l.optionUncoveredConsent),
-                      onChanged: _busy
-                          ? null
-                          : (v) => setState(() {
-                              _uncovered = v ?? false;
-                              _invalidate();
-                            }),
-                    ),
-                  _field('margin', l.optionMarginAfter, number: true),
-                  Text(l.optionMarginHint),
-                  _field('reference', l.investReference, number: true),
-                  _field(
-                    'underlyingPrice',
-                    l.optionUnderlyingReference,
-                    number: true,
+                ),
+                const SizedBox(height: 12),
+                if (!widget.specificationOnly) ...[
+                  InvestmentSection(
+                    title: l.investTradeDetails,
+                    children: [
+                      if (_kind != StockEventKind.optionMargin)
+                        _field('quantity', l.optionContracts, number: true),
+                      if (!{
+                        StockEventKind.optionExpire,
+                        StockEventKind.optionPhysicalSettle,
+                        StockEventKind.optionMargin,
+                      }.contains(_kind))
+                        _field(
+                          'price',
+                          _kind == StockEventKind.optionCashSettle
+                              ? l.optionActualSettlement
+                              : l.optionPremium,
+                          number: true,
+                        ),
+                      if (_kind != StockEventKind.optionMargin)
+                        _field('fee', l.investFees, number: true),
+                      if (settles) ...[
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _short,
+                          title: Text(l.investShortPosition),
+                          onChanged: _busy
+                              ? null
+                              : (v) => setState(() {
+                                  _short = v;
+                                  _invalidate();
+                                }),
+                        ),
+                        CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _confirmed,
+                          title: Text(l.optionSettlementConfirmed),
+                          onChanged: _busy
+                              ? null
+                              : (v) => setState(() {
+                                  _confirmed = v ?? false;
+                                  _invalidate();
+                                }),
+                        ),
+                      ],
+                      if (_kind == StockEventKind.optionPhysicalSettle)
+                        CheckboxListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _uncovered,
+                          title: Text(l.optionUncoveredConsent),
+                          onChanged: _busy
+                              ? null
+                              : (v) => setState(() {
+                                  _uncovered = v ?? false;
+                                  _invalidate();
+                                }),
+                        ),
+                      _field('margin', l.optionMarginAfter, number: true),
+                      Text(l.optionMarginHint),
+                      _field('reference', l.investReference, number: true),
+                      _field(
+                        'underlyingPrice',
+                        l.optionUnderlyingReference,
+                        number: true,
+                      ),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(l.investDate),
+                        subtitle: Text(
+                          '${MaterialLocalizations.of(context).formatFullDate(_date)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_date))}',
+                        ),
+                        onTap: _busy
+                            ? null
+                            : () async {
+                                final day = await showEntryDatePicker(
+                                  context: context,
+                                  initialDateTime: _date,
+                                );
+                                if (!context.mounted || day == null) return;
+                                final time = await showEntryTimePicker(
+                                  context: context,
+                                  initialDateTime: day,
+                                );
+                                if (!mounted || time == null) return;
+                                setState(() {
+                                  _date = time;
+                                  _invalidate();
+                                });
+                              },
+                      ),
+                      _field('note', l.investNote),
+                    ],
                   ),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l.investDate),
-                    subtitle: Text(
-                      '${MaterialLocalizations.of(context).formatFullDate(_date)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_date))}',
-                    ),
-                    onTap: _busy
-                        ? null
-                        : () async {
-                            final day = await showEntryDatePicker(
-                              context: context,
-                              initialDateTime: _date,
-                            );
-                            if (!context.mounted || day == null) return;
-                            final time = await showEntryTimePicker(
-                              context: context,
-                              initialDateTime: day,
-                            );
-                            if (!mounted || time == null) return;
-                            setState(() {
-                              _date = time;
-                              _invalidate();
-                            });
-                          },
-                  ),
-                  _field('note', l.investNote),
+                  const SizedBox(height: 12),
                   OutlinedButton(
+                    style: investmentOutlineButtonStyle(context),
                     onPressed: _busy ? null : () => _makePreview(p),
                     child: Text(l.optionPreview),
                   ),
@@ -635,16 +670,35 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
-                        Text(l.optionPreview),
-                        Text(
-                          '${l.investCash}: ${formatUserMoney(_preview!.cash, p.currencyCode)}',
+                        SectionTitle(title: l.optionPreview),
+                        const SizedBox(height: 8),
+                        DetailInfoRow(
+                          inline: true,
+                          label: l.investCash,
+                          value: formatUserMoney(
+                            _preview!.cash,
+                            p.currencyCode,
+                          ),
                         ),
-                        Text(
-                          '${l.optionMargin}: ${formatUserMoney(_preview!.projection.frozenMargin.toDouble(), p.currencyCode)}',
+                        DetailInfoRow(
+                          inline: true,
+                          label: l.optionMargin,
+                          value: formatUserMoney(
+                            _preview!.projection.frozenMargin.toDouble(),
+                            p.currencyCode,
+                          ),
                         ),
-                        Text(
-                          '${l.investNetValue}: ${value == null ? l.investUnknown : formatUserMoney(_preview!.cash + value.toDouble(), p.currencyCode)}',
+                        DetailInfoRow(
+                          inline: true,
+                          label: l.investNetValue,
+                          value: value == null
+                              ? l.investUnknown
+                              : formatUserMoney(
+                                  _preview!.cash + value.toDouble(),
+                                  p.currencyCode,
+                                ),
                         ),
+                        const Divider(height: 20),
                         for (final holding in _preview!.projection.positions)
                           Text(
                             '${_preview!.portfolio.securities.firstWhere((s) => s.id == holding.securityId).symbol} · ${holding.short ? l.investShortPosition : l.investLong} · ${holding.quantity} · ${l.investCost}: ${holding.cost == null ? l.investUnknown : formatUserMoney(holding.cost!.toDouble(), p.currencyCode)}',

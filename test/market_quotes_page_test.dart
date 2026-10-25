@@ -1,6 +1,7 @@
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:verifin/app/common_widgets.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
@@ -111,6 +112,17 @@ void main() {
     tester.binding.handleAppLifecycleStateChanged(AppLifecycleState.resumed);
     await tester.pumpAndSettle();
     expect(adapter.requests, 1);
+    // 来源状态位于分组下方，按实际用户滚动后核对完整展示。
+    await tester.scrollUntilVisible(
+      find.text('来源声明延迟：15 分钟'),
+      250,
+      scrollable: find
+          .descendant(
+            of: find.byType(MarketQuotesPage),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     expect(find.text('来源标记：休市'), findsOneWidget);
     expect(find.text('来源声明延迟：15 分钟'), findsOneWidget);
     await tester.pumpWidget(const SizedBox.shrink());
@@ -194,8 +206,8 @@ void main() {
     expect(find.textContaining('来源尚未通过自动估值门禁'), findsWidgets);
     expect(
       tester
-          .widget<SwitchListTile>(
-            find.widgetWithText(SwitchListTile, '开启参考行情联网'),
+          .widget<CompactSwitchRow>(
+            find.widgetWithText(CompactSwitchRow, '开启参考行情联网'),
           )
           .onChanged,
       isNull,

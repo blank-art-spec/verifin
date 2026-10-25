@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../app/common_widgets.dart';
+import '../app/investments/investment_widgets.dart';
 import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
 import '../app/feedback.dart';
@@ -120,7 +121,7 @@ class InvestmentPage extends StatelessWidget {
       body: SafeArea(
         child: VeriPage(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [
               VeriHeader(
                 title: l.investTitle,
@@ -246,22 +247,26 @@ class InvestmentPage extends StatelessWidget {
                           ),
                         ],
                       ),
-                      const SizedBox(height: 12),
-                      Text(
-                        '${l.investIncome}：${money(projection.income.toDouble())}',
+                      const Divider(height: 24),
+                      DetailInfoRow(
+                        inline: true,
+                        label: l.investIncome,
+                        value: money(projection.income.toDouble()),
                       ),
                       if (portfolio.securities.any(
                         (s) => s.option != null,
                       )) ...[
-                        Text(
-                          '${l.optionMargin}: ${money(projection.frozenMargin.toDouble())}',
+                        DetailInfoRow(
+                          inline: true,
+                          label: l.optionMargin,
+                          value: money(projection.frozenMargin.toDouble()),
                         ),
-                        Text(
-                          '${l.optionAvailableCash}: ${money(cash - projection.frozenMargin.toDouble())}',
-                        ),
-                        Text(
-                          l.optionMarginHint,
-                          style: Theme.of(context).textTheme.bodySmall,
+                        DetailInfoRow(
+                          inline: true,
+                          label: l.optionAvailableCash,
+                          value: money(
+                            cash - projection.frozenMargin.toDouble(),
+                          ),
                         ),
                       ],
                     ],
@@ -278,6 +283,7 @@ class InvestmentPage extends StatelessWidget {
                       label: Text(l.investNewTrade),
                     ),
                     OutlinedButton(
+                      style: investmentOutlineButtonStyle(context),
                       onPressed: () => Navigator.of(context).push<void>(
                         MaterialPageRoute(
                           builder: (_) =>
@@ -287,6 +293,7 @@ class InvestmentPage extends StatelessWidget {
                       child: Text(l.optionTitle),
                     ),
                     OutlinedButton(
+                      style: investmentOutlineButtonStyle(context),
                       onPressed: () async {
                         final value = await showTextInputDialog(
                           context: context,
@@ -321,17 +328,15 @@ class InvestmentPage extends StatelessWidget {
                   ],
                 ),
                 const SizedBox(height: 10),
-                Text(
+                InvestmentHint(
                   portfolio.marketPriceIds.isEmpty
                       ? l.investManualHint
                       : l.marketEffectiveHint,
-                  style: Theme.of(context).textTheme.bodySmall,
                 ),
+                if (portfolio.securities.any((s) => s.option != null))
+                  InvestmentHint(l.optionMarginHint),
                 const SizedBox(height: 16),
-                Text(
-                  l.investPositions,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                SectionTitle(title: l.investPositions),
                 const SizedBox(height: 8),
                 if (projection.positions.isEmpty)
                   VeriCard(child: Text(l.investEmpty)),
@@ -350,10 +355,7 @@ class InvestmentPage extends StatelessWidget {
                   const SizedBox(height: 8),
                 ],
                 const SizedBox(height: 14),
-                Text(
-                  l.investRecords,
-                  style: Theme.of(context).textTheme.titleMedium,
-                ),
+                SectionTitle(title: l.investRecords),
                 const SizedBox(height: 8),
                 for (final event in [
                   ...portfolio.events,
@@ -369,11 +371,19 @@ class InvestmentPage extends StatelessWidget {
                           '${event.kind.label(l)} · ${portfolio.securities.firstWhere((s) => s.id == event.securityId).symbol}',
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
+                        const SizedBox(height: 8),
                         Text(_eventDetails(event, l, account.currencyCode)),
+                        const SizedBox(height: 6),
                         Text(
                           MaterialLocalizations.of(
                             context,
                           ).formatFullDate(event.occurredAt),
+                          style: Theme.of(context).textTheme.bodySmall
+                              ?.copyWith(
+                                color: Theme.of(
+                                  context,
+                                ).colorScheme.onSurfaceVariant,
+                              ),
                         ),
                         if (event.note.isNotEmpty) Text(event.note),
                       ],
@@ -383,10 +393,7 @@ class InvestmentPage extends StatelessWidget {
                 ],
               ],
               const SizedBox(height: 12),
-              Text(
-                l.investNoOptions,
-                style: Theme.of(context).textTheme.bodySmall,
-              ),
+              InvestmentHint(l.investNoOptions),
             ],
           ),
         ),
@@ -441,7 +448,10 @@ class _StockPositionCard extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+          // 长合约名称换行时，方向仍与标题首行基线对齐。
           Row(
+            crossAxisAlignment: CrossAxisAlignment.baseline,
+            textBaseline: TextBaseline.alphabetic,
             children: [
               Expanded(
                 child: Text(
@@ -449,19 +459,45 @@ class _StockPositionCard extends StatelessWidget {
                   style: Theme.of(context).textTheme.titleMedium,
                 ),
               ),
-              Text(position.short ? l.investShortPosition : l.investLong),
+              const SizedBox(width: 12),
+              Text(
+                position.short ? l.investShortPosition : l.investLong,
+                style: Theme.of(context).textTheme.labelLarge,
+              ),
             ],
           ),
-          const SizedBox(height: 6),
+          const SizedBox(height: 8),
           Text(
-            '${security.market.label(l)} · ${security.option == null ? l.investQuantity : l.optionContracts} ${position.quantity}',
+            security.market.label(l),
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          ),
+          const Divider(height: 20),
+          DetailInfoRow(
+            inline: true,
+            label: security.option == null
+                ? l.investQuantity
+                : l.optionContracts,
+            value: position.quantity.toString(),
           ),
           if (security.option != null) ...[
-            Text(
-              '${security.option!.right.label(l)} · ${l.optionExpiry}: ${MaterialLocalizations.of(context).formatFullDate(DateTime.parse(security.option!.expiry))}',
+            DetailInfoRow(
+              inline: true,
+              label: l.optionRightType,
+              value: security.option!.right.label(l),
             ),
-            Text(
-              '${l.optionMultiplier}: ${security.option!.premiumMultiplier}',
+            DetailInfoRow(
+              inline: true,
+              label: l.optionExpiry,
+              value: MaterialLocalizations.of(
+                context,
+              ).formatMediumDate(DateTime.parse(security.option!.expiry)),
+            ),
+            DetailInfoRow(
+              inline: true,
+              label: l.optionMultiplier,
+              value: security.option!.premiumMultiplier,
             ),
             if (!security.option!.confirmed ||
                 security.option!.settlement == OptionSettlement.unsupported ||
@@ -470,30 +506,46 @@ class _StockPositionCard extends StatelessWidget {
                     .investmentProjection(accountId)!
                     .optionReviews
                     .contains(security.id))
-              Text(l.optionPending),
+              InvestmentHint(l.optionPending),
           ],
-          Text(
-            '${l.investCost}：${position.cost == null ? l.investUnknown : formatUserMoney(position.cost!.toDouble(), portfolio.currencyCode)}',
+          DetailInfoRow(
+            inline: true,
+            label: l.investCost,
+            value: position.cost == null
+                ? l.investUnknown
+                : formatUserMoney(
+                    position.cost!.toDouble(),
+                    portfolio.currencyCode,
+                  ),
           ),
-          Text(
-            '${quoteReference == null ? l.investReference : l.marketEffectivePrice}：${price == null ? l.investUnknown : formatUserSecurityPrice(price, portfolio.currencyCode)}',
+          DetailInfoRow(
+            inline: true,
+            label: quoteReference == null
+                ? l.investReference
+                : l.marketEffectivePrice,
+            value: price == null
+                ? l.investUnknown
+                : formatUserSecurityPrice(price, portfolio.currencyCode),
           ),
           if (quoteReference != null)
-            Text(
+            InvestmentHint(
               '${quote!.source} · ${l.marketQuoteTime}: ${formatQuoteTime(context, quoteReference.time)}',
             )
           else if (portfolio.marketPriceIds.contains(security.id))
-            Text(l.marketNoQuote),
-          Text(
-            '${l.investUnrealized}：${pnl == null ? l.investUnknown : formatSignedUserMoney(pnl.toDouble(), portfolio.currencyCode)}',
-            style: TextStyle(
-              color: accountBalanceColor(
-                context,
-                c.accounts.firstWhere((a) => a.id == accountId),
-                pnl?.toDouble() ?? 0,
-              ),
+            InvestmentHint(l.marketNoQuote),
+          DetailInfoRow(
+            inline: true,
+            label: l.investUnrealized,
+            value: pnl == null
+                ? l.investUnknown
+                : formatSignedUserMoney(pnl.toDouble(), portfolio.currencyCode),
+            valueColor: accountBalanceColor(
+              context,
+              c.accounts.firstWhere((a) => a.id == accountId),
+              pnl?.toDouble() ?? 0,
             ),
           ),
+          const Divider(height: 20),
           Wrap(
             spacing: 4,
             children: [
@@ -730,7 +782,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
       keyboardType: numeric
           ? const TextInputType.numberWithOptions(decimal: true, signed: true)
           : TextInputType.text,
-      decoration: InputDecoration(labelText: label),
+      decoration: investmentInputDecoration(context, label),
     ),
   );
 
@@ -869,7 +921,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
           child: Material(
             type: MaterialType.transparency,
             child: ListView(
-              padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
                 VeriHeader(
                   title: widget.setup
@@ -885,165 +937,181 @@ class _StockEditorPageState extends State<StockEditorPage> {
                   const SizedBox(height: 12),
                   _field('cash', l.investOpeningCash, numeric: true),
                 ],
-                if (!widget.setup && !widget.transfer)
-                  VeriAnchoredChoice<StockEventKind>(
-                    values: const [
-                      StockEventKind.buy,
-                      StockEventKind.sell,
-                      StockEventKind.shortSell,
-                      StockEventKind.cover,
-                      StockEventKind.dividend,
-                      StockEventKind.fee,
-                      StockEventKind.split,
-                    ],
-                    selected: _kind,
-                    idOf: (v) => v.name,
-                    labelOf: (v) => v.label(l),
-                    onSelected: (v) => setState(() => _kind = v),
-                    semanticLabel: l.investEventType,
-                    builder: (context, open, active) => ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(l.investEventType),
-                      trailing: TextButton(
-                        onPressed: open,
-                        child: Text(_kind.label(l)),
+                InvestmentSection(
+                  title: l.investSecurityDetails,
+                  children: [
+                    if (!widget.setup && !widget.transfer)
+                      VeriAnchoredChoice<StockEventKind>(
+                        values: const [
+                          StockEventKind.buy,
+                          StockEventKind.sell,
+                          StockEventKind.shortSell,
+                          StockEventKind.cover,
+                          StockEventKind.dividend,
+                          StockEventKind.fee,
+                          StockEventKind.split,
+                        ],
+                        selected: _kind,
+                        idOf: (v) => v.name,
+                        labelOf: (v) => v.label(l),
+                        onSelected: (v) => setState(() => _kind = v),
+                        semanticLabel: l.investEventType,
+                        builder: (context, open, active) => SettingsRow(
+                          icon: Icons.swap_horiz,
+                          title: l.investEventType,
+                          trailing: _kind.label(l),
+                          trailingMaxLines: null,
+                          trailingIcon: Icons.unfold_more,
+                          onTap: open,
+                        ),
+                      ),
+                    VeriAnchoredChoice<StockMarket>(
+                      values: StockMarket.values,
+                      selected: _market,
+                      idOf: (v) => v.name,
+                      labelOf: (v) => v.label(l),
+                      onSelected: (v) => setState(() => _market = v),
+                      semanticLabel: l.investMarket,
+                      builder: (context, open, active) => SettingsRow(
+                        icon: Icons.public,
+                        title: l.investMarket,
+                        trailing: _market.label(l),
+                        trailingMaxLines: null,
+                        trailingIcon: Icons.unfold_more,
+                        onTap: widget.transfer || widget.event != null
+                            ? null
+                            : open,
                       ),
                     ),
-                  ),
-                VeriAnchoredChoice<StockMarket>(
-                  values: StockMarket.values,
-                  selected: _market,
-                  idOf: (v) => v.name,
-                  labelOf: (v) => v.label(l),
-                  onSelected: (v) => setState(() => _market = v),
-                  semanticLabel: l.investMarket,
-                  builder: (context, open, active) => ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l.investMarket),
-                    trailing: TextButton(
-                      onPressed: widget.transfer || widget.event != null
-                          ? null
-                          : open,
-                      child: Text(_market.label(l)),
+                    _field(
+                      'symbol',
+                      l.investSymbol,
+                      readOnly: widget.transfer || widget.event != null,
                     ),
-                  ),
+                    _field('name', l.investName, readOnly: widget.transfer),
+                  ],
                 ),
-                _field(
-                  'symbol',
-                  l.investSymbol,
-                  readOnly: widget.transfer || widget.event != null,
-                ),
-                _field('name', l.investName, readOnly: widget.transfer),
-                if (widget.setup ||
-                    widget.transfer ||
-                    !{
-                      StockEventKind.dividend,
-                      StockEventKind.fee,
-                    }.contains(_kind))
-                  _field(
-                    'quantity',
-                    widget.setup
-                        ? l.investOpeningQuantity
-                        : _kind == StockEventKind.split
-                        ? l.investSplitNew
-                        : l.investQuantity,
-                    numeric: true,
-                  ),
-                if (widget.setup) ...[
-                  _field('cost', l.investOpeningCost, numeric: true),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _short,
-                    onChanged: (v) => setState(() => _short = v),
-                    title: Text(l.investShortPosition),
-                  ),
-                  SwitchListTile(
-                    contentPadding: EdgeInsets.zero,
-                    value: _financing,
-                    onChanged: (v) => setState(() => _financing = v),
-                    title: Text(l.investFinance),
-                  ),
-                ],
-                if (!widget.setup && !widget.transfer) ...[
-                  _field('price', switch (_kind) {
-                    StockEventKind.dividend ||
-                    StockEventKind.fee => l.investTotalAmount,
-                    StockEventKind.split => l.investSplitOld,
-                    _ => l.investPrice,
-                  }, numeric: true),
-                  if (_kind != StockEventKind.split)
-                    _field('fee', l.investFees, numeric: true),
-                  if (_kind == StockEventKind.split)
-                    Text(
-                      l.investSplitHint,
-                      style: Theme.of(context).textTheme.bodySmall,
+                const SizedBox(height: 12),
+                InvestmentSection(
+                  title: l.investTradeDetails,
+                  children: [
+                    if (widget.setup ||
+                        widget.transfer ||
+                        !{
+                          StockEventKind.dividend,
+                          StockEventKind.fee,
+                        }.contains(_kind))
+                      _field(
+                        'quantity',
+                        widget.setup
+                            ? l.investOpeningQuantity
+                            : _kind == StockEventKind.split
+                            ? l.investSplitNew
+                            : l.investQuantity,
+                        numeric: true,
+                      ),
+                    if (widget.setup) ...[
+                      _field('cost', l.investOpeningCost, numeric: true),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _short,
+                        onChanged: (v) => setState(() => _short = v),
+                        title: Text(l.investShortPosition),
+                      ),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _financing,
+                        onChanged: (v) => setState(() => _financing = v),
+                        title: Text(l.investFinance),
+                      ),
+                    ],
+                    if (!widget.setup && !widget.transfer) ...[
+                      _field('price', switch (_kind) {
+                        StockEventKind.dividend ||
+                        StockEventKind.fee => l.investTotalAmount,
+                        StockEventKind.split => l.investSplitOld,
+                        _ => l.investPrice,
+                      }, numeric: true),
+                      if (_kind != StockEventKind.split)
+                        _field('fee', l.investFees, numeric: true),
+                      if (_kind == StockEventKind.split)
+                        Text(
+                          l.investSplitHint,
+                          style: Theme.of(context).textTheme.bodySmall,
+                        ),
+                    ],
+                    if (!widget.transfer) ...[
+                      const SizedBox(height: 12),
+                      _field('reference', l.investReference, numeric: true),
+                      Text(
+                        l.investReferenceConsent,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
+                    ],
+                    if (widget.transfer) ...[
+                      Text(l.investTransferHint),
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(l.investTarget),
+                        subtitle: Text(
+                          targets
+                                  .where((a) => a.id == _target)
+                                  .firstOrNull
+                                  ?.name ??
+                              l.investTransferHint,
+                        ),
+                        trailing: const Icon(Icons.chevron_right),
+                        onTap: targets.isEmpty
+                            ? null
+                            : () async {
+                                final selected = await showOptionSheet<String>(
+                                  context: context,
+                                  title: l.investTarget,
+                                  values: targets.map((a) => a.id).toList(),
+                                  selected: _target ?? targets.first.id,
+                                  labelOf: (id) => targets
+                                      .firstWhere((a) => a.id == id)
+                                      .name,
+                                  showSelectedMarker: _target != null,
+                                );
+                                if (!mounted || selected == null) {
+                                  return;
+                                }
+                                setState(() => _target = selected);
+                              },
+                      ),
+                      SwitchListTile(
+                        value: _short,
+                        onChanged: (v) => setState(() => _short = v),
+                        title: Text(l.investShortPosition),
+                      ),
+                    ],
+                    ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      title: Text(
+                        widget.setup ? l.investOpeningDate : l.investDate,
+                      ),
+                      subtitle: Text(
+                        '${MaterialLocalizations.of(context).formatFullDate(_date)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_date))}',
+                      ),
+                      onTap: () async {
+                        final day = await showEntryDatePicker(
+                          context: context,
+                          initialDateTime: _date,
+                        );
+                        if (!context.mounted || day == null) return;
+                        final time = await showEntryTimePicker(
+                          context: context,
+                          initialDateTime: day,
+                        );
+                        if (!mounted || time == null) return;
+                        setState(() => _date = time);
+                      },
                     ),
-                ],
-                if (!widget.transfer) ...[
-                  const SizedBox(height: 12),
-                  _field('reference', l.investReference, numeric: true),
-                  Text(
-                    l.investReferenceConsent,
-                    style: Theme.of(context).textTheme.bodySmall,
-                  ),
-                ],
-                if (widget.transfer) ...[
-                  Text(l.investTransferHint),
-                  ListTile(
-                    contentPadding: EdgeInsets.zero,
-                    title: Text(l.investTarget),
-                    subtitle: Text(
-                      targets.where((a) => a.id == _target).firstOrNull?.name ??
-                          l.investTransferHint,
-                    ),
-                    trailing: const Icon(Icons.chevron_right),
-                    onTap: targets.isEmpty
-                        ? null
-                        : () async {
-                            final selected = await showOptionSheet<String>(
-                              context: context,
-                              title: l.investTarget,
-                              values: targets.map((a) => a.id).toList(),
-                              selected: _target ?? targets.first.id,
-                              labelOf: (id) =>
-                                  targets.firstWhere((a) => a.id == id).name,
-                              showSelectedMarker: _target != null,
-                            );
-                            if (!mounted || selected == null) {
-                              return;
-                            }
-                            setState(() => _target = selected);
-                          },
-                  ),
-                  SwitchListTile(
-                    value: _short,
-                    onChanged: (v) => setState(() => _short = v),
-                    title: Text(l.investShortPosition),
-                  ),
-                ],
-                ListTile(
-                  contentPadding: EdgeInsets.zero,
-                  title: Text(
-                    widget.setup ? l.investOpeningDate : l.investDate,
-                  ),
-                  subtitle: Text(
-                    '${MaterialLocalizations.of(context).formatFullDate(_date)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_date))}',
-                  ),
-                  onTap: () async {
-                    final day = await showEntryDatePicker(
-                      context: context,
-                      initialDateTime: _date,
-                    );
-                    if (!context.mounted || day == null) return;
-                    final time = await showEntryTimePicker(
-                      context: context,
-                      initialDateTime: day,
-                    );
-                    if (!mounted || time == null) return;
-                    setState(() => _date = time);
-                  },
+                    _field('note', l.investNote),
+                  ],
                 ),
-                _field('note', l.investNote),
+                const SizedBox(height: 16),
                 if (_error != null)
                   Padding(
                     padding: const EdgeInsets.symmetric(vertical: 12),
@@ -1145,11 +1213,11 @@ class _AvgoProbePageState extends State<AvgoProbePage> {
       body: SafeArea(
         child: VeriPage(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [
               VeriHeader(title: l.investProbe, showBack: true),
               const SizedBox(height: 12),
-              Text(l.investProbeConsent),
+              InvestmentHint(l.investProbeConsent),
               const SizedBox(height: 12),
               FilledButton(
                 onPressed: _running ? null : _run,
@@ -1189,8 +1257,8 @@ class _AvgoProbePageState extends State<AvgoProbePage> {
                 ),
                 const SizedBox(height: 10),
               ],
-              Text(l.investProbeResearch),
-              Text(l.investProbeSpecsUnknown),
+              InvestmentHint(l.investProbeResearch),
+              InvestmentHint(l.investProbeSpecsUnknown),
             ],
           ),
         ),

@@ -66,6 +66,16 @@ void main() {
     await tester.pumpAndSettle();
     expect(c.investmentFor(account.id), isNotNull);
     expect(find.text('参考净值'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('暂无证券持仓'),
+      200,
+      scrollable: find
+          .descendant(
+            of: find.byType(InvestmentPage),
+            matching: find.byType(Scrollable),
+          )
+          .first,
+    );
     expect(find.text('暂无证券持仓'), findsOneWidget);
     expect(tester.takeException(), isNull);
   });

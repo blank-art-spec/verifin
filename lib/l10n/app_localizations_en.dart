@@ -7264,4 +7264,22 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get investHistorySingleObservation =>
       'One observation saved. A trend appears after at least two valid observations are saved.';
+
+  @override
+  String get investSecurityDetails => 'Security details';
+
+  @override
+  String get investTradeDetails => 'Trade details';
+
+  @override
+  String get investContractTerms => 'Contract terms';
+
+  @override
+  String get investValuationBasis => 'Valuation basis';
+
+  @override
+  String get marketAwaitingReview => 'Pending review';
+
+  @override
+  String get optionRightType => 'Option type';
 }

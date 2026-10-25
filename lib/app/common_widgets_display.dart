@@ -90,22 +90,73 @@ class FilterPill extends StatelessWidget {
 }
 
 class DetailInfoRow extends StatelessWidget {
+  /// [label] 为字段名，[value] 为完整内容；[inline] 在普通字号下左右对齐，
+  /// 窄容器或大字号自动上下排列。[valueColor] 仅供调用方传入已解析的语义色。
+  /// 默认保留原有纵向详情样式，避免改变其他页面。
   const DetailInfoRow({
     super.key,
     required this.label,
     required this.value,
     this.placeholder = false,
     this.onTap,
+    this.inline = false,
+    this.valueColor,
   });
 
   final String label;
   final String value;
   final bool placeholder;
   final VoidCallback? onTap;
+  final bool inline;
+  final Color? valueColor;
 
+  /// 根据可用宽度与系统文字缩放分配标签和值；不省略金额或长合约代码。
   @override
   Widget build(BuildContext context) {
     final textColor = Theme.of(context).colorScheme.onSurface;
+    if (inline) {
+      return LayoutBuilder(
+        builder: (context, constraints) {
+          final stacked =
+              constraints.maxWidth < 280 ||
+              MediaQuery.textScalerOf(context).scale(13) > 18;
+          final labelText = Text(
+            label,
+            style: Theme.of(context).textTheme.bodySmall?.copyWith(
+              color: Theme.of(context).colorScheme.onSurfaceVariant,
+            ),
+          );
+          final valueText = Text(
+            value,
+            textAlign: stacked ? TextAlign.start : TextAlign.end,
+            style: Theme.of(context).textTheme.bodyMedium?.copyWith(
+              color: valueColor ?? textColor,
+              fontWeight: FontWeight.w600,
+            ),
+          );
+          final content = Padding(
+            padding: const EdgeInsets.symmetric(vertical: 5),
+            child: stacked
+                ? Column(
+                    crossAxisAlignment: CrossAxisAlignment.stretch,
+                    children: [labelText, const SizedBox(height: 4), valueText],
+                  )
+                : Row(
+                    crossAxisAlignment: CrossAxisAlignment.baseline,
+                    textBaseline: TextBaseline.alphabetic,
+                    children: [
+                      Expanded(flex: 4, child: labelText),
+                      const SizedBox(width: 12),
+                      Expanded(flex: 6, child: valueText),
+                    ],
+                  ),
+          );
+          return onTap == null
+              ? content
+              : InkWell(onTap: onTap, child: content);
+        },
+      );
+    }
     final content = Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[

@@ -4,6 +4,7 @@ library;
 import 'dart:async';
 import 'package:flutter/material.dart';
 import '../app/common_widgets.dart';
+import '../app/investments/investment_widgets.dart';
 import '../app/currency_math.dart';
 import '../app/feedback.dart';
 import '../app/investments/investment_quote_sync.dart';
@@ -163,50 +164,65 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
               builder: (context, state, child) {
                 final quotes = sync.quotesFor(p);
                 return ListView(
-                  padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+                  padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                   children: [
                     VeriHeader(title: l.marketTitle, showBack: true),
                     const SizedBox(height: 12),
-                    Text(l.marketConsent),
-                    if (!sync.client.hasApprovedSources)
-                      VeriCard(child: Text(l.marketGatePending)),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: state.enabled,
-                      title: Text(l.marketEnable),
-                      onChanged: _saving || !sync.client.hasApprovedSources
-                          ? null
-                          : (v) => _configure(v, state.automatic),
+                    InvestmentHint(l.marketConsent),
+                    const SizedBox(height: 8),
+                    InvestmentSection(
+                      title: l.marketTitle,
+                      children: [
+                        if (!sync.client.hasApprovedSources)
+                          InvestmentHint(l.marketGatePending),
+                        CompactSwitchRow(
+                          icon: Icons.cloud_outlined,
+                          value: state.enabled,
+                          title: Text(l.marketEnable),
+                          onChanged: _saving || !sync.client.hasApprovedSources
+                              ? null
+                              : (v) => _configure(v, state.automatic),
+                        ),
+                        CompactSwitchRow(
+                          icon: Icons.autorenew,
+                          value: state.automatic,
+                          title: Text(l.marketAutomatic),
+                          onChanged: _saving || !state.enabled
+                              ? null
+                              : (v) => _configure(state.enabled, v),
+                        ),
+                        FilledButton(
+                          onPressed:
+                              !state.enabled ||
+                                  state.status == QuoteSyncStatus.loading
+                              ? null
+                              : _refresh,
+                          child: Text(l.marketRefresh),
+                        ),
+                        const SizedBox(height: 8),
+                        InvestmentHint(state.status.label(l)),
+                        if (state.attemptedAt != null)
+                          Text(
+                            '${l.marketAttempt}: ${formatQuoteTime(context, state.attemptedAt!)}',
+                          ),
+                        if (state.cooldownUntil != null)
+                          Text(
+                            '${l.marketNextRefresh}: ${formatQuoteTime(context, state.cooldownUntil!)}',
+                          ),
+                      ],
                     ),
-                    SwitchListTile(
-                      contentPadding: EdgeInsets.zero,
-                      value: state.automatic,
-                      title: Text(l.marketAutomatic),
-                      onChanged: _saving || !state.enabled
-                          ? null
-                          : (v) => _configure(state.enabled, v),
-                    ),
-                    FilledButton(
-                      onPressed:
-                          !state.enabled ||
-                              state.status == QuoteSyncStatus.loading
-                          ? null
-                          : _refresh,
-                      child: Text(l.marketRefresh),
-                    ),
-                    Text(state.status.label(l)),
-                    if (state.attemptedAt != null)
-                      Text(
-                        '${l.marketAttempt}: ${formatQuoteTime(context, state.attemptedAt!)}',
-                      ),
-                    if (state.cooldownUntil != null)
-                      Text(
-                        '${l.marketNextRefresh}: ${formatQuoteTime(context, state.cooldownUntil!)}',
-                      ),
                     const SizedBox(height: 12),
-                    Text(l.marketSourceReview),
-                    for (final source in MarketQuoteClient.pendingSources)
-                      Text('${source.id} · ${l.marketGatePending}'),
+                    InvestmentSection(
+                      title: l.marketSourceReview,
+                      children: [
+                        for (final source in MarketQuoteClient.pendingSources)
+                          DetailInfoRow(
+                            inline: true,
+                            label: source.id,
+                            value: l.marketAwaitingReview,
+                          ),
+                      ],
+                    ),
                     for (final s in p.securities.where(
                       (s) => held.contains(s.id),
                     )) ...[
@@ -215,7 +231,17 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                         child: Column(
                           crossAxisAlignment: CrossAxisAlignment.start,
                           children: [
-                            Text('${s.name} · ${s.symbol}'),
+                            Text(
+                              s.name,
+                              style: Theme.of(context).textTheme.titleMedium
+                                  ?.copyWith(fontWeight: FontWeight.w700),
+                            ),
+                            const SizedBox(height: 4),
+                            Text(
+                              s.symbol,
+                              style: Theme.of(context).textTheme.bodySmall,
+                            ),
+                            const SizedBox(height: 8),
                             // 卡片已有实色表面，直接绘制文字和开关，避免 ListTile 墨水被卡片遮住。
                             Row(
                               children: [
@@ -265,9 +291,16 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                                   q.delayMinutes == null)
                                 Text(l.marketStateUnknown),
                             ] else
-                              Text(l.marketNoQuote),
-                            Text(
-                              '${l.marketManualFallback}: ${p.manualPrices[s.id] == null ? l.investUnknown : formatUserSecurityPrice(p.manualPrices[s.id]!, p.currencyCode)}',
+                              InvestmentHint(l.marketNoQuote),
+                            DetailInfoRow(
+                              inline: true,
+                              label: l.marketManualFallback,
+                              value: p.manualPrices[s.id] == null
+                                  ? l.investUnknown
+                                  : formatUserSecurityPrice(
+                                      p.manualPrices[s.id]!,
+                                      p.currencyCode,
+                                    ),
                             ),
                           ],
                         ),

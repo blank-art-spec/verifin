@@ -12715,6 +12715,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已保存 1 个观察点；至少保存 2 个有效观察点后显示趋势。'**
   String get investHistorySingleObservation;
+
+  /// No description provided for @investSecurityDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'证券资料'**
+  String get investSecurityDetails;
+
+  /// No description provided for @investTradeDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'交易资料'**
+  String get investTradeDetails;
+
+  /// No description provided for @investContractTerms.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约条款'**
+  String get investContractTerms;
+
+  /// No description provided for @investValuationBasis.
+  ///
+  /// In zh, this message translates to:
+  /// **'估值依据'**
+  String get investValuationBasis;
+
+  /// No description provided for @marketAwaitingReview.
+  ///
+  /// In zh, this message translates to:
+  /// **'待核对'**
+  String get marketAwaitingReview;
+
+  /// No description provided for @optionRightType.
+  ///
+  /// In zh, this message translates to:
+  /// **'期权类型'**
+  String get optionRightType;
 }
 
 class _AppLocalizationsDelegate

@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import '../app/app_theme.dart';
 import '../app/chart_painters.dart';
 import '../app/common_widgets.dart';
+import '../app/investments/investment_widgets.dart';
 import '../app/currency_math.dart';
 import '../app/feedback.dart';
 import '../app/investments/quote_format.dart';
@@ -83,11 +84,11 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
       body: SafeArea(
         child: VeriPage(
           child: ListView(
-            padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [
               VeriHeader(title: l.investHistory, showBack: true),
               const SizedBox(height: 12),
-              Text(l.investHistoryHint),
+              InvestmentHint(l.investHistoryHint),
               const SizedBox(height: 12),
               FilledButton.icon(
                 key: const Key('capture_investment_valuation'),
@@ -95,6 +96,7 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
                 icon: const Icon(Icons.bookmark_add_outlined),
                 label: Text(l.investHistoryCapture),
               ),
+              const SizedBox(height: 16),
               if (snapshots.isEmpty)
                 Padding(
                   padding: const EdgeInsets.all(16),
@@ -112,6 +114,10 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
                       padding: const EdgeInsets.symmetric(horizontal: 16),
                       child: InteractiveTrendChart(
                         color: veriRoyal,
+                        // 日期坐标使用主题次级文字色，避免浅色卡片上的默认淡灰难以阅读。
+                        labelColor: Theme.of(
+                          context,
+                        ).colorScheme.onSurfaceVariant,
                         values: values.cast<double>(),
                         xLabels: [
                           axisLabel(snapshots.first.capturedAt),
@@ -141,6 +147,7 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
                         s.baseCurrencyCode != snapshots.first.baseCurrencyCode,
                   ))
                 VeriCard(child: Text(l.investHistoryGap)),
+              const SizedBox(height: 16),
               for (final s in snapshots.reversed)
                 Builder(
                   builder: (context) {
@@ -149,37 +156,103 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
                           s,
                         ),
                         parts = value?.amounts;
-                    return VeriCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
+                    return Padding(
+                      padding: const EdgeInsets.only(bottom: 12),
+                      child: InvestmentSection(
+                        title: formatQuoteTime(context, s.capturedAt),
                         children: [
-                          Text(
-                            formatQuoteTime(context, s.capturedAt),
-                            style: Theme.of(context).textTheme.titleMedium,
-                          ),
-                          const SizedBox(height: 8),
                           if (parts == null)
-                            Text(l.investHistoryInvalid)
+                            InvestmentHint(l.investHistoryInvalid)
                           else ...[
-                            Text('${l.investNetValue}: ${money(parts.net)}'),
-                            Text('${l.investCash}: ${money(value!.cash)}'),
-                            Text(
-                              '${l.metricTotalAssets}: ${money(parts.assets)} · ${l.aiStatTotalLiabilities}: ${money(parts.liabilities)}',
+                            DetailInfoRow(
+                              inline: true,
+                              label: l.investNetValue,
+                              value: money(parts.net),
                             ),
-                            Text('${l.optionMargin}: ${money(value.frozen)}'),
+                            DetailInfoRow(
+                              inline: true,
+                              label: l.investCash,
+                              value: money(value!.cash),
+                            ),
+                            DetailInfoRow(
+                              inline: true,
+                              label: l.metricTotalAssets,
+                              value: money(parts.assets),
+                            ),
+                            DetailInfoRow(
+                              inline: true,
+                              label: l.aiStatTotalLiabilities,
+                              value: money(parts.liabilities),
+                            ),
+                            DetailInfoRow(
+                              inline: true,
+                              label: l.optionMargin,
+                              value: money(value.frozen),
+                            ),
                           ],
-                          Text(
-                            '${l.investHistoryBase}: ${values[snapshots.indexOf(s)] == null ? '—' : formatUserMoney(values[snapshots.indexOf(s)]!, s.baseCurrencyCode)}',
+                          const Divider(height: 24),
+                          DetailInfoRow(
+                            inline: true,
+                            label: l.investHistoryBase,
+                            value: values[snapshots.indexOf(s)] == null
+                                ? '—'
+                                : formatUserMoney(
+                                    values[snapshots.indexOf(s)]!,
+                                    s.baseCurrencyCode,
+                                  ),
                           ),
                           if (s.rateToBase != null)
-                            Text(
-                              '${l.investHistoryRate}: ${formatRateValue(s.rateToBase!)}${s.rateDate == null ? '' : ' · ${MaterialLocalizations.of(context).formatMediumDate(s.rateDate!)}'}',
+                            DetailInfoRow(
+                              inline: true,
+                              label: l.investHistoryRate,
+                              value:
+                                  '${formatRateValue(s.rateToBase!)}${s.rateDate == null ? '' : ' · ${MaterialLocalizations.of(context).formatMediumDate(s.rateDate!)}'}',
                             ),
+                          // 保存时的证券、来源、价格、时间仍完整可见，按依据分组避免长段落挤在一起。
+                          const Divider(height: 24),
+                          SectionTitle(title: l.investValuationBasis),
                           for (final fact in s.prices.entries)
-                            Text(
-                              '${p!.securities.where((v) => v.id == fact.key).firstOrNull?.symbol ?? fact.key}: '
-                              '${formatUserSecurityPrice(InvestmentDecimal.parse(fact.value.price).toString(), p.currencyCode)} · '
-                              '${fact.value.manual ? l.exchangeRateSourceManual : fact.value.source} · ${formatQuoteTime(context, fact.value.quotedAt)}',
+                            Padding(
+                              padding: const EdgeInsets.only(top: 12),
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.stretch,
+                                children: [
+                                  Text(
+                                    p!.securities
+                                            .where((v) => v.id == fact.key)
+                                            .firstOrNull
+                                            ?.symbol ??
+                                        fact.key,
+                                    style: Theme.of(
+                                      context,
+                                    ).textTheme.titleSmall,
+                                  ),
+                                  DetailInfoRow(
+                                    inline: true,
+                                    label: fact.value.manual
+                                        ? l.exchangeRateSourceManual
+                                        : fact.value.source,
+                                    value: formatUserSecurityPrice(
+                                      InvestmentDecimal.parse(
+                                        fact.value.price,
+                                      ).toString(),
+                                      p.currencyCode,
+                                    ),
+                                  ),
+                                  Text(
+                                    formatQuoteTime(
+                                      context,
+                                      fact.value.quotedAt,
+                                    ),
+                                    style: Theme.of(context).textTheme.bodySmall
+                                        ?.copyWith(
+                                          color: Theme.of(
+                                            context,
+                                          ).colorScheme.onSurfaceVariant,
+                                        ),
+                                  ),
+                                ],
+                              ),
                             ),
                         ],
                       ),

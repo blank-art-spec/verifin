@@ -7006,4 +7006,22 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get investHistorySingleObservation => '已保存 1 个观察点；至少保存 2 个有效观察点后显示趋势。';
+
+  @override
+  String get investSecurityDetails => '证券资料';
+
+  @override
+  String get investTradeDetails => '交易资料';
+
+  @override
+  String get investContractTerms => '合约条款';
+
+  @override
+  String get investValuationBasis => '估值依据';
+
+  @override
+  String get marketAwaitingReview => '待核对';
+
+  @override
+  String get optionRightType => '期权类型';
 }

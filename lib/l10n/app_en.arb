@@ -2739,5 +2739,11 @@
   "marketHalted": "Source status: halted",
   "marketDelayKnown": "Source-declared delay: {minutes} minutes",
   "@marketDelayKnown": {"placeholders": {"minutes": {"type": "int"}}},
-  "investHistorySingleObservation": "One observation saved. A trend appears after at least two valid observations are saved."
+  "investHistorySingleObservation": "One observation saved. A trend appears after at least two valid observations are saved.",
+  "investSecurityDetails": "Security details",
+  "investTradeDetails": "Trade details",
+  "investContractTerms": "Contract terms",
+  "investValuationBasis": "Valuation basis",
+  "marketAwaitingReview": "Pending review",
+  "optionRightType": "Option type"
 }
