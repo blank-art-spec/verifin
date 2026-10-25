@@ -22,6 +22,14 @@ import 'market_quotes_page.dart';
 import 'investment_history_page.dart';
 import '../app/investments/investment_valuation.dart';
 
+/// 将资产占比按当前语言显示为一位小数的百分比，不修改原始精度。
+///
+/// [l] 提供应用语言与百分比格式；[share] 是估值层计算的 0–1 比率，
+/// 空头义务可大于 1。分母为零或价格不完整时传入 null，显示“未知”，
+/// 避免把无法计算的占比误写成 0%。
+String _investmentShareText(AppLocalizations l, double? share) =>
+    share == null ? l.investUnknown : l.investAllocationPercent(share);
+
 /// 指定币种账户的持仓与记录；父账户通过既有子账户列表进入。
 class InvestmentPage extends StatelessWidget {
   /// [accountId] 必须是真实账户 ID；账户被删除时显示空态，不回退其他账户。
@@ -93,7 +101,8 @@ class InvestmentPage extends StatelessWidget {
     );
   }
 
-  /// 以同一纯计算结果展示现金、持仓净值及盈亏；手填价和成交价格明确分开。
+  /// 以同一纯计算结果展示现金、持仓净值、盈亏及占总资产比例。
+  /// 占比使用该币种账户的正现金与多头市值，负债单列；手填价与成交价仍明确分开。
   @override
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
@@ -195,6 +204,8 @@ class InvestmentPage extends StatelessWidget {
                             label: l.investCash,
                             value: money(cash),
                             color: surfaceText,
+                            detail:
+                                '${l.investCashShare} ${_investmentShareText(l, detail!.cashShare)}',
                           ),
                           SummaryMetric(
                             label: l.investMarketValue,
@@ -210,13 +221,22 @@ class InvestmentPage extends StatelessWidget {
                         children: [
                           SummaryMetric(
                             label: l.investLongValue,
-                            value: money(detail!.longValue!),
+                            value: detail.longValue == null
+                                ? l.investUnknown
+                                : money(detail.longValue!),
                             color: surfaceText,
+                            detail:
+                                '${l.investHoldingsShare} ${_investmentShareText(l, detail.holdingsShare)}',
                           ),
                           SummaryMetric(
                             label: l.investShortObligation,
-                            value: money(detail.shortObligation!),
+                            value: detail.shortObligation == null
+                                ? l.investUnknown
+                                : money(detail.shortObligation!),
                             color: surfaceText,
+                            detail: (detail.shortObligation ?? 0) > 0
+                                ? '${l.investShortShare} ${_investmentShareText(l, detail.shortObligationShare)}'
+                                : null,
                           ),
                         ],
                       ),
@@ -269,6 +289,15 @@ class InvestmentPage extends StatelessWidget {
                           ),
                         ),
                       ],
+                      const SizedBox(height: 8),
+                      Text(
+                        (detail.amounts?.liabilities ?? 0) > 0
+                            ? l.investAllocationLiabilityHint
+                            : l.investAllocationHint,
+                        style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                          color: Theme.of(context).colorScheme.onSurfaceVariant,
+                        ),
+                      ),
                     ],
                   ),
                 ),
@@ -345,6 +374,7 @@ class InvestmentPage extends StatelessWidget {
                     accountId: accountId,
                     portfolio: portfolio,
                     position: position,
+                    accountValuation: detail,
                     onTransfer: () => _edit(
                       context,
                       securityId: position.securityId,
@@ -404,19 +434,24 @@ class InvestmentPage extends StatelessWidget {
 
 /// 一项持仓使用统一图标、金额格式和纯计算，不维护另一份可写数量。
 class _StockPositionCard extends StatelessWidget {
+  /// [accountId] 指向当前币种账户；[portfolio] 与 [position] 共享当前有效参考价。
+  /// [accountValuation] 为顶部概览使用的同一估值，保证所有持仓采用同一占比分母。
   /// [onTransfer] 进入两端原子转移表单，价格与成本补齐分别走 Controller。
   const _StockPositionCard({
     required this.accountId,
     required this.portfolio,
     required this.position,
+    required this.accountValuation,
     required this.onTransfer,
   });
   final String accountId;
   final InvestmentPortfolio portfolio;
   final StockPosition position;
+  final InvestmentAccountValuation accountValuation;
   final VoidCallback onTransfer;
 
-  /// 展示方向、数量、总成本与参考价；未知成本不显示成零。
+  /// 展示方向、数量、总成本、参考价及占总资产比例；未知成本不显示成零。
+  /// 多头以市值计算持仓占比，空头以回补义务单列，期权沿用显式权利金乘数。
   @override
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
@@ -533,6 +568,14 @@ class _StockPositionCard extends StatelessWidget {
             )
           else if (portfolio.marketPriceIds.contains(security.id))
             InvestmentHint(l.marketNoQuote),
+          DetailInfoRow(
+            inline: true,
+            label: position.short ? l.investShortShare : l.investHoldingsShare,
+            value: _investmentShareText(
+              l,
+              accountValuation.shareOfAssets(value?.toDouble()),
+            ),
+          ),
           DetailInfoRow(
             inline: true,
             label: l.investUnrealized,

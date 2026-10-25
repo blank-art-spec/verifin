@@ -12751,6 +12751,42 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'期权类型'**
   String get optionRightType;
+
+  /// No description provided for @investCashShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'现金占比'**
+  String get investCashShare;
+
+  /// No description provided for @investHoldingsShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓占比'**
+  String get investHoldingsShare;
+
+  /// No description provided for @investShortShare.
+  ///
+  /// In zh, this message translates to:
+  /// **'空头义务占比'**
+  String get investShortShare;
+
+  /// No description provided for @investAllocationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'占比按本账户总资产计算。'**
+  String get investAllocationHint;
+
+  /// No description provided for @investAllocationLiabilityHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'占比以正现金和多头持仓价值之和计算；空头义务和融资计入负债。'**
+  String get investAllocationLiabilityHint;
+
+  /// 资产占比，显示一位小数；空头义务占比可超过 100%。
+  ///
+  /// In zh, this message translates to:
+  /// **'{value}'**
+  String investAllocationPercent(double value);
 }
 
 class _AppLocalizationsDelegate

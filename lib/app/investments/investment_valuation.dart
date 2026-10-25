@@ -35,6 +35,61 @@ class InvestmentAccountValuation {
           (cash > 0 ? cash : 0) + longValue!,
           (cash < 0 ? -cash : 0) + shortObligation!,
         );
+
+  /// 现金资产占总资产的比例，范围为 0–1；返回小数比例而不是百分数。
+  ///
+  /// 负现金属于融资负债，因此分子按 0 计算；已冻结的现金仍属现金资产，
+  /// 不减去 [frozen]。价格不完整、估值含非有限数或总资产不大于 0 时返回 null，
+  /// 区分“无法计算”与存在有效总资产时的现金占比 0。
+  double? get cashShare => shareOfAssets(cash < 0 ? 0 : cash);
+
+  /// 多头持仓市值占总资产的比例，范围为 0–1；股票与期权沿用已计算的 [longValue]。
+  ///
+  /// 分母为正现金与多头市值之和，不采用扣除融资或空头义务后的净值。
+  /// 成本未知不会阻止计算；价格不完整、非有限或总资产不大于 0 时返回 null。
+  double? get holdingsShare => shareOfAssets(longValue);
+
+  /// 空头回补义务占总资产的比例，仅作负债披露，不加入现金和多头的资产分布。
+  ///
+  /// 分子为 [shortObligation]；高杠杆时结果可以大于 1，不截断为 100%。
+  /// 价格不完整、非有限或总资产不大于 0 时返回 null；保证金不重复作为义务扣减。
+  double? get shortObligationShare => shareOfAssets(shortObligation);
+
+  /// 将原币非负金额 [value] 换算为占本账户总资产的小数比例，供单项持仓共用。
+  ///
+  /// [value] 应为已按结算币种舍入的市值或空头义务；股票与期权的市值仍由
+  /// securityPositionValue 计算，本方法不重算数量、价格或乘数。分母复用
+  /// [amounts] 的正现金加多头市值，冻结额不重复扣除，负债不抵销分母。
+  ///
+  /// 输入为 null、负数或非有限数，整体估值不完整/含非有限数、多头市值或空头义务
+  /// 为负数、总资产不大于 0，
+  /// 或除法结果超出有限数范围时均返回 null。允许大于 1，以保留真实空头风险。
+  double? shareOfAssets(double? value) {
+    final longs = longValue, shorts = shortObligation;
+    if (value == null ||
+        !value.isFinite ||
+        value < 0 ||
+        !cash.isFinite ||
+        longs == null ||
+        !longs.isFinite ||
+        longs < 0 ||
+        shorts == null ||
+        !shorts.isFinite ||
+        shorts < 0) {
+      return null;
+    }
+    final assetAmounts = amounts;
+    if (assetAmounts == null ||
+        !assetAmounts.assets.isFinite ||
+        !assetAmounts.liabilities.isFinite ||
+        assetAmounts.assets <= 0) {
+      return null;
+    }
+    final share = value / assetAmounts.assets;
+    if (!share.isFinite) return null;
+    // 消除 -0.0，避免格式化后出现没有实际含义的负零占比。
+    return share == 0 ? 0 : share;
+  }
 }
 
 /// 统一股票/期权乘数与多空方向；[portfolio] 的价格须是调用方选定的时点依据。

@@ -254,5 +254,6 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 - 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与代码来源门禁；`InvestmentQuoteSync` 独立设备通知源及有界缓存/冷却/页面定时，`MarketQuotesPage` 复用应用解锁作用域暂停网络；`quote_format.dart` 的 `formatQuoteTime` 共用时间格式。当前没有通过自动估值门禁的生产适配器，不能将测试夹具当成真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
 
 - 证券资产与历史：`investment_valuation.dart` 的 `valueInvestmentAccount` / `valueLedgerAccounts` / `accountCashAt` / `investmentRevision` / `investmentSnapshotAt` 是纯计算入口；`currency_math.dart` 的 `AccountAssetAmounts` 和 `ConvertedAccountBalances` 保留总资产/负债分解。`models/investment_valuation_snapshot.dart` 保存实际观察点依据，`InvestmentHistoryPage` 复用 `InteractiveTrendChart`。详见 [阶段 5](securities-stage05-implementation.md)。
+- 证券资产占比：`InvestmentAccountValuation.cashShare` / `holdingsShare` / `shortObligationShare` 与 `shareOfAssets(value)` 统一以本币种账户的正现金加多头市值为分母；分母为零、估值不完整或输入无效时返回 null。概览复用 `SummaryMetric.detail`，持仓卡复用 `DetailInfoRow`；空头义务独立标注且允许超过 100%，冻结不重复扣减。百分比经 l10n `investAllocationPercent` 按语言显示一位小数。
 
 - 证券展示组合：`app/investments/investment_widgets.dart` 的 `InvestmentSection` 复用 `VeriCard`，统一分组标题、内容伸展和内部 Material 墨水层；`InvestmentHint` 统一次级说明的图标、行距和主题颜色。`InvestmentInputField` 令标签独立占位、随字号换行，并为输入框保留可访问性名称；`investmentInputDecoration` 只提供实色底色，不添加浮动标签。`investmentOutlineButtonStyle` 对齐次要按钮与主按钮的圆角、间距和触控高度。均只负责展示，不访问 Controller。

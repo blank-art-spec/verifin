@@ -2745,5 +2745,11 @@
   "investContractTerms": "Contract terms",
   "investValuationBasis": "Valuation basis",
   "marketAwaitingReview": "Pending review",
-  "optionRightType": "Option type"
+  "optionRightType": "Option type",
+  "investCashShare": "Cash share",
+  "investHoldingsShare": "Holdings share",
+  "investShortShare": "Short obligation share",
+  "investAllocationHint": "Shares use this account's total assets.",
+  "investAllocationLiabilityHint": "Shares use positive cash plus long position value. Short obligations and financing count as liabilities.",
+  "investAllocationPercent": "{value}"
 }

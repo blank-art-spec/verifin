@@ -7282,4 +7282,32 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionRightType => 'Option type';
+
+  @override
+  String get investCashShare => 'Cash share';
+
+  @override
+  String get investHoldingsShare => 'Holdings share';
+
+  @override
+  String get investShortShare => 'Short obligation share';
+
+  @override
+  String get investAllocationHint => 'Shares use this account\'s total assets.';
+
+  @override
+  String get investAllocationLiabilityHint =>
+      'Shares use positive cash plus long position value. Short obligations and financing count as liabilities.';
+
+  @override
+  String investAllocationPercent(double value) {
+    final intl.NumberFormat valueNumberFormat =
+        intl.NumberFormat.decimalPercentPattern(
+          locale: localeName,
+          decimalDigits: 1,
+        );
+    final String valueString = valueNumberFormat.format(value);
+
+    return '$valueString';
+  }
 }

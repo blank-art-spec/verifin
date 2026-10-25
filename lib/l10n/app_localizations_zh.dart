@@ -7024,4 +7024,31 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get optionRightType => '期权类型';
+
+  @override
+  String get investCashShare => '现金占比';
+
+  @override
+  String get investHoldingsShare => '持仓占比';
+
+  @override
+  String get investShortShare => '空头义务占比';
+
+  @override
+  String get investAllocationHint => '占比按本账户总资产计算。';
+
+  @override
+  String get investAllocationLiabilityHint => '占比以正现金和多头持仓价值之和计算；空头义务和融资计入负债。';
+
+  @override
+  String investAllocationPercent(double value) {
+    final intl.NumberFormat valueNumberFormat =
+        intl.NumberFormat.decimalPercentPattern(
+          locale: localeName,
+          decimalDigits: 1,
+        );
+    final String valueString = valueNumberFormat.format(value);
+
+    return '$valueString';
+  }
 }
