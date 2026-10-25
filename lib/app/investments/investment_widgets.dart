@@ -5,6 +5,66 @@ import 'package:flutter/material.dart';
 import '../app_theme.dart';
 import '../common_widgets.dart';
 
+/// 证券概览中两项指标的响应式排版，复用标准 SummaryMetric 的标签与数值样式。
+class InvestmentMetricPair extends StatelessWidget {
+  /// [first] 与 [second] 按业务顺序排列，均由调用方传入已格式化的展示内容。
+  /// [filled] 为 true 时使用实色浅底与统一圆角突出现金/持仓，为 false 时
+  /// 仅排列次级指标，不增加表面层；本组件不读取 Controller 或计算金额。
+  const InvestmentMetricPair({
+    super.key,
+    required this.first,
+    required this.second,
+    this.filled = true,
+  });
+
+  final SummaryMetric first, second;
+  final bool filled;
+
+  /// 用 [context] 的画布实色包裹 [metric]；内部 Row 保持其 Expanded 父子关系合法。
+  /// 面板不设固定高度，长标签、长金额和占比均由标准指标自身测量并换行。
+  Widget _panel(BuildContext context, SummaryMetric metric) {
+    final content = Row(children: [metric]);
+    if (!filled) return content;
+    return DecoratedBox(
+      decoration: BoxDecoration(
+        color: Theme.of(context).scaffoldBackgroundColor,
+        borderRadius: BorderRadius.circular(veriRadiusSm),
+      ),
+      child: Padding(padding: const EdgeInsets.all(12), child: content),
+    );
+  }
+
+  /// 普通手机宽度使用等宽双列，大字号或窄容器改为单列，避免强制缩小文字。
+  /// [context] 提供主题与系统字号；双列仅对这两个静态指标测量固有高度，
+  /// 让两块实色面板等高，不在整页列表上使用固有尺寸测量。
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final stacked =
+          constraints.maxWidth < 300 ||
+          MediaQuery.textScalerOf(context).scale(13) > 18;
+      final firstPanel = _panel(context, first);
+      final secondPanel = _panel(context, second);
+      if (stacked) {
+        return Column(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [firstPanel, const SizedBox(height: 12), secondPanel],
+        );
+      }
+      return IntrinsicHeight(
+        child: Row(
+          crossAxisAlignment: CrossAxisAlignment.stretch,
+          children: [
+            Expanded(child: firstPanel),
+            const SizedBox(width: 12),
+            Expanded(child: secondPanel),
+          ],
+        ),
+      );
+    },
+  );
+}
+
 /// [context] 提供当前主题；仅为输入区提供实色底色，聚焦与错误边框沿用主题。
 /// 字段名由 [InvestmentInputField] 单独布局，避免浮动标签越界覆盖上一行说明。
 InputDecoration investmentInputDecoration(BuildContext context) =>

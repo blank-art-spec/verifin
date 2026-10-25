@@ -49,6 +49,30 @@
 
 全量原有失败：`auto_capture_page_test.dart`「退款复核选择指定原消费后创建关联退款」、`auto_capture_test.dart`「跨账本退款只匹配目标账本的账户和原支出」、`workday_calendar_controller_test.dart`「下载日历同时进入原生快照和确认日期规则，跨账本/删除账户不删除公共缓存」、`workday_calendar_page_test.dart`「进入工具页不联网，主动开启后检查，运行中可关闭且不接收旧结果」。基线复现证据见 [阶段 3](securities-stage03-implementation.md)，本轮未改动这些领域实现或测试。
 
+## 2026-10-25 证券概览排版与模拟器更新
+
+顶部概览以参考净值为独立主数字，现金/多头持仓使用等宽实色面板并保留占比；
+次级资产明细与已实现/未实现盈亏分组排列，所有原指标仍保留。
+`InvestmentMetricPair` 复用 `SummaryMetric`，窄容器或大字号改单列，金额完整自然换行。
+新增 7 项几何布局回归，覆盖中英文、393/360 宽度、大字号、浅深色、长正负金额、
+299/300dp 边界与共享指标默认行为；连同原证券/占比/表单组合共 26 项通过。
+412 个 Dart 源文件格式检查通过，应用源码与测试静态检查无问题。
+
+按用户明确要求构建并覆盖安装到 `emulator-5556` / `verifin_x300_lite`：Flutter 3.47.2、
+Java 17、SDK 36、API 35 x86_64，独立 `diagnostic` 包、正式入口及 `UNIFIED_DESIGN_PREVIEW=true`。
+安装前完整备份应用数据；冷启动及浏览后数据库与安装前副本 SHA-256 完全一致。
+实际页面显示现金 7,756 USD、净值 10,396 USD、现金/持仓占比 74.6% / 25.4%，
+AVGO / GOOG 均为 6 股，占比 19.0% / 6.3%，父账户为 72,772 CNY。
+本次进程未发现 Flutter 异常、未处理异常或布局溢出，最终停留在 USD 证券概览。
+本地截图、日志及校验信息见 `build/validation/investment-overview-20261025/`；正式应用和原有账目保留，未发布。
+
+全量回归在独立源码副本中执行，避免与主工程构建共写插件注册及依赖元数据；运行前后核对
+3 个生产文件及新增布局测试的 SHA-256，副本与最终源码完全一致。
+结果为 1,515 项通过、6 项跳过、6 项失败，新增 7 项概览回归全部通过；
+6 项失败与前述修改前基线清单完全相同，涉及自动采集退款、信用账期和工作日日历，各 2 项。
+完整记录见本地 `build/validation/investment-overview-full-20261025/full-regression-validation.json`，
+日志为 `.toolchain/logs/investment-overview-full.log`。
+
 ## 2026-10-25 证券资产占比
 
 2026-10-25 占比展示补充：证券概览显示现金、多头持仓占总资产的比例，各证券卡显示相同分母下的比例；

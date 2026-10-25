@@ -101,8 +101,9 @@ class InvestmentPage extends StatelessWidget {
     );
   }
 
-  /// 以同一纯计算结果展示现金、持仓净值、盈亏及占总资产比例。
-  /// 占比使用该币种账户的正现金与多头市值，负债单列；手填价与成交价仍明确分开。
+  /// 以同一纯计算结果展示净值、资产构成、盈亏及占总资产比例。
+  /// 净值为主信息，现金/多头用实色面板，次级明细与盈亏分组排列；
+  /// 窄屏与大字号允许完整换行。占比仍使用该币种账户的正现金与多头市值。
   @override
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
@@ -126,6 +127,7 @@ class InvestmentPage extends StatelessWidget {
         : valueInvestmentAccount(portfolio, cash);
     String money(double value) => formatUserMoney(value, account.currencyCode);
     final surfaceText = Theme.of(context).colorScheme.onSurface;
+    final secondaryText = Theme.of(context).colorScheme.onSurfaceVariant;
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
@@ -188,84 +190,95 @@ class InvestmentPage extends StatelessWidget {
                   child: Column(
                     crossAxisAlignment: CrossAxisAlignment.start,
                     children: [
-                      Text(l.investNetValue),
+                      Text(
+                        l.investNetValue,
+                        style: Theme.of(
+                          context,
+                        ).textTheme.bodySmall?.copyWith(color: secondaryText),
+                      ),
                       const SizedBox(height: 6),
                       Text(
                         valuation!.marketValue == null
                             ? l.investNoQuotes
                             : money(cash + valuation.marketValue!.toDouble()),
                         style: Theme.of(context).textTheme.headlineMedium
-                            ?.copyWith(fontWeight: FontWeight.w800),
+                            ?.copyWith(
+                              fontSize: 32,
+                              fontWeight: FontWeight.w800,
+                              height: 1.15,
+                            ),
                       ),
                       const SizedBox(height: 16),
-                      Row(
-                        children: [
-                          SummaryMetric(
-                            label: l.investCash,
-                            value: money(cash),
-                            color: surfaceText,
-                            detail:
-                                '${l.investCashShare} ${_investmentShareText(l, detail!.cashShare)}',
-                          ),
-                          SummaryMetric(
-                            label: l.investMarketValue,
-                            value: valuation.marketValue == null
-                                ? l.investUnknown
-                                : money(valuation.marketValue!.toDouble()),
-                            color: surfaceText,
-                          ),
-                        ],
+                      InvestmentMetricPair(
+                        first: SummaryMetric(
+                          label: l.investCash,
+                          value: money(cash),
+                          color: surfaceText,
+                          detail:
+                              '${l.investCashShare} ${_investmentShareText(l, detail!.cashShare)}',
+                          allowValueWrap: true,
+                        ),
+                        second: SummaryMetric(
+                          label: l.investLongValue,
+                          value: detail.longValue == null
+                              ? l.investUnknown
+                              : money(detail.longValue!),
+                          color: surfaceText,
+                          detail:
+                              '${l.investHoldingsShare} ${_investmentShareText(l, detail.holdingsShare)}',
+                          allowValueWrap: true,
+                        ),
                       ),
                       const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          SummaryMetric(
-                            label: l.investLongValue,
-                            value: detail.longValue == null
-                                ? l.investUnknown
-                                : money(detail.longValue!),
-                            color: surfaceText,
-                            detail:
-                                '${l.investHoldingsShare} ${_investmentShareText(l, detail.holdingsShare)}',
-                          ),
-                          SummaryMetric(
-                            label: l.investShortObligation,
-                            value: detail.shortObligation == null
-                                ? l.investUnknown
-                                : money(detail.shortObligation!),
-                            color: surfaceText,
-                            detail: (detail.shortObligation ?? 0) > 0
-                                ? '${l.investShortShare} ${_investmentShareText(l, detail.shortObligationShare)}'
-                                : null,
-                          ),
-                        ],
+                      InvestmentMetricPair(
+                        filled: false,
+                        first: SummaryMetric(
+                          label: l.investMarketValue,
+                          value: valuation.marketValue == null
+                              ? l.investUnknown
+                              : money(valuation.marketValue!.toDouble()),
+                          color: secondaryText,
+                          allowValueWrap: true,
+                        ),
+                        second: SummaryMetric(
+                          label: l.investShortObligation,
+                          value: detail.shortObligation == null
+                              ? l.investUnknown
+                              : money(detail.shortObligation!),
+                          color: secondaryText,
+                          detail: (detail.shortObligation ?? 0) > 0
+                              ? '${l.investShortShare} ${_investmentShareText(l, detail.shortObligationShare)}'
+                              : null,
+                          allowValueWrap: true,
+                        ),
                       ),
-                      const SizedBox(height: 14),
-                      Row(
-                        children: [
-                          SummaryMetric(
-                            label: l.investRealized,
-                            value: projection!.realizedComplete
-                                ? money(projection.realized.toDouble())
-                                : l.investUnknown,
-                            color: accountBalanceColor(
-                              context,
-                              account,
-                              projection.realized.toDouble(),
-                            ),
+                      const Divider(height: 24),
+                      InvestmentMetricPair(
+                        filled: false,
+                        first: SummaryMetric(
+                          label: l.investRealized,
+                          value: projection!.realizedComplete
+                              ? money(projection.realized.toDouble())
+                              : l.investUnknown,
+                          color: accountBalanceColor(
+                            context,
+                            account,
+                            projection.realized.toDouble(),
                           ),
-                          SummaryMetric(
-                            label: l.investUnrealized,
-                            value: valuation.unrealized == null
-                                ? l.investUnknown
-                                : money(valuation.unrealized!.toDouble()),
-                            color: accountBalanceColor(
-                              context,
-                              account,
-                              valuation.unrealized?.toDouble() ?? 0,
-                            ),
+                          allowValueWrap: true,
+                        ),
+                        second: SummaryMetric(
+                          label: l.investUnrealized,
+                          value: valuation.unrealized == null
+                              ? l.investUnknown
+                              : money(valuation.unrealized!.toDouble()),
+                          color: accountBalanceColor(
+                            context,
+                            account,
+                            valuation.unrealized?.toDouble() ?? 0,
                           ),
-                        ],
+                          allowValueWrap: true,
+                        ),
                       ),
                       const Divider(height: 24),
                       DetailInfoRow(

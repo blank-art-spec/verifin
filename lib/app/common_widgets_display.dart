@@ -296,19 +296,29 @@ class MoneyUnitLabel extends StatelessWidget {
 }
 
 class SummaryMetric extends StatelessWidget {
+  /// 创建标准的“标签、数值、补充说明”指标，必须放在 Row 的子级中。
+  ///
+  /// [label] 为本地化指标名，[value] 为已格式化的完整数值，
+  /// [color] 为调用方解析后的数值颜色，[detail] 为可选占比等次级说明。
+  /// [allowValueWrap] 默认为 false，沿用既有单行数值；证券概览显式开启时，
+  /// 标签、数值和说明均居中完整换行，避免大字号或长金额被省略。
   const SummaryMetric({
     super.key,
     required this.label,
     required this.value,
     required this.color,
     this.detail,
+    this.allowValueWrap = false,
   });
 
   final String label;
   final String value;
   final Color color;
   final String? detail;
+  final bool allowValueWrap;
 
+  /// 根据 [context] 的主题渲染指标，保留 Expanded 以均分父 Row 的宽度。
+  /// 开启完整换行时不限定数值行数，其余页面继续使用原有的单行显示行为。
   @override
   Widget build(BuildContext context) {
     final textColor = Theme.of(context).colorScheme.onSurface;
@@ -318,6 +328,7 @@ class SummaryMetric extends StatelessWidget {
         children: <Widget>[
           Text(
             label,
+            textAlign: allowValueWrap ? TextAlign.center : null,
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: textColor.withValues(
                 alpha: veriUnifiedDesignPreview ? 0.68 : 0.54,
@@ -327,8 +338,9 @@ class SummaryMetric extends StatelessWidget {
           const SizedBox(height: 7),
           Text(
             value,
-            maxLines: 1,
-            overflow: TextOverflow.ellipsis,
+            textAlign: allowValueWrap ? TextAlign.center : null,
+            maxLines: allowValueWrap ? null : 1,
+            overflow: allowValueWrap ? null : TextOverflow.ellipsis,
             style: Theme.of(context).textTheme.titleLarge?.copyWith(
               color: color,
               fontSize: 18,
@@ -339,6 +351,7 @@ class SummaryMetric extends StatelessWidget {
             const SizedBox(height: 4),
             Text(
               detail!,
+              textAlign: allowValueWrap ? TextAlign.center : null,
               style: Theme.of(context).textTheme.labelSmall?.copyWith(
                 color: textColor.withValues(
                   alpha: veriUnifiedDesignPreview ? 0.62 : 0.42,

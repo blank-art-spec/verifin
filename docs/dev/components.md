@@ -170,7 +170,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `CurrencyAmountField` | Widget | `common_widgets.dart` | 交易/退款/周期编辑器统一的货币金额行；按 ISO minor unit 格式化；`amount == null` 时显示明确缺失态。`forceUnit` **默认 `true` 且不要改**：编辑器允许临时选一个账本里还没有的币种，那一刻闸门还关着但同屏已出现两个币种，单位必须保留。只有两端币种被锁死、不可能出现第二币种的地方（退款表单）才显式传 `false` |
 | `MoneyUnitLabel` | Widget | `common_widgets.dart` | 聚合卡片的轻量「单位：¥/CNY」提示（首页支出走势卡——**仅未开启 `UNIFIED_DESIGN_PREVIEW` 的旧外观**，正式外观这里渲染的是「周／月／季／年」标签、首页预算卡、日历卡、AI 结果卡；走势设置页预览复用同一张卡）；单币种账本隐藏单位时组件自身返回 `SizedBox.shrink`——**只表示看不见，不能拿它判断单位是否显示**；把容器一起收掉的调用点（日历卡）隐藏时根本不构建，`find.byType` 是 `findsNothing`。要断言隐藏用 `find.textContaining('单位：')` |
 | `currencyUnitSubtitle` | 纯函数 | `common_widgets.dart` | **页头 / 卡片副标题拼「单位：x」的唯一入口**：传 `l10n`、上下文前缀（书名/账户类型/日期范围，可空）与币种代码。隐藏单位时返回前缀本身（**不会把书名一起丢掉**），无前缀时返回 `null`——调用方必须据此整段省略副标题，不要渲染只剩分隔符的残句 |
-| `SummaryMetric` | Widget | `common_widgets.dart` | **指标块**（label+value+color+detail）。各类统计小块一律用它，勿新造 `_XxxMetric`/`_XxxTile` |
+| `SummaryMetric` | Widget | `common_widgets.dart` | **指标块**（label+value+color+detail）。各类统计小块一律用它，勿新造 `_XxxMetric`/`_XxxTile`。`allowValueWrap` 默认 false；证券概览显式设 true，让标签、金额、说明居中完整换行，其他调用保留默认显示方式 |
 | `FilterPill` | Widget | `common_widgets.dart` | 筛选胶囊（标签+可选图标+chevron） |
 | `ToolEntry` | Widget | `common_widgets.dart` | 工具入口图标块 |
 
@@ -257,3 +257,4 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 - 证券资产占比：`InvestmentAccountValuation.cashShare` / `holdingsShare` / `shortObligationShare` 与 `shareOfAssets(value)` 统一以本币种账户的正现金加多头市值为分母；分母为零、估值不完整或输入无效时返回 null。概览复用 `SummaryMetric.detail`，持仓卡复用 `DetailInfoRow`；空头义务独立标注且允许超过 100%，冻结不重复扣减。百分比经 l10n `investAllocationPercent` 按语言显示一位小数。
 
 - 证券展示组合：`app/investments/investment_widgets.dart` 的 `InvestmentSection` 复用 `VeriCard`，统一分组标题、内容伸展和内部 Material 墨水层；`InvestmentHint` 统一次级说明的图标、行距和主题颜色。`InvestmentInputField` 令标签独立占位、随字号换行，并为输入框保留可访问性名称；`investmentInputDecoration` 只提供实色底色，不添加浮动标签。`investmentOutlineButtonStyle` 对齐次要按钮与主按钮的圆角、间距和触控高度。均只负责展示，不访问 Controller。
+- 证券概览排版：同文件 `InvestmentMetricPair(first, second, filled)` 只排列两个 `SummaryMetric`。普通宽度等宽双列，内容宽度小于 300dp 或 13sp 文字缩放后超过 18dp 时改单列；`filled` 用实色画布色与统一圆角突出现金/持仓，false 用于次级资产与盈亏。内部 Row 保持标准指标 Expanded 关系合法，仅对这两个静态项测量等高；不读取或计算账务。
