@@ -1,9 +1,111 @@
 {
   "app": "verifin",
   "version": 12,
-  "exportedAt": "2026-07-03T16:00:00.000",
+  "exportedAt": "2026-10-25T10:00:00.000",
   "data": {
-    "investmentPortfolios": [],
+    "investmentPortfolios": [
+      {
+        "accountId": "acc_investment_usd",
+        "bookId": "book_investment",
+        "currencyCode": "USD",
+        "openedAt": "2026-10-01T00:00:00.000",
+        "openingCash": "10000",
+        "includedEntryIds": [],
+        "securities": [
+          {
+            "symbol": "AVGO",
+            "name": "博通",
+            "market": "us",
+            "currencyCode": "USD"
+          },
+          {
+            "symbol": "GOOG",
+            "name": "谷歌",
+            "market": "us",
+            "currencyCode": "USD"
+          }
+        ],
+        "openingHoldings": [],
+        "events": [
+          {
+            "id": "test_avgo_buy",
+            "securityId": "us:stock:AVGO",
+            "kind": "buy",
+            "occurredAt": "2026-10-03T10:00:00.000",
+            "sequence": 1,
+            "quantity": "10",
+            "price": "300",
+            "fee": "1",
+            "note": "验收示例：博通固定测试买价，不是历史成交或现价",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_avgo_sell",
+            "securityId": "us:stock:AVGO",
+            "kind": "sell",
+            "occurredAt": "2026-10-04T10:00:00.000",
+            "sequence": 2,
+            "quantity": "4",
+            "price": "330",
+            "fee": "1",
+            "note": "验收示例：博通固定测试卖价，部分卖出后保留六股",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_goog_buy",
+            "securityId": "us:stock:GOOG",
+            "kind": "buy",
+            "occurredAt": "2026-10-05T10:00:00.000",
+            "sequence": 3,
+            "quantity": "10",
+            "price": "100",
+            "fee": "1",
+            "note": "验收示例：谷歌 GOOG 固定测试买价，不是 GOOGL 或真实成交",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_goog_sell",
+            "securityId": "us:stock:GOOG",
+            "kind": "sell",
+            "occurredAt": "2026-10-06T10:00:00.000",
+            "sequence": 4,
+            "quantity": "4",
+            "price": "110",
+            "fee": "1",
+            "note": "验收示例：谷歌固定测试卖价，部分卖出后保留六股",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          }
+        ],
+        "manualPrices": {
+          "us:stock:AVGO": "330",
+          "us:stock:GOOG": "110"
+        },
+        "allowFinancing": false,
+        "anchorIncludedIds": {},
+        "marketPriceIds": [],
+        "valuationSnapshots": []
+      }
+    ],
     "ledgerBooks": [
       {
         "id": "default",
@@ -575,7 +677,7 @@
         "groupId": null,
         "initialBalance": 0.0,
         "iconCode": "investment",
-        "note": "投资账户的美元子账户，初始余额为零",
+        "note": "证券验收示例：期初现金 10000 USD，谷歌 GOOG 与博通 AVGO 的买卖和持仓均在此子账户；价格为固定测试值",
         "includeInAssets": true,
         "hidden": false,
         "currencyCode": "USD",
@@ -794,6 +896,28 @@
         "source": "manual",
         "createdAt": "2026-07-01T09:00:00.000",
         "updatedAt": "2026-07-01T09:00:00.000"
+      },
+      {
+        "id": "test_investment_rate_USD",
+        "bookId": "book_investment",
+        "baseCurrencyCode": "CNY",
+        "currencyCode": "USD",
+        "effectiveDate": "2026-10-01",
+        "rateToBase": 7.0,
+        "source": "manual",
+        "createdAt": "2026-10-25T09:00:00.000",
+        "updatedAt": "2026-10-25T09:00:00.000"
+      },
+      {
+        "id": "test_investment_rate_HKD",
+        "bookId": "book_investment",
+        "baseCurrencyCode": "CNY",
+        "currencyCode": "HKD",
+        "effectiveDate": "2026-10-01",
+        "rateToBase": 0.9,
+        "source": "manual",
+        "createdAt": "2026-10-25T09:00:00.000",
+        "updatedAt": "2026-10-25T09:00:00.000"
       }
     ],
     "creditAccounts": [

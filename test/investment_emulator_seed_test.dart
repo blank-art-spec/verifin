@@ -11,9 +11,14 @@ import 'package:verifin/data/app_database.dart';
 import 'package:verifin/data/ledger_repository.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
+/// 注册显式模拟器副本的双标的准备用例，无参数、无返回值。
+///
+/// 仅在设置 VERIFIN_EMULATOR_DB 时运行；路径必须指向 build/validation
+/// 内已存在的数据库副本。兼容旧版转账入金基线和新版模板的期初现金，
+/// 所有事件使用稳定 ID，重复运行不会重复入金或追加同一笔买卖。
 void main() {
   final explicitPath = Platform.environment['VERIFIN_EMULATOR_DB'];
-  test('在已备份的模拟器数据库副本中通过生产命令保留博通验收数据', () async {
+  test('在已备份的模拟器数据库副本中通过生产命令保留谷歌和博通验收数据', () async {
     final path = paths.normalize(paths.absolute(explicitPath!));
     final allowed = paths.join(Directory.current.path, 'build', 'validation');
     if (!paths.isWithin(allowed, path) || !File(path).existsSync()) {
@@ -30,6 +35,9 @@ void main() {
     try {
       expect(c.activeBook.id, 'book_investment');
       final usd = c.accounts.singleWhere((a) => a.id == 'acc_investment_usd');
+      // 新模板已在证券聚合中记录 10,000 USD 期初现金，不再额外转入一笔。
+      // 旧模拟器仍沿用零期初加银行转账，保留其原有资金来源和交易 ID。
+      final needsDeposit = c.investmentFor(usd.id)?.openingCash != '10000';
       // 汇率也是明确标识的验收输入，只在该测试账本尚无相应汇率时补充。
       for (final rate in {'USD': 7.0, 'HKD': 0.9}.entries) {
         if (!c.exchangeRates.any((r) => r.currencyCode == rate.key)) {
@@ -45,7 +53,7 @@ void main() {
         }
       }
       const bankId = 'test_avgo_bank_usd';
-      if (!c.accounts.any((a) => a.id == bankId)) {
+      if (needsDeposit && !c.accounts.any((a) => a.id == bankId)) {
         c.addAccount(
           Account(
             id: bankId,
@@ -73,7 +81,7 @@ void main() {
           isTrue,
         );
       }
-      if (!c.entries.any((e) => e.id == 'test_avgo_deposit')) {
+      if (needsDeposit && !c.entries.any((e) => e.id == 'test_avgo_deposit')) {
         c.addEntry(
           LedgerEntry(
             id: 'test_avgo_deposit',
@@ -139,10 +147,68 @@ void main() {
         ),
         isTrue,
       );
-      expect(c.accountBalance(usd), 8318);
-      expect(c.accountAssetValue(usd), 10298);
+      // GOOG 与 AVGO 共用同一个真实 USD 子账户，不新建证券专属账户。
+      // 金额固定为验收输入；GOOG 是本用例的代码，不与 GOOGL 混用。
+      const goog = StockSecurity(
+        symbol: 'GOOG',
+        name: '谷歌',
+        market: StockMarket.us,
+        currencyCode: 'USD',
+      );
       expect(
-        c.investmentProjection(usd.id)!.positions.single.quantity.toString(),
+        await c.saveStockEvent(
+          accountId: usd.id,
+          security: goog,
+          event: StockEvent(
+            id: 'test_goog_buy',
+            securityId: goog.id,
+            kind: StockEventKind.buy,
+            occurredAt: DateTime(2026, 10, 5, 10),
+            sequence: 3,
+            quantity: '10',
+            price: '100',
+            fee: '1',
+            note: '验收示例：谷歌 GOOG 固定测试买价，不是 GOOGL 或真实成交',
+          ),
+          referencePrice: '110',
+        ),
+        isTrue,
+      );
+      expect(
+        await c.saveStockEvent(
+          accountId: usd.id,
+          security: goog,
+          event: StockEvent(
+            id: 'test_goog_sell',
+            securityId: goog.id,
+            kind: StockEventKind.sell,
+            occurredAt: DateTime(2026, 10, 6, 10),
+            sequence: 4,
+            quantity: '4',
+            price: '110',
+            fee: '1',
+            note: '验收示例：谷歌固定测试卖价，部分卖出后保留六股',
+          ),
+          referencePrice: '110',
+        ),
+        isTrue,
+      );
+      expect(c.accountBalance(usd), 7756);
+      expect(c.accountAssetValue(usd), 10396);
+      final positions = c.investmentProjection(usd.id)!.positions;
+      expect(positions, hasLength(2));
+      expect(
+        positions
+            .singleWhere((p) => p.securityId == avgo.id)
+            .quantity
+            .toString(),
+        '6',
+      );
+      expect(
+        positions
+            .singleWhere((p) => p.securityId == goog.id)
+            .quantity
+            .toString(),
         '6',
       );
       expect(
