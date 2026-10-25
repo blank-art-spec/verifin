@@ -33,6 +33,20 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   /// 设备级自动采集配置；默认所有监听关闭。
   AutoCaptureSettings get autoCaptureSettings => _autoCaptureSettings;
 
+  /// 显式初始化的代次，用于使设备日志页面的缓存及在途读取失效。
+  int get notificationCaptureLogResetGeneration =>
+      _notificationCaptureLogResetGeneration;
+
+  /// 查询设备级通知捕获日志，不改变账本、采集事件或正式交易。
+  Future<NotificationCaptureLogBatch?> readNotificationCaptureLogs({
+    String? beforeId,
+    int limit = 50,
+  }) => AppAutoCaptureBridge.notificationLogs(beforeId: beforeId, limit: limit);
+
+  /// 只清空诊断历史，已有待确认事件、规则和账目保持原样。
+  Future<bool> clearNotificationCaptureLogs() =>
+      AppAutoCaptureBridge.clearNotificationLogs();
+
   /// 当前账本的自动化状态统计。
   ///
   /// [now] 可由测试注入；“今日”按本地日历日比较，不用绝对 24 小时，避免跨时区/DST 错位。
@@ -7719,6 +7733,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   }
 
   void resetAllData() {
+    _notificationCaptureLogResetGeneration++;
     // 初始化撤销日历联网授权和下载缓存，并使尚未返回的网络请求失效。
     _workdayCalendarGeneration++;
     _workdayCalendarResetGeneration++;
@@ -7808,6 +7823,22 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _persistAllLedgerData();
     _persistCaptureEvents();
     _persistAutoCaptureRules();
+    // 合并现有账本写入和设备日志清理，后台刷盘必须等待两者完成。
+    final previousGeneration = _writeGeneration;
+    final previousWrite = _pendingWrite;
+    late final int joinedGeneration;
+    final joined =
+        Future.wait<void>(<Future<void>>[
+          previousWrite,
+          AppAutoCaptureBridge.resetNotificationLogsAfterDataReset(),
+        ]).then<void>((_) {
+          // 先前写入的失败已反馈；仅延续失败状态，避免日志清理成功掩盖它。
+          if (_lastFailedWriteGeneration == previousGeneration) {
+            _lastFailedWriteGeneration = joinedGeneration;
+          }
+        });
+    _trackWrite(joined);
+    joinedGeneration = _writeGeneration;
     themePreferenceListenable.value = _themePreference;
     notifyListeners();
   }

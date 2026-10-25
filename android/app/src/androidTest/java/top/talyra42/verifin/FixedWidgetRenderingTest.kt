@@ -17,13 +17,15 @@ class FixedWidgetRenderingTest : Instrumentation() {
     private var accountReminderSuite = false
     private var accountRecoverySuite = false
     private var reminderLiveSuite = false
+    private var notificationCaptureLogSuite = false
 
-    /** 读取 [arguments] 的 suite 参数；默认保持原桌面组件验收，仅显式选择才测提醒。 */
+    /** 读取 [arguments] 的 suite 参数；默认保持原桌面组件验收，其余套件仅显式选择运行。 */
     override fun onCreate(arguments: Bundle?) {
         super.onCreate(arguments)
         accountReminderSuite = arguments?.getString("suite") == "account-reminder"
         accountRecoverySuite = arguments?.getString("suite") == "reminder-recovery"
         reminderLiveSuite = arguments?.getString("suite") == "reminder-live"
+        notificationCaptureLogSuite = arguments?.getString("suite") == "notification-capture-log"
         start()
     }
 
@@ -31,7 +33,10 @@ class FixedWidgetRenderingTest : Instrumentation() {
     override fun onStart() {
         val result = Bundle()
         try {
-            if (reminderLiveSuite) {
+            if (notificationCaptureLogSuite) {
+                NotificationCaptureLogChecks.runAll(targetContext)
+                result.putString("stream", "通过：通知日志七天清理、持久化、游标分页、正文边界和清空隔离\n")
+            } else if (reminderLiveSuite) {
                 check(targetContext.packageName.endsWith(".graphicsdiagnostic")) { "只能在隔离应用安排真机测试" }
                 AccountEntryReminderReceiver.scheduleTest(targetContext, "提醒恢复验证", "隔离测试，不会记账", "账户记账提醒")
                 result.putString("stream", "已安排：${AccountEntryReminderReceiver.deliveryStatus(targetContext)}\n")

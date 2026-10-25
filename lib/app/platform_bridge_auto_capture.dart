@@ -12,8 +12,8 @@ void setAutoCaptureAvailableHandler(Future<void> Function()? handler) {
 
 /// 最近一条通知在 Android 原生采集管线中的处理结果。
 ///
-/// 这里只保存来源、时间和阶段状态，不包含通知正文。正文仍只存在于成功入队后的
-/// [RawCaptureInput] / CaptureEvent 中，避免诊断功能扩大敏感数据暴露范围。
+/// 此实时快照只包含来源、时间和阶段状态。可回看的七天通知日志单独保存，
+/// 并且只有允许来源且通过金融过滤的通知才可保留正文。
 class NativeNotificationDiagnostic {
   const NativeNotificationDiagnostic({
     required this.occurredAt,
@@ -51,7 +51,117 @@ class NativeNotificationDiagnostic {
   }
 }
 
-/// Android 自动采集的实时诊断快照。
+/// 设备本机通知捕获日志，与账本事件及正式交易分开保存。
+///
+/// [recordedAt] 是本次捕获时间，用于七天滚动保留；[occurredAt] 是系统通知时间。
+/// [sourceEventId] 只用于关联当前账本已经存在的采集事件，不触发重新解析或入账。
+class NotificationCaptureLogEntry {
+  const NotificationCaptureLogEntry({
+    required this.id,
+    required this.recordedAt,
+    required this.diagnostic,
+    this.sourceEventId = '',
+    this.rawText = '',
+  });
+
+  final String id;
+  final DateTime recordedAt;
+  final NativeNotificationDiagnostic diagnostic;
+  final String sourceEventId;
+  final String rawText;
+
+  DateTime get occurredAt => diagnostic.occurredAt;
+  String get sourceId => diagnostic.sourceId;
+  String get sourceLabel => diagnostic.sourceLabel;
+  String get textExtraction => diagnostic.textExtraction;
+  String get financialFilter => diagnostic.financialFilter;
+  String get queueResult => diagnostic.queueResult;
+  String get outcome => diagnostic.outcome;
+
+  /// 原生记录字段缺失时跳过该行，不用当前时间伪造捕获记录。
+  static NotificationCaptureLogEntry? fromMap(Map<dynamic, dynamic> raw) {
+    String text(String key, [String fallback = '']) =>
+        raw[key] is String ? raw[key] as String : fallback;
+    final rawId = raw['id'];
+    final id = rawId is String || rawId is int ? '$rawId' : '';
+    final recorded = raw['recordedAt'];
+    final occurred = raw['occurredAt'];
+    if ((int.tryParse(id) ?? 0) <= 0 ||
+        recorded is! int ||
+        recorded <= 0 ||
+        occurred is! int ||
+        occurred <= 0 ||
+        recorded > 8640000000000000 ||
+        occurred > 8640000000000000) {
+      return null;
+    }
+    final diagnostic = NativeNotificationDiagnostic(
+      occurredAt: DateTime.fromMillisecondsSinceEpoch(occurred),
+      sourceId: text('sourceId'),
+      sourceLabel: text('sourceLabel'),
+      textExtraction: text('textExtraction', 'notRun'),
+      financialFilter: text('financialFilter', 'notRun'),
+      queueResult: text('queueResult', 'notRun'),
+      outcome: text('outcome', 'none'),
+    );
+    // 原生存储负责限制正文范围；读取时再次防御旧桥或畸形数据扩大正文暴露范围。
+    final retainBody =
+        diagnostic.sourceId.isNotEmpty &&
+        diagnostic.textExtraction == 'success' &&
+        diagnostic.financialFilter == 'passed' &&
+        const <String>{
+          'queued',
+          'duplicate',
+          'queueWriteFailed',
+        }.contains(diagnostic.outcome);
+    final body = retainBody ? text('rawText') : '';
+    return NotificationCaptureLogEntry(
+      id: id,
+      recordedAt: DateTime.fromMillisecondsSinceEpoch(recorded),
+      diagnostic: diagnostic,
+      sourceEventId: text('sourceEventId'),
+      rawText: body.length <= 8000 ? body : body.substring(0, 8000),
+    );
+  }
+}
+
+/// 原生日志按稳定自增 id 倒序分页，新通知插入不会改变后续页面的游标边界。
+class NotificationCaptureLogBatch {
+  const NotificationCaptureLogBatch({
+    required this.entries,
+    required this.hasMore,
+    this.nextBeforeId,
+  });
+
+  final List<NotificationCaptureLogEntry> entries;
+  final bool hasMore;
+  final String? nextBeforeId;
+
+  factory NotificationCaptureLogBatch.fromMap(Map<dynamic, dynamic> raw) {
+    final values = raw['entries'];
+    final entries = <NotificationCaptureLogEntry>[];
+    final ids = <String>{};
+    if (values is List) {
+      for (final value in values.whereType<Map>()) {
+        final entry = NotificationCaptureLogEntry.fromMap(value);
+        if (entry != null && ids.add(entry.id)) entries.add(entry);
+      }
+    }
+    final cursor = raw['nextBeforeId'];
+    final next = cursor is String && (int.tryParse(cursor) ?? 0) > 0
+        ? cursor
+        : entries.lastOrNull?.id;
+    final hasMore =
+        raw['hasMore'] == true && entries.isNotEmpty && next != null;
+    return NotificationCaptureLogBatch(
+      entries: List<NotificationCaptureLogEntry>.unmodifiable(entries),
+      hasMore: hasMore,
+      nextBeforeId: hasMore ? next : null,
+    );
+  }
+}
+
+/// Android 自动采集的实时诊断快照.
 ///
 /// [notificationAccessGranted] 是系统授权，[listenerConnected] 是当前进程实际收到的
 /// NLS 连接回调；两者必须分开显示，才能识别“设置页显示已授权但服务并未工作”的情况。
@@ -134,6 +244,52 @@ class InstalledNotificationApp {
 /// Android 通知/短信监听桥。原生层只捕获并持久化原文，解析与正式落账全部在 Dart 层。
 class AppAutoCaptureBridge {
   AppAutoCaptureBridge._();
+
+  /// null 表示读取失败或旧原生桥不支持，不能把它显示成“没有通知日志”。
+  static Future<NotificationCaptureLogBatch?> notificationLogs({
+    String? beforeId,
+    int limit = 50,
+  }) async {
+    try {
+      final raw = await _channel.invokeMethod<Map<dynamic, dynamic>>(
+        'readNotificationCaptureLogs',
+        <String, Object?>{'beforeId': ?beforeId, 'limit': limit.clamp(1, 100)},
+      );
+      return raw == null ? null : NotificationCaptureLogBatch.fromMap(raw);
+    } on MissingPluginException {
+      return null; // 非 Android 或旧安装包，由页面显示不可用和重试入口。
+    } on PlatformException {
+      return null; // 原生存储读取失败，由页面保留已有结果并提供重试。
+    }
+  }
+
+  /// 仅删除本机诊断日志；不消费原生队列，也不修改 CaptureEvent 或正式交易。
+  static Future<bool> clearNotificationLogs() async {
+    try {
+      return await _channel.invokeMethod<bool>(
+            'clearNotificationCaptureLogs',
+          ) ??
+          false;
+    } on MissingPluginException {
+      return false; // 旧桥不可用时不报告清空成功。
+    } on PlatformException {
+      return false; // 删除失败时保留页面内容并反馈失败。
+    }
+  }
+
+  /// 显式初始化应用数据时清除设备诊断历史；旧桥或非 Android 宿主没有该数据。
+  static Future<void> resetNotificationLogsAfterDataReset() async {
+    try {
+      final cleared = await _channel.invokeMethod<bool>(
+        'resetNotificationCaptureLogs',
+      );
+      if (cleared != true) {
+        throw PlatformException(code: 'NOTIFICATION_LOG_RESET_FAILED');
+      }
+    } on MissingPluginException {
+      // 桌面测试和旧原生桥不存在这份独立日志，不阻止原有账本初始化。
+    }
+  }
 
   /// null 表示原生读取不可用，调用方必须显示失败与重试入口。
   static Future<List<InstalledNotificationApp>?> installedNotificationApps({

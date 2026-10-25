@@ -245,6 +245,7 @@ mixin _ControllerState on ChangeNotifier {
   NumberPadLayout _numberPadLayout = NumberPadLayout.standard;
   AiSettings _aiSettings = const AiSettings();
   AutoCaptureSettings _autoCaptureSettings = AutoCaptureSettings.disabled;
+  int _notificationCaptureLogResetGeneration = 0;
   AiCapabilityProfile? _aiCapabilityProfile;
 
   /// AI 对话查询的聊天记录：每条 `{role, content, displays?}`——助手消息可带序列化的

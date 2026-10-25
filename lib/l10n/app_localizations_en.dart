@@ -5975,7 +5975,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get autoCaptureDiagnosticOutcomeFinancialRejected =>
-      'No financial keyword matched';
+      'Missing numbers or transaction keywords';
 
   @override
   String get autoCaptureDiagnosticOutcomeQueued => 'Saved to the native queue';
@@ -6735,4 +6735,68 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get accountCurrencyChildExists =>
       'This parent account already has this currency. Choose another currency.';
+
+  @override
+  String get notificationCaptureLogTitle => 'Notification capture logs';
+
+  @override
+  String get notificationCaptureLogPrivacy =>
+      'Logs stay on this device for the last 7 days. Blocked sources and notifications that fail transaction screening retain status only, without notification text.';
+
+  @override
+  String get notificationCaptureLogEmpty =>
+      'No capture logs in the last 7 days';
+
+  @override
+  String get notificationCaptureLogEmptyHint =>
+      'Enable payment notification listening to see processing results for new notifications.';
+
+  @override
+  String get notificationCaptureLogReadFailed =>
+      'Unable to read notification capture logs. Try again.';
+
+  @override
+  String get notificationCaptureLogRetry => 'Retry';
+
+  @override
+  String get notificationCaptureLogLoadMore => 'Load earlier logs';
+
+  @override
+  String get notificationCaptureLogClearTitle => 'Clear capture logs?';
+
+  @override
+  String get notificationCaptureLogClearMessage =>
+      'Only notification capture logs will be deleted. Pending events, their saved notification text, and ledger entries are unchanged. This cannot be undone.';
+
+  @override
+  String get notificationCaptureLogCleared => 'Capture logs cleared';
+
+  @override
+  String get notificationCaptureLogClearFailed =>
+      'Unable to clear capture logs. Your logs are unchanged. Try again.';
+
+  @override
+  String get notificationCaptureLogRecordedAt => 'Captured at';
+
+  @override
+  String get notificationCaptureLogOccurredAt => 'Notification time';
+
+  @override
+  String get notificationCaptureLogSourceId => 'Source package';
+
+  @override
+  String get notificationCaptureLogRawText => 'Notification text';
+
+  @override
+  String get notificationCaptureLogNoBody =>
+      'Notification text was not retained for this result; only processing status is saved.';
+
+  @override
+  String get notificationCaptureLogDetails => 'View details and text';
+
+  @override
+  String get notificationCaptureLogCollapse => 'Collapse details';
+
+  @override
+  String get notificationCaptureLogEntryHint => 'Last 7 days';
 }

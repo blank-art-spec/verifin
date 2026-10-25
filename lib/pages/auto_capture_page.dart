@@ -13,6 +13,7 @@ import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'auto_capture_sources_page.dart';
 import 'entry_detail_page.dart';
+import 'notification_capture_log_page.dart';
 import 'sheets.dart';
 import 'transaction_detail_page.dart';
 
@@ -320,6 +321,20 @@ class _AutoCapturePageState extends State<AutoCapturePage>
                         !_nativeDiagnostics.listenerConnected
                     ? _reconnectNotificationListener
                     : null,
+              ),
+              const SizedBox(height: 12),
+              VeriCard(
+                child: SettingsRow(
+                  key: const Key('notification_capture_log_entry'),
+                  icon: Icons.history,
+                  title: l10n.notificationCaptureLogTitle,
+                  trailing: l10n.notificationCaptureLogEntryHint,
+                  onTap: () => Navigator.of(context).push(
+                    MaterialPageRoute<void>(
+                      builder: (_) => const NotificationCaptureLogPage(),
+                    ),
+                  ),
+                ),
               ),
               const SizedBox(height: 12),
               Text(
@@ -1053,29 +1068,12 @@ class _RecentNotificationDiagnostic extends StatelessWidget {
   }
 
   /// 把原生稳定阶段代码映射为本地化显示文案；未知代码保守显示“未执行”。
-  String _stageLabel(AppLocalizations l10n, String value) => switch (value) {
-    'success' => l10n.autoCaptureDiagnosticSucceeded,
-    'failed' => l10n.autoCaptureDiagnosticFailed,
-    'passed' => l10n.autoCaptureDiagnosticPassed,
-    'rejected' => l10n.autoCaptureDiagnosticRejected,
-    'enqueued' => l10n.autoCaptureDiagnosticEnqueued,
-    'duplicate' => l10n.autoCaptureDiagnosticDuplicate,
-    'invalidText' => l10n.autoCaptureDiagnosticFailed,
-    'writeFailed' => l10n.autoCaptureDiagnosticFailed,
-    _ => l10n.autoCaptureDiagnosticNotRun,
-  };
+  String _stageLabel(AppLocalizations l10n, String value) =>
+      notificationCaptureStageLabel(l10n, value);
 
   /// 把通知最终结果代码映射为可操作的解释，覆盖所有原生提前返回点。
-  String _outcomeLabel(AppLocalizations l10n, String value) => switch (value) {
-    'nativeDisabled' => l10n.autoCaptureDiagnosticOutcomeNativeDisabled,
-    'sourceBlocked' => l10n.autoCaptureDiagnosticOutcomeSourceBlocked,
-    'textUnavailable' => l10n.autoCaptureDiagnosticOutcomeTextUnavailable,
-    'financialRejected' => l10n.autoCaptureDiagnosticOutcomeFinancialRejected,
-    'queued' => l10n.autoCaptureDiagnosticOutcomeQueued,
-    'duplicate' => l10n.autoCaptureDiagnosticOutcomeDuplicate,
-    'queueWriteFailed' => l10n.autoCaptureDiagnosticOutcomeQueueWriteFailed,
-    _ => l10n.autoCaptureDiagnosticUnavailable,
-  };
+  String _outcomeLabel(AppLocalizations l10n, String value) =>
+      notificationCaptureOutcomeLabel(l10n, value);
 }
 
 class _AutoCaptureStatsCard extends StatelessWidget {

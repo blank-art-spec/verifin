@@ -14,7 +14,7 @@ import android.util.Log
  *
  * 用户必须在系统“通知使用权”页面显式授权。服务仅提取通知标题/正文并写原始队列，
  * 不启动界面、不调用 AI、不生成交易，也不会监听本应用自己的通知。服务连接状态和
- * 最近一次处理阶段会写入不含正文的本机诊断快照，方便区分系统未连接、正文提取失败、
+ * 最近一次处理阶段写入不含正文的诊断快照和七天日志，日志原文只来自允许的金融通知，便于区分正文提取失败、
  * 金融过滤未通过和成功入队。
  */
 class PaymentNotificationListenerService : NotificationListenerService() {
@@ -128,16 +128,17 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             )
             return
         }
+        val sourceEventId = AutoCaptureBridge.notificationEventId(
+            notificationKey = sbn.key,
+            postTime = sbn.postTime,
+            rawText = rawText,
+        )
         val queueResult = AutoCaptureBridge.enqueue(
             context = this,
             sourceKind = "notification",
             sourceId = sourcePackage,
             sourceLabel = sourceLabel,
-            sourceEventId = AutoCaptureBridge.notificationEventId(
-                notificationKey = sbn.key,
-                postTime = sbn.postTime,
-                rawText = rawText,
-            ),
+            sourceEventId = sourceEventId,
             rawText = rawText,
             receivedAt = sbn.postTime,
         )
@@ -159,6 +160,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
                 AutoCaptureEnqueueResult.WRITE_FAILED -> "queueWriteFailed"
             },
             occurredAt = sbn.postTime,
+            sourceEventId = sourceEventId,
+            rawText = rawText,
         )
     }
 

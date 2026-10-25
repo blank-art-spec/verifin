@@ -3,6 +3,7 @@ package top.talyra42.verifin
 import android.content.Context
 import android.content.Intent
 import android.content.pm.PackageManager
+import android.util.Log
 import org.json.JSONArray
 import org.json.JSONObject
 import java.util.UUID
@@ -84,6 +85,7 @@ object AutoCaptureBridge {
      * @param listenAll 是否接收所有来源（仍会经过金融关键词前置过滤）。
      * @param packages 精确包名白名单；listenAll=false 时生效。
      */
+    @Synchronized
     fun writeConfig(
         context: Context,
         notificationEnabled: Boolean,
@@ -107,7 +109,9 @@ object AutoCaptureBridge {
 
         // 配置来自用户刚完成的显式操作。这里同步提交，保证应用随即退到后台或进程被
         // 系统回收时，NotificationListenerService 仍能读到已经确认的新开关。
-        return editor.commit()
+        val saved = editor.commit()
+        if (saved) pruneNotificationCaptureLogs(context)
+        return saved
     }
 
     /** 查询桌面可启动的已安装应用，并补充系统可见的已知通知来源。
@@ -242,7 +246,8 @@ object AutoCaptureBridge {
         prefs(context).getLong(KEY_LISTENER_DISCONNECTED_AT, 0L)
 
     /**
-     * 记录最近一次通知在原生采集管线中的停留位置，不保存通知正文。
+     * 更新不含正文的最近通知快照，并追加设备本地七天历史。
+     * 历史存储会重新校验采集开关、来源许可及金融过滤结果。
      *
      * @param sourceId 通知来源包名；原生总开关关闭时传空，避免额外记录无关来源。
      * @param sourceLabel 通知来源显示名；解析失败时回退包名。
@@ -251,6 +256,7 @@ object AutoCaptureBridge {
      * @param queueResult notRun、enqueued 或 duplicate。
      * @param outcome 页面用于解释结果的稳定代码，不直接作为用户可见文案。
      */
+    @Synchronized
     fun recordNotificationDiagnostic(
         context: Context,
         sourceId: String,
@@ -260,7 +266,14 @@ object AutoCaptureBridge {
         queueResult: String,
         outcome: String,
         occurredAt: Long = System.currentTimeMillis(),
+        sourceEventId: String = "",
+        rawText: String = "",
     ) {
+        // 与配置/重置使用同一把锁，检查必须先于快照写入；旧回调不能在重置后恢复来源信息。
+        // 关闭状态仅允许 NLS 原有的不含来源信息的 nativeDisabled 快照。
+        if (!notificationEnabled(context) &&
+            (sourceId.isNotBlank() || sourceLabel.isNotBlank() || outcome != "nativeDisabled")
+        ) return
         val diagnostic = JSONObject()
             .put("occurredAt", occurredAt)
             .put("sourceId", sourceId)
@@ -272,6 +285,57 @@ object AutoCaptureBridge {
         prefs(context).edit()
             .putString(KEY_LAST_NOTIFICATION_DIAGNOSTIC, diagnostic.toString())
             .apply()
+        if (sourceId.isBlank() || outcome == "nativeDisabled" || !notificationEnabled(context)) return
+        try {
+            NotificationCaptureLogStore(context).use { store ->
+                store.append(
+                    NotificationCaptureLogRecord(
+                        occurredAt = occurredAt,
+                        sourceId = sourceId,
+                        sourceLabel = sourceLabel,
+                        textExtraction = textExtraction,
+                        financialFilter = financialFilter,
+                        queueResult = queueResult,
+                        outcome = outcome,
+                        sourceEventId = sourceEventId,
+                        rawText = rawText,
+                    ),
+                )
+            }
+        } catch (error: RuntimeException) {
+            // 不能让辅助日志失败阻断原始事件采集；不输出正文、金额或 SQL 参数。
+            Log.e("VeriFinCapture", "通知捕获日志保存失败：${error.javaClass.simpleName}")
+        }
+    }
+
+    /** 分页读取七天内设备日志；失败交给页面反馈，不伪装成空列表。 */
+    fun readNotificationCaptureLogs(
+        context: Context,
+        beforeId: String? = null,
+        limit: Int = 50,
+    ): Map<String, Any?> = NotificationCaptureLogStore(context).use { it.read(beforeId, limit) }
+
+    /** 清空捕获日志；不修改开关、采集队列、待确认事件或账目。 */
+    fun clearNotificationCaptureLogs(context: Context): Boolean {
+        NotificationCaptureLogStore(context).use { it.clear() }
+        return true
+    }
+
+    /** 用户明确重置全部本地数据时，先停用采集，再清除日志及最新诊断快照。 */
+    @Synchronized
+    fun resetNotificationCaptureLogs(context: Context): Boolean {
+        if (!writeConfig(context, false, false, false, emptyList(), emptyList())) return false
+        NotificationCaptureLogStore(context).use { it.clear() }
+        return prefs(context).edit().remove(KEY_LAST_NOTIFICATION_DIAGNOSTIC).commit()
+    }
+
+    /** 配置同步及诊断刷新时也执行到期清理；失败不回滚已保存的采集配置。 */
+    private fun pruneNotificationCaptureLogs(context: Context) {
+        try {
+            NotificationCaptureLogStore(context).use { it.purgeExpired() }
+        } catch (error: RuntimeException) {
+            Log.e("VeriFinCapture", "通知捕获日志清理失败：${error.javaClass.simpleName}")
+        }
     }
 
     /**
@@ -285,6 +349,7 @@ object AutoCaptureBridge {
         context: Context,
         notificationAccessGranted: Boolean,
     ): Map<String, Any?> {
+        pruneNotificationCaptureLogs(context)
         val values = prefs(context)
         val queueLength = try {
             JSONArray(values.getString(KEY_QUEUE, "[]")).length()

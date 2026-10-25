@@ -26,7 +26,17 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.text('自动记账与智能识别'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('支付通知监听'),
+      160,
+      scrollable: firstVerticalScrollable(),
+    );
     expect(find.text('支付通知监听'), findsOneWidget);
+    await tester.scrollUntilVisible(
+      find.text('消费短信补充'),
+      120,
+      scrollable: firstVerticalScrollable(),
+    );
     expect(find.text('消费短信补充'), findsOneWidget);
     await tester.scrollUntilVisible(
       find.text('暂时没有待处理事件'),
@@ -266,6 +276,11 @@ void main() {
       180,
       scrollable: firstVerticalScrollable(),
     );
+    await Scrollable.ensureVisible(
+      tester.element(find.text('复核记账')),
+      alignment: 0.5,
+    );
+    await tester.pumpAndSettle();
     await tester.tap(find.text('复核记账'));
     await tester.pumpAndSettle();
 

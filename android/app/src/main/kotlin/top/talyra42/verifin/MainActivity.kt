@@ -156,6 +156,35 @@ class MainActivity : FlutterFragmentActivity() {
                     }.start()
                 }
                 "readAutoCaptureQueue" -> result.success(AutoCaptureBridge.read(this))
+                "readNotificationCaptureLogs" -> {
+                    val beforeId = call.argument<String>("beforeId")
+                    val limit = call.argument<Number>("limit")?.toInt() ?: 50
+                    Thread {
+                        try {
+                            val page = AutoCaptureBridge.readNotificationCaptureLogs(this, beforeId, limit)
+                            runOnUiThread { result.success(page) }
+                        } catch (error: Exception) {
+                            // 不把通知正文或 SQL 参数放入通道错误或系统日志。
+                            runOnUiThread {
+                                result.error("CAPTURE_LOG_READ_FAILED", error.javaClass.simpleName, null)
+                            }
+                        }
+                    }.start()
+                }
+                "clearNotificationCaptureLogs", "resetNotificationCaptureLogs" -> {
+                    val reset = call.method == "resetNotificationCaptureLogs"
+                    Thread {
+                        try {
+                            val cleared = if (reset) AutoCaptureBridge.resetNotificationCaptureLogs(this)
+                                else AutoCaptureBridge.clearNotificationCaptureLogs(this)
+                            runOnUiThread { result.success(cleared) }
+                        } catch (error: Exception) {
+                            runOnUiThread {
+                                result.error("CAPTURE_LOG_CLEAR_FAILED", error.javaClass.simpleName, null)
+                            }
+                        }
+                    }.start()
+                }
                 "ackAutoCaptureQueue" -> {
                     AutoCaptureBridge.acknowledge(
                         this,

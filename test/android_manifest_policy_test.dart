@@ -66,7 +66,8 @@ void main() {
     expect(listener, contains('notification.tickerText'));
     expect(bridge, contains('recordNotificationDiagnostic'));
     expect(bridge, contains('notificationListenerConnected'));
-    expect(bridge, contains('return editor.commit()'));
+    expect(bridge, contains('val saved = editor.commit()'));
+    expect(bridge, contains('return saved'));
   });
 
   test('Play 渠道显式移除短信权限和接收器', () {

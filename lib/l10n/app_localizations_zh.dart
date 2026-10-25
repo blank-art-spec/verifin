@@ -5803,7 +5803,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get autoCaptureDiagnosticOutcomeTextUnavailable => '标准通知字段没有正文';
 
   @override
-  String get autoCaptureDiagnosticOutcomeFinancialRejected => '未命中金融关键词';
+  String get autoCaptureDiagnosticOutcomeFinancialRejected => '缺少数字或交易关键词';
 
   @override
   String get autoCaptureDiagnosticOutcomeQueued => '已写入原生队列';
@@ -6515,4 +6515,63 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get accountCurrencyChildExists => '该主账户已包含此币种，请选择其他币种。';
+
+  @override
+  String get notificationCaptureLogTitle => '通知捕获日志';
+
+  @override
+  String get notificationCaptureLogPrivacy =>
+      '日志仅保存在本机，保留最近 7 天。未允许来源及未通过交易筛选的通知只记录处理状态，不保存正文。';
+
+  @override
+  String get notificationCaptureLogEmpty => '最近 7 天暂无捕获日志';
+
+  @override
+  String get notificationCaptureLogEmptyHint => '开启支付通知监听后，新收到的通知处理结果会显示在这里。';
+
+  @override
+  String get notificationCaptureLogReadFailed => '无法读取通知捕获日志，请重试。';
+
+  @override
+  String get notificationCaptureLogRetry => '重试';
+
+  @override
+  String get notificationCaptureLogLoadMore => '加载更早日志';
+
+  @override
+  String get notificationCaptureLogClearTitle => '清空捕获日志？';
+
+  @override
+  String get notificationCaptureLogClearMessage =>
+      '仅删除通知捕获日志，不会删除待确认事件及其原文，也不会删除账目。清空后无法恢复。';
+
+  @override
+  String get notificationCaptureLogCleared => '捕获日志已清空';
+
+  @override
+  String get notificationCaptureLogClearFailed => '清空失败，日志仍保留，请重试。';
+
+  @override
+  String get notificationCaptureLogRecordedAt => '捕获时间';
+
+  @override
+  String get notificationCaptureLogOccurredAt => '通知时间';
+
+  @override
+  String get notificationCaptureLogSourceId => '来源应用包名';
+
+  @override
+  String get notificationCaptureLogRawText => '通知原文';
+
+  @override
+  String get notificationCaptureLogNoBody => '此结果未保留通知正文，仅记录处理状态。';
+
+  @override
+  String get notificationCaptureLogDetails => '查看详情与原文';
+
+  @override
+  String get notificationCaptureLogCollapse => '收起详情';
+
+  @override
+  String get notificationCaptureLogEntryHint => '保留 7 天';
 }

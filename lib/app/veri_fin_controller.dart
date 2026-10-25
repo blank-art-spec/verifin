@@ -36,6 +36,7 @@ import 'ledger_math.dart';
 import 'ledger_data_validation.dart';
 import 'logging/app_logger.dart';
 import 'models.dart';
+import 'platform_bridge.dart';
 import 'recurring.dart';
 import 'reminder/reminder_settings.dart';
 import 'reminder/account_entry_reminder.dart';

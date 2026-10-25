@@ -10433,7 +10433,7 @@ abstract class AppLocalizations {
   /// No description provided for @autoCaptureDiagnosticOutcomeFinancialRejected.
   ///
   /// In zh, this message translates to:
-  /// **'未命中金融关键词'**
+  /// **'缺少数字或交易关键词'**
   String get autoCaptureDiagnosticOutcomeFinancialRejected;
 
   /// No description provided for @autoCaptureDiagnosticOutcomeQueued.
@@ -11749,6 +11749,120 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'该主账户已包含此币种，请选择其他币种。'**
   String get accountCurrencyChildExists;
+
+  /// No description provided for @notificationCaptureLogTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知捕获日志'**
+  String get notificationCaptureLogTitle;
+
+  /// No description provided for @notificationCaptureLogPrivacy.
+  ///
+  /// In zh, this message translates to:
+  /// **'日志仅保存在本机，保留最近 7 天。未允许来源及未通过交易筛选的通知只记录处理状态，不保存正文。'**
+  String get notificationCaptureLogPrivacy;
+
+  /// No description provided for @notificationCaptureLogEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'最近 7 天暂无捕获日志'**
+  String get notificationCaptureLogEmpty;
+
+  /// No description provided for @notificationCaptureLogEmptyHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启支付通知监听后，新收到的通知处理结果会显示在这里。'**
+  String get notificationCaptureLogEmptyHint;
+
+  /// No description provided for @notificationCaptureLogReadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'无法读取通知捕获日志，请重试。'**
+  String get notificationCaptureLogReadFailed;
+
+  /// No description provided for @notificationCaptureLogRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'重试'**
+  String get notificationCaptureLogRetry;
+
+  /// No description provided for @notificationCaptureLogLoadMore.
+  ///
+  /// In zh, this message translates to:
+  /// **'加载更早日志'**
+  String get notificationCaptureLogLoadMore;
+
+  /// No description provided for @notificationCaptureLogClearTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空捕获日志？'**
+  String get notificationCaptureLogClearTitle;
+
+  /// No description provided for @notificationCaptureLogClearMessage.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅删除通知捕获日志，不会删除待确认事件及其原文，也不会删除账目。清空后无法恢复。'**
+  String get notificationCaptureLogClearMessage;
+
+  /// No description provided for @notificationCaptureLogCleared.
+  ///
+  /// In zh, this message translates to:
+  /// **'捕获日志已清空'**
+  String get notificationCaptureLogCleared;
+
+  /// No description provided for @notificationCaptureLogClearFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'清空失败，日志仍保留，请重试。'**
+  String get notificationCaptureLogClearFailed;
+
+  /// No description provided for @notificationCaptureLogRecordedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'捕获时间'**
+  String get notificationCaptureLogRecordedAt;
+
+  /// No description provided for @notificationCaptureLogOccurredAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知时间'**
+  String get notificationCaptureLogOccurredAt;
+
+  /// No description provided for @notificationCaptureLogSourceId.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源应用包名'**
+  String get notificationCaptureLogSourceId;
+
+  /// No description provided for @notificationCaptureLogRawText.
+  ///
+  /// In zh, this message translates to:
+  /// **'通知原文'**
+  String get notificationCaptureLogRawText;
+
+  /// No description provided for @notificationCaptureLogNoBody.
+  ///
+  /// In zh, this message translates to:
+  /// **'此结果未保留通知正文，仅记录处理状态。'**
+  String get notificationCaptureLogNoBody;
+
+  /// No description provided for @notificationCaptureLogDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看详情与原文'**
+  String get notificationCaptureLogDetails;
+
+  /// No description provided for @notificationCaptureLogCollapse.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起详情'**
+  String get notificationCaptureLogCollapse;
+
+  /// No description provided for @notificationCaptureLogEntryHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'保留 7 天'**
+  String get notificationCaptureLogEntryHint;
 }
 
 class _AppLocalizationsDelegate
