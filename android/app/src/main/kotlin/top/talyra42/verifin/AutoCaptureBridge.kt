@@ -246,7 +246,7 @@ object AutoCaptureBridge {
         prefs(context).getLong(KEY_LISTENER_DISCONNECTED_AT, 0L)
 
     /**
-     * 更新不含正文的最近通知快照，并追加设备本地七天历史。
+     * 更新不含正文的最近通知快照，并追加设备本地三天历史。
      * 历史存储会重新校验采集开关、来源许可及金融过滤结果。
      *
      * @param sourceId 通知来源包名；原生总开关关闭时传空，避免额外记录无关来源。
@@ -308,7 +308,7 @@ object AutoCaptureBridge {
         }
     }
 
-    /** 分页读取七天内设备日志；失败交给页面反馈，不伪装成空列表。 */
+    /** 分页读取三天内设备日志；失败交给页面反馈，不伪装成空列表。 */
     fun readNotificationCaptureLogs(
         context: Context,
         beforeId: String? = null,

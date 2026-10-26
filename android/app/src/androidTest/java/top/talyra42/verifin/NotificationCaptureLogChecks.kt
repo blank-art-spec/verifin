@@ -14,7 +14,8 @@ internal object NotificationCaptureLogChecks {
     private const val PREFERENCES_NAME = "notification-capture-log-checks"
     private const val BANK_PACKAGE = "test.capture.bank"
     private const val OTHER_PACKAGE = "test.capture.other"
-    private const val RETENTION_MS = 7L * 24L * 60L * 60L * 1_000L
+    private const val DAY_MS = 24L * 60L * 60L * 1_000L
+    private const val RETENTION_MS = 3L * DAY_MS
 
     /** 只允许 diagnostic 包运行，并在结束时关闭和删除本套件自己创建的文件。 */
     fun runAll(base: Context) {
@@ -49,7 +50,7 @@ internal object NotificationCaptureLogChecks {
         }
         val preferences = context.getSharedPreferences("ignored", Context.MODE_PRIVATE)
         val previousQueueCallback = AutoCaptureBridge.onQueueAvailable
-        var now = 1_800_000_000_000L
+        val now = 1_800_000_000_000L
         var store = NotificationCaptureLogStore(context, DATABASE_NAME) { now }
 
         fun configure(enabled: Boolean = true) {
@@ -82,13 +83,25 @@ internal object NotificationCaptureLogChecks {
             rawText = rawText,
         )
 
+        // 模拟旧版已落库的时间戳，避免准备夹具时追加操作先清掉三至七天内的旧数据。
+        fun seedRecordedTimes(logStore: NotificationCaptureLogStore, timestamps: List<Long>): List<String> {
+            val ids = timestamps.indices.map { requireNotNull(logStore.append(record(eventId = "retention-$it"))) }
+            ids.zip(timestamps).forEach { (id, recordedAt) ->
+                logStore.writableDatabase.execSQL(
+                    "UPDATE notification_capture_logs SET recorded_at = ? WHERE id = ?",
+                    arrayOf(recordedAt, id.toLong()),
+                )
+            }
+            return ids
+        }
+
         try {
             check(preferences.edit().clear().commit())
             AutoCaptureBridge.onQueueAvailable = null
             configure()
             store.clear()
 
-            // 时效按本机捕获时刻计算；补抓的旧通知仍应保留一个完整的七天窗口。
+            // 时效按本机捕获时刻计算；补抓的旧通知仍应保留一个完整的三天窗口。
             val historicalPostTime = now - RETENTION_MS * 2
             val oldNoticeId = requireNotNull(store.append(record(occurredAt = historicalPostTime)))
             val oldNotice = entries(store.read()).single()
@@ -98,26 +111,38 @@ internal object NotificationCaptureLogChecks {
             store = NotificationCaptureLogStore(context, DATABASE_NAME) { now }
             check(entries(store.read()).single()["id"] == oldNoticeId) { "日志必须在关闭重开数据库后保留" }
 
-            // 恰好七天和更早的记录过期；晚一毫秒的记录仍在保留窗口内。
+            // 恰好三天和更早的旧记录过期；晚一毫秒的记录仍在保留窗口内。
             store.clear()
             val cutoff = now - RETENTION_MS
-            now = cutoff - 1
-            store.append(record())
-            now = cutoff
-            store.append(record())
-            now = cutoff + 1
-            val retainedId = requireNotNull(store.append(record()))
-            now = cutoff + RETENTION_MS
-            check(entries(store.read()).map { it["id"] } == listOf(retainedId)) { "七天边界清理不正确" }
-            check(store.purgeExpired() == 0) { "读取日志时必须实际清理过期数据，而不只是隐藏" }
+            val retainedId = seedRecordedTimes(
+                store, listOf(now - 6L * DAY_MS, cutoff - 1, cutoff, cutoff + 1),
+            ).last()
+            check(storedIds(store).size == 4) { "读取前应存在旧保留期内的过期夹具" }
+            check(entries(store.read()).map { it["id"] } == listOf(retainedId)) { "三天边界清理不正确" }
+            check(storedIds(store) == listOf(retainedId)) { "读取时必须实际删除过期日志，而不只是隐藏" }
 
-            // 新通知到来时也清理过期项，不依赖用户打开日志页面。
+            // 新通知也清除三至七天内的旧日志，并保留三天边界内的记录。
             store.clear()
-            now = cutoff
-            store.append(record())
-            now = cutoff + RETENTION_MS
-            store.append(record())
-            check(store.purgeExpired() == 0) { "追加通知时必须清理过期日志" }
+            val appendRetainedId = seedRecordedTimes(
+                store, listOf(now - 6L * DAY_MS, cutoff, cutoff + 1),
+            ).last()
+            val appendedId = requireNotNull(store.append(record()))
+            check(storedIds(store) == listOf(appendedId, appendRetainedId)) { "追加通知时必须清理过期日志" }
+
+            // 配置同步走默认日志库；直接查表，防止后续 read 自行清理掩盖同步入口失效。
+            NotificationCaptureLogStore(context).use { configStore ->
+                configStore.clear()
+                val syncTime = System.currentTimeMillis()
+                val syncRetainedId = seedRecordedTimes(
+                    configStore,
+                    listOf(syncTime - 6L * DAY_MS, syncTime - 4L * DAY_MS,
+                        syncTime - RETENTION_MS, syncTime - 2L * DAY_MS),
+                ).last()
+                check(storedIds(configStore).size == 4)
+                configure()
+                check(storedIds(configStore) == listOf(syncRetainedId)) { "配置同步必须按三天保留期清理旧日志" }
+                configStore.clear()
+            }
 
             // 同一毫秒的多条通知用稳定 id 分页；翻页期间的新通知不能造成重复或漏项。
             store.clear()
@@ -264,6 +289,14 @@ internal object NotificationCaptureLogChecks {
             }
         }
     }
+
+    /** 不触发到期清理，确认 read/append/配置同步已物理删除旧行。 */
+    private fun storedIds(store: NotificationCaptureLogStore): List<String> =
+        store.readableDatabase.rawQuery("SELECT id FROM notification_capture_logs ORDER BY id DESC", null).use { cursor ->
+            buildList {
+                while (cursor.moveToNext()) add(cursor.getLong(0).toString())
+            }
+        }
 
     /** 检查 MethodChannel 风格的分页结果，不把类型不符默默当成空日志。 */
     private fun entries(batch: Map<String, Any?>): List<Map<*, *>> {

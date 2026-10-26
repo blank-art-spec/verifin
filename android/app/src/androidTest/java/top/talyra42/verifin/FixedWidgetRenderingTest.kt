@@ -35,7 +35,7 @@ class FixedWidgetRenderingTest : Instrumentation() {
         try {
             if (notificationCaptureLogSuite) {
                 NotificationCaptureLogChecks.runAll(targetContext)
-                result.putString("stream", "通过：通知日志七天清理、持久化、游标分页、正文边界和清空隔离\n")
+                result.putString("stream", "通过：通知日志三天清理、持久化、游标分页、正文边界和清空隔离\n")
             } else if (reminderLiveSuite) {
                 check(targetContext.packageName.endsWith(".graphicsdiagnostic")) { "只能在隔离应用安排真机测试" }
                 AccountEntryReminderReceiver.scheduleTest(targetContext, "提醒恢复验证", "隔离测试，不会记账", "账户记账提醒")

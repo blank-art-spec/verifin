@@ -11759,13 +11759,13 @@ abstract class AppLocalizations {
   /// No description provided for @notificationCaptureLogPrivacy.
   ///
   /// In zh, this message translates to:
-  /// **'日志仅保存在本机，保留最近 7 天。未允许来源及未通过交易筛选的通知只记录处理状态，不保存正文。'**
+  /// **'日志仅保存在本机，保留最近 3 天。未允许来源及未通过交易筛选的通知只记录处理状态，不保存正文。'**
   String get notificationCaptureLogPrivacy;
 
   /// No description provided for @notificationCaptureLogEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'最近 7 天暂无捕获日志'**
+  /// **'最近 3 天暂无捕获日志'**
   String get notificationCaptureLogEmpty;
 
   /// No description provided for @notificationCaptureLogEmptyHint.
@@ -11861,7 +11861,7 @@ abstract class AppLocalizations {
   /// No description provided for @notificationCaptureLogEntryHint.
   ///
   /// In zh, this message translates to:
-  /// **'保留 7 天'**
+  /// **'保留 3 天'**
   String get notificationCaptureLogEntryHint;
 }
 

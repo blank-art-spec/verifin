@@ -98,7 +98,7 @@ void main() {
     await tester.pumpAndSettle();
 
     expect(find.byType(NotificationCaptureLogPage), findsOneWidget);
-    expect(find.text('最近 7 天暂无捕获日志'), findsOneWidget);
+    expect(find.text('最近 3 天暂无捕获日志'), findsOneWidget);
   });
 
   testWidgets('日志详情可显示并选择三行以后的完整通知原文', (tester) async {
@@ -138,7 +138,7 @@ void main() {
     await _pumpPage(tester);
 
     expect(find.text('无法读取通知捕获日志，请重试。'), findsOneWidget);
-    expect(find.text('最近 7 天暂无捕获日志'), findsNothing);
+    expect(find.text('最近 3 天暂无捕获日志'), findsNothing);
     fail = false;
     await tester.tap(find.byKey(const Key('notification_log_retry')));
     await tester.pumpAndSettle();
@@ -224,7 +224,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(clearCalls, 2);
     expect(find.byKey(const ValueKey('notification_log_30')), findsNothing);
-    expect(find.text('最近 7 天暂无捕获日志'), findsOneWidget);
+    expect(find.text('最近 3 天暂无捕获日志'), findsOneWidget);
     expect(controller.entries.length, entriesBefore);
   });
 
@@ -249,7 +249,7 @@ void main() {
     older.complete(_batch([_entry('20')]));
     await tester.pumpAndSettle();
 
-    expect(find.text('最近 7 天暂无捕获日志'), findsOneWidget);
+    expect(find.text('最近 3 天暂无捕获日志'), findsOneWidget);
     expect(find.byKey(const ValueKey('notification_log_20')), findsNothing);
   });
 
@@ -283,7 +283,7 @@ void main() {
     cleanup.complete(true);
     await tester.pumpAndSettle();
     expect(reads, 2);
-    expect(find.text('最近 7 天暂无捕获日志'), findsOneWidget);
+    expect(find.text('最近 3 天暂无捕获日志'), findsOneWidget);
     expect(find.byType(SelectableText), findsNothing);
     await controller.waitForPendingWrites();
   });
@@ -319,7 +319,7 @@ void main() {
     await tester.pumpAndSettle();
     expect(find.text('初始化前的私密通知原文'), findsNothing);
     expect(find.byKey(const ValueKey('notification_log_30')), findsNothing);
-    expect(find.text('最近 7 天暂无捕获日志'), findsOneWidget);
+    expect(find.text('最近 3 天暂无捕获日志'), findsOneWidget);
     await controller.waitForPendingWrites();
   });
 
@@ -354,7 +354,7 @@ void main() {
     cleanup.complete();
     await tester.pumpAndSettle();
     expect(reads, 1);
-    expect(find.text('最近 7 天暂无捕获日志'), findsOneWidget);
+    expect(find.text('最近 3 天暂无捕获日志'), findsOneWidget);
     expect(find.byKey(const ValueKey('notification_log_30')), findsNothing);
     await controller.waitForPendingWrites();
   });

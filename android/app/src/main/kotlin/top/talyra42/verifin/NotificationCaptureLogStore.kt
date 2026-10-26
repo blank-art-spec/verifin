@@ -19,7 +19,7 @@ data class NotificationCaptureLogRecord(
 )
 
 /**
- * 设备本地通知日志，滚动保留七个 24 小时；不参与账本备份或恢复。
+ * 设备本地通知日志，滚动保留三个 24 小时；不参与账本备份或恢复。
  *
  * 独立 SQLite 文件避免每次通知重写整个历史 JSON。只有当前允许来源、已成功提取且通过
  * 金融过滤的通知才能保留正文，其余只保存来源和阶段状态。时钟和文件名可供隔离测试注入。
@@ -146,7 +146,7 @@ class NotificationCaptureLogStore(
     /** 仅删除本日志表，不碰采集队列、待复核事件、设置或账目。 */
     fun clear(): Int = writableDatabase.delete(TABLE, null, null)
 
-    /** 在配置同步时也清理；年龄达到七个 24 小时即到期。 */
+    /** 在配置同步时也清理；年龄达到三个 24 小时即到期。 */
     fun purgeExpired(): Int {
         val timestamp = now()
         require(timestamp > 0) { "Invalid capture log time" }
@@ -160,7 +160,7 @@ class NotificationCaptureLogStore(
         private const val DATABASE_NAME = "verifin_notification_capture_logs.db"
         private const val DATABASE_VERSION = 1
         private const val TABLE = "notification_capture_logs"
-        private const val RETENTION_MILLIS = 7L * 24L * 60L * 60L * 1_000L
+        private const val RETENTION_MILLIS = 3L * 24L * 60L * 60L * 1_000L
         private const val MAX_TEXT_LENGTH = 8_000
         private const val MAX_SOURCE_LENGTH = 256
         private const val MAX_STAGE_LENGTH = 64

@@ -9,7 +9,7 @@ import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 
-/// 设备本机七天通知捕获记录；读取及清空均不改变账本事件或正式交易。
+/// 设备本机三天通知捕获记录；读取及清空均不改变账本事件或正式交易。
 class NotificationCaptureLogPage extends StatefulWidget {
   const NotificationCaptureLogPage({super.key});
 

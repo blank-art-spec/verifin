@@ -2579,8 +2579,8 @@
     "accountParentValuation": "Value in parent account currency",
   "accountCurrencyChildExists": "This parent account already has this currency. Choose another currency.",
   "notificationCaptureLogTitle": "Notification capture logs",
-  "notificationCaptureLogPrivacy": "Logs stay on this device for the last 7 days. Blocked sources and notifications that fail transaction screening retain status only, without notification text.",
-  "notificationCaptureLogEmpty": "No capture logs in the last 7 days",
+  "notificationCaptureLogPrivacy": "Logs stay on this device for the last 3 days. Blocked sources and notifications that fail transaction screening retain status only, without notification text.",
+  "notificationCaptureLogEmpty": "No capture logs in the last 3 days",
   "notificationCaptureLogEmptyHint": "Enable payment notification listening to see processing results for new notifications.",
   "notificationCaptureLogReadFailed": "Unable to read notification capture logs. Try again.",
   "notificationCaptureLogRetry": "Retry",
@@ -2596,5 +2596,5 @@
   "notificationCaptureLogNoBody": "Notification text was not retained for this result; only processing status is saved.",
   "notificationCaptureLogDetails": "View details and text",
   "notificationCaptureLogCollapse": "Collapse details",
-  "notificationCaptureLogEntryHint": "Last 7 days"
+  "notificationCaptureLogEntryHint": "Last 3 days"
 }

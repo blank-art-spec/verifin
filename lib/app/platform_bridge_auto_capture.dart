@@ -12,7 +12,7 @@ void setAutoCaptureAvailableHandler(Future<void> Function()? handler) {
 
 /// 最近一条通知在 Android 原生采集管线中的处理结果。
 ///
-/// 此实时快照只包含来源、时间和阶段状态。可回看的七天通知日志单独保存，
+/// 此实时快照只包含来源、时间和阶段状态。可回看的三天通知日志单独保存，
 /// 并且只有允许来源且通过金融过滤的通知才可保留正文。
 class NativeNotificationDiagnostic {
   const NativeNotificationDiagnostic({
@@ -53,7 +53,7 @@ class NativeNotificationDiagnostic {
 
 /// 设备本机通知捕获日志，与账本事件及正式交易分开保存。
 ///
-/// [recordedAt] 是本次捕获时间，用于七天滚动保留；[occurredAt] 是系统通知时间。
+/// [recordedAt] 是本次捕获时间，用于三天滚动保留；[occurredAt] 是系统通知时间。
 /// [sourceEventId] 只用于关联当前账本已经存在的采集事件，不触发重新解析或入账。
 class NotificationCaptureLogEntry {
   const NotificationCaptureLogEntry({

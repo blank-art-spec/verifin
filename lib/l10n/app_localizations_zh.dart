@@ -6521,10 +6521,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationCaptureLogPrivacy =>
-      '日志仅保存在本机，保留最近 7 天。未允许来源及未通过交易筛选的通知只记录处理状态，不保存正文。';
+      '日志仅保存在本机，保留最近 3 天。未允许来源及未通过交易筛选的通知只记录处理状态，不保存正文。';
 
   @override
-  String get notificationCaptureLogEmpty => '最近 7 天暂无捕获日志';
+  String get notificationCaptureLogEmpty => '最近 3 天暂无捕获日志';
 
   @override
   String get notificationCaptureLogEmptyHint => '开启支付通知监听后，新收到的通知处理结果会显示在这里。';
@@ -6573,5 +6573,5 @@ class AppLocalizationsZh extends AppLocalizations {
   String get notificationCaptureLogCollapse => '收起详情';
 
   @override
-  String get notificationCaptureLogEntryHint => '保留 7 天';
+  String get notificationCaptureLogEntryHint => '保留 3 天';
 }

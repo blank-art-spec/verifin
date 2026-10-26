@@ -6741,11 +6741,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationCaptureLogPrivacy =>
-      'Logs stay on this device for the last 7 days. Blocked sources and notifications that fail transaction screening retain status only, without notification text.';
+      'Logs stay on this device for the last 3 days. Blocked sources and notifications that fail transaction screening retain status only, without notification text.';
 
   @override
   String get notificationCaptureLogEmpty =>
-      'No capture logs in the last 7 days';
+      'No capture logs in the last 3 days';
 
   @override
   String get notificationCaptureLogEmptyHint =>
@@ -6798,5 +6798,5 @@ class AppLocalizationsEn extends AppLocalizations {
   String get notificationCaptureLogCollapse => 'Collapse details';
 
   @override
-  String get notificationCaptureLogEntryHint => 'Last 7 days';
+  String get notificationCaptureLogEntryHint => 'Last 3 days';
 }
