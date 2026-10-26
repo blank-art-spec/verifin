@@ -6521,7 +6521,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationCaptureLogPrivacy =>
-      '日志仅保存在本机，保留最近 3 天。未允许来源及未通过交易筛选的通知只记录处理状态，不保存正文。';
+      '日志仅保存在本机，保留最近 3 天。允许来源的通知均保存系统提供的文字，包括未通过交易筛选的通知；未允许或已排除的来源不保存正文。源应用未提供的内容无法补齐，日志不会改变识别或入账结果。';
 
   @override
   String get notificationCaptureLogEmpty => '最近 3 天暂无捕获日志';
@@ -6562,6 +6562,15 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get notificationCaptureLogRawText => '通知原文';
+
+  @override
+  String get notificationCaptureLogUnavailableText => '系统未提供可读取的通知文字。';
+
+  @override
+  String get notificationCaptureLogPartialText => '部分内容未能读取或已达到保存上限。';
+
+  @override
+  String get notificationCaptureLogLegacyText => '旧记录，可能仅含部分通知文字。';
 
   @override
   String get notificationCaptureLogNoBody => '此结果未保留通知正文，仅记录处理状态。';

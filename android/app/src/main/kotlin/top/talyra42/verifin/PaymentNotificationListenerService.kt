@@ -12,7 +12,7 @@ import android.util.Log
  *
  * 用户必须在系统“通知使用权”页面显式授权。服务仅提取通知标题/正文并写原始队列，
  * 不启动界面、不调用 AI、不生成交易，也不会监听本应用自己的通知。服务连接状态和
- * 最近一次处理阶段写入不含正文的诊断快照和三天日志，日志原文只来自允许的金融通知，便于区分正文提取失败、
+ * 最近一次处理阶段写入不含正文的诊断快照，三天日志单独保存允许来源的通知文字，便于区分正文提取失败、
  * 金融过滤未通过和成功入队。
  */
 class PaymentNotificationListenerService : NotificationListenerService() {
@@ -40,7 +40,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
         }
     }
 
-    /** 系统发布通知时调用；按用户白名单与金融关键词过滤后保存原文。 */
+    /** 系统发布通知时调用；允许来源保存展示日志，识别队列仍按原金融条件过滤。 */
     override fun onNotificationPosted(sbn: StatusBarNotification?) {
         sbn ?: return
         captureNotification(sbn)
@@ -99,7 +99,14 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             )
             return
         }
-        val rawText = NotificationTextExtractor.extract(this, sbn.notification)
+        val rawText = try {
+            NotificationTextExtractor.extract(this, sbn.notification)
+        } catch (_: RuntimeException) {
+            // 异常标准字段不能阻止独立日志读取；不输出通知内容或异常对象。
+            Log.w(LOG_TAG, "通知识别正文读取失败，继续记录独立通知日志")
+            null
+        }
+        val logText = NotificationTextExtractor.extractForLog(this, sbn.notification)
         if (rawText == null) {
             AutoCaptureBridge.recordNotificationDiagnostic(
                 context = this,
@@ -110,6 +117,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
                 queueResult = "notRun",
                 outcome = "textUnavailable",
                 occurredAt = sbn.postTime,
+                rawText = logText.text,
+                textCompleteness = logText.textCompleteness,
             )
             return
         }
@@ -123,6 +132,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
                 queueResult = "notRun",
                 outcome = "financialRejected",
                 occurredAt = sbn.postTime,
+                rawText = logText.text,
+                textCompleteness = logText.textCompleteness,
             )
             return
         }
@@ -159,7 +170,8 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             },
             occurredAt = sbn.postTime,
             sourceEventId = sourceEventId,
-            rawText = rawText,
+            rawText = logText.text,
+            textCompleteness = logText.textCompleteness,
         )
     }
 

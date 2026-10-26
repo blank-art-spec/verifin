@@ -13,7 +13,7 @@ void setAutoCaptureAvailableHandler(Future<void> Function()? handler) {
 /// 最近一条通知在 Android 原生采集管线中的处理结果。
 ///
 /// 此实时快照只包含来源、时间和阶段状态。可回看的三天通知日志单独保存，
-/// 并且只有允许来源且通过金融过滤的通知才可保留正文。
+/// 允许来源的通知独立保存系统提供的文字，不受识别用金融过滤结果限制。
 class NativeNotificationDiagnostic {
   const NativeNotificationDiagnostic({
     required this.occurredAt,
@@ -62,6 +62,7 @@ class NotificationCaptureLogEntry {
     required this.diagnostic,
     this.sourceEventId = '',
     this.rawText = '',
+    this.textCompleteness = 'legacy',
   });
 
   final String id;
@@ -69,6 +70,9 @@ class NotificationCaptureLogEntry {
   final NativeNotificationDiagnostic diagnostic;
   final String sourceEventId;
   final String rawText;
+
+  /// captured 只表示已读取系统提供的文字，不承诺源应用提供了完整原始内容。
+  final String textCompleteness;
 
   DateTime get occurredAt => diagnostic.occurredAt;
   String get sourceId => diagnostic.sourceId;
@@ -104,23 +108,60 @@ class NotificationCaptureLogEntry {
       queueResult: text('queueResult', 'notRun'),
       outcome: text('outcome', 'none'),
     );
-    // 原生存储负责限制正文范围；读取时再次防御旧桥或畸形数据扩大正文暴露范围。
-    final retainBody =
-        diagnostic.sourceId.isNotEmpty &&
-        diagnostic.textExtraction == 'success' &&
-        diagnostic.financialFilter == 'passed' &&
+    // 日志正文独立于识别结果；仍拒绝被屏蔽、关闭采集和异常阶段组合的正文。
+    final status = text('textCompleteness', 'legacy');
+    final completeness =
         const <String>{
-          'queued',
-          'duplicate',
-          'queueWriteFailed',
-        }.contains(diagnostic.outcome);
+          'captured',
+          'partial',
+          'legacy',
+          'unavailable',
+          'notStored',
+        }.contains(status)
+        ? status
+        : 'legacy';
+    final eligibleOutcome = switch (diagnostic.outcome) {
+      'queued' || 'duplicate' || 'queueWriteFailed' =>
+        diagnostic.textExtraction == 'success' &&
+            diagnostic.financialFilter == 'passed',
+      'financialRejected' =>
+        diagnostic.textExtraction == 'success' &&
+            diagnostic.financialFilter == 'rejected' &&
+            diagnostic.queueResult == 'notRun',
+      'textUnavailable' =>
+        diagnostic.textExtraction == 'failed' &&
+            diagnostic.financialFilter == 'notRun' &&
+            diagnostic.queueResult == 'notRun',
+      _ => false,
+    };
+    final eligibleSource =
+        diagnostic.sourceId.trim().isNotEmpty && eligibleOutcome;
+    final retainBody =
+        eligibleSource &&
+        completeness != 'notStored' &&
+        completeness != 'unavailable';
     final body = retainBody ? text('rawText') : '';
+    const maxTextLength = 65536;
+    final truncated = body.length > maxTextLength;
+    var bodyEnd = maxTextLength;
+    if (truncated &&
+        body.codeUnitAt(bodyEnd - 1) >= 0xd800 &&
+        body.codeUnitAt(bodyEnd - 1) <= 0xdbff &&
+        body.codeUnitAt(bodyEnd) >= 0xdc00 &&
+        body.codeUnitAt(bodyEnd) <= 0xdfff) {
+      bodyEnd--;
+    }
     return NotificationCaptureLogEntry(
       id: id,
       recordedAt: DateTime.fromMillisecondsSinceEpoch(recorded),
       diagnostic: diagnostic,
-      sourceEventId: text('sourceEventId'),
-      rawText: body.length <= 8000 ? body : body.substring(0, 8000),
+      sourceEventId: retainBody ? text('sourceEventId') : '',
+      rawText: truncated ? body.substring(0, bodyEnd) : body,
+      textCompleteness: !eligibleSource || completeness == 'notStored'
+          ? 'notStored'
+          : truncated
+          ? 'partial'
+          : completeness,
     );
   }
 }

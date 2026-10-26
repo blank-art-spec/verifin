@@ -16,13 +16,14 @@ data class NotificationCaptureLogRecord(
     val outcome: String,
     val sourceEventId: String = "",
     val rawText: String = "",
+    val textCompleteness: String = "legacy",
 )
 
 /**
  * 设备本地通知日志，滚动保留三个 24 小时；不参与账本备份或恢复。
  *
- * 独立 SQLite 文件避免每次通知重写整个历史 JSON。只有当前允许来源、已成功提取且通过
- * 金融过滤的通知才能保留正文，其余只保存来源和阶段状态。时钟和文件名可供隔离测试注入。
+ * 独立 SQLite 文件避免每次通知重写整个历史 JSON。当前允许来源的通知可保留日志专用正文，
+ * 不受金融过滤和识别阶段限制；未允许或已排除来源只保存状态。时钟和文件名可供隔离测试注入。
  */
 class NotificationCaptureLogStore(
     private val context: Context,
@@ -43,7 +44,8 @@ class NotificationCaptureLogStore(
                 queue_result TEXT NOT NULL,
                 outcome TEXT NOT NULL,
                 source_event_id TEXT NOT NULL,
-                raw_text TEXT NOT NULL
+                raw_text TEXT NOT NULL,
+                text_completeness TEXT NOT NULL DEFAULT 'legacy'
             )
             """.trimIndent(),
         )
@@ -51,8 +53,9 @@ class NotificationCaptureLogStore(
     }
 
     override fun onUpgrade(db: SQLiteDatabase, oldVersion: Int, newVersion: Int) {
-        // 未来升级必须显式迁移，不以重建表的方式静默删除历史。
-        check(oldVersion == newVersion) { "Unsupported notification capture log schema upgrade" }
+        check(oldVersion == 1 && newVersion == 2) { "Unsupported notification capture log schema upgrade" }
+        // 旧日志不补造完整性结论，也不删除或重建已有正文。
+        db.execSQL("ALTER TABLE $TABLE ADD COLUMN text_completeness TEXT NOT NULL DEFAULT 'legacy'")
     }
 
     /** 与原生配置/重置共用锁，重置关停采集后不能再追加旧回调或敏感正文。 */
@@ -69,10 +72,25 @@ class NotificationCaptureLogStore(
                 db.setTransactionSuccessful()
                 return@synchronized null
             }
-            // 存储层重新核对权限与结果；调用方误传正文也不能越过来源/金融过滤边界。
+            // 日志与识别独立；再次核对来源许可，旧回调或误传正文仍不能越过隐私边界。
             val mayRetainText = AutoCaptureBridge.notificationSourceAllowed(context, record.sourceId) &&
-                record.textExtraction == "success" && record.financialFilter == "passed" &&
-                record.outcome in setOf("queued", "duplicate", "queueWriteFailed")
+                record.outcome !in setOf("sourceBlocked", "nativeDisabled")
+            val normalizedText = if (mayRetainText) record.rawText.trim() else ""
+            // UTF-16上限不能把代理对切开，避免桥编码后出现半个字符或替换符。
+            val textLimit = if (normalizedText.length > MAX_TEXT_LENGTH &&
+                Character.isHighSurrogate(normalizedText[MAX_TEXT_LENGTH - 1]) &&
+                Character.isLowSurrogate(normalizedText[MAX_TEXT_LENGTH])
+            ) MAX_TEXT_LENGTH - 1 else MAX_TEXT_LENGTH
+            val storedText = normalizedText.take(textLimit)
+            val completeness = when {
+                !mayRetainText -> "notStored"
+                normalizedText.length > MAX_TEXT_LENGTH -> "partial"
+                record.textCompleteness == "partial" -> "partial"
+                record.textCompleteness == "captured" && storedText.isEmpty() -> "unavailable"
+                record.textCompleteness == "unavailable" && storedText.isNotEmpty() -> "partial"
+                record.textCompleteness in setOf("captured", "unavailable", "legacy") -> record.textCompleteness
+                else -> "legacy"
+            }
             val values = ContentValues().apply {
                 put("recorded_at", recordedAt)
                 put("occurred_at", record.occurredAt.takeIf { it > 0 } ?: recordedAt)
@@ -83,7 +101,8 @@ class NotificationCaptureLogStore(
                 put("queue_result", record.queueResult.take(MAX_STAGE_LENGTH))
                 put("outcome", record.outcome.take(MAX_STAGE_LENGTH))
                 put("source_event_id", if (mayRetainText) record.sourceEventId else "")
-                put("raw_text", if (mayRetainText) record.rawText.trim().take(MAX_TEXT_LENGTH) else "")
+                put("raw_text", storedText)
+                put("text_completeness", completeness)
             }
             val id = db.insertOrThrow(TABLE, null, values)
             db.setTransactionSuccessful()
@@ -126,6 +145,7 @@ class NotificationCaptureLogStore(
                             "outcome" to cursor.getString(8),
                             "sourceEventId" to cursor.getString(9),
                             "rawText" to cursor.getString(10),
+                            "textCompleteness" to cursor.getString(11),
                         ),
                     )
                 }
@@ -158,15 +178,15 @@ class NotificationCaptureLogStore(
 
     companion object {
         private const val DATABASE_NAME = "verifin_notification_capture_logs.db"
-        private const val DATABASE_VERSION = 1
+        private const val DATABASE_VERSION = 2
         private const val TABLE = "notification_capture_logs"
         private const val RETENTION_MILLIS = 3L * 24L * 60L * 60L * 1_000L
-        private const val MAX_TEXT_LENGTH = 8_000
+        private const val MAX_TEXT_LENGTH = 65_536
         private const val MAX_SOURCE_LENGTH = 256
         private const val MAX_STAGE_LENGTH = 64
         private val COLUMNS = arrayOf(
             "id", "recorded_at", "occurred_at", "source_id", "source_label", "text_extraction",
-            "financial_filter", "queue_result", "outcome", "source_event_id", "raw_text",
+            "financial_filter", "queue_result", "outcome", "source_event_id", "raw_text", "text_completeness",
         )
     }
 }

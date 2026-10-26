@@ -247,7 +247,7 @@ object AutoCaptureBridge {
 
     /**
      * 更新不含正文的最近通知快照，并追加设备本地三天历史。
-     * 历史存储会重新校验采集开关、来源许可及金融过滤结果。
+     * 历史存储会重新校验采集开关和来源许可；允许来源的日志正文与金融识别独立。
      *
      * @param sourceId 通知来源包名；原生总开关关闭时传空，避免额外记录无关来源。
      * @param sourceLabel 通知来源显示名；解析失败时回退包名。
@@ -255,6 +255,8 @@ object AutoCaptureBridge {
      * @param financialFilter notRun、passed 或 rejected。
      * @param queueResult notRun、enqueued 或 duplicate。
      * @param outcome 页面用于解释结果的稳定代码，不直接作为用户可见文案。
+     * @param rawText 日志专用展示文字，不用于金融过滤、事件指纹或识别入队。
+     * @param textCompleteness captured、partial、unavailable 或旧记录兼容值 legacy。
      */
     @Synchronized
     fun recordNotificationDiagnostic(
@@ -268,6 +270,7 @@ object AutoCaptureBridge {
         occurredAt: Long = System.currentTimeMillis(),
         sourceEventId: String = "",
         rawText: String = "",
+        textCompleteness: String = "legacy",
     ) {
         // 与配置/重置使用同一把锁，检查必须先于快照写入；旧回调不能在重置后恢复来源信息。
         // 关闭状态仅允许 NLS 原有的不含来源信息的 nativeDisabled 快照。
@@ -299,6 +302,7 @@ object AutoCaptureBridge {
                         outcome = outcome,
                         sourceEventId = sourceEventId,
                         rawText = rawText,
+                        textCompleteness = textCompleteness,
                     ),
                 )
             }

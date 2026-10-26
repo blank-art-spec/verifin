@@ -19,6 +19,7 @@ Map<String, Object?> _row(
   String outcome = 'queued',
   String financialFilter = 'passed',
   String rawText = '信用卡尾号1234消费USD 12.34',
+  String textCompleteness = 'captured',
 }) => <String, Object?>{
   'id': id,
   'recordedAt': _time,
@@ -28,9 +29,15 @@ Map<String, Object?> _row(
   'sourceEventId': 'event-$id',
   'textExtraction': 'success',
   'financialFilter': financialFilter,
-  'queueResult': 'enqueued',
+  'queueResult': switch (outcome) {
+    'financialRejected' || 'textUnavailable' => 'notRun',
+    'duplicate' => 'duplicate',
+    'queueWriteFailed' => 'writeFailed',
+    _ => 'enqueued',
+  },
   'outcome': outcome,
   'rawText': rawText,
+  'textCompleteness': textCompleteness,
 };
 
 class _FailingRuleWriteRepository extends InMemoryLedgerRepository {
@@ -71,11 +78,9 @@ void main() {
     }
   });
 
-  test('过滤与关闭结果不会从异常原生数据暴露通知正文', () {
+  test('来源拦截、关闭和异常结果仍不暴露正文', () {
     for (final outcome in <String>[
       'sourceBlocked',
-      'financialRejected',
-      'textUnavailable',
       'nativeDisabled',
       'unknownFutureOutcome',
     ]) {
@@ -83,34 +88,107 @@ void main() {
         _row('1', outcome: outcome),
       )!;
       expect(entry.rawText, isEmpty, reason: outcome);
+      expect(entry.sourceEventId, isEmpty, reason: outcome);
+      expect(entry.textCompleteness, 'notStored', reason: outcome);
     }
-    expect(
-      NotificationCaptureLogEntry.fromMap(
-        _row('1', financialFilter: 'rejected'),
-      )!.rawText,
-      isEmpty,
-    );
-    expect(
-      NotificationCaptureLogEntry.fromMap(<String, Object?>{
-        ..._row('1'),
-        'sourceId': '',
-      })!.rawText,
-      isEmpty,
-    );
-    expect(
-      NotificationCaptureLogEntry.fromMap(<String, Object?>{
-        ..._row('1'),
-        'textExtraction': 'failed',
-      })!.rawText,
-      isEmpty,
-    );
-    final body = List<String>.filled(8500, '字').join();
-    final entry = NotificationCaptureLogEntry.fromMap(
-      _row('1', outcome: 'queueWriteFailed', rawText: body),
-    )!;
-    expect(entry.rawText.length, 8000);
+    for (final invalid in <Map<String, Object?>>[
+      _row('1', financialFilter: 'rejected'),
+      <String, Object?>{..._row('1'), 'sourceId': ''},
+      <String, Object?>{..._row('1'), 'textExtraction': 'failed'},
+      _row('1', textCompleteness: 'notStored'),
+      _row('1', textCompleteness: 'unavailable'),
+    ]) {
+      expect(NotificationCaptureLogEntry.fromMap(invalid)!.rawText, isEmpty);
+    }
   });
 
+  test('日志文字独立于金融筛选或识别正文提取结果', () {
+    final rejected = NotificationCaptureLogEntry.fromMap(
+      _row(
+        '1',
+        outcome: 'financialRejected',
+        financialFilter: 'rejected',
+        rawText: '完整的来源通知文字',
+      ),
+    )!;
+    expect(rejected.rawText, '完整的来源通知文字');
+    expect(rejected.textCompleteness, 'captured');
+    expect(rejected.outcome, 'financialRejected');
+    expect(rejected.queueResult, 'notRun');
+    final unavailable = NotificationCaptureLogEntry.fromMap(<String, Object?>{
+      ..._row(
+        '2',
+        outcome: 'textUnavailable',
+        financialFilter: 'notRun',
+        rawText: '日志独立提取到的可见文字',
+      ),
+      'textExtraction': 'failed',
+    })!;
+    expect(unavailable.rawText, '日志独立提取到的可见文字');
+    expect(unavailable.textExtraction, 'failed');
+    expect(unavailable.queueResult, 'notRun');
+  });
+
+  test('完整日志不再被旧8000字符边界截断，超出65536时明确标记部分内容', () {
+    final body = '${List<String>.filled(9000, '字').join()}通知原文末尾';
+    final full = NotificationCaptureLogEntry.fromMap(
+      _row('1', outcome: 'queueWriteFailed', rawText: body),
+    )!;
+    expect(full.rawText, body);
+    expect(full.textCompleteness, 'captured');
+    final boundary = List<String>.filled(65536, '字').join();
+    expect(
+      NotificationCaptureLogEntry.fromMap(
+        _row('2', rawText: boundary),
+      )!.textCompleteness,
+      'captured',
+    );
+    final truncated = NotificationCaptureLogEntry.fromMap(
+      _row('3', rawText: '$boundary超出'),
+    )!;
+    expect(truncated.rawText, boundary);
+    expect(truncated.textCompleteness, 'partial');
+  });
+
+  test('日志截断不切断跨越65536边界的emoji代理对', () {
+    final prefix = List<String>.filled(65535, '字').join();
+    final truncated = NotificationCaptureLogEntry.fromMap(
+      _row('1', rawText: '$prefix😀末尾'),
+    )!;
+    expect(truncated.rawText, prefix);
+    expect(truncated.textCompleteness, 'partial');
+    final exact = '${List<String>.filled(65534, '字').join()}😀';
+    final complete = NotificationCaptureLogEntry.fromMap(
+      _row('2', rawText: exact),
+    )!;
+    expect(complete.rawText, exact);
+    expect(complete.rawText.length, 65536);
+    expect(complete.textCompleteness, 'captured');
+  });
+  test('旧桥或未知完整性保持未知，部分内容和无文字状态不伪装成完整', () {
+    final legacy = _row('1')..remove('textCompleteness');
+    expect(
+      NotificationCaptureLogEntry.fromMap(legacy)!.textCompleteness,
+      'legacy',
+    );
+    expect(
+      NotificationCaptureLogEntry.fromMap(
+        _row('2', textCompleteness: 'futureState'),
+      )!.textCompleteness,
+      'legacy',
+    );
+    expect(
+      NotificationCaptureLogEntry.fromMap(
+        _row('3', textCompleteness: 'partial'),
+      )!.textCompleteness,
+      'partial',
+    );
+    final unavailable = NotificationCaptureLogEntry.fromMap(
+      _row('4', textCompleteness: 'unavailable'),
+    )!;
+    expect(unavailable.rawText, isEmpty);
+    expect(unavailable.textCompleteness, 'unavailable');
+  });
   test('分页结果跳过坏行并去重，无有效数据时不制造无限加载游标', () {
     final batch = NotificationCaptureLogBatch.fromMap(<String, Object?>{
       'entries': <Object?>[

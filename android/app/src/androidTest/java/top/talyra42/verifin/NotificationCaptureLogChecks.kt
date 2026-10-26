@@ -53,13 +53,14 @@ internal object NotificationCaptureLogChecks {
         val now = 1_800_000_000_000L
         var store = NotificationCaptureLogStore(context, DATABASE_NAME) { now }
 
-        fun configure(enabled: Boolean = true) {
+        fun configure(enabled: Boolean = true, excludedPackages: List<String> = emptyList()) {
             check(AutoCaptureBridge.writeConfig(
                 context = context,
                 notificationEnabled = enabled,
                 smsEnabled = false,
                 listenAll = false,
                 packages = listOf(BANK_PACKAGE),
+                excludedPackages = excludedPackages,
             )) { "隔离通知配置保存失败" }
         }
 
@@ -71,6 +72,7 @@ internal object NotificationCaptureLogChecks {
             occurredAt: Long = now,
             eventId: String = "notification-$now",
             outcome: String = "queued",
+            textCompleteness: String = "captured",
         ) = NotificationCaptureLogRecord(
             occurredAt = occurredAt,
             sourceId = sourceId,
@@ -81,6 +83,7 @@ internal object NotificationCaptureLogChecks {
             outcome = outcome,
             sourceEventId = eventId,
             rawText = rawText,
+            textCompleteness = textCompleteness,
         )
 
         // 模拟旧版已落库的时间戳，避免准备夹具时追加操作先清掉三至七天内的旧数据。
@@ -101,6 +104,46 @@ internal object NotificationCaptureLogChecks {
             configure()
             store.clear()
 
+            // 真实 v1 文件升级只增加完整性列，旧行、id、正文及独立索引均保留。
+            val migrationDatabase = "migration-v1.sqlite"
+            context.openOrCreateDatabase(migrationDatabase, Context.MODE_PRIVATE, null).use { legacyDb ->
+                legacyDb.execSQL(
+                    """
+                    CREATE TABLE notification_capture_logs (
+                        id INTEGER PRIMARY KEY AUTOINCREMENT,
+                        recorded_at INTEGER NOT NULL,
+                        occurred_at INTEGER NOT NULL,
+                        source_id TEXT NOT NULL,
+                        source_label TEXT NOT NULL,
+                        text_extraction TEXT NOT NULL,
+                        financial_filter TEXT NOT NULL,
+                        queue_result TEXT NOT NULL,
+                        outcome TEXT NOT NULL,
+                        source_event_id TEXT NOT NULL,
+                        raw_text TEXT NOT NULL
+                    )
+                    """.trimIndent(),
+                )
+                legacyDb.execSQL("CREATE INDEX notification_capture_logs_recorded_at ON notification_capture_logs(recorded_at)")
+                legacyDb.execSQL(
+                    "INSERT INTO notification_capture_logs VALUES (77, ?, ?, ?, '旧银行', 'success', 'passed', 'enqueued', 'queued', 'legacy-event', '旧版已保存正文')",
+                    arrayOf<Any>(now, now - 1, BANK_PACKAGE),
+                )
+                legacyDb.version = 1
+            }
+            NotificationCaptureLogStore(context, migrationDatabase) { now }.use { migrated ->
+                val oldRow = entries(migrated.read()).single()
+                check(migrated.readableDatabase.version == 2) { "独立日志库未升级至版本2" }
+                check(oldRow["id"] == "77" && oldRow["rawText"] == "旧版已保存正文") { "迁移不得重建或改写旧正文" }
+                check(oldRow["sourceEventId"] == "legacy-event" && oldRow["textCompleteness"] == "legacy") {
+                    "迁移不得丢失原事件号，也不能假称旧日志完整"
+                }
+                check(requireNotNull(migrated.append(record())).toLong() > 77)
+                check(entries(migrated.read()).size == 2) { "升级后写入不能覆盖历史行" }
+            }
+            NotificationCaptureLogStore(context, migrationDatabase) { now }.use { reopened ->
+                check(entries(reopened.read()).single { it["id"] == "77" }["textCompleteness"] == "legacy")
+            }
             // 时效按本机捕获时刻计算；补抓的旧通知仍应保留一个完整的三天窗口。
             val historicalPostTime = now - RETENTION_MS * 2
             val oldNoticeId = requireNotNull(store.append(record(occurredAt = historicalPostTime)))
@@ -165,27 +208,76 @@ internal object NotificationCaptureLogChecks {
                 check(failure is IllegalArgumentException) { "无效游标不能被当作第一页读取" }
             }
 
-            // 内容边界由存储层再次检查，不能仅依赖通知监听器传入的阶段结果。
+            // 日志正文与金融识别独立；来源许可仍由存储层再次检查。
             store.clear()
             val acceptedId = requireNotNull(store.append(record(rawText = "  已选来源消费USD 12.34  ")))
-            store.append(record(sourceId = OTHER_PACKAGE, rawText = "不允许来源的秘密正文"))
-            store.append(record(financialFilter = "rejected", rawText = "普通聊天内容不应保存"))
-            store.append(record(textExtraction = "failed", rawText = "正文提取失败不能保存残留文本"))
-            store.append(record(outcome = "sourceBlocked", rawText = "来源阻止结果不能夹带正文"))
-            store.append(record(outcome = "financialRejected", rawText = "被拒绝结果不能夹带正文"))
+            val blockedId = requireNotNull(store.append(record(sourceId = OTHER_PACKAGE, rawText = "不允许来源的秘密正文")))
+            val queueBeforeRejectedLogs = AutoCaptureBridge.read(context)
+            val rejectedId = requireNotNull(store.append(record(
+                financialFilter = "rejected", outcome = "financialRejected", eventId = "",
+                rawText = "允许来源未被识别的完整通知",
+            )))
+            val failedId = requireNotNull(store.append(record(
+                textExtraction = "failed", financialFilter = "notRun", outcome = "textUnavailable", eventId = "",
+                rawText = "日志单独提取到的文字",
+            )))
+            val notRunId = requireNotNull(store.append(record(textExtraction = "notRun", rawText = "日志不依赖识别阶段")))
+            val blockedOutcomeId = requireNotNull(store.append(record(outcome = "sourceBlocked", rawText = "来源阻止结果不能夹带正文")))
+            configure(excludedPackages = listOf(BANK_PACKAGE))
+            val excludedId = requireNotNull(store.append(record(rawText = "已排除来源不能保存正文")))
+            configure()
+            check(store.append(record(sourceId = context.packageName)) == null) { "不能保存本应用自己的通知" }
+            check(store.append(record(sourceId = "")) == null)
             val privacyRows = entries(store.read())
-            check(privacyRows.size == 6)
+            check(privacyRows.size == 7)
             check(privacyRows.single { it["id"] == acceptedId }["rawText"] == "已选来源消费USD 12.34")
-            check(privacyRows.filter { it["id"] != acceptedId }.all { it["rawText"] == "" && it["sourceEventId"] == "" }) {
-                "未允许来源、非金融通知和提取失败的日志只能保留阶段元数据"
-            }
+            check(privacyRows.single { it["id"] == rejectedId }["rawText"] == "允许来源未被识别的完整通知")
+            check(privacyRows.single { it["id"] == rejectedId }["sourceEventId"] == "") { "日志不能为未入队通知编造事件号" }
+            check(privacyRows.single { it["id"] == failedId }["rawText"] == "日志单独提取到的文字")
+            check(privacyRows.single { it["id"] == notRunId }["rawText"] == "日志不依赖识别阶段")
+            check(AutoCaptureBridge.read(context) == queueBeforeRejectedLogs) { "保存未识别日志不能创建采集队列输入" }
+            val deniedIds = setOf(blockedId, blockedOutcomeId, excludedId)
+            check(privacyRows.filter { it["id"] in deniedIds }.all {
+                it["rawText"] == "" && it["sourceEventId"] == "" && it["textCompleteness"] == "notStored"
+            }) { "未允许或已排除来源只能保存元数据，不能夹带正文和完整性结论" }
+            check(privacyRows.filter { it["id"] !in deniedIds }.all { it["textCompleteness"] == "captured" })
             configure(enabled = false)
             check(store.append(record(rawText = "关闭后不能捕获")) == null)
-            check(entries(store.read()).size == 6) { "总开关关闭后不得新增日志" }
+            check(entries(store.read()).size == 7) { "总开关关闭后不得新增日志" }
             configure()
-            val boundedId = requireNotNull(store.append(record(rawText = "消费USD 12.34 " + "x".repeat(8_100))))
-            check((entries(store.read()).single { it["id"] == boundedId }["rawText"] as String).length == 8_000)
 
+            // 日志不再在8000字符处截断；65536字符是独立日志上限，触顶必须明确partial。
+            val longerThanCaptureText = "x".repeat(9_000)
+            val longId = requireNotNull(store.append(record(rawText = longerThanCaptureText)))
+            check(entries(store.read()).single { it["id"] == longId }["rawText"] == longerThanCaptureText)
+            val exactText = "x".repeat(65_536)
+            val exactId = requireNotNull(store.append(record(rawText = exactText)))
+            val exactRow = entries(store.read()).single { it["id"] == exactId }
+            check(exactRow["rawText"] == exactText && exactRow["textCompleteness"] == "captured")
+            val boundedId = requireNotNull(store.append(record(rawText = exactText + "x")))
+            val boundedRow = entries(store.read()).single { it["id"] == boundedId }
+            check(boundedRow["rawText"] == exactText && boundedRow["textCompleteness"] == "partial") {
+                "存储层截断不能继续声称已完整读取"
+            }
+            val emoji = "\uD83D\uDE42"
+            val emojiFitsText = "x".repeat(65_534) + emoji
+            val emojiFitsId = requireNotNull(store.append(record(rawText = emojiFitsText)))
+            val emojiFitsRow = entries(store.read()).single { it["id"] == emojiFitsId }
+            check(emojiFitsRow["rawText"] == emojiFitsText && emojiFitsRow["textCompleteness"] == "captured") {
+                "完整位于边界内的emoji不能被裁掉"
+            }
+            val emojiCutPrefix = "x".repeat(65_535)
+            val emojiCutId = requireNotNull(store.append(record(rawText = emojiCutPrefix + emoji + "tail")))
+            val emojiCutRow = entries(store.read()).single { it["id"] == emojiCutId }
+            check(emojiCutRow["rawText"] == emojiCutPrefix && emojiCutRow["textCompleteness"] == "partial") {
+                "超过上限的emoji必须整体截去，不能留下半个UTF-16代理对"
+            }
+            val partialId = requireNotNull(store.append(record(rawText = "部分可读文字", textCompleteness = "partial")))
+            check(entries(store.read()).single { it["id"] == partialId }["textCompleteness"] == "partial")
+            val unknownId = requireNotNull(store.append(record(textCompleteness = "future-code")))
+            check(entries(store.read()).single { it["id"] == unknownId }["textCompleteness"] == "legacy")
+            val emptyId = requireNotNull(store.append(record(rawText = "  ", textCompleteness = "captured")))
+            check(entries(store.read()).single { it["id"] == emptyId }["textCompleteness"] == "unavailable")
             // 日志清理不能删除等待 Flutter 消费的原生通知队列。
             check(AutoCaptureBridge.enqueue(
                 context = context,
@@ -229,8 +321,31 @@ internal object NotificationCaptureLogChecks {
                     occurredAt = now,
                     sourceEventId = eventId,
                     rawText = "尾号1234消费USD 12.34",
+                    textCompleteness = "captured",
                 )
             }
+            // 真实桥也保存允许来源的未识别正文，仍不触发队列或泄漏到最近诊断快照。
+            val bridgeQueueBefore = AutoCaptureBridge.read(context)
+            AutoCaptureBridge.recordNotificationDiagnostic(
+                context = context,
+                sourceId = BANK_PACKAGE,
+                sourceLabel = "隔离银行",
+                textExtraction = "success",
+                financialFilter = "rejected",
+                queueResult = "notRun",
+                outcome = "financialRejected",
+                occurredAt = now,
+                rawText = "允许来源完整通知，金融过滤未通过",
+                textCompleteness = "captured",
+            )
+            val rejectedBridgeRow = entries(AutoCaptureBridge.readNotificationCaptureLogs(context)).single()
+            check(rejectedBridgeRow["rawText"] == "允许来源完整通知，金融过滤未通过")
+            check(rejectedBridgeRow["textCompleteness"] == "captured" && rejectedBridgeRow["sourceEventId"] == "")
+            check(AutoCaptureBridge.read(context) == bridgeQueueBefore)
+            val metadataOnly = AutoCaptureBridge.diagnostics(context, true)["lastNotification"] as? Map<*, *>
+                ?: error("应存在最近通知阶段快照")
+            check("rawText" !in metadataOnly && "textCompleteness" !in metadataOnly) { "最近诊断只能包含阶段元数据" }
+            check(AutoCaptureBridge.clearNotificationCaptureLogs(context))
             appendDefaultLog("before-bridge-clear")
             check(entries(AutoCaptureBridge.readNotificationCaptureLogs(context)).isNotEmpty())
             check(AutoCaptureBridge.clearNotificationCaptureLogs(context))

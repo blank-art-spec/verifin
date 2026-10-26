@@ -16,6 +16,7 @@ Map<String, Object?> _entry(
   String id, {
   String outcome = 'queued',
   String text = '掌上生活通知\n消费 USD 9.25\n卡尾号 1234',
+  String textCompleteness = 'captured',
 }) {
   final time = DateTime(2026, 10, 26, 10).millisecondsSinceEpoch;
   return {
@@ -30,6 +31,7 @@ Map<String, Object?> _entry(
     'queueResult': outcome == 'financialRejected' ? 'notRun' : 'enqueued',
     'outcome': outcome,
     'rawText': text,
+    'textCompleteness': textCompleteness,
   };
 }
 
@@ -119,19 +121,91 @@ void main() {
     expect(find.textContaining('通知时间'), findsOneWidget);
   });
 
-  testWidgets('过滤通知仅显示状态，不暴露桥接返回的正文', (tester) async {
-    read = (_) async =>
-        _batch([_entry('30', outcome: 'financialRejected', text: '不应显示的私密正文')]);
+  testWidgets('未通过金融筛选的通知仍可查看允许保存的正文', (tester) async {
+    read = (_) async => _batch([
+      _entry('30', outcome: 'financialRejected', text: '供排查的完整通知正文'),
+    ]);
     await _pumpPage(tester);
     await tester.tap(find.byKey(const ValueKey('notification_log_detail_30')));
     await tester.pumpAndSettle();
 
     expect(find.text('缺少数字或交易关键词'), findsOneWidget);
+    expect(find.text('供排查的完整通知正文'), findsOneWidget);
+    expect(find.byType(SelectableText), findsOneWidget);
+  });
+
+  testWidgets('来源拦截的通知仍仅显示状态，不暴露异常桥接正文', (tester) async {
+    read = (_) async =>
+        _batch([_entry('30', outcome: 'sourceBlocked', text: '不应显示的私密正文')]);
+    await _pumpPage(tester);
+    await tester.tap(find.byKey(const ValueKey('notification_log_detail_30')));
+    await tester.pumpAndSettle();
+
     expect(find.text('不应显示的私密正文'), findsNothing);
     expect(find.byType(SelectableText), findsNothing);
     expect(find.text('此结果未保留通知正文，仅记录处理状态。'), findsOneWidget);
   });
 
+  testWidgets('超过8000字符的日志可查看末尾，不隐藏保存的文字', (tester) async {
+    final longText = '${List<String>.filled(9000, '字').join()}完整通知的末尾';
+    read = (_) async => _batch([_entry('30', text: longText)]);
+    await _pumpPage(tester);
+    await tester.tap(find.byKey(const ValueKey('notification_log_detail_30')));
+    await tester.pumpAndSettle();
+    final body = tester.widget<SelectableText>(
+      find.byKey(const ValueKey('notification_log_body_30')),
+    );
+    expect(body.data, longText);
+    expect(body.maxLines, isNull);
+    expect(
+      find.byKey(const ValueKey('notification_log_completeness_30')),
+      findsNothing,
+    );
+  });
+
+  const completenessHints = {
+    'partial': '部分内容未能读取或已达到保存上限。',
+    'legacy': '旧记录，可能仅含部分通知文字。',
+    'unavailable': '系统未提供可读取的通知文字。',
+  };
+  for (final item in completenessHints.entries) {
+    testWidgets('通知日志完整性提示：${item.key}', (tester) async {
+      read = (_) async => _batch([
+        _entry(
+          '30',
+          text: item.key == 'unavailable' ? '' : '通知正文',
+          textCompleteness: item.key,
+        ),
+      ]);
+      await _pumpPage(tester);
+      await tester.tap(
+        find.byKey(const ValueKey('notification_log_detail_30')),
+      );
+      await tester.pumpAndSettle();
+      expect(find.text(item.value), findsOneWidget);
+    });
+  }
+  testWidgets('旧版未保存正文的记录不误称为系统未提供文字', (tester) async {
+    read = (_) async =>
+        _batch([_entry('30', text: '', textCompleteness: 'legacy')]);
+    await _pumpPage(tester);
+    await tester.tap(find.byKey(const ValueKey('notification_log_detail_30')));
+    await tester.pumpAndSettle();
+    expect(find.text('旧记录，可能仅含部分通知文字。'), findsOneWidget);
+    expect(find.text('此结果未保留通知正文，仅记录处理状态。'), findsOneWidget);
+    expect(find.text('系统未提供可读取的通知文字。'), findsNothing);
+  });
+  testWidgets('部分内容没有可显示文字时不误称为仅保存状态', (tester) async {
+    read = (_) async =>
+        _batch([_entry('30', text: '', textCompleteness: 'partial')]);
+    await _pumpPage(tester);
+    await tester.tap(find.byKey(const ValueKey('notification_log_detail_30')));
+    await tester.pumpAndSettle();
+    expect(find.text('部分内容未能读取或已达到保存上限。'), findsOneWidget);
+    expect(find.text('系统未提供可读取的通知文字。'), findsOneWidget);
+    expect(find.text('此结果未保留通知正文，仅记录处理状态。'), findsNothing);
+    expect(find.byType(SelectableText), findsNothing);
+  });
   testWidgets('读取失败不会假装为空，重试后展示日志', (tester) async {
     var fail = true;
     read = (_) async => fail ? null : _batch([_entry('30')]);

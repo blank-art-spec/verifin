@@ -11759,7 +11759,7 @@ abstract class AppLocalizations {
   /// No description provided for @notificationCaptureLogPrivacy.
   ///
   /// In zh, this message translates to:
-  /// **'日志仅保存在本机，保留最近 3 天。未允许来源及未通过交易筛选的通知只记录处理状态，不保存正文。'**
+  /// **'日志仅保存在本机，保留最近 3 天。允许来源的通知均保存系统提供的文字，包括未通过交易筛选的通知；未允许或已排除的来源不保存正文。源应用未提供的内容无法补齐，日志不会改变识别或入账结果。'**
   String get notificationCaptureLogPrivacy;
 
   /// No description provided for @notificationCaptureLogEmpty.
@@ -11839,6 +11839,24 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'通知原文'**
   String get notificationCaptureLogRawText;
+
+  /// No description provided for @notificationCaptureLogUnavailableText.
+  ///
+  /// In zh, this message translates to:
+  /// **'系统未提供可读取的通知文字。'**
+  String get notificationCaptureLogUnavailableText;
+
+  /// No description provided for @notificationCaptureLogPartialText.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分内容未能读取或已达到保存上限。'**
+  String get notificationCaptureLogPartialText;
+
+  /// No description provided for @notificationCaptureLogLegacyText.
+  ///
+  /// In zh, this message translates to:
+  /// **'旧记录，可能仅含部分通知文字。'**
+  String get notificationCaptureLogLegacyText;
 
   /// No description provided for @notificationCaptureLogNoBody.
   ///

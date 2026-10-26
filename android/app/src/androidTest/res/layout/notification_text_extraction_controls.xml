@@ -12,10 +12,12 @@
         android:layout_height="wrap_content"
         android:text="立即支付999元" />
     <Chronometer
+        android:id="@android:id/progress"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:text="计时噪声999" />
     <TextClock
+        android:id="@android:id/summary"
         android:layout_width="wrap_content"
         android:layout_height="wrap_content"
         android:format12Hour="'时钟噪声999'"

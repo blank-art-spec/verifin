@@ -33,6 +33,16 @@ internal object NotificationTextExtractionChecks {
             hiddenAncestorSkipsVisibleDescendants(context)
             actionAndClockControlsAreNotBody(context)
             customTraversalStopsAtNodeLimit(context)
+            logIncludesCustomEvenWhenStandardExists(context)
+            logDeduplicatesFieldsAndAllLayoutVariants(context)
+            logKeepsTextAboveLegacyLimit(context)
+            logMarksExactLengthBoundaries(context)
+            logPreservesStandardsOnLayoutFailure(context)
+            logReportsUnavailableWithoutReadableText(context)
+            logRespectsVisibilityAndControlBoundaries(context)
+            logKeepsActionTitlesWithoutChangingRecognition(context)
+            logReportsNodeBudgetCompleteness(context)
+            logHandlesMalformedFieldsAndSurrogateBoundaries(context)
         } finally {
             testResourceContext = null
         }
@@ -279,6 +289,239 @@ internal object NotificationTextExtractionChecks {
         }
         check(NotificationTextExtractor.extract(context, notification(511)) == "正文") {
             "512节点限额外的正文仍被读取"
+        }
+    }
+
+    /** 完整日志独立于识别正文：标准短文非空也继续读取展开布局。 */
+    private fun logIncludesCustomEvenWhenStandardExists(context: Context) {
+        val standard = "尾号1234消费USD"
+        val complete = "尾号1234消费USD 12.34，商户TEST，交易已成功"
+        val notice = Notification().apply {
+            extras = Bundle().apply {
+                putCharSequence(Notification.EXTRA_TITLE, "银行提醒")
+                putCharSequence(Notification.EXTRA_TEXT, standard)
+            }
+            bigContentView = customView("银行提醒", complete)
+        }
+        val log = NotificationTextExtractor.extractForLog(context, notice)
+        check(log.text == "银行提醒\n$standard\n$complete" && log.textCompleteness == "captured") {
+            "标准正文非空时日志未补读完整自定义文字"
+        }
+        check(NotificationTextExtractor.extract(context, notice) == "银行提醒\n$standard") {
+            "日志补文改变了自动识别输入"
+        }
+    }
+
+    /** 标准字段及展开、折叠和横幅均读取，重复片段按整串保留一份。 */
+    private fun logDeduplicatesFieldsAndAllLayoutVariants(context: Context) {
+        val notice = Notification().apply {
+            extras = Bundle().apply {
+                putCharSequence(Notification.EXTRA_TITLE, "银行提醒")
+                putCharSequence(Notification.EXTRA_TITLE_BIG, "展开标题")
+                putCharSequence(Notification.EXTRA_TEXT, "短通知")
+                putCharSequence(Notification.EXTRA_BIG_TEXT, "展开正文")
+                putCharSequence(Notification.EXTRA_SUB_TEXT, "副标题")
+                putCharSequence(Notification.EXTRA_SUMMARY_TEXT, "摘要")
+                putCharSequence(Notification.EXTRA_INFO_TEXT, "信息文字")
+                putCharSequence(Notification.EXTRA_CONVERSATION_TITLE, "会话标题")
+                putCharSequenceArray(Notification.EXTRA_TEXT_LINES, arrayOf("短通知", "多行补充"))
+                putParcelableArray(Notification.EXTRA_MESSAGES, arrayOf(message("当前消息")))
+                putParcelableArray(Notification.EXTRA_HISTORIC_MESSAGES, arrayOf(message("历史消息")))
+            }
+            tickerText = "状态栏文字"
+            bigContentView = customView("银行提醒", "展开正文")
+            contentView = customView("短通知", "折叠补充")
+            headsUpContentView = customView("展开正文", "横幅补充")
+        }
+        val expected = listOf(
+            "银行提醒", "展开标题", "展开正文", "短通知", "副标题", "摘要", "信息文字", "会话标题",
+            "多行补充", "当前消息", "历史消息", "状态栏文字", "折叠补充", "横幅补充",
+        ).joinToString("\n")
+        val log = NotificationTextExtractor.extractForLog(context, notice)
+        check(log.text == expected && log.textCompleteness == "captured") {
+            "日志未覆盖全部布局或标准文字，或出现重复片段"
+        }
+    }
+
+    /** 日志不再在旧8000字符处静默截断，识别兜底仍保持原有上限。 */
+    private fun logKeepsTextAboveLegacyLimit(context: Context) {
+        val longBody = "x".repeat(8_100)
+        val customNotice = Notification().apply {
+            extras = Bundle()
+            bigContentView = customView("", longBody)
+        }
+        val customLog = NotificationTextExtractor.extractForLog(context, customNotice)
+        check(customLog.text == longBody && customLog.textCompleteness == "captured") {
+            "完整日志仍按旧8000字符上限截断"
+        }
+        check(NotificationTextExtractor.extract(context, customNotice) == "x".repeat(8_000)) {
+            "日志扩容改变了原识别文本预算"
+        }
+        val standardNotice = Notification().apply {
+            extras = Bundle().apply { putCharSequence(Notification.EXTRA_TEXT, longBody) }
+        }
+        val standardLog = NotificationTextExtractor.extractForLog(context, standardNotice)
+        check(standardLog.text == longBody && standardLog.textCompleteness == "captured") {
+            "完整标准日志被旧显示上限截断"
+        }
+    }
+
+    /** 精确长度不误报截断；超长及标题换行占用预算时明确标记partial。 */
+    private fun logMarksExactLengthBoundaries(context: Context) {
+        fun standard(body: String, title: String? = null): Notification = Notification().apply {
+            extras = Bundle().apply {
+                putCharSequence(Notification.EXTRA_TITLE, title)
+                putCharSequence(Notification.EXTRA_TEXT, body)
+            }
+        }
+        val atLimit = NotificationTextExtractor.extractForLog(context, standard("x".repeat(65_536)))
+        check(atLimit.text.length == 65_536 && atLimit.textCompleteness == "captured") {
+            "精确65536字符被错误标记为部分内容"
+        }
+        val overLimit = NotificationTextExtractor.extractForLog(context, standard("x".repeat(65_537)))
+        check(overLimit.text == "x".repeat(65_536) && overLimit.textCompleteness == "partial") {
+            "超长标准日志未限长或未提示部分内容"
+        }
+        val title = "银行提醒"
+        val exactBody = "x".repeat(65_536 - title.length - 1)
+        val withTitle = NotificationTextExtractor.extractForLog(context, standard(exactBody, title))
+        check(withTitle.text == "$title\n$exactBody" && withTitle.textCompleteness == "captured") {
+            "标题及换行计入预算后的精确边界不正确"
+        }
+        val extraBody = NotificationTextExtractor.extractForLog(context, standard(exactBody + "x", title))
+        check(extraBody.text == withTitle.text && extraBody.textCompleteness == "partial") {
+            "正文上限未包含标题和换行"
+        }
+        val customNotice = Notification().apply {
+            extras = Bundle()
+            contentView = customView("", "x".repeat(65_537))
+        }
+        val customLog = NotificationTextExtractor.extractForLog(context, customNotice)
+        check(customLog.text == "x".repeat(65_536) && customLog.textCompleteness == "partial") {
+            "超长自定义日志未限长或未提示部分内容"
+        }
+    }
+
+    /** 一个布局异常不丢失标准内容或其他布局，日志明确表示内容不完整。 */
+    private fun logPreservesStandardsOnLayoutFailure(context: Context) {
+        val notice = Notification().apply {
+            extras = Bundle().apply { putCharSequence(Notification.EXTRA_TEXT, "标准短文") }
+            bigContentView = RemoteViews("android", Int.MAX_VALUE)
+            contentView = customView("", "可读取补充")
+        }
+        val log = NotificationTextExtractor.extractForLog(context, notice)
+        check(log.text == "标准短文\n可读取补充" && log.textCompleteness == "partial") {
+            "布局失败未保留可用文字或被错误标记为已完整读取"
+        }
+        check(NotificationTextExtractor.extract(context, notice) == "标准短文") {
+            "日志异常改变了原识别结果"
+        }
+    }
+
+    /** 确实没有可读文字与有读取失败分别表示，不能伪装为captured。 */
+    private fun logReportsUnavailableWithoutReadableText(context: Context) {
+        for (notice in listOf(null, Notification().apply { extras = Bundle() })) {
+            val log = NotificationTextExtractor.extractForLog(context, notice)
+            check(log.text.isEmpty() && log.textCompleteness == "unavailable") { "空通知日志应显示无可读文字" }
+        }
+        val unreadable = Notification().apply {
+            extras = Bundle()
+            contentView = RemoteViews("android", Int.MAX_VALUE)
+        }
+        val failedLog = NotificationTextExtractor.extractForLog(context, unreadable)
+        check(failedLog.text.isEmpty() && failedLog.textCompleteness == "partial") {
+            "读取失败的空日志未标明不完整"
+        }
+    }
+
+    /** 日志跳过隐藏文字，但保留可见操作按钮与时钟文字供查看。 */
+    private fun logRespectsVisibilityAndControlBoundaries(context: Context) {
+        for (visibility in listOf(View.GONE, View.INVISIBLE)) {
+            val notice = Notification().apply {
+                extras = Bundle()
+                contentView = customRootView().apply { setViewVisibility(android.R.id.content, visibility) }
+            }
+            val log = NotificationTextExtractor.extractForLog(context, notice)
+            check(log.text.isEmpty() && log.textCompleteness == "unavailable") { "日志读取了隐藏父容器下的内容" }
+        }
+        val controls = Notification().apply {
+            extras = Bundle()
+            contentView = testLayout("notification_text_extraction_controls").apply {
+                setTextViewText(android.R.id.progress, "计时器文字999")
+                setTextViewText(android.R.id.summary, "时钟噪声999")
+            }
+        }
+        val rendered = requireNotNull(controls.contentView).apply(context, FrameLayout(context)) as LinearLayout
+        val visibleControlTexts = (0 until rendered.childCount).mapNotNull { index ->
+            (rendered.getChildAt(index) as? TextView)?.text?.toString()?.trim()?.takeIf { it.isNotEmpty() }
+        }
+        check(visibleControlTexts.contains("立即支付999元") && visibleControlTexts.contains("时钟噪声999")) {
+            "日志控件测试布局未包含按钮或可读时钟"
+        }
+        val log = NotificationTextExtractor.extractForLog(context, controls)
+        val loggedLines = log.text.lines()
+        check(log.textCompleteness == "captured" && visibleControlTexts.all { it in loggedLines }) {
+            "日志遗漏可见按钮、Chronometer或TextClock文字"
+        }
+        check(NotificationTextExtractor.extract(context, controls) == "尾号1234消费USD 12.34") {
+            "展示日志中的操作文字改变了原识别输入"
+        }
+    }
+
+    /** 系统独立Action标题也保留并去重，且不能进入识别输入。 */
+    private fun logKeepsActionTitlesWithoutChangingRecognition(context: Context) {
+        val notice = Notification().apply {
+            extras = Bundle().apply { putCharSequence(Notification.EXTRA_TEXT, "识别短文") }
+            actions = arrayOf(
+                Notification.Action.Builder(0, "打开账单", null).build(),
+                Notification.Action.Builder(0, "复制通知", null).build(),
+                Notification.Action.Builder(0, "打开账单", null).build(),
+            )
+        }
+        val log = NotificationTextExtractor.extractForLog(context, notice)
+        check(log.text == "识别短文\n打开账单\n复制通知" && log.textCompleteness == "captured") {
+            "日志遗漏系统Action标题，或出现重复操作文字"
+        }
+        check(NotificationTextExtractor.extract(context, notice) == "识别短文") {
+            "操作标题进入了原识别正文"
+        }
+    }
+
+    /** 限额内外必须同时校验正文与完整性标记，避免截断后仍显示已完整读取。 */
+    private fun logReportsNodeBudgetCompleteness(context: Context) {
+        fun notice(childrenBeforeSentinel: Int): Notification = Notification().apply {
+            extras = Bundle()
+            contentView = nodeLimitView(childrenBeforeSentinel)
+        }
+        val within = NotificationTextExtractor.extractForLog(context, notice(510))
+        check(within.text == "正文\n限额哨兵" && within.textCompleteness == "captured") {
+            "节点限额内完整日志未被完整读取"
+        }
+        val over = NotificationTextExtractor.extractForLog(context, notice(511))
+        check(over.text == "正文" && over.textCompleteness == "partial") {
+            "节点预算跳过内容时没有提示日志不完整"
+        }
+    }
+    /** 异常字段不打断其他正文读取；UTF-16截断保留完整字符。 */
+    private fun logHandlesMalformedFieldsAndSurrogateBoundaries(context: Context) {
+        val malformed = Notification().apply {
+            extras = Bundle().apply {
+                putInt(Notification.EXTRA_TEXT, 42)
+                putCharSequence(Notification.EXTRA_BIG_TEXT, "可读正文")
+            }
+        }
+        val malformedLog = NotificationTextExtractor.extractForLog(context, malformed)
+        check(malformedLog.text == "可读正文" && malformedLog.textCompleteness == "partial") {
+            "异常标准字段丢失其他文字或没有标明部分内容"
+        }
+        val emoji = Notification().apply {
+            extras = Bundle().apply {
+                putCharSequence(Notification.EXTRA_TEXT, "x".repeat(65_535) + "\uD83D\uDCB0")
+            }
+        }
+        val emojiLog = NotificationTextExtractor.extractForLog(context, emoji)
+        check(emojiLog.text == "x".repeat(65_535) && emojiLog.textCompleteness == "partial") {
+            "日志预算在UTF-16代理对中间截断，产生不完整字符"
         }
     }
 

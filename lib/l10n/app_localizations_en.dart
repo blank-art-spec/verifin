@@ -6741,7 +6741,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationCaptureLogPrivacy =>
-      'Logs stay on this device for the last 3 days. Blocked sources and notifications that fail transaction screening retain status only, without notification text.';
+      'Logs stay on this device for the last 3 days. Allowed sources retain the text provided by the system, including notifications that fail transaction screening. Blocked or excluded sources retain no text. Content omitted by the source app cannot be recovered. Logs do not change recognition or ledger entries.';
 
   @override
   String get notificationCaptureLogEmpty =>
@@ -6786,6 +6786,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationCaptureLogRawText => 'Notification text';
+
+  @override
+  String get notificationCaptureLogUnavailableText =>
+      'The system did not provide readable notification text.';
+
+  @override
+  String get notificationCaptureLogPartialText =>
+      'Some content could not be read or reached the storage limit.';
+
+  @override
+  String get notificationCaptureLogLegacyText =>
+      'Older record; it may contain only part of the notification text.';
 
   @override
   String get notificationCaptureLogNoBody =>

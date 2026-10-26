@@ -374,8 +374,23 @@ class _NotificationLogCard extends StatelessWidget {
               style: const TextStyle(fontWeight: FontWeight.w700),
             ),
             const SizedBox(height: 6),
+            if (entry.textCompleteness == 'partial' ||
+                entry.textCompleteness == 'legacy') ...[
+              Text(
+                entry.textCompleteness == 'partial'
+                    ? l10n.notificationCaptureLogPartialText
+                    : l10n.notificationCaptureLogLegacyText,
+                key: ValueKey('notification_log_completeness_${entry.id}'),
+              ),
+              const SizedBox(height: 6),
+            ],
             if (entry.rawText.isEmpty)
-              Text(l10n.notificationCaptureLogNoBody)
+              Text(
+                entry.textCompleteness == 'notStored' ||
+                        entry.textCompleteness == 'legacy'
+                    ? l10n.notificationCaptureLogNoBody
+                    : l10n.notificationCaptureLogUnavailableText,
+              )
             else
               SelectableText(
                 entry.rawText,
