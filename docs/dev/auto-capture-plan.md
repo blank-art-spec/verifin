@@ -134,8 +134,10 @@ flutter test integration_test/capture_review_test.dart -d <device-id> --flavor d
 监听服务实现 `onListenerConnected` / `onListenerDisconnected`：断开时在 Android 7.0+
 主动请求 `requestRebind`；重连后补抓“本次开启采集之后、上次断开之后、最近 24 小时”
 三者交集内仍驻留通知栏的活动通知，稳定事件号继续负责幂等。正文提取覆盖标准标题/正文、
-BigText、多行文本、副标题、摘要、信息文字、MessagingStyle 当前/历史消息与 ticker；完全由
-自定义 RemoteViews 绘制且不提供这些字段的通知会在诊断中明确显示 `textUnavailable`。
+BigText、多行文本、副标题、摘要、信息文字、MessagingStyle 当前/历史消息与 ticker，已有标准正文时保持原文及字段顺序不变。
+仅缺少标准正文时，`NotificationTextExtractor` 在本机对未挂载的自定义 RemoteViews 读取可见 TextView，依次尝试展开、折叠和横幅布局，按整串去重。标准正文包括非空 BigText、正文、多行文本、当前/历史消息和 ticker；仅有标题、摘要等补充字段也可触发兜底。
+新增兜底文字仅填充至原文 8000 字符上限，已有标准字段不裁剪；每个布局最多遍历 512 个节点，深度上限为 32；隐藏或透明的控件及其子节点、按钮、计时器和时钟不作为正文。布局资源失效或 ROM 不兼容时保留已读标准字段并继续其他布局，不输出正文或异常对象到日志。仍无可读文字时记录 `textUnavailable`；纯图片/自绘内容无法从 TextView 提取。
+来源筛选仍先于正文提取，金融过滤、入队、自动入账条件和 3 天日志边界不变；不增加权限、依赖、OCR 或无障碍，也不展开通知栏或点击控件。
 
 原生开关和原始队列都在返回成功前同步提交 SharedPreferences，保证应用随即退后台或进程
 被系统回收时不会只停留在异步写队列；每次启动、回前台和打开自动识别页都会用 Dart 权威

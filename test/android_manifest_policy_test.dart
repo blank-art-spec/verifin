@@ -55,15 +55,24 @@ void main() {
       'android/app/src/main/kotlin/top/talyra42/verifin/AutoCaptureBridge.kt',
     ).readAsStringSync();
 
+    final extractor = File(
+      'android/app/src/main/kotlin/top/talyra42/verifin/'
+      'NotificationTextExtractor.kt',
+    ).readAsStringSync();
+
     expect(listener, contains('override fun onListenerConnected()'));
     expect(listener, contains('override fun onListenerDisconnected()'));
     expect(listener, contains('requestRebind('));
     expect(listener, contains('activeNotifications'));
-    expect(listener, contains('Notification.EXTRA_TEXT_LINES'));
-    expect(listener, contains('Notification.EXTRA_SUB_TEXT'));
-    expect(listener, contains('Notification.EXTRA_SUMMARY_TEXT'));
-    expect(listener, contains('Notification.EXTRA_MESSAGES'));
-    expect(listener, contains('notification.tickerText'));
+    expect(
+      listener,
+      contains('NotificationTextExtractor.extract(this, sbn.notification)'),
+    );
+    expect(extractor, contains('Notification.EXTRA_TEXT_LINES'));
+    expect(extractor, contains('Notification.EXTRA_SUB_TEXT'));
+    expect(extractor, contains('Notification.EXTRA_SUMMARY_TEXT'));
+    expect(extractor, contains('Notification.EXTRA_MESSAGES'));
+    expect(extractor, contains('notification.tickerText'));
     expect(bridge, contains('recordNotificationDiagnostic'));
     expect(bridge, contains('notificationListenerConnected'));
     expect(bridge, contains('val saved = editor.commit()'));

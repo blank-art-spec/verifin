@@ -1,10 +1,8 @@
 package top.talyra42.verifin
 
-import android.app.Notification
 import android.content.ComponentName
 import android.content.Context
 import android.os.Build
-import android.os.Bundle
 import android.service.notification.NotificationListenerService
 import android.service.notification.StatusBarNotification
 import android.util.Log
@@ -101,7 +99,7 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             )
             return
         }
-        val rawText = extractText(sbn)
+        val rawText = NotificationTextExtractor.extract(this, sbn.notification)
         if (rawText == null) {
             AutoCaptureBridge.recordNotificationDiagnostic(
                 context = this,
@@ -163,57 +161,6 @@ class PaymentNotificationListenerService : NotificationListenerService() {
             sourceEventId = sourceEventId,
             rawText = rawText,
         )
-    }
-
-    /**
-     * 从常见 Notification 样式合并用户可见文字。
-     *
-     * 除标题、大文本和正文外，同时兼容多行文本、副标题、摘要、信息文字、会话标题、
-     * MessagingStyle 当前/历史消息以及 tickerText。使用有序集合去重，避免同一句正文
-     * 在多个 extras 字段重复出现。完全由自定义 RemoteViews 绘制且没有任何标准 extras
-     * 或 ticker 的通知仍会明确记录为 textUnavailable，而不是静默消失。
-     *
-     * @param sbn Android 状态栏通知。
-     * @return 合并后的非空正文；没有可读取文字时返回 null。
-     */
-    private fun extractText(sbn: StatusBarNotification): String? {
-        val notification = sbn.notification ?: return null
-        val extras = notification.extras
-        val values = linkedSetOf<String>()
-
-        /** 归一化一段可见文本并加入有序集合；空白不会进入结果。 */
-        fun add(value: CharSequence?) {
-            val normalized = value?.toString()?.trim().orEmpty()
-            if (normalized.isNotEmpty()) values.add(normalized)
-        }
-
-        add(extras.getCharSequence(Notification.EXTRA_TITLE))
-        add(extras.getCharSequence(Notification.EXTRA_TITLE_BIG))
-        add(extras.getCharSequence(Notification.EXTRA_BIG_TEXT))
-        add(extras.getCharSequence(Notification.EXTRA_TEXT))
-        add(extras.getCharSequence(Notification.EXTRA_SUB_TEXT))
-        add(extras.getCharSequence(Notification.EXTRA_SUMMARY_TEXT))
-        add(extras.getCharSequence(Notification.EXTRA_INFO_TEXT))
-        add(extras.getCharSequence(Notification.EXTRA_CONVERSATION_TITLE))
-        extras.getCharSequenceArray(Notification.EXTRA_TEXT_LINES)?.forEach(::add)
-        appendMessageTexts(extras.get(Notification.EXTRA_MESSAGES), ::add)
-        appendMessageTexts(extras.get(Notification.EXTRA_HISTORIC_MESSAGES), ::add)
-        add(notification.tickerText)
-        return values.joinToString("\n").ifBlank { null }
-    }
-
-    /**
-     * 提取 MessagingStyle bundle 数组中的消息正文。
-     *
-     * @param rawValue Notification extras 中的消息数组；类型异常时安全忽略。
-     * @param add 由调用方提供的文本归一化与去重函数。
-     */
-    private fun appendMessageTexts(rawValue: Any?, add: (CharSequence?) -> Unit) {
-        val messages = rawValue as? Array<*> ?: return
-        for (message in messages) {
-            val bundle = message as? Bundle ?: continue
-            add(bundle.getCharSequence("text"))
-        }
     }
 
     /**

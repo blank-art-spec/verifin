@@ -18,6 +18,7 @@ class FixedWidgetRenderingTest : Instrumentation() {
     private var accountRecoverySuite = false
     private var reminderLiveSuite = false
     private var notificationCaptureLogSuite = false
+    private var notificationTextExtractionSuite = false
 
     /** 读取 [arguments] 的 suite 参数；默认保持原桌面组件验收，其余套件仅显式选择运行。 */
     override fun onCreate(arguments: Bundle?) {
@@ -26,6 +27,7 @@ class FixedWidgetRenderingTest : Instrumentation() {
         accountRecoverySuite = arguments?.getString("suite") == "reminder-recovery"
         reminderLiveSuite = arguments?.getString("suite") == "reminder-live"
         notificationCaptureLogSuite = arguments?.getString("suite") == "notification-capture-log"
+        notificationTextExtractionSuite = arguments?.getString("suite") == "notification-text-extraction"
         start()
     }
 
@@ -33,7 +35,18 @@ class FixedWidgetRenderingTest : Instrumentation() {
     override fun onStart() {
         val result = Bundle()
         try {
-            if (notificationCaptureLogSuite) {
+            if (notificationTextExtractionSuite) {
+                var extractionError: Throwable? = null
+                runOnMainSync {
+                    try {
+                        NotificationTextExtractionChecks.runAll(targetContext, context)
+                    } catch (error: Throwable) {
+                        extractionError = error
+                    }
+                }
+                extractionError?.let { throw it }
+                result.putString("stream", "通过：标准通知正文不变、自定义布局兜底、去重与隐藏文本边界\n")
+            } else if (notificationCaptureLogSuite) {
                 NotificationCaptureLogChecks.runAll(targetContext)
                 result.putString("stream", "通过：通知日志三天清理、持久化、游标分页、正文边界和清空隔离\n")
             } else if (reminderLiveSuite) {
