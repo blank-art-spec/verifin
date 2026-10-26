@@ -72,6 +72,9 @@ enum AccountType {
       supportsCredit ||
       this == AccountType.debitCard ||
       this == AccountType.investment;
+
+  /// 是否允许独立股票投资记账；父账户仅汇总，操作仍落到真实币种子账户。
+  bool get supportsSecurities => this == AccountType.investment;
 }
 
 class Account {

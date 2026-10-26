@@ -6799,4 +6799,579 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get notificationCaptureLogEntryHint => 'Last 3 days';
+
+  @override
+  String get investTitle => 'Securities investments';
+
+  @override
+  String get investEnable => 'Enable securities holdings';
+
+  @override
+  String get investSetupHint =>
+      'Confirm opening cash. If the old balance includes stocks, enter cash and holdings separately to avoid double counting.';
+
+  @override
+  String get investCash => 'Cash';
+
+  @override
+  String get investNetValue => 'Estimated net value';
+
+  @override
+  String get investMarketValue => 'Net holdings value';
+
+  @override
+  String get investRealized => 'Realized P/L';
+
+  @override
+  String get investUnrealized => 'Unrealized P/L';
+
+  @override
+  String get investIncome => 'Net dividends and expenses';
+
+  @override
+  String get investPositions => 'Holdings';
+
+  @override
+  String get investRecords => 'Investment records';
+
+  @override
+  String get investNewTrade => 'Record stock transaction';
+
+  @override
+  String get investEmpty => 'No securities holdings';
+
+  @override
+  String get investManualHint =>
+      'Manual reference prices are in use. Quote validation only queries public data and does not change trades or valuations.';
+
+  @override
+  String get investSymbol => 'Symbol';
+
+  @override
+  String get investName => 'Security name';
+
+  @override
+  String get investMarket => 'Market';
+
+  @override
+  String get investMarketUS => 'US';
+
+  @override
+  String get investMarketCN => 'Mainland China';
+
+  @override
+  String get investMarketHK => 'Hong Kong';
+
+  @override
+  String get investBuy => 'Buy';
+
+  @override
+  String get investSell => 'Sell';
+
+  @override
+  String get investShort => 'Sell short';
+
+  @override
+  String get investCover => 'Buy to cover';
+
+  @override
+  String get investDividend => 'Dividend';
+
+  @override
+  String get investFee => 'Expense';
+
+  @override
+  String get investSplit => 'Stock split / consolidation';
+
+  @override
+  String get investTransferIn => 'Transfer in';
+
+  @override
+  String get investTransferOut => 'Transfer out';
+
+  @override
+  String get investQuantity => 'Quantity (shares)';
+
+  @override
+  String get investPrice => 'Trade price';
+
+  @override
+  String get investTotalAmount => 'Total amount';
+
+  @override
+  String get investSplitNew => 'New shares';
+
+  @override
+  String get investSplitOld => 'Old shares';
+
+  @override
+  String get investFees => 'Fees / taxes';
+
+  @override
+  String get investReference => 'Manual reference price';
+
+  @override
+  String get investCost => 'Remaining total cost';
+
+  @override
+  String get investUnknown => 'Unknown / incomplete';
+
+  @override
+  String get investLong => 'Long';
+
+  @override
+  String get investShortPosition => 'Short';
+
+  @override
+  String get investOpeningCash => 'Opening cash';
+
+  @override
+  String get investOpeningQuantity => 'Opening shares (optional)';
+
+  @override
+  String get investOpeningCost => 'Opening total cost (blank if unknown)';
+
+  @override
+  String get investFinance =>
+      'This account is confirmed to allow actual financing / negative cash';
+
+  @override
+  String get investSaveError =>
+      'Not saved. Check numbers, currency, cash, opening date and subsequent holdings.';
+
+  @override
+  String get investDelete => 'Delete investment record';
+
+  @override
+  String get investDeleteHint =>
+      'Cash, costs and later holdings will be recalculated. Transfers must be handled as a complete batch.';
+
+  @override
+  String get investDate => 'Trade time';
+
+  @override
+  String get investNote => 'Note';
+
+  @override
+  String get investSplitHint =>
+      'For a split, enter new shares as quantity and old shares as price. Total cost stays unchanged; confirm the reference price separately. For dividends or expenses, price is the total amount.';
+
+  @override
+  String get investOpeningDate => 'Opening effective time';
+
+  @override
+  String get investReprice => 'Change reference price';
+
+  @override
+  String get investTransfer => 'Transfer holdings';
+
+  @override
+  String get investTarget => 'Destination account';
+
+  @override
+  String get investCostEdit => 'Complete opening cost';
+
+  @override
+  String get investCashCheck => 'Confirm cash';
+
+  @override
+  String get investCashHint =>
+      'Adjusts cash only; stock quantities and costs remain unchanged.';
+
+  @override
+  String get investProbe => 'Broadcom quote validation';
+
+  @override
+  String get investProbeConsent =>
+      'Querying sends the AVGO symbol to Yahoo and Nasdaq, which can see your IP. Account and holding details are never sent. Quotes are for validation and do not guarantee execution prices.';
+
+  @override
+  String get investProbeRun => 'Query public quotes';
+
+  @override
+  String get investProbePending => 'Not queried';
+
+  @override
+  String get investProbeError => 'Source unavailable';
+
+  @override
+  String get investProbeTimeUnknown =>
+      'Valid quote time unknown; not real-time';
+
+  @override
+  String get investProbeNetworkError =>
+      'Cannot connect to the source. Check your network.';
+
+  @override
+  String get investProbeTimeout => 'Source request timed out. Try again later.';
+
+  @override
+  String get investProbeInvalidData =>
+      'Source data is incomplete or its format has changed.';
+
+  @override
+  String get investProbeNoContracts => 'No qualifying contracts returned';
+
+  @override
+  String get investSource => 'Source';
+
+  @override
+  String get investProbeResearch =>
+      'This query evaluates source feasibility. Release suitability still needs review.';
+
+  @override
+  String get investShortHint =>
+      'Short positions carry a repurchase obligation. Short-sale proceeds do not immediately increase net assets.';
+
+  @override
+  String get investEnableOpening => 'Enable and opening position';
+
+  @override
+  String get investCurrency => 'Settlement currency';
+
+  @override
+  String get investTransferHint =>
+      'Both accounts must be enabled investments in the same book and currency.';
+
+  @override
+  String get investSave => 'Save';
+
+  @override
+  String get investNoQuotes => 'Missing reference prices; net value incomplete';
+
+  @override
+  String get investEventType => 'Action';
+
+  @override
+  String get investTime => 'Time';
+
+  @override
+  String get investReferenceConsent =>
+      'A new security uses the reference price you confirm here; you can change it later.';
+
+  @override
+  String get investCurrentCash => 'Current book cash';
+
+  @override
+  String get investNoOptions =>
+      'Stock and option bookkeeping use manual reference prices. Public quotes are used only to validate sources.';
+
+  @override
+  String get investFetchedAt => 'Fetched at';
+
+  @override
+  String get investProbeSpecsUnknown =>
+      'Option multipliers, deliverables and quote timestamps still need verification. This page does not create option positions.';
+
+  @override
+  String get optionTitle => 'Option trades and settlement';
+
+  @override
+  String get optionCall => 'Call';
+
+  @override
+  String get optionPut => 'Put';
+
+  @override
+  String get optionPhysical => 'Physical exercise / assignment';
+
+  @override
+  String get optionCashSettlement => 'Cash settlement';
+
+  @override
+  String get optionUnsupported => 'Nonstandard / incomplete';
+
+  @override
+  String get optionBuyOpen => 'Buy to open';
+
+  @override
+  String get optionSellClose => 'Sell to close';
+
+  @override
+  String get optionSellOpen => 'Sell to open';
+
+  @override
+  String get optionBuyClose => 'Buy to close';
+
+  @override
+  String get optionExpire => 'Confirm worthless expiry';
+
+  @override
+  String get optionMargin => 'Frozen cash margin';
+
+  @override
+  String get optionMarginAfter =>
+      'Confirmed frozen total after this action (blank: unchanged; 0: release)';
+
+  @override
+  String get optionMarginHint =>
+      'Frozen funds remain in cash. Cash less frozen funds is a reference, not broker buying power. Closing does not release funds automatically.';
+
+  @override
+  String get optionAvailableCash => 'Reference available cash';
+
+  @override
+  String get optionManualHint =>
+      'Record actual option activity manually. Verify the contract code, expiry, multiplier and deliverables. Quote queries do not create contracts.';
+
+  @override
+  String get optionSelect => 'Select an existing contract';
+
+  @override
+  String get optionCode => 'Full contract code';
+
+  @override
+  String get optionUnderlying => 'Underlying stock symbol';
+
+  @override
+  String get optionUnderlyingName => 'Underlying stock name';
+
+  @override
+  String get optionExpiry => 'Contract expiry date';
+
+  @override
+  String get optionStrike => 'Strike price (contract identity)';
+
+  @override
+  String get optionMultiplier => 'Premium multiplier per unit';
+
+  @override
+  String get optionDeliverableShares => 'Actual shares delivered per contract';
+
+  @override
+  String get optionExerciseCash => 'Total exercise cash per contract';
+
+  @override
+  String get optionSpecification => 'Specification source / missing details';
+
+  @override
+  String get optionSpecConfirmed =>
+      'I have verified settlement, deliverables and currency amounts';
+
+  @override
+  String get optionContracts => 'Contracts (positive integer)';
+
+  @override
+  String get optionPremium => 'Premium per unit';
+
+  @override
+  String get optionActualSettlement => 'Actual total cash settlement';
+
+  @override
+  String get optionSettlementConfirmed =>
+      'I confirm the actual settlement / worthless expiry';
+
+  @override
+  String get optionUncoveredConsent =>
+      'For a call assignment, allow uncovered shares to become a stock short position with a repurchase obligation';
+
+  @override
+  String get optionUnderlyingReference =>
+      'Manual reference price for delivered stock';
+
+  @override
+  String get optionPreview => 'Preview resulting cash and holdings';
+
+  @override
+  String get optionAdjustmentHint =>
+      'Enter premium multiplier, delivered shares and exercise cash independently. Do not infer adjusted-contract cash from strike times delivered shares.';
+
+  @override
+  String get optionVerifySpec => 'Verify contract specifications';
+
+  @override
+  String get optionSpecOnlyHint =>
+      'Completes specifications without creating trades or cash movements. Pricing identity and settled deliverables are locked.';
+
+  @override
+  String get optionPending =>
+      'Pending: expiry, unverified specifications or underlying adjustment. Holdings are retained.';
+
+  @override
+  String get optionValidationError =>
+      'Not saved or preview unavailable. Check integer contracts, contract specifications, confirmation, holdings/cash, reference prices and later events. Unsupported deliverables remain pending.';
+
+  @override
+  String get marketTitle => 'Reference quotes';
+
+  @override
+  String get marketEnable => 'Enable reference quote requests';
+
+  @override
+  String get marketAutomatic =>
+      'Refresh every 5 minutes while this page is visible';
+
+  @override
+  String get marketRefresh => 'Refresh reference quotes';
+
+  @override
+  String get marketConsent =>
+      'When enabled, only security/contract codes go to approved sources, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. Refresh stops when leaving this page, backgrounding or locking.';
+
+  @override
+  String get marketGatePending =>
+      'No source has passed automatic valuation review. Manual reference prices remain available.';
+
+  @override
+  String get marketSourceReview => 'Source terms and field review';
+
+  @override
+  String get marketUseForValuation =>
+      'Use eligible quotes for valuation (off: persistent manual price)';
+
+  @override
+  String get marketSaveFailed =>
+      'Quote settings were not saved or the source is unavailable. Keep a manual reference price.';
+
+  @override
+  String get marketManualFallback => 'Manual fallback reference price';
+
+  @override
+  String get marketNoQuote =>
+      'No eligible quote. Using the manual fallback price.';
+
+  @override
+  String get marketReady => 'Eligible quotes cached';
+
+  @override
+  String get marketUnavailable =>
+      'This source/instrument is unavailable. Previous reference prices are retained.';
+
+  @override
+  String get marketFailed =>
+      'Source failure or invalid fields. Older cached quotes keep their original timestamps.';
+
+  @override
+  String get marketCooldown => 'Source cooldown. Refresh later.';
+
+  @override
+  String get marketNotCached =>
+      'Quotes were not cached. Current results are available only in memory.';
+
+  @override
+  String get marketIdle => 'Not refreshed; networking is off by default';
+
+  @override
+  String get marketAttempt => 'Last attempt';
+
+  @override
+  String get marketNextRefresh => 'Next allowed refresh';
+
+  @override
+  String get marketQuoteTime => 'Source quote time';
+
+  @override
+  String get marketStateUnknown =>
+      'Trading state or delay may be unknown; cached quotes are not guaranteed real-time';
+
+  @override
+  String get marketEffectiveHint =>
+      'Estimated net value uses cached quotes and manual fallback prices. Quotes never change actual trades, quantities or cash.';
+
+  @override
+  String get marketEffectivePrice => 'Market reference price';
+
+  @override
+  String get marketSetManual => 'Switch to a manual reference price';
+
+  @override
+  String get investHistory => 'Valuation history';
+
+  @override
+  String get investHistoryCapture => 'Save current valuation evidence';
+
+  @override
+  String get investHistorySaved => 'Current valuation evidence saved';
+
+  @override
+  String get investHistoryHint =>
+      'Only saved observations and their price and exchange-rate evidence are shown. Missing dates stay empty. Earlier ledger edits require affected observations to be reviewed.';
+
+  @override
+  String get investHistoryEmpty =>
+      'No saved valuation evidence yet. Save a current observation to view it here.';
+
+  @override
+  String get investHistoryGap =>
+      'Some historical dates lack valid prices, exchange rates or valuation evidence. View saved observations in the investment account valuation history.';
+
+  @override
+  String get investHistoryInvalid =>
+      'The ledger was revised or price evidence is incomplete. This observation cannot be used in historical totals.';
+
+  @override
+  String get investHistoryBase => 'Net value in the saved base currency';
+
+  @override
+  String get investHistoryRate => 'Saved reference exchange rate';
+
+  @override
+  String get investLongValue => 'Long position value';
+
+  @override
+  String get investShortObligation => 'Short position obligation';
+
+  @override
+  String get marketOpen => 'Source status: open';
+
+  @override
+  String get marketClosed => 'Source status: closed';
+
+  @override
+  String get marketHalted => 'Source status: halted';
+
+  @override
+  String marketDelayKnown(int minutes) {
+    return 'Source-declared delay: $minutes minutes';
+  }
+
+  @override
+  String get investHistorySingleObservation =>
+      'One observation saved. A trend appears after at least two valid observations are saved.';
+
+  @override
+  String get investSecurityDetails => 'Security details';
+
+  @override
+  String get investTradeDetails => 'Trade details';
+
+  @override
+  String get investContractTerms => 'Contract terms';
+
+  @override
+  String get investValuationBasis => 'Valuation basis';
+
+  @override
+  String get marketAwaitingReview => 'Pending review';
+
+  @override
+  String get optionRightType => 'Option type';
+
+  @override
+  String get investCashShare => 'Cash share';
+
+  @override
+  String get investHoldingsShare => 'Holdings share';
+
+  @override
+  String get investShortShare => 'Short obligation share';
+
+  @override
+  String get investAllocationHint => 'Shares use this account\'s total assets.';
+
+  @override
+  String get investAllocationLiabilityHint =>
+      'Shares use positive cash plus long position value. Short obligations and financing count as liabilities.';
+
+  @override
+  String investAllocationPercent(double value) {
+    final intl.NumberFormat valueNumberFormat =
+        intl.NumberFormat.decimalPercentPattern(
+          locale: localeName,
+          decimalDigits: 1,
+        );
+    final String valueString = valueNumberFormat.format(value);
+
+    return '$valueString';
+  }
 }

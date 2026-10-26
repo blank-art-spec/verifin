@@ -30,6 +30,7 @@ class LedgerDataSnapshot {
     this.billingStatements = const <BillingStatement>[],
     this.statementRepaymentAllocations = const <StatementRepaymentAllocation>[],
     this.creditAccounts = const <CreditAccount>[],
+    this.investmentPortfolios = const <InvestmentPortfolio>[],
   });
 
   final List<LedgerBook> books;
@@ -51,6 +52,7 @@ class LedgerDataSnapshot {
   final List<BillingStatement> billingStatements;
   final List<StatementRepaymentAllocation> statementRepaymentAllocations;
   final List<CreditAccount> creditAccounts;
+  final List<InvestmentPortfolio> investmentPortfolios;
 }
 
 /// 账目类数据仓储接口。生产实现为 [SqliteLedgerRepository]；测试可注入内存实现，
@@ -58,6 +60,12 @@ class LedgerDataSnapshot {
 ///
 /// 语义为「整表覆盖」：每次 saveX 以传入列表整体替换该类数据。
 abstract interface class LedgerRepository {
+  /// 读取所有账本的投资聚合，旧库升级后返回空集合。
+  Future<List<InvestmentPortfolio>> loadInvestmentPortfolios();
+
+  /// 原子替换全部投资聚合；跨账户持仓转移亦使用此入口，失败不得留下半个批次。
+  Future<void> saveInvestmentPortfolios(List<InvestmentPortfolio> portfolios);
+
   Future<List<LedgerEntry>> loadEntries();
   Future<void> saveEntries(List<LedgerEntry> entries);
 
@@ -209,6 +217,27 @@ class SqliteLedgerRepository implements LedgerRepository {
 
   final AppDatabase _database;
   Database get _db => _database.db;
+
+  /// 从 SQLite 读取精确文本聚合，并建立后续差分保存的行基线。
+  @override
+  Future<List<InvestmentPortfolio>> loadInvestmentPortfolios() async {
+    final rows = await _db.query('investment_portfolios', orderBy: 'id');
+    final values = rows.map(_investmentPortfolioFromRow).toList();
+    _seedSnapshot(
+      'investment_portfolios',
+      values.map(_investmentPortfolioToRow),
+    );
+    return values;
+  }
+
+  /// 串行保存投资聚合；每个账户的期初、成交、资金腿及手填价一起成功或回滚。
+  @override
+  Future<void> saveInvestmentPortfolios(List<InvestmentPortfolio> portfolios) {
+    final rows = portfolios.map(_investmentPortfolioToRow).toList();
+    return _enqueueWrite(
+      () => _incrementalReplace('investment_portfolios', rows),
+    );
+  }
 
   /// 串行化本仓储的全部写入。sqflite 会串行执行底层事务，但行级差分快照在
   /// 事务开始前就会读取；若两个 saveX 同时进入，后一个会基于旧快照计算差分，
@@ -857,6 +886,11 @@ class SqliteLedgerRepository implements LedgerRepository {
       await _db.transaction((txn) async {
         await _replaceInTxn(
           txn,
+          'investment_portfolios',
+          snapshot.investmentPortfolios.map(_investmentPortfolioToRow),
+        );
+        await _replaceInTxn(
+          txn,
           'ledger_books',
           _indexed(snapshot.books, _bookToRow),
         );
@@ -948,6 +982,10 @@ class SqliteLedgerRepository implements LedgerRepository {
       // 整替后重建各增量表基线，使后续单条 saveX 的差分有正确起点（否则会拿导入前
       // 的旧快照去 diff、误删或漏写）。附件/预算不走增量、无需重置。
       _seedSnapshot('ledger_books', _indexed(snapshot.books, _bookToRow));
+      _seedSnapshot(
+        'investment_portfolios',
+        snapshot.investmentPortfolios.map(_investmentPortfolioToRow),
+      );
       _seedSnapshot('accounts', _indexed(snapshot.accounts, _accountToRow));
       _seedSnapshot('account_groups', snapshot.accountGroups.map(_groupToRow));
       _seedSnapshot(
@@ -1880,4 +1918,23 @@ class _RowDiff {
 
   /// 无增删改且无需清空整表——调用方可据此跳过事务。
   bool get isEmpty => !fullReplace && upsert.isEmpty && deleteIds.isEmpty;
+}
+
+/// 将投资聚合写为 SQLite 精确文本行；索引字段与 payload 一起原子保存。
+Map<String, Object?> _investmentPortfolioToRow(InvestmentPortfolio portfolio) =>
+    {
+      'id': portfolio.accountId,
+      'book_id': portfolio.bookId,
+      'payload': jsonEncode(portfolio.toJson()),
+    };
+
+/// 读取投资行并核对索引身份；损坏/跨账本 payload 不应静默加载。
+InvestmentPortfolio _investmentPortfolioFromRow(Map<String, Object?> row) {
+  final result = InvestmentPortfolio.fromJson(
+    Map<String, Object?>.from(jsonDecode(row['payload'] as String) as Map),
+  );
+  if (result.accountId != row['id'] || result.bookId != row['book_id']) {
+    throw const FormatException('投资数据索引不一致');
+  }
+  return result;
 }

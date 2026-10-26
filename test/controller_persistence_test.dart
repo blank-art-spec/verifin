@@ -10,6 +10,8 @@ import 'package:verifin/data/app_database.dart';
 import 'package:verifin/data/ledger_repository.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
+import 'support/sample_investment_expectations.dart';
+
 void main() {
   setUpAll(sqfliteFfiInit);
 
@@ -632,6 +634,7 @@ void main() {
       LocalKeyValueStore(),
       repository: repo,
     );
+    addTearDown(controller.dispose);
     controller.importDataJson(rawJson);
     await controller.waitForPendingWrites();
 
@@ -639,12 +642,17 @@ void main() {
       LocalKeyValueStore(),
       repository: repo,
     );
+    addTearDown(reloaded.dispose);
     expect(reloaded.accounts.length, greaterThanOrEqualTo(8));
     expect(reloaded.entries.length, greaterThanOrEqualTo(20));
     expect(reloaded.categories.any((c) => c.id == 'coffee'), isTrue);
     // 导出应能从 SQLite 恢复出的内存状态重建等价备份。
     final reExported = jsonDecode(reloaded.exportDataJson()) as Map;
     expect((reExported['data'] as Map)['entries'], isNotEmpty);
+    // 冷启动后使用同一套组合检查，覆盖父子关联、USD 现金、两只股票与独立汇率。
+    expect(reloaded.activeBook.id, defaultLedgerBookId);
+    expectSampleInvestmentPortfolio(reloaded);
+    expect(reloaded.activeBook.id, defaultLedgerBookId);
   });
 
   test('重置数据会清空 SQLite', () async {

@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 27;
+  static const int schemaVersion = 28;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -83,7 +83,19 @@ class AppDatabase {
         25: _migrateToV25,
         26: _migrateToV26,
         27: _migrateToV27,
+        28: _migrateToV28,
       };
+
+  /// 升级到 v28：每个币种账户保存一个投资聚合；旧账户不自动启用或改变余额。
+  static Future<void> _migrateToV28(Database db) async {
+    await db.execute(_investmentTable);
+    await db.execute(_investmentIndex);
+  }
+
+  static const String _investmentTable =
+      'CREATE TABLE investment_portfolios (id TEXT PRIMARY KEY, book_id TEXT NOT NULL, payload TEXT NOT NULL)';
+  static const String _investmentIndex =
+      'CREATE INDEX idx_investment_portfolios_book ON investment_portfolios (book_id)';
 
   static Future<void> _migrateToV27(Database db) async {
     await db.execute(
@@ -1023,6 +1035,8 @@ class AppDatabase {
   /// 当前完整建表语句（供全新数据库 onCreate 用）。字段命名用 snake_case；
   /// 布尔存 0/1；时间存毫秒时间戳。已含历次迁移引入的列/表（parent_id、tags 等）。
   static const List<String> _schemaCurrent = <String>[
+    _investmentTable,
+    _investmentIndex,
     '''
     CREATE TABLE ledger_books (
       id TEXT PRIMARY KEY,

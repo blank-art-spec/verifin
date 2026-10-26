@@ -61,6 +61,7 @@ class AiToolContext {
     this.bookId = '',
     this.budget,
     this.currencyDisplay = MoneyCodeDisplay.code,
+    this.assetAmounts = const {},
   });
 
   /// 当前语言的文案：卡片标题、统计项标签、表头与回喂模型的 summary 都用它解析。
@@ -87,6 +88,18 @@ class AiToolContext {
 
   /// 账户当前余额查询（含初始余额与全部交易累积）。
   final double Function(Account account) balanceOf;
+
+  /// 当前证券资产分解的不可变快照；默认空保留普通余额查询，工具不触达 Controller。
+  final Map<String, AccountAssetAmounts> assetAmounts;
+
+  /// 资产工具显示净值；信用工具仍使用 [balanceOf] 的真实现金/欠款。
+  double assetValue(Account account) =>
+      assetAmounts[account.id]?.net ?? balanceOf(account);
+
+  /// 未注入证券分解的账户沿用普通余额正负语义。
+  AccountAssetAmounts accountAmounts(Account account) =>
+      assetAmounts[account.id] ??
+      AccountAssetAmounts.balance(balanceOf(account));
 
   /// 统计、筛选与工具回传金额使用的当前账本本位币。
   final String baseCurrencyCode;
@@ -1100,7 +1113,8 @@ class AccountsOverviewTool extends AiQueryTool {
     }
     final total = convertAccountBalancesToBase(
       accounts: accounts.where((account) => account.includeInAssets),
-      balanceOf: ctx.balanceOf,
+      balanceOf: ctx.assetValue,
+      valuationOf: ctx.accountAmounts,
       bookId: ctx.bookId,
       baseCurrencyCode: ctx.baseCurrencyCode,
       date: ctx.now,
@@ -1118,19 +1132,21 @@ class AccountsOverviewTool extends AiQueryTool {
             .map(
               (account) =>
                   '${account.name} '
-                  '${formatMoney(ctx.balanceOf(account), account.currencyCode, display: ctx.currencyDisplay)}',
+                  '${formatMoney(ctx.assetValue(account), account.currencyCode, display: ctx.currencyDisplay)}',
             )
             .join(l10n.aiSepSemicolon),
         totalText,
       ),
       display: AiTableDisplay(
-        title: l10n.accountBalanceLabel,
+        title: ctx.assetAmounts.isEmpty
+            ? l10n.accountBalanceLabel
+            : l10n.investNetValue,
         headers: <String>[
           l10n.accountLabel,
           // 单币种账本下每行都是同一个币种，整列去掉；多币种时它是唯一的辨币依据。
           if (ctx.currencyDisplay != MoneyCodeDisplay.none)
             l10n.aiHeaderCurrency,
-          l10n.aiHeaderBalance,
+          ctx.assetAmounts.isEmpty ? l10n.aiHeaderBalance : l10n.investNetValue,
         ],
         rows: accounts
             .map(
@@ -1139,7 +1155,7 @@ class AccountsOverviewTool extends AiQueryTool {
                 if (ctx.currencyDisplay != MoneyCodeDisplay.none)
                   account.currencyCode,
                 formatCurrencyNumber(
-                  ctx.balanceOf(account),
+                  ctx.assetValue(account),
                   account.currencyCode,
                 ),
               ],
@@ -1171,7 +1187,8 @@ class NetWorthTool extends AiQueryTool {
         .toList(growable: false);
     final converted = convertAccountBalancesToBase(
       accounts: valued,
-      balanceOf: ctx.balanceOf,
+      balanceOf: ctx.assetValue,
+      valuationOf: ctx.accountAmounts,
       bookId: ctx.bookId,
       baseCurrencyCode: ctx.baseCurrencyCode,
       date: ctx.now,
@@ -1185,16 +1202,8 @@ class NetWorthTool extends AiQueryTool {
         ),
       );
     }
-    var assets = 0.0;
-    var liabilities = 0.0;
-    for (final account in valued) {
-      final amount = converted.amountsByAccountId[account.id] ?? 0;
-      if (amount > 0) {
-        assets += amount;
-      } else {
-        liabilities += -amount;
-      }
-    }
+    final assets = converted.completeAssets!,
+        liabilities = converted.completeLiabilities!;
     final net = assets - liabilities;
     return AiToolResult(
       summary: l10n.aiNetWorthSummary(

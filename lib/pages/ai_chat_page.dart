@@ -196,6 +196,9 @@ class _AiChatPageState extends State<AiChatPage> {
     final scope = VeriFinScope.of(context);
     final l10n = AppLocalizations.of(context);
     final prior = _priorMessages();
+    final balances = {
+      for (final a in scope.accounts) a.id: scope.accountBalance(a),
+    };
     final context0 = AiToolContext(
       entries: scope.statisticsEntries,
       accounts: scope.accounts,
@@ -204,7 +207,13 @@ class _AiChatPageState extends State<AiChatPage> {
       statementRepaymentAllocations: scope.statementRepaymentAllocations,
       categories: scope.categories,
       tags: scope.tags,
-      balanceOf: scope.accountBalance,
+      balanceOf: (a) => balances[a.id] ?? a.initialBalance,
+      // 先复制资产与现金，避免 AI 在异步查询途中读到下一次行情修订。
+      assetAmounts: Map.unmodifiable({
+        for (final a in scope.accounts)
+          if (scope.investmentFor(a.id) != null)
+            a.id: scope.accountAssetAmounts(a),
+      }),
       baseCurrencyCode: scope.activeBook.baseCurrencyCode,
       now: DateTime.now(),
       l10n: l10n,

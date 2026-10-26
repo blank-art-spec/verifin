@@ -202,7 +202,7 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
                           subtitle: Text(a.currencyCode),
                           trailing: Text(
                             formatUserMoney(
-                              c.accountBalance(a),
+                              c.accountAssetValue(a),
                               a.currencyCode,
                             ),
                           ),

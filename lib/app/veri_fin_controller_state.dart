@@ -13,6 +13,40 @@ mixin _ControllerState on ChangeNotifier {
   AppLogger? get _logger;
   bool get _systemIsEnglish;
   HolidayCalendarClient get _workdayCalendarClient;
+  MarketQuoteClient get _marketQuoteClient;
+  InvestmentQuoteSync? _investmentQuoteSync;
+
+  /// 独立设备行情通知源；首次读取只恢复缓存，不联网，不发送账户资料。
+  InvestmentQuoteSync get investmentQuoteSync {
+    if (_investmentQuoteSync == null) {
+      final sync = InvestmentQuoteSync(
+        store: _store,
+        client: _marketQuoteClient,
+        logger: _logger,
+      );
+      _investmentQuoteSync = sync;
+      sync.reconcile(_investmentPortfolios);
+      sync.onPricesChanged = () => notifyListeners();
+    }
+    return _investmentQuoteSync!;
+  }
+
+  /// 返回只读有效估值依据；仅明确选择行情的项采用合格缓存，原手填事实不被覆盖。
+  InvestmentPortfolio pricedInvestmentPortfolio(InvestmentPortfolio p) {
+    if (p.marketPriceIds.isEmpty) return p;
+    final quotes = investmentQuoteSync.quotesFor(p),
+        prices = {...p.manualPrices};
+    for (final s in p.securities.where(
+      (s) => p.marketPriceIds.contains(s.id),
+    )) {
+      final value = quotes[s.id]?.reference(
+        MarketQuoteRequest(s),
+        investmentQuoteSync.clock(),
+      );
+      if (value != null) prices[s.id] = value.price;
+    }
+    return p.copyWith(manualPrices: prices);
+  }
 
   /// SQLite 落库失败时回调（由 UI 层挂钩弹出「保存失败」提示）。
   void Function(Object error)? onPersistError;
@@ -60,6 +94,20 @@ mixin _ControllerState on ChangeNotifier {
 
   final List<AutoCaptureRule> _autoCaptureRules = <AutoCaptureRule>[];
   final List<LedgerBook> _ledgerBooks = <LedgerBook>[];
+  final List<InvestmentPortfolio> _investmentPortfolios = [];
+
+  /// 跨账本内部读取，只允许当前仍存在且类型/币种一致的真实账户引用。
+  InvestmentPortfolio? _portfolioForAccount(Account account) =>
+      _investmentPortfolios
+          .where(
+            (p) =>
+                p.accountId == account.id &&
+                p.bookId == account.bookId &&
+                account.type.supportsSecurities &&
+                p.currencyCode == account.currencyCode,
+          )
+          .firstOrNull;
+
   final List<Account> _accounts = <Account>[];
   final List<AccountGroup> _accountGroups = <AccountGroup>[];
   final List<CreditAccount> _creditAccounts = <CreditAccount>[];
@@ -96,6 +144,16 @@ mixin _ControllerState on ChangeNotifier {
   int _rateSyncGeneration = 0;
 
   void _invalidateDerivedViews() {
+    // 实体删除后的聚合与同一事务快照使用相同过滤，避免备份重新带回孤儿账户。
+    _investmentPortfolios.removeWhere(
+      (p) => !_accounts.any(
+        (a) =>
+            a.id == p.accountId &&
+            a.bookId == p.bookId &&
+            a.type.supportsSecurities,
+      ),
+    );
+    _investmentQuoteSync?.reconcile(_investmentPortfolios);
     _statisticsProjection = null;
     _entriesView = null;
     _captureEventsView = null;
@@ -497,6 +555,10 @@ mixin _ControllerState on ChangeNotifier {
       _activeBookId = defaultLedgerBookId;
       _store.write(_activeBookKey, _activeBookId);
     }
+    _investmentPortfolios
+      ..clear()
+      ..addAll(await _repository.loadInvestmentPortfolios());
+    validateInvestmentPortfolios(_investmentPortfolios, _accounts);
     final entries = await _repository.loadEntries();
     entries.sort(_compareEntriesLatestFirst);
     _entries
@@ -1079,7 +1141,10 @@ mixin _ControllerState on ChangeNotifier {
     );
   }
 
+  /// 构建跨表原子保存快照；可选集合表示本次候选变更，其余沿用当前状态。
+  /// 投资聚合仅保留候选账户内仍存在的真实账户，删除/恢复不留下孤儿持仓。
   LedgerDataSnapshot _ledgerDataSnapshot({
+    List<InvestmentPortfolio>? investmentPortfolios,
     List<LedgerBook>? books,
     List<Account>? accounts,
     List<AccountGroup>? accountGroups,
@@ -1101,6 +1166,16 @@ mixin _ControllerState on ChangeNotifier {
     List<StatementRepaymentAllocation>? statementRepaymentAllocations,
   }) {
     return LedgerDataSnapshot(
+      investmentPortfolios: (investmentPortfolios ?? _investmentPortfolios)
+          .where(
+            (p) => (accounts ?? _accounts).any(
+              (a) =>
+                  a.id == p.accountId &&
+                  a.bookId == p.bookId &&
+                  a.type.supportsSecurities,
+            ),
+          )
+          .toList(),
       books: books ?? List<LedgerBook>.of(_ledgerBooks),
       accounts: accounts ?? List<Account>.of(_accounts),
       accountGroups: accountGroups ?? List<AccountGroup>.of(_accountGroups),

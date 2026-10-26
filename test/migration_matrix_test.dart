@@ -191,6 +191,8 @@ void main() {
       expect(dinnerCategory.categoryId, lunch.categoryId);
 
       final account = (await repo.loadAccounts()).single;
+      // v28 只增加空的投资聚合表，不猜测旧证券账户的现金/总资产含义。
+      expect(await repo.loadInvestmentPortfolios(), isEmpty);
       expect(account.cardNumber, '');
       // v12 迁移给旧账户默认「不跟随」，与全新账户的默认 true 有意不同。
       expect(account.cardLast4Follows, isFalse);

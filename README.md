@@ -34,6 +34,7 @@
 
 ## ✨ 功能亮点
 
+- 股票投资：投资币种账户支持显式期初、买卖/卖空回补、费用股息、拆股和同币种持仓转移，现金与手填参考市值分开，买卖不计消费预算；博通公开行情验证需用户主动点击，现支持期权开平仓、保证金核对及确认到期/交割，参考行情缓存与页面刷新机制已接入，但生产来源门禁仍未通过，默认继续手填估值。概览显示现金与多头持仓占总资产的比例，各持仓卡显示对应比例，空头义务单列。资产、负债与净值在首页、小组件及只读 AI 中统一汇总，历史页可主动保存当时价格和汇率依据，缺日不回填。详见 [股票阶段](docs/dev/securities-stage02-implementation.md)、[期权阶段](docs/dev/securities-stage03-implementation.md)与[资产历史阶段](docs/dev/securities-stage05-implementation.md)。
 - 银行与证券多币种主账户：储蓄卡、投资账户支持一个主账户下的 HKD/USD/CNY 等币种子账户；主币种只用于估值，余额和流水保留原币，普通账户不启用信用卡账单与还款。旧独立账户可在详情显式启用，备份结构保持兼容。
 - 多币种信用父子账户：父账户聚合流水和还款，普通记账只选父账户并按交易币种入账；银行跨币种结算时可在「更多信息 → 入账账户」指定子账户，转账仍选具体账户。相容的旧账户自动归并并保留原交易。外币可选填明确折算额，统计优先该金额，其余按最新汇率计算；支持可选的 Frankfurter 每日汇率更新。
 
@@ -77,7 +78,7 @@
 - 导入记录保存稳定来源交易号和指纹：重复导入会幂等跳过，与手工流水唯一匹配时只追加来源证据；预览页汇总自动匹配、来源独有、本地独有和金额冲突。
 - **应用锁**：6 位 PIN / 3×3 图案 + 生物解锁（密钥仅加盐哈希存本机，不保存任何生物特征数据）；启用后应用内容不可截屏、并从「最近任务」缩略图隐藏；
 - GitHub 自分发版支持应用内检查更新；APK 下载遇到锁屏断网、超时或网络切换时会保留进度并断点续传，完整后通过长度、摘要、包名和版本校验才打开系统安装器；
-- **备份范围**：JSON v9 备份包含账本本位币、信用主体与币种子账户关联、动态账期/账期预算、交易三层金额、交易时间精度与银行记账日、银行确认的账期归属与来源证据、余额锚点、正式账单、还款分配、周期汇率策略、本地汇率表、标签维度、项目、标签模板及全部既有账目数据与偏好；仍兼容 v1–v8 旧备份。**不包含**机密凭证（应用锁、备份口令、WebDAV 与 AI 密钥）和设备本地设置（语言、记账提醒、备份目录）——换机后这些需重设（完整清单见 [`docs/dev/tech-decisions.md`](docs/dev/tech-decisions.md)）；
+- **备份范围**：JSON v10 备份包含股票投资聚合、手填参考价及现金核对边界，以及账本本位币、信用主体与币种子账户关联、动态账期/账期预算、交易三层金额、交易时间精度与银行记账日、银行确认的账期归属与来源证据、余额锚点、正式账单、还款分配、周期汇率策略、本地汇率表、标签维度、项目、标签模板及全部既有账目数据与偏好；仍兼容 v1–v9 旧备份。**不包含**机密凭证（应用锁、备份口令、WebDAV 与 AI 密钥）和设备本地设置（语言、记账提醒、备份目录）——换机后这些需重设（完整清单见 [`docs/dev/tech-decisions.md`](docs/dev/tech-decisions.md)）；
 - 无账号、无自有服务器、无广告或统计遥测 SDK；节假日日历联网更新须主动开启，仅向 GitHub / jsDelivr 请求公共年份文件，不发送账目或设备标识。隐私政策与用户协议应用内可查。
 
 ### 🌍 体验
@@ -163,11 +164,13 @@ lib/
 | [`docs/acceptance-checklist.md`](docs/acceptance-checklist.md) | 功能验收清单 |
 | [`docs/automation.md`](docs/automation.md) | 自动化接入（Intent 接口，配 Tasker 示例） |
 | [`docs/dev/i18n-verification.md`](docs/dev/i18n-verification.md) | 多语言真机验证清单 |
-| [`docs/dev/verifin-sample-backup.json`](docs/dev/verifin-sample-backup.json) | 可导入的测试备份数据 |
+| [`docs/dev/verifin-sample-backup.json`](docs/dev/verifin-sample-backup.json) | 可导入的测试备份：投资总账户下设 CNY / USD / HKD，GOOG 与 AVGO 买卖及持仓归 USD；[固定金额与手动验收](docs/dev/sample-investment-template.md) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 贡献指南（上手路线 + 提交前检查清单） |
 | [`AGENTS.md`](AGENTS.md) | 贡献与 Agent 开发规范（含代码规范·组件化） |
 | [`docs/dev/components.md`](docs/dev/components.md) | 组件清单（写新组件前先查） |
 | [`docs/dev/tech-decisions.md`](docs/dev/tech-decisions.md) | 关键技术决策与选型理由 |
+| [`docs/dev/securities-trading-plan.md`](docs/dev/securities-trading-plan.md) | 证券交易与参考行情总体方案（股票/期权/历史依据已实现，生产自动行情待来源准入） |
+| [`docs/dev/securities-trading-acceptance.md`](docs/dev/securities-trading-acceptance.md) | 博通专项流程 B01–B08、证券全面验收 A01–A23 与金额基准（待开发后执行） |
 | [`docs/dev/known-limitations.md`](docs/dev/known-limitations.md) | 已知限制与技术债台账 |
 | [`docs/dev/multi-currency-design.md`](docs/dev/multi-currency-design.md) | 多币种与离线汇率设计、实现结果及验收记录 |
 | [`docs/dev/feedback-system.md`](docs/dev/feedback-system.md) | 应用内轻提示组件、操作结果、队列与迁移规范 |

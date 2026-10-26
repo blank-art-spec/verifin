@@ -6,6 +6,7 @@ import '../l10n/app_localizations.dart';
 import 'app_theme.dart';
 import 'ledger_math.dart';
 import 'models.dart';
+import 'currency_math.dart';
 
 /// 首页走势卡片可展示的统计指标。每个指标自带周期口径（本月/今日/本周/本年/总）与
 /// 展示风格（[homeMetricStyle]），计算见 [computeHomeMetric]。
@@ -218,6 +219,7 @@ class HomeMetricContext {
     required this.accounts,
     required this.balanceOf,
     this.balanceInBaseOf,
+    this.assetAmountsInBaseOf,
     required this.now,
   });
 
@@ -229,6 +231,9 @@ class HomeMetricContext {
 
   /// 账户余额折算成本位币后的值；缺汇率时返回 null。未注入时保持单币种兼容。
   final double? Function(Account)? balanceInBaseOf;
+
+  /// 可选证券资产/负债分解，已折算到本位币；为空时兼容旧余额正负计算。
+  final AccountAssetAmounts? Function(Account)? assetAmountsInBaseOf;
   final DateTime now;
 }
 
@@ -267,13 +272,27 @@ List<double>? _assetBalances(HomeMetricContext ctx) {
   for (final account in ctx.accounts.where(
     (account) => account.includeInAssets && !account.hidden,
   )) {
-    final balance =
-        ctx.balanceInBaseOf?.call(account) ??
-        (ctx.balanceInBaseOf == null ? ctx.balanceOf(account) : null);
+    final balance = ctx.assetAmountsInBaseOf != null
+        ? ctx.assetAmountsInBaseOf!(account)?.net
+        : ctx.balanceInBaseOf?.call(account) ??
+              (ctx.balanceInBaseOf == null ? ctx.balanceOf(account) : null);
     if (balance == null) return null;
     balances.add(balance);
   }
   return balances;
+}
+
+/// 首页总资产/负债不能按账户净值正负抵销；缺汇率时整项不可用。
+double _grossAssets(HomeMetricContext ctx, {required bool liabilities}) {
+  var total = 0.0;
+  for (final account in ctx.accounts.where(
+    (a) => a.includeInAssets && !a.hidden,
+  )) {
+    final parts = ctx.assetAmountsInBaseOf!(account);
+    if (parts == null) return double.nan;
+    total += liabilities ? parts.liabilities : parts.assets;
+  }
+  return total;
 }
 
 /// 计算指定指标当前的数值（当前账本口径）。纯函数。
@@ -314,10 +333,16 @@ double computeHomeMetric(HomeMetric metric, HomeMetricContext ctx) {
     case HomeMetric.totalNet:
       return _net(ctx, (_) => true);
     case HomeMetric.totalAssets:
+      if (ctx.assetAmountsInBaseOf != null) {
+        return _grossAssets(ctx, liabilities: false);
+      }
       final balances = _assetBalances(ctx);
       if (balances == null) return double.nan;
       return balances.where((b) => b > 0).fold<double>(0, (sum, b) => sum + b);
     case HomeMetric.totalLiabilities:
+      if (ctx.assetAmountsInBaseOf != null) {
+        return _grossAssets(ctx, liabilities: true);
+      }
       // 负债以正数（绝对值）展示。
       final balances = _assetBalances(ctx);
       if (balances == null) return double.nan;

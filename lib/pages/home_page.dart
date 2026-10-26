@@ -46,6 +46,13 @@ class HomePage extends StatelessWidget {
       entries: entries,
       accounts: controller.accounts,
       balanceOf: controller.accountBalance,
+      assetAmountsInBaseOf: (a) =>
+          accountValuation.assetsByAccountId[a.id] == null
+          ? null
+          : AccountAssetAmounts(
+              accountValuation.assetsByAccountId[a.id]!,
+              accountValuation.liabilitiesByAccountId[a.id]!,
+            ),
       balanceInBaseOf: (account) =>
           accountValuation.amountsByAccountId[account.id],
       now: now,

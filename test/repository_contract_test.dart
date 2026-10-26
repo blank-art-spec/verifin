@@ -5,6 +5,7 @@ import 'package:verifin/data/app_database.dart';
 import 'package:verifin/data/ledger_repository.dart';
 
 import 'support/in_memory_ledger_repository.dart';
+import 'support/investment_fixture.dart';
 
 /// 仓储契约测试：同一组行为断言对 InMemory 与 SQLite 两个实现各跑一遍，
 /// 保证「widget 测试注入的内存实现」与「生产的 SQLite 实现」不会悄悄分叉
@@ -60,6 +61,62 @@ List<Map<String, Object?>> _jsonOf(Iterable<dynamic> items) => items
 
 void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
   group('仓储契约 · $name', () {
+    test('期权交割及保证金作为完整聚合一次保存，原样读取与清理', () async {
+      final repo = await openRepo(), s = optionFixture();
+      final p = optionPortfolioFixture(
+        s,
+        events: [
+          optionEventFixture(s, StockEventKind.optionSellOpen, margin: '1000'),
+        ],
+      );
+      await repo.saveInvestmentPortfolios([p]);
+      expect(
+        (await repo.loadInvestmentPortfolios()).single.toJson(),
+        p.toJson(),
+      );
+      await repo.saveInvestmentPortfolios([]);
+      expect(await repo.loadInvestmentPortfolios(), isEmpty);
+    });
+    test('投资聚合原子整替、读取隔离及失败后的差分基线一致', () async {
+      final repo = await openRepo();
+      expect(await repo.loadInvestmentPortfolios(), isEmpty);
+      final first = portfolioFixture(
+        events: [
+          stockEventFixture(
+            'buy',
+            StockEventKind.buy,
+            '0.125',
+            '80',
+            fee: '0.01',
+          ),
+        ],
+      );
+      await repo.saveInvestmentPortfolios([
+        first,
+        portfolioFixture(accountId: 'second'),
+      ]);
+      final loaded = await repo.loadInvestmentPortfolios();
+      expect(loaded.map((p) => p.accountId).toSet(), {
+        first.accountId,
+        'second',
+      });
+      expect(
+        loaded.firstWhere((p) => p.accountId == first.accountId).toJson(),
+        first.toJson(),
+      );
+      loaded.clear();
+      expect(await repo.loadInvestmentPortfolios(), hasLength(2));
+      final updated = first.copyWith(
+        manualPrices: {avgoFixture.id: '88.00000001'},
+      );
+      await repo.saveInvestmentPortfolios([updated]);
+      expect(
+        (await repo.loadInvestmentPortfolios()).single.toJson(),
+        updated.toJson(),
+      );
+      await repo.saveInvestmentPortfolios([]);
+      expect(await repo.loadInvestmentPortfolios(), isEmpty);
+    });
     test('新库为空且 hasAnyData=false', () async {
       final repo = await openRepo();
       expect(await repo.hasAnyData(), isFalse);

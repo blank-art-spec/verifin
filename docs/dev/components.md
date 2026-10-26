@@ -168,11 +168,11 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `SettingsRow` | Widget | `common_widgets.dart` | 设置行（图标+标题+trailing 文本+chevron）；`leading` 可传账户图标等自定义前置，`contentColor` 可上色（如危险操作红色）；`trailingMaxLines` 默认 1，长规则名称传 null 完整换行 |
 | `CompactSwitchRow` | Widget | `common_widgets.dart` | 紧凑开关行（整行可点，不只点开关）；`onChanged:null` 保留原生禁用语义，表示当前平台/状态不可用 |
 | `VeriSegmentedControl<T>` | Widget | `common_widgets.dart` | **统一分段控件**（文字标签 + 滑动胶囊指示，基于 `animated_toggle_switch`）。所有「N 选一的横向口径切换」一律用它，不要再手写 Row+InkWell 分段条或裸用 Material `SegmentedButton`。颜色只走设计令牌，调用方仅可通过 `accentOf` 指定选中项的语义强调色；`compact: true` 用于卡片标题行内的小切换；`onChanged: null` 整组禁用；自带 `Semantics`（第三方控件本身无语义）。**不用它**：图标型开关（走 `CompactSwitchRow`）、超过 4 项或需要分区的单选（走 `showOptionSheet` / `VeriAnchoredChoice`）、菜单触发器（走 `FilterPill`）、左右步进器（走 `MonthSwitcher`；非月份范围须传 `previousTooltip` / `nextTooltip`） |
-| `DetailInfoRow` | Widget | `common_widgets.dart` | 详情页 label/value 行（可点击带 chevron） |
+| `DetailInfoRow` | Widget | `common_widgets.dart` | 详情页 label/value 行；默认纵排。`inline: true` 为标签/数值左右分列并按文字基线对齐，宽度不足 280dp 或正文缩放超过约 1.4 倍时改为上下排；完整换行不省略金额。`valueColor` 接受调用方解析后的语义色 |
 | `CurrencyAmountField` | Widget | `common_widgets.dart` | 交易/退款/周期编辑器统一的货币金额行；按 ISO minor unit 格式化；`amount == null` 时显示明确缺失态。`forceUnit` **默认 `true` 且不要改**：编辑器允许临时选一个账本里还没有的币种，那一刻闸门还关着但同屏已出现两个币种，单位必须保留。只有两端币种被锁死、不可能出现第二币种的地方（退款表单）才显式传 `false` |
 | `MoneyUnitLabel` | Widget | `common_widgets.dart` | 聚合卡片的轻量「单位：¥/CNY」提示（首页支出走势卡——**仅未开启 `UNIFIED_DESIGN_PREVIEW` 的旧外观**，正式外观这里渲染的是「周／月／季／年」标签、首页预算卡、日历卡、AI 结果卡；走势设置页预览复用同一张卡）；单币种账本隐藏单位时组件自身返回 `SizedBox.shrink`——**只表示看不见，不能拿它判断单位是否显示**；把容器一起收掉的调用点（日历卡）隐藏时根本不构建，`find.byType` 是 `findsNothing`。要断言隐藏用 `find.textContaining('单位：')` |
 | `currencyUnitSubtitle` | 纯函数 | `common_widgets.dart` | **页头 / 卡片副标题拼「单位：x」的唯一入口**：传 `l10n`、上下文前缀（书名/账户类型/日期范围，可空）与币种代码。隐藏单位时返回前缀本身（**不会把书名一起丢掉**），无前缀时返回 `null`——调用方必须据此整段省略副标题，不要渲染只剩分隔符的残句 |
-| `SummaryMetric` | Widget | `common_widgets.dart` | **指标块**（label+value+color+detail）。各类统计小块一律用它，勿新造 `_XxxMetric`/`_XxxTile` |
+| `SummaryMetric` | Widget | `common_widgets.dart` | **指标块**（label+value+color+detail）。各类统计小块一律用它，勿新造 `_XxxMetric`/`_XxxTile`。`allowValueWrap` 默认 false；证券概览显式设 true，让标签、金额、说明居中完整换行，其他调用保留默认显示方式 |
 | `FilterPill` | Widget | `common_widgets.dart` | 筛选胶囊（标签+可选图标+chevron） |
 | `ToolEntry` | Widget | `common_widgets.dart` | 工具入口图标块 |
 
@@ -240,6 +240,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 ## 维护约定
 
+- 股票投资：`models/investment.dart` 定义不可变账户聚合；`investments/investment_decimal.dart` 提供八位精确量价和现金舍入，`stock_projection.dart` 的 `projectStocks` / `valueStocks` / `compareStockEvents` 统一重放、排序与估值，`stock_cash_math.dart` 的 `investmentCashBalance` 合并普通转账和投资现金腿。每股报价使用 `currency_math.dart` 的 `formatUserSecurityPrice` 保留八位精度并遵守单位偏好。页面为 `InvestmentPage` / `StockEditorPage` / `AvgoProbePage`（`pages/investment_page.dart`）；只通过 Controller 写入，复用既有卡片、指标、菜单、输入和确认入口。详见 [阶段 0–2 实现](securities-stage02-implementation.md)。
+
 - `app_theme.dart` 维护内容表面令牌与纯函数 `veriContentSurfaceColor(Brightness)`，供 `VeriCard` 和资产封面共用；`veriUnifiedDesignPreview` 默认关闭，只控制布局密度与排版。既有组件的布局分支见 [统一设计候选方案](unified-design-preview.md)。
 
 - 新增可复用件 → 归入对应族、加进本表、放对的文件（通用叶子组件→`common_widgets.dart`，跨路由反馈 Host→`feedback.dart`，弹窗 helper→`sheets.dart`，记账相关 widget→`entry_sheets.dart`，纯计算→对应 `*_math`/`*_tree` 模块）。
@@ -248,3 +250,13 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 - **改货币显示口径要补双向测试**：单币种 + 开关打开断言该处不出现单位（`find.textContaining('单位：')`），多币种账本断言单位仍在，见 `test/single_currency_unit_test.dart`；只测一侧会把收口做成隐藏过度。
 - 同一 UI 片段或逻辑在 **≥2 个文件**出现 → 立即抽共享件，变体用参数表达。
 - 删除/重命名可复用件 → 同步改本表与所有调用点。
+
+- 期权投资：`models/option_contract.dart` 定义独立的权利金乘数、交割股数与每张行权现金；`stock_projection.dart` 的 part `option_projection.dart` 重放开平仓/到期/交割及保证金，`securityPositionValue` 统一股数/张数估值、`optionExpired` 只判断待确认。`OptionEditorPage` 复用现有组件并要求预览，Controller 的 `previewOptionEvent` 零写入，`saveOptionEvent` / `saveOptionSpecification` 原子校验提交。详见 [期权阶段](securities-stage03-implementation.md)。
+
+- 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与代码来源门禁；`InvestmentQuoteSync` 独立设备通知源及有界缓存/冷却/页面定时，`MarketQuotesPage` 复用应用解锁作用域暂停网络；`quote_format.dart` 的 `formatQuoteTime` 共用时间格式。当前没有通过自动估值门禁的生产适配器，不能将测试夹具当成真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
+
+- 证券资产与历史：`investment_valuation.dart` 的 `valueInvestmentAccount` / `valueLedgerAccounts` / `accountCashAt` / `investmentRevision` / `investmentSnapshotAt` 是纯计算入口；`currency_math.dart` 的 `AccountAssetAmounts` 和 `ConvertedAccountBalances` 保留总资产/负债分解。`models/investment_valuation_snapshot.dart` 保存实际观察点依据，`InvestmentHistoryPage` 复用 `InteractiveTrendChart`。详见 [阶段 5](securities-stage05-implementation.md)。
+- 证券资产占比：`InvestmentAccountValuation.cashShare` / `holdingsShare` / `shortObligationShare` 与 `shareOfAssets(value)` 统一以本币种账户的正现金加多头市值为分母；分母为零、估值不完整或输入无效时返回 null。概览复用 `SummaryMetric.detail`，持仓卡复用 `DetailInfoRow`；空头义务独立标注且允许超过 100%，冻结不重复扣减。百分比经 l10n `investAllocationPercent` 按语言显示一位小数。
+
+- 证券展示组合：`app/investments/investment_widgets.dart` 的 `InvestmentSection` 复用 `VeriCard`，统一分组标题、内容伸展和内部 Material 墨水层；`InvestmentHint` 统一次级说明的图标、行距和主题颜色。`InvestmentInputField` 令标签独立占位、随字号换行，并为输入框保留可访问性名称；`investmentInputDecoration` 只提供实色底色，不添加浮动标签。`investmentOutlineButtonStyle` 对齐次要按钮与主按钮的圆角、间距和触控高度。均只负责展示，不访问 Controller。
+- 证券概览排版：同文件 `InvestmentMetricPair(first, second, filled)` 只排列两个 `SummaryMetric`。普通宽度等宽双列，内容宽度小于 300dp 或 13sp 文字缩放后超过 18dp 时改单列；`filled` 用实色画布色与统一圆角突出现金/持仓，false 用于次级资产与盈亏。内部 Row 保持标准指标 Expanded 关系合法，仅对这两个静态项测量等高；不读取或计算账务。

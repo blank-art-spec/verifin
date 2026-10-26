@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import '../app/app_theme.dart';
 import '../app/common_widgets.dart';
 import '../app/home_metrics.dart';
+import '../app/currency_math.dart';
 import '../app/ledger_math.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
@@ -160,6 +161,13 @@ class _HomeMetricsSettingsPageState extends State<HomeMetricsSettingsPage> {
       entries: controller.statisticsEntries,
       accounts: controller.accounts,
       balanceOf: controller.accountBalance,
+      assetAmountsInBaseOf: (a) =>
+          accountValuation.assetsByAccountId[a.id] == null
+          ? null
+          : AccountAssetAmounts(
+              accountValuation.assetsByAccountId[a.id]!,
+              accountValuation.liabilitiesByAccountId[a.id]!,
+            ),
       balanceInBaseOf: (account) =>
           accountValuation.amountsByAccountId[account.id],
       now: now,

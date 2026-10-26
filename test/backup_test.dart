@@ -7,6 +7,7 @@ import 'package:verifin/app/home_metrics.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
+import 'support/sample_investment_expectations.dart';
 import 'support/test_harness.dart';
 
 void main() {
@@ -311,7 +312,7 @@ void main() {
 
       final backup = source.exportDataJson();
       final root = jsonDecode(backup) as Map<String, dynamic>;
-      expect(root['version'], 9);
+      expect(root['version'], 12);
       final data = root['data'] as Map<String, dynamic>;
       expect(data['exchangeRates'], hasLength(1));
       expect(data['currencyFractionStyle'], isNotNull);
@@ -655,6 +656,20 @@ void main() {
       // tag_stats 是样例备份没有的新面板，归一化时按默认开启追加到末尾。
       'tag_stats',
     ]);
+
+    // 模板默认仍进入日常账本；共享检查会临时切换账本并恢复，不改已有样例语义。
+    expect(controller.activeBook.id, defaultLedgerBookId);
+    expectSampleInvestmentPortfolio(controller);
+    expect(controller.activeBook.id, defaultLedgerBookId);
+    await controller.waitForPendingWrites();
+
+    // 使用正式导出结果再次导入隔离控制器，核对父子关系、精确成交与手填价格保留。
+    final restored = await makeController();
+    addTearDown(restored.dispose);
+    restored.importDataJson(controller.exportDataJson());
+    expectSampleInvestmentPortfolio(restored);
+    expect(restored.activeBook.id, defaultLedgerBookId);
+    await restored.waitForPendingWrites();
 
     controller.dispose();
   });

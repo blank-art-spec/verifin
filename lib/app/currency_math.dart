@@ -4,6 +4,7 @@ import 'amount_format.dart' as amount_format;
 import 'calendar_days.dart';
 import 'currency_catalog.dart';
 import 'models.dart';
+import 'investments/investment_decimal.dart';
 
 /// 将金额规整到 [currencyCode] 的 ISO 4217 minor unit，并消除 `-0`。
 double normalizeCurrencyAmount(num value, String currencyCode) {
@@ -79,6 +80,18 @@ String formatUserMoney(
         : amount_format.activeMoneyCodeDisplay,
     style: style,
   );
+}
+
+/// 精确显示证券每股价格，不按现金 minor unit 截断合法的八位小数。
+/// [value] 是领域层校验过的十进制文本；[currencyCode] 遵守现有单位样式和单币种隐藏偏好。
+String formatUserSecurityPrice(String value, String currencyCode) {
+  final number = InvestmentDecimal.parse(value).toString();
+  final currency = CurrencyCatalog.require(currencyCode);
+  return switch (amount_format.activeMoneyCodeDisplay) {
+    MoneyCodeDisplay.none => number,
+    MoneyCodeDisplay.code => '${currency.code} $number',
+    MoneyCodeDisplay.symbol => '$number ${_compactCurrencySymbol(currency)}',
+  };
 }
 
 String formatSignedUserMoney(
@@ -338,6 +351,22 @@ bool isExchangeRateStale(
   return calendarDaysBetween(rate.effectiveDate, asOf) > thresholdDays;
 }
 
+/// 单账户原币资产分解；负债以正数表达，净值恒等于资产减负债。
+class AccountAssetAmounts {
+  /// [assets]/[liabilities] 不互相抵销，保留融资和空头义务。
+  const AccountAssetAmounts(this.assets, this.liabilities);
+  final double assets, liabilities;
+
+  /// 同一原币、同一时点的资产减负债；冻结额不是第二份负债。
+  double get net => assets - liabilities;
+
+  /// 普通账户仍按真实余额正负拆分，不改变信用账户的原有余额含义。
+  factory AccountAssetAmounts.balance(double balance) => AccountAssetAmounts(
+    balance > 0 ? balance : 0,
+    balance < 0 ? -balance : 0,
+  );
+}
+
 class ConvertedAccountBalances {
   const ConvertedAccountBalances({
     required this.amountsByAccountId,
@@ -345,6 +374,9 @@ class ConvertedAccountBalances {
     required this.affectedAccountIds,
     required this.rateDatesByAccountId,
     required this.staleAccountIds,
+    this.assetsByAccountId = const {},
+    this.liabilitiesByAccountId = const {},
+    this.missingValuationAccountIds = const {},
   });
 
   final Map<String, double> amountsByAccountId;
@@ -352,8 +384,25 @@ class ConvertedAccountBalances {
   final Set<String> affectedAccountIds;
   final Map<String, DateTime> rateDatesByAccountId;
   final Set<String> staleAccountIds;
+  final Map<String, double> assetsByAccountId, liabilitiesByAccountId;
+  final Set<String> missingValuationAccountIds;
 
-  bool get isComplete => missingCurrencyCodes.isEmpty;
+  bool get isComplete =>
+      missingCurrencyCodes.isEmpty && missingValuationAccountIds.isEmpty;
+
+  /// 汇总未抵销的资产和负债；旧调用方未提供分解时兼容余额正负口径。
+  double? get completeAssets => isComplete
+      ? (assetsByAccountId.isNotEmpty
+                ? assetsByAccountId.values
+                : amountsByAccountId.values.where((v) => v > 0))
+            .fold<double>(0, (sum, v) => sum + v)
+      : null;
+  double? get completeLiabilities => isComplete
+      ? (liabilitiesByAccountId.isNotEmpty
+                ? liabilitiesByAccountId.values
+                : amountsByAccountId.values.where((v) => v < 0).map((v) => -v))
+            .fold<double>(0, (sum, v) => sum + v)
+      : null;
 
   double? get completeTotal => isComplete
       ? amountsByAccountId.values.fold<double>(0, (sum, value) => sum + value)
@@ -365,6 +414,7 @@ class ConvertedAccountBalances {
 /// [balanceOf] 提供真实原币余额，[bookId] 隔离汇率所属账本；
 /// [date] 限定估值日，[rates] 仍以账本本位币报价，用于来源到目标币种的交叉折算。
 /// 缺少来源或目标汇率时 [ConvertedAccountBalances.completeTotal] 为 null，禁止展示部分合计。
+/// [valuationOf] 可提供证券资产/负债分解；返回 null 表示缺估值依据，不能回退现金或零。
 ConvertedAccountBalances convertAccountBalancesToBase({
   required Iterable<Account> accounts,
   required double Function(Account account) balanceOf,
@@ -373,16 +423,28 @@ ConvertedAccountBalances convertAccountBalancesToBase({
   required DateTime date,
   required Iterable<ExchangeRate> rates,
   String? targetCurrencyCode,
+  AccountAssetAmounts? Function(Account account)? valuationOf,
 }) {
   final amounts = <String, double>{};
+  final assets = <String, double>{}, liabilities = <String, double>{};
+  final missingValuations = <String>{};
   final missingCodes = <String>{};
   final affectedIds = <String>{};
   final rateDates = <String, DateTime>{};
   final staleAccountIds = <String>{};
   for (final account in accounts) {
-    final balance = balanceOf(account);
-    if (isZeroCurrencyAmount(balance, account.currencyCode)) {
+    final parts = valuationOf == null
+        ? AccountAssetAmounts.balance(balanceOf(account))
+        : valuationOf(account);
+    if (parts == null) {
+      missingValuations.add(account.id);
+      continue;
+    }
+    final balance = parts.net;
+    if (parts.assets == 0 && parts.liabilities == 0) {
       amounts[account.id] = 0;
+      assets[account.id] = 0;
+      liabilities[account.id] = 0;
       continue;
     }
     final result = convertCurrencyAmount(
@@ -396,6 +458,17 @@ ConvertedAccountBalances convertAccountBalancesToBase({
     );
     if (result is ConvertedCurrencyAmount) {
       amounts[account.id] = result.amount;
+      final factor = result.sourceRateToBase / result.targetRateToBase;
+      assets[account.id] = normalizeCurrencyAmount(
+        parts.assets * factor,
+        targetCurrencyCode ?? baseCurrencyCode,
+      );
+      liabilities[account.id] = normalizeCurrencyAmount(
+        parts.liabilities * factor,
+        targetCurrencyCode ?? baseCurrencyCode,
+      );
+      // 分解项分别舍入后再取净额，保证总资产－总负债＝净资产。
+      amounts[account.id] = assets[account.id]! - liabilities[account.id]!;
       // 交叉折算也依赖目标币种汇率，展示两端中更早的生效日。
       final dates = [
         if (result.sourceRateDate != null) result.sourceRateDate!,
@@ -419,5 +492,8 @@ ConvertedAccountBalances convertAccountBalancesToBase({
     affectedAccountIds: Set<String>.unmodifiable(affectedIds),
     rateDatesByAccountId: Map<String, DateTime>.unmodifiable(rateDates),
     staleAccountIds: Set<String>.unmodifiable(staleAccountIds),
+    assetsByAccountId: Map.unmodifiable(assets),
+    liabilitiesByAccountId: Map.unmodifiable(liabilities),
+    missingValuationAccountIds: Set.unmodifiable(missingValuations),
   );
 }

@@ -349,7 +349,7 @@ void main() {
     expect(c.billingStatements, isEmpty);
   });
 
-  test('SQLite 冷启动、JSON v9 往返和删除保留普通主账户关系，无结构迁移', () async {
+  test('SQLite 冷启动、JSON v11 往返和删除保留普通主账户关系，无结构迁移', () async {
     sqfliteFfiInit();
     final db = await AppDatabase.open(
       factory: databaseFactoryFfi,
@@ -372,7 +372,7 @@ void main() {
     expect(c.accountsForParent(parentId), hasLength(2));
     expect(c.creditAccounts, isEmpty);
     final raw = c.exportDataJson();
-    expect((jsonDecode(raw) as Map)['version'], 9);
+    expect((jsonDecode(raw) as Map)['version'], 12);
     final restored = await makeController();
     addTearDown(restored.dispose);
     restored.importDataJson(raw, dryRun: true);
