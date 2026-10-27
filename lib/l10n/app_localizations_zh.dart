@@ -6757,43 +6757,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investCashHint => '只校准现金，不改写股票数量与成本。';
 
   @override
-  String get investProbe => '博通行情验证';
-
-  @override
-  String get investProbeConsent =>
-      '点击查询将向 Yahoo、Nasdaq 发送 AVGO 代码，服务方可见 IP；不会发送账户或持仓。数据仅用于验证，不代表可成交价格。';
-
-  @override
-  String get investProbeRun => '查询公开行情';
-
-  @override
-  String get investProbePending => '尚未查询';
-
-  @override
-  String get investProbeError => '来源暂不可用';
-
-  @override
-  String get investProbeTimeUnknown => '有效报价时间未知，不能标为实时';
-
-  @override
-  String get investProbeNetworkError => '无法连接来源，请检查网络连接';
-
-  @override
-  String get investProbeTimeout => '来源请求超时，可稍后重试';
-
-  @override
-  String get investProbeInvalidData => '来源数据不完整或格式已变化';
-
-  @override
-  String get investProbeNoContracts => '未取得满足条件的合约';
-
-  @override
-  String get investSource => '来源';
-
-  @override
-  String get investProbeResearch => '此查询用于来源可行性验证；发布适用条件仍需核对。';
-
-  @override
   String get investShortHint => '空头有回补义务，收到卖空款不会立即增加净资产。';
 
   @override
@@ -6815,9 +6778,6 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investEventType => '操作类型';
 
   @override
-  String get investTime => '时间';
-
-  @override
   String get investReferenceConsent => '新证券以本次确认的参考价估值，后续可手动修改。';
 
   @override
@@ -6828,9 +6788,6 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get investFetchedAt => '抓取时间';
-
-  @override
-  String get investProbeSpecsUnknown => '期权乘数、交割规格及各报价时间仍待核对，此页不据此创建期权持仓。';
 
   @override
   String get optionTitle => '期权交易与结算';
@@ -6987,7 +6944,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get marketOptionUnsupported =>
-      '当前来源不支持期权报价，本地 TEST 示例不会联网查询；继续使用手填参考价。';
+      '当前来源不支持期权报价；本地 TEST 示例为虚构合约，不会联网查询，继续使用手填参考价。';
 
   @override
   String get marketSourceReview => '来源使用条件与字段核对';

@@ -218,6 +218,9 @@ void main() {
         await _reveal(tester, find.text(l.marketSourceResearch));
         expect(find.text(l.marketSourceResearch), findsOneWidget);
         expect(find.text(researchFixtureSourceId), findsOneWidget);
+        // 来源分组只展示已装配项，不再出现已移除的旧验证来源。
+        expect(find.text('Yahoo Finance'), findsNothing);
+        expect(find.text('Nasdaq'), findsNothing);
         await _reveal(tester, find.text(_testOption.symbol));
         expect(
           tester.widget<Switch>(_valuationSwitch(_testOption)).onChanged,
@@ -225,6 +228,12 @@ void main() {
         );
         await _reveal(tester, find.text(l.marketOptionUnsupported));
         expect(find.text(l.marketOptionUnsupported), findsOneWidget);
+        // 滚到末尾检查旧查询入口已移除，避免仍可跳往不用的第三方来源。
+        final list = tester.state<ScrollableState>(firstVerticalScrollable());
+        list.position.jumpTo(list.position.maxScrollExtent);
+        await tester.pumpAndSettle();
+        expect(find.text('博通行情验证'), findsNothing);
+        expect(find.text('Broadcom quote validation'), findsNothing);
         expect(controller.investmentFor(account.id)!.marketPriceIds, isEmpty);
         expect(controller.accountAssetValue(account), 10099);
 

@@ -8,7 +8,6 @@ import '../app/investments/investment_widgets.dart';
 import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
 import '../app/feedback.dart';
-import '../app/investments/avgo_quote_probe.dart';
 import '../app/investments/investment_decimal.dart';
 import '../app/investments/stock_projection.dart';
 import '../app/investments/quote_format.dart';
@@ -159,10 +158,7 @@ class InvestmentPage extends StatelessWidget {
                     tooltip: l.marketTitle,
                     onPressed: () => Navigator.of(context).push<void>(
                       MaterialPageRoute(
-                        builder: (_) => MarketQuotesPage(
-                          accountId: accountId,
-                          sourceProbeBuilder: (_) => const AvgoProbePage(),
-                        ),
+                        builder: (_) => MarketQuotesPage(accountId: accountId),
                       ),
                     ),
                   ),
@@ -1216,107 +1212,6 @@ class _StockEditorPageState extends State<StockEditorPage> {
                   ),
               ],
             ),
-          ),
-        ),
-      ),
-    );
-  }
-}
-
-/// 用户主动查询的博通来源验证页；结果只在页面内存中，不污染投资账务。
-class AvgoProbePage extends StatefulWidget {
-  /// 页面创建不会联网；必须阅读说明并点击查询按钮。
-  const AvgoProbePage({super.key});
-
-  /// 为独立请求创建状态，离页后不再提交 UI 更新。
-  @override
-  State<AvgoProbePage> createState() => _AvgoProbePageState();
-}
-
-class _AvgoProbePageState extends State<AvgoProbePage> {
-  bool _running = false;
-  List<AvgoProbeResult>? _results;
-
-  /// 显式执行一次公开查询，日志仅记录来源/状态，不记录账户、数量或原始响应。
-  Future<void> _run() async {
-    if (_running) return;
-    final logger = VeriFinScope.of(context).logger;
-    setState(() => _running = true);
-    final results = await const AvgoQuoteProbe().run();
-    for (final r in results) {
-      final failure = switch (r.failure) {
-        AvgoProbeFailure.network => '网络连接失败',
-        AvgoProbeFailure.timeout => '请求超时',
-        AvgoProbeFailure.invalidData => '数据格式异常',
-        null => '无',
-      };
-      logger?.info(
-        '博通来源验证：${r.source}，状态 ${r.status ?? 0}，有效字段 ${r.available}，失败类别 $failure',
-        source: 'investment_quote',
-      );
-    }
-    if (!mounted) return;
-    setState(() {
-      _results = results;
-      _running = false;
-    });
-  }
-
-  /// 显示来源时间未知、不可用及发布条件待核对，避免把响应成功等同于实时权限。
-  @override
-  Widget build(BuildContext context) {
-    final l = AppLocalizations.of(context);
-    return Scaffold(
-      body: SafeArea(
-        child: VeriPage(
-          child: ListView(
-            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
-            children: [
-              VeriHeader(title: l.investProbe, showBack: true),
-              const SizedBox(height: 12),
-              InvestmentHint(l.investProbeConsent),
-              const SizedBox(height: 12),
-              FilledButton(
-                onPressed: _running ? null : _run,
-                child: Text(_running ? l.commonProcessing : l.investProbeRun),
-              ),
-              const SizedBox(height: 12),
-              if (_results == null && !_running) Text(l.investProbePending),
-              for (final r in _results ?? <AvgoProbeResult>[]) ...[
-                VeriCard(
-                  child: Column(
-                    crossAxisAlignment: CrossAxisAlignment.start,
-                    children: [
-                      Text(
-                        r.source,
-                        style: Theme.of(context).textTheme.titleMedium,
-                      ),
-                      const SizedBox(height: 8),
-                      if (!r.available)
-                        Text(switch (r.failure) {
-                          AvgoProbeFailure.network => l.investProbeNetworkError,
-                          AvgoProbeFailure.timeout => l.investProbeTimeout,
-                          AvgoProbeFailure.invalidData =>
-                            l.investProbeInvalidData,
-                          null => l.investProbeError,
-                        }),
-                      for (final line in r.lines) SelectableText(line),
-                      Text(
-                        r.quoteTime == null
-                            ? l.investProbeTimeUnknown
-                            : '${l.investTime}：${formatQuoteTime(context, r.quoteTime!)}',
-                      ),
-                      Text(
-                        '${l.investFetchedAt}：${formatQuoteTime(context, r.fetchedAt)}',
-                      ),
-                    ],
-                  ),
-                ),
-                const SizedBox(height: 10),
-              ],
-              InvestmentHint(l.investProbeResearch),
-              InvestmentHint(l.investProbeSpecsUnknown),
-            ],
           ),
         ),
       ),

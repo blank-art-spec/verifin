@@ -18,14 +18,9 @@ import '../l10n/app_localizations.dart';
 import 'app_lock_gate.dart';
 
 class MarketQuotesPage extends StatefulWidget {
-  /// [accountId] 为可见的原币账户；[sourceProbeBuilder] 可打开独立来源研究页，不共用自动授权。
-  const MarketQuotesPage({
-    super.key,
-    required this.accountId,
-    this.sourceProbeBuilder,
-  });
+  /// [accountId] 为当前可见的原币账户，页面只展示该账户的持仓及已装配来源。
+  const MarketQuotesPage({super.key, required this.accountId});
   final String accountId;
-  final WidgetBuilder? sourceProbeBuilder;
 
   /// 页面私有生命周期负责暂停刷新，不要求 Android 后台权限或常驻服务。
   @override
@@ -154,16 +149,8 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
     }
     final sync = c.investmentQuoteSync;
     final held = projectStocks(p).positions.map((h) => h.securityId).toSet();
-    // 实际装配来源优先展示，未装配的候选继续显示待核对，避免接入后仍只列旧候选。
-    final registeredIds = sync.client.adapters
-        .map((adapter) => adapter.capability.id)
-        .toSet();
-    final sources = [
-      ...sync.client.adapters.map((adapter) => adapter.capability),
-      ...MarketQuoteClient.pendingSources.where(
-        (source) => !registeredIds.contains(source.id),
-      ),
-    ];
+    // 只展示当前构建实际装配的来源；已移除的研究候选不再形成空配置项。
+    final sources = sync.client.adapters.map((adapter) => adapter.capability);
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
@@ -227,23 +214,25 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                           ),
                       ],
                     ),
-                    const SizedBox(height: 12),
-                    InvestmentSection(
-                      title: l.marketSourceReview,
-                      children: [
-                        for (final source in sources)
-                          DetailInfoRow(
-                            inline: true,
-                            label: source.id,
-                            value: source.approved
-                                ? l.marketSourceConnected
-                                : source.researchOnly &&
-                                      sync.client.allowResearchSources
-                                ? l.marketSourceResearch
-                                : l.marketAwaitingReview,
-                          ),
-                      ],
-                    ),
+                    if (sources.isNotEmpty) ...[
+                      const SizedBox(height: 12),
+                      InvestmentSection(
+                        title: l.marketSourceReview,
+                        children: [
+                          for (final source in sources)
+                            DetailInfoRow(
+                              inline: true,
+                              label: source.id,
+                              value: source.approved
+                                  ? l.marketSourceConnected
+                                  : source.researchOnly &&
+                                        sync.client.allowResearchSources
+                                  ? l.marketSourceResearch
+                                  : l.marketAwaitingReview,
+                            ),
+                        ],
+                      ),
+                    ],
                     for (final s in p.securities.where(
                       (s) => held.contains(s.id),
                     )) ...[
@@ -334,21 +323,6 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                         ),
                       ),
                     ],
-                    if (widget.sourceProbeBuilder != null)
-                      TextButton(
-                        onPressed: () async {
-                          sync.setVisible(null);
-                          _boundPortfolio = null;
-                          await Navigator.of(context).push<void>(
-                            MaterialPageRoute(
-                              builder: widget.sourceProbeBuilder!,
-                            ),
-                          );
-                          if (!mounted) return;
-                          _activate();
-                        },
-                        child: Text(l.investProbe),
-                      ),
                   ],
                 );
               },

@@ -12224,78 +12224,6 @@ abstract class AppLocalizations {
   /// **'只校准现金，不改写股票数量与成本。'**
   String get investCashHint;
 
-  /// No description provided for @investProbe.
-  ///
-  /// In zh, this message translates to:
-  /// **'博通行情验证'**
-  String get investProbe;
-
-  /// No description provided for @investProbeConsent.
-  ///
-  /// In zh, this message translates to:
-  /// **'点击查询将向 Yahoo、Nasdaq 发送 AVGO 代码，服务方可见 IP；不会发送账户或持仓。数据仅用于验证，不代表可成交价格。'**
-  String get investProbeConsent;
-
-  /// No description provided for @investProbeRun.
-  ///
-  /// In zh, this message translates to:
-  /// **'查询公开行情'**
-  String get investProbeRun;
-
-  /// No description provided for @investProbePending.
-  ///
-  /// In zh, this message translates to:
-  /// **'尚未查询'**
-  String get investProbePending;
-
-  /// No description provided for @investProbeError.
-  ///
-  /// In zh, this message translates to:
-  /// **'来源暂不可用'**
-  String get investProbeError;
-
-  /// No description provided for @investProbeTimeUnknown.
-  ///
-  /// In zh, this message translates to:
-  /// **'有效报价时间未知，不能标为实时'**
-  String get investProbeTimeUnknown;
-
-  /// No description provided for @investProbeNetworkError.
-  ///
-  /// In zh, this message translates to:
-  /// **'无法连接来源，请检查网络连接'**
-  String get investProbeNetworkError;
-
-  /// No description provided for @investProbeTimeout.
-  ///
-  /// In zh, this message translates to:
-  /// **'来源请求超时，可稍后重试'**
-  String get investProbeTimeout;
-
-  /// No description provided for @investProbeInvalidData.
-  ///
-  /// In zh, this message translates to:
-  /// **'来源数据不完整或格式已变化'**
-  String get investProbeInvalidData;
-
-  /// No description provided for @investProbeNoContracts.
-  ///
-  /// In zh, this message translates to:
-  /// **'未取得满足条件的合约'**
-  String get investProbeNoContracts;
-
-  /// No description provided for @investSource.
-  ///
-  /// In zh, this message translates to:
-  /// **'来源'**
-  String get investSource;
-
-  /// No description provided for @investProbeResearch.
-  ///
-  /// In zh, this message translates to:
-  /// **'此查询用于来源可行性验证；发布适用条件仍需核对。'**
-  String get investProbeResearch;
-
   /// No description provided for @investShortHint.
   ///
   /// In zh, this message translates to:
@@ -12338,12 +12266,6 @@ abstract class AppLocalizations {
   /// **'操作类型'**
   String get investEventType;
 
-  /// No description provided for @investTime.
-  ///
-  /// In zh, this message translates to:
-  /// **'时间'**
-  String get investTime;
-
   /// No description provided for @investReferenceConsent.
   ///
   /// In zh, this message translates to:
@@ -12367,12 +12289,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'抓取时间'**
   String get investFetchedAt;
-
-  /// No description provided for @investProbeSpecsUnknown.
-  ///
-  /// In zh, this message translates to:
-  /// **'期权乘数、交割规格及各报价时间仍待核对，此页不据此创建期权持仓。'**
-  String get investProbeSpecsUnknown;
 
   /// No description provided for @optionTitle.
   ///
@@ -12677,7 +12593,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketOptionUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'当前来源不支持期权报价，本地 TEST 示例不会联网查询；继续使用手填参考价。'**
+  /// **'当前来源不支持期权报价；本地 TEST 示例为虚构合约，不会联网查询，继续使用手填参考价。'**
   String get marketOptionUnsupported;
 
   /// No description provided for @marketSourceReview.

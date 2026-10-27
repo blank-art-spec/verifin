@@ -145,7 +145,6 @@ void main() {
             OptionEditorPage(accountId: account.id),
             InvestmentHistoryPage(accountId: account.id),
             MarketQuotesPage(accountId: account.id),
-            const AvgoProbePage(),
           ]) {
             await tester.pumpWidget(
               VeriFinScope(

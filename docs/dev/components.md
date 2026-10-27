@@ -241,7 +241,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 ## 维护约定
 
-- 股票投资：`models/investment.dart` 定义不可变账户聚合；`investments/investment_decimal.dart` 提供八位精确量价和现金舍入，`stock_projection.dart` 的 `projectStocks` / `valueStocks` / `compareStockEvents` 统一重放、排序与估值，`stock_cash_math.dart` 的 `investmentCashBalance` 合并普通转账和投资现金腿。每股报价使用 `currency_math.dart` 的 `formatUserSecurityPrice` 保留八位精度并遵守单位偏好。页面为 `InvestmentPage` / `StockEditorPage` / `AvgoProbePage`（`pages/investment_page.dart`）；只通过 Controller 写入，复用既有卡片、指标、菜单、输入和确认入口。详见 [阶段 0–2 实现](securities-stage02-implementation.md)。
+- 股票投资：`models/investment.dart` 定义不可变账户聚合；`investments/investment_decimal.dart` 提供八位精确量价和现金舍入，`stock_projection.dart` 的 `projectStocks` / `valueStocks` / `compareStockEvents` 统一重放、排序与估值，`stock_cash_math.dart` 的 `investmentCashBalance` 合并普通转账和投资现金腿。每股报价使用 `currency_math.dart` 的 `formatUserSecurityPrice` 保留八位精度并遵守单位偏好。页面为 `InvestmentPage` / `StockEditorPage`（`pages/investment_page.dart`），顶部行情入口直接进入 `MarketQuotesPage`；旧博通来源验证页与查询客户端已移除。只通过 Controller 写入，复用既有卡片、指标、菜单、输入和确认入口。详见 [阶段 0–2 实现](securities-stage02-implementation.md)。
 
 - `app_theme.dart` 维护内容表面令牌与纯函数 `veriContentSurfaceColor(Brightness)`，供 `VeriCard` 和资产封面共用；`veriUnifiedDesignPreview` 默认关闭，只控制布局密度与排版。既有组件的布局分支见 [统一设计候选方案](unified-design-preview.md)。
 

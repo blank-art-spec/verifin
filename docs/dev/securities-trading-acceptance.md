@@ -19,6 +19,11 @@
 
 期权测试使用明确标记“验收示例”的手工合约，不冒充交易所真实代码；真实行情验证必须换成实际存在的合约及正式规格。本文所有例子的权利金乘数/交割股数是用例输入，不是对三地合约的统一规定。
 
+2026-10-27 当前查询边界：仅显式 diagnostic 调试构建的腾讯股票适配器可研究真实股票行情，
+旧 Yahoo/Nasdaq 验证页及查询客户端已移除。港股模板的两份 `TEST-TCH` 为虚构合约，
+没有真实挂牌身份；当前来源不支持期权，不会发送这些合约代码。应显示不支持并继续手填估值，
+不能把它记录为一次网络获取失败，也不能将股票联网成功算作 B06 期权行情通过。
+
 2026-10-25 模板补充：[当前测试备份](verifin-sample-backup.json) 已含“投资账本 → 投资账户 → CNY / USD / HKD”，GOOG 与 AVGO 的股票买卖和持仓都在 USD 子账户，手填价格及预期金额见[双标的模板说明](sample-investment-template.md)。该模板 USD 已有期初现金和四笔买卖，不能直接当作 B02 的零余额起点；执行下文独立场景时仍使用新的测试账户/账本，不覆盖已有组合。
 
 ## 2. 博通股票及其期权专项流程
@@ -331,7 +336,7 @@ flutter pub get
 dart format .
 flutter analyze
 flutter test test/investment_math_test.dart test/investment_projection_test.dart test/investment_option_settlement_test.dart
-flutter test test/market_quote_client_test.dart test/investment_controller_test.dart test/investment_ui_test.dart
+flutter test test/tencent_quote_adapter_test.dart test/market_quote_research_test.dart test/market_quote_sync_test.dart test/market_quotes_page_test.dart test/market_quotes_research_page_test.dart test/investment_controller_test.dart test/investment_ui_test.dart
 flutter test test/repository_test.dart test/repository_contract_test.dart test/controller_persistence_test.dart test/migration_matrix_test.dart test/model_roundtrip_test.dart
 flutter test test/backup_test.dart test/backup_archive_test.dart test/backup_crypto_test.dart test/accounts_assets_test.dart test/currency_account_parent_test.dart test/credit_hierarchy_currency_test.dart
 flutter test

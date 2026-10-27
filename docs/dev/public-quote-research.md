@@ -20,6 +20,10 @@
 不接入港股人民币柜台，不把 GOOG 与 GOOGL、A 股 `600026` 与港股 `01138` 混用。
 不因股票行情返回成功而自动创建或确认期权规格。
 
+模板中的 `TEST-TCH-CALL-20261230-440` 和 `TEST-TCH-PUT-20261230-380` 是本地虚构
+验收合约，没有可向行情来源查询的真实挂牌身份。当前适配器也没有接入港股期权数据，
+因此两项持续使用手填价；页面的“不支持期权”不是一次网络获取失败。
+
 ## 构建与启用边界
 
 正式入口在 `main.dart` 调用 `buildProductionMarketQuoteClient()` 装配客户端。
@@ -119,7 +123,9 @@ flutter run -d emulator-5556 --debug --flavor diagnostic --dart-define=UNIFIED_D
 
 - [HKEX 网站条款](https://www.hkex.com.hk/global/exchange/terms-of-use?sc_lang=en)限制未经许可的程序化访问，未把其网页抓取当作适配器。
 - [东方财富服务条款](https://corp.eastmoney.com/fuwutiaokuan.html)限制行情再传播；本次匿名公开请求超时，不据此建立可用性承诺。
-- Yahoo、Nasdaq 的已有待核对状态保持不变，详见[阶段 4](securities-stage04-implementation.md)。
+- Yahoo、Nasdaq 未取得正式准入。2026-10-27 已移除旧博通验证页、查询客户端及
+  待核对来源配置，应用不再向这两个来源发请求；历史调查依据保留在[阶段 4](securities-stage04-implementation.md)
+  和 Git 历史中。
 
 正式渠道开放前，仍须单独完成适用许可、覆盖范围、Android 字段和使用频率核对；
 这不属于通过修改 `approved`、更换测试身份或放宽响应校验就能完成的步骤。

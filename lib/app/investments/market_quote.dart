@@ -206,20 +206,6 @@ class MarketQuoteClient {
   final List<MarketQuoteAdapter> adapters;
   final bool allowResearchSources;
 
-  /// 当前尚未通过应用自动估值门禁的公开候选，状态供页面如实说明。
-  static const pendingSources = [
-    QuoteSourceCapability(
-      'Yahoo Finance',
-      approved: false,
-      reviewNote: '应用自动使用条件待核对',
-    ),
-    QuoteSourceCapability(
-      'Nasdaq',
-      approved: false,
-      reviewNote: '采集使用条件及期权字段时间未通过',
-    ),
-  ];
-
   /// 判断 [adapter] 能否在本构建使用：正式准入，或显式诊断构建中的研究来源。
   /// 同步、缓存恢复和页面开关共用此判断，避免仅放开界面却绕过请求/缓存校验。
   bool allowsAdapter(MarketQuoteAdapter adapter) =>

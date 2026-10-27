@@ -213,6 +213,10 @@ void main() {
       isNull,
     );
     expect(c.investmentQuoteSync.state.value.enabled, isFalse);
+    // 空来源构建保留手填说明，但不展示空配置分组或未装配的旧研究候选。
+    expect(find.text('来源使用条件与字段核对'), findsNothing);
+    expect(find.text('Yahoo Finance'), findsNothing);
+    expect(find.text('Nasdaq'), findsNothing);
     expect(tester.takeException(), isNull);
   });
 

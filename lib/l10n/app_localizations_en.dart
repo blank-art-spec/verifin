@@ -6991,47 +6991,6 @@ class AppLocalizationsEn extends AppLocalizations {
       'Adjusts cash only; stock quantities and costs remain unchanged.';
 
   @override
-  String get investProbe => 'Broadcom quote validation';
-
-  @override
-  String get investProbeConsent =>
-      'Querying sends the AVGO symbol to Yahoo and Nasdaq, which can see your IP. Account and holding details are never sent. Quotes are for validation and do not guarantee execution prices.';
-
-  @override
-  String get investProbeRun => 'Query public quotes';
-
-  @override
-  String get investProbePending => 'Not queried';
-
-  @override
-  String get investProbeError => 'Source unavailable';
-
-  @override
-  String get investProbeTimeUnknown =>
-      'Valid quote time unknown; not real-time';
-
-  @override
-  String get investProbeNetworkError =>
-      'Cannot connect to the source. Check your network.';
-
-  @override
-  String get investProbeTimeout => 'Source request timed out. Try again later.';
-
-  @override
-  String get investProbeInvalidData =>
-      'Source data is incomplete or its format has changed.';
-
-  @override
-  String get investProbeNoContracts => 'No qualifying contracts returned';
-
-  @override
-  String get investSource => 'Source';
-
-  @override
-  String get investProbeResearch =>
-      'This query evaluates source feasibility. Release suitability still needs review.';
-
-  @override
   String get investShortHint =>
       'Short positions carry a repurchase obligation. Short-sale proceeds do not immediately increase net assets.';
 
@@ -7055,9 +7014,6 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investEventType => 'Action';
 
   @override
-  String get investTime => 'Time';
-
-  @override
   String get investReferenceConsent =>
       'A new security uses the reference price you confirm here; you can change it later.';
 
@@ -7070,10 +7026,6 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investFetchedAt => 'Fetched at';
-
-  @override
-  String get investProbeSpecsUnknown =>
-      'Option multipliers, deliverables and quote timestamps still need verification. This page does not create option positions.';
 
   @override
   String get optionTitle => 'Option trades and settlement';
@@ -7244,7 +7196,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketOptionUnsupported =>
-      'This source does not provide option quotes. Local TEST examples are never queried. Using the manual reference price.';
+      'This source does not provide option quotes. Local TEST examples are fictional contracts and are never queried. Using the manual reference price.';
 
   @override
   String get marketSourceReview => 'Source terms and field review';

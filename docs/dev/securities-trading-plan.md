@@ -3,7 +3,7 @@
 日期：2026-10-23。开发分支：codex/securities-trading-quotes-20261023。
 
 基线：main 的 28891d5，SQLite v27、备份 JSON v9、应用 1.19.9+158。
-**当前状态：阶段 1–3 股票与期权离线账务已实现（见 [期权阶段记录](securities-stage03-implementation.md)）；2026-10-27 新增免账号、免 Key 的腾讯股票诊断研究适配器，正式发布来源仍未准入。** 该真实来源仅在 debug + diagnostic + 显式 `PUBLIC_QUOTE_RESEARCH=true` 时装配，沪深/香港股票本次真实样本为 600026/00700，美股仅 AVGO/GOOG；期权与 TEST 代码不查询。来源 `approved` 仍为 false，技术可达不代表正式许可，详见[公开股票诊断研究](public-quote-research.md)。股票投资聚合、精确计算、离线记账、手填估值与显式博通公开来源验证见 [阶段 0–2 记录](securities-stage02-implementation.md)；参考行情机制见 [阶段 4](securities-stage04-implementation.md)，资产分解、历史依据、小组件/只读查询与恢复见 [阶段 5](securities-stage05-implementation.md)。完整联网覆盖仍待逐项准入，不可据此宣称全部落地。
+**当前状态：阶段 1–3 股票与期权离线账务已实现（见 [期权阶段记录](securities-stage03-implementation.md)）；2026-10-27 新增免账号、免 Key 的腾讯股票诊断研究适配器，正式发布来源仍未准入。** 该真实来源仅在 debug + diagnostic + 显式 `PUBLIC_QUOTE_RESEARCH=true` 时装配，沪深/香港股票本次真实样本为 600026/00700，美股仅 AVGO/GOOG；期权与 TEST 代码不查询。来源 `approved` 仍为 false，技术可达不代表正式许可，详见[公开股票诊断研究](public-quote-research.md)。股票投资聚合、精确计算、离线记账及手填估值见 [阶段 0–2 记录](securities-stage02-implementation.md)，其中的旧博通 Yahoo/Nasdaq 验证页和查询客户端现已移除；参考行情机制见 [阶段 4](securities-stage04-implementation.md)，资产分解、历史依据、小组件/只读查询与恢复见 [阶段 5](securities-stage05-implementation.md)。完整联网覆盖仍待逐项准入，不可据此宣称全部落地。
 后续实施以代码和测试为准，不能把本文列出的拟建入口当成已有功能。
 
 配套材料：[可执行验收操作](securities-trading-acceptance.md)、[当前父子账户与汇率](credit-hierarchy-currency.md)、[架构](architecture.md)、[组件](components.md)、[统一设计](../design-system.md)。
@@ -166,16 +166,16 @@
 
 ### 7.1 移植方式及当前证据
 
-参考 AKShare 所使用的公开请求与解析逻辑，按需改写为 Dart；不打包 Python/pandas，不部署 AKTools，不在设备运行本地 HTTP 服务。股票阶段已实现独立 Dart 验证客户端，并有 Yahoo 股票与 Nasdaq 期权公开响应样例；各品种是否通过完整门禁以阶段 0–2 实测记录为准。
+参考 AKShare 所使用的公开请求与解析逻辑，按需改写为 Dart；不打包 Python/pandas，不部署 AKTools，不在设备运行本地 HTTP 服务。股票阶段曾用独立 Dart 验证客户端读取 Yahoo 股票与 Nasdaq 期权公开响应；这份客户端及专用夹具现已移除，历史证据见阶段 0–2 记录及 Git 历史。当前仅显式诊断构建装配腾讯股票适配器，各品种是否通过完整门禁仍须逐项核对。
 
 | 市场/品种 | 调研候选 | 当前证据 | 实施时必须补齐 |
 | --- | --- | --- | --- |
 | A 股股票/ETF | AKShare 的东方财富、必要时新浪/腾讯公开查询实现 | 有股票快照接口文档/源码 | 指定证券请求、价格单位、真实报价时间、手机连通和使用条件 |
 | 港股股票/ETF | AKShare 的东方财富/新浪查询实现 | 文档说明约 15 分钟延迟 | 币种、代码前导零、交易所时间、延迟与更新时间实测 |
-| 美股股票/ETF | AKShare 美股查询实现；Yahoo 路线作为候选备用 | 有快照接口文档；先以 AVGO 核对，不等于完整交易所实时流 | USD、未复权现价、美东夏令时、盘前盘后、数据时间和覆盖范围 |
+| 美股股票/ETF | AKShare 美股查询实现；Yahoo 仅保留历史调研记录 | 当前腾讯诊断适配器只核对 AVGO/GOOG，不等于完整交易所实时流 | USD、未复权现价、美东夏令时、盘前盘后、数据时间和覆盖范围 |
 | 内地 ETF/股指期权 | option_sse_spot_price_sina、option_cffex_hs300_spot_sina 等 | 有指定合约行情和报价字段文档 | 合约身份、报价乘数、到期/调整合约、买卖价与时间字段 |
-| 美股期权 | 已验证 Yahoo options 返回 401；当前显式查询采用 Nasdaq 有界期权链，不绕过访问限制 | 已读取 AVGO 未到期配对的公开字段；报价时间、乘数/交割规格及发布使用条件仍不完整 | 无账号可用性、个人用途限制与发布适用性、完整合约/乘数、双边报价和各字段时间、报价延迟 |
-| 港股期权 | 待寻找满足要求的公开来源 | 尚未确认免账号、免后台可用接口 | 来源、授权范围、手机直连、合约规格及真实样例；未通过不得标支持 |
+| 美股期权 | 历史 Yahoo options 返回 401，Nasdaq 有界期权链曾返回公开字段；旧查询现已移除 | 当时读取 AVGO 未到期配对，报价时间、乘数/交割规格及发布使用条件仍不完整；当前无期权适配器 | 无账号可用性、个人用途限制与发布适用性、完整合约/乘数、双边报价和各字段时间、报价延迟 |
+| 港股期权 | 待寻找满足要求的公开来源 | 当前腾讯适配器只支持股票；模板 TEST-TCH 合约为本地虚构输入，无真实挂牌身份 | 来源、授权范围、手机直连、合约规格及真实样例；未通过不得标支持 |
 
 AKShare 的代码许可证和上游行情的使用条件分别核对；“请求不用 Key”不能替代“适合应用发布”。代码复用时保留必要版权许可声明，记录参考文件和固定提交号。发布版本只能启用已核对使用条件、已实测的接口；其他项保留手填。不能假定网页公开即允许任意再利用。
 
@@ -302,7 +302,7 @@ P1–P3 可在部分行情未获确认时开发；P4 不得把失败来源换成
 | 精确计算 | test/investment_math_test.dart | 量价精度、费用、分摊余数、碎股、零/负值、非法和溢出 |
 | 持仓重放 | test/investment_projection_test.dart | 稳定顺序、补录编辑删除、超量平仓、期初边界、多空独立、拆股/转移 |
 | 期权 | test/investment_option_settlement_test.dart | 乘数与交割股数分离、保证金、四类实物交割、现金交割、指派空头、到期不猜零 |
-| 行情 | test/market_quote_client_test.dart | 真实 fixture、单位/身份/时间、延迟/休市、旧响应、失败限流/超限、手填覆盖及撤权 |
+| 行情 | test/tencent_quote_adapter_test.dart、test/market_quote_research_test.dart、test/market_quote_sync_test.dart | 真实 fixture、单位/身份/时间、研究构建门禁、旧响应、失败限流/超限、手填覆盖及撤权 |
 | 状态与 UI | test/investment_controller_test.dart、test/investment_ui_test.dart | 草稿无副作用、失败反馈、刷新只改估值、跨账本和各尺寸语言 |
 | 数据层 | repository_test、repository_contract、controller_persistence、migration_matrix、model_roundtrip | SQLite/内存相同断言、每个旧 schema 升级、原子失败/后续写恢复 |
 | 备份 | backup_test、backup_archive_test、backup_crypto_test 及新增投资 fixture | v1–v9 兼容、v10 往返、ZIP/加密 JSON、预览、错误恢复零写入 |

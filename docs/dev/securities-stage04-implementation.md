@@ -10,14 +10,14 @@
 
 2026-10-24 复核依据：
 
-- [Nasdaq Legal Information](https://www.nasdaq.com/legal)，页面标注 2026-05-11 更新，职责/使用限制包含对自动或人工捕获内容的限制。现有期权响应同时缺各报价字段时间，不能直接升级为应用自动估值来源。
-- [Yahoo API 条款](https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apitnc/index.html)及[服务条款](https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html)，存在 API 数据使用与访问限制；本轮没有确认 chart 端点适用于本应用自动使用的依据，继续保留待核对状态。
+- [Nasdaq Legal Information](https://www.nasdaq.com/legal)，页面标注 2026-05-11 更新，职责/使用限制包含对自动或人工捕获内容的限制。当时期权响应同时缺各报价字段时间，不能直接升级为应用自动估值来源。
+- [Yahoo API 条款](https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apitnc/index.html)及[服务条款](https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html)，存在 API 数据使用与访问限制；当时没有确认 chart 端点适用于本应用自动使用的依据。
 
-这两个候选继续以 `pendingSources` 展示。`QuoteSourceCapability.approved` 只表达正式评审后的发布准入，不接受缓存、网页响应、导入 JSON 或用户填写的“授权标记”。研究来源通过独立 `researchOnly` 与构建工厂的 `allowResearchSources` 配合，只在上述三项条件满足时参与来源选择，不修改 `approved`。没有新增个人 API Key、券商登录、后台服务或任意 URL 接口。后续正式来源仍须完成使用条件与 Android 字段验证。
+2026-10-27 已删除这两个候选的旧博通验证页、查询客户端、专用夹具和 `pendingSources` 配置，页面只展示当前实际装配的来源；历史调查和当次验证结果仍可通过本文、阶段 0–2 记录及 Git 历史追溯。`QuoteSourceCapability.approved` 只表达正式评审后的发布准入，不接受缓存、网页响应、导入 JSON 或用户填写的“授权标记”。研究来源通过独立 `researchOnly` 与构建工厂的 `allowResearchSources` 配合，只在上述三项条件满足时参与来源选择，不修改 `approved`。没有新增个人 API Key、券商登录、后台服务或任意 URL 接口。后续正式来源仍须完成使用条件与 Android 字段验证。
 
 ## 数据与估值
 
-`MarketQuoteRequest` 仅含公开代码、市场、币种、品种及证券 ID，不包含账本/账户、数量、余额、成本或备注。每来源按当前持仓合并最多 20 个身份，来源请求串行，每批总超时 15 秒；不存在全市场下载再筛持仓。新增腾讯研究适配器只访问固定 HTTPS 主机 `qt.gtimg.cn`，流式累计最多 512 KiB，不跟随跳转、不带凭证、不绕过 HTTP 拒绝；超时或超限关闭连接。该 I/O 路径仅由显式诊断研究工厂装配，普通构建没有已准入生产 I/O 来源；既有独立研究客户端的 15 秒/512 KiB 约束保留。
+`MarketQuoteRequest` 仅含公开代码、市场、币种、品种及证券 ID，不包含账本/账户、数量、余额、成本或备注。每来源按当前持仓合并最多 20 个身份，来源请求串行，每批总超时 15 秒；不存在全市场下载再筛持仓。腾讯研究适配器只访问固定 HTTPS 主机 `qt.gtimg.cn`，流式累计最多 512 KiB，不跟随跳转、不带凭证、不绕过 HTTP 拒绝；超时或超限关闭连接。该 I/O 路径仅由显式诊断研究工厂装配，普通构建没有已准入生产 I/O 来源。
 
 `MarketQuote` 保存证券、来源、原币、每股/每权利金单位、最近成交/买价/卖价及各自时间、抓取时间、来源声明延迟和交易状态。股票采用带源时间的正成交价；期权优先有效双边中间价，否则采用带时间的正成交价。倒挂或零买价不计算中间价，缺时间/错误单位/错误币种/非有限或负价格/明显未来时间不可估值；网络零报价不触发自动清仓。
 
@@ -38,6 +38,8 @@
 `production_market_quotes.dart` 的 `buildProductionMarketQuoteClient()` 只在正式入口装配本构建允许的来源；通用 Controller 的默认客户端仍为空，不因创建或冷启动自动联网。`TencentQuoteAdapter` 校验 GBK 响应中的市场、完整身份、币种、每股正价格与源时间；美股明确匹配 `.OQ` 身份，使用共享 `ensureTimezoneDatabase()` 的 IANA `America/New_York` 规则处理冬夏令时。没有来源时间时不以抓取时间代替。当前交易状态与标称延迟保持 unknown/null，不猜实时或开收盘。
 
 页面显示研究范围，用户先主动开启联网，再逐证券选择“使用合格行情估值”；刷新只改变参考估值，不改现金、成交或手填后备价。请求、偏好恢复和缓存采用同一个来源可用性判断，普通/发行/无参数构建不会借用旧开关或研究缓存恢复联网。完整机制及实际执行结果集中在[诊断研究记录](public-quote-research.md)。
+
+港股模板的两份 `TEST-TCH` 期权是本地虚构验收合约，没有真实挂牌身份；当前来源仅支持股票，不向来源发送这些合约，也不把“不支持期权”归为临时网络错误。合约定义、手填价与已有期权账务保持不变。
 
 ## 2026-10-24 历史验证
 
