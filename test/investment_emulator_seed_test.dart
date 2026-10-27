@@ -63,7 +63,7 @@ void main() {
           Account(
             id: bankId,
             bookId: usd.bookId,
-            name: '博通验收入金.USD',
+            name: '现金账户',
             type: AccountType.cash,
             groupId: null,
             initialBalance: 10000,
