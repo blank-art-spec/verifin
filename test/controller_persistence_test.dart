@@ -649,7 +649,7 @@ void main() {
     // 导出应能从 SQLite 恢复出的内存状态重建等价备份。
     final reExported = jsonDecode(reloaded.exportDataJson()) as Map;
     expect((reExported['data'] as Map)['entries'], isNotEmpty);
-    // 冷启动后使用同一套组合检查，覆盖父子关联、USD 现金、两只股票与独立汇率。
+    // 冷启动后共用三地组合检查，覆盖父子关联、各币种现金、腾讯期权与独立汇率。
     expect(reloaded.activeBook.id, defaultLedgerBookId);
     expectSampleInvestmentPortfolio(reloaded);
     expect(reloaded.activeBook.id, defaultLedgerBookId);

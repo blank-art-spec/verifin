@@ -16,8 +16,8 @@ import 'package:verifin/pages/investment_page.dart';
 
 import 'support/test_harness.dart';
 
-/// 将正式双标的样例载入隔离控制器，供真实证券概览做布局验收。
-/// [locale] 指定界面及金额格式语言；[openingCash] 非空时仅替换测试副本的期初现金，
+/// 将三地样例的 USD 双标的组合载入隔离控制器，供真实证券概览做布局验收。
+/// [locale] 指定界面及金额格式语言；[openingCash] 非空时仅替换 USD 副本的期初现金，
 /// 并显式允许融资，以覆盖合法的大额负现金。调用方负责释放返回的控制器。
 Future<VeriFinController> _overviewController({
   Locale locale = const Locale('zh'),
@@ -29,7 +29,11 @@ Future<VeriFinController> _overviewController({
   if (openingCash != null) {
     final data = root['data'] as Map<String, dynamic>;
     final portfolio =
-        (data['investmentPortfolios'] as List).single as Map<String, dynamic>;
+        (data['investmentPortfolios'] as List).singleWhere(
+              (portfolio) =>
+                  (portfolio as Map)['accountId'] == 'acc_investment_usd',
+            )
+            as Map<String, dynamic>;
     portfolio['openingCash'] = openingCash;
     portfolio['allowFinancing'] = true;
   }

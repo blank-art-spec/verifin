@@ -1,7 +1,7 @@
 {
   "app": "verifin",
   "version": 12,
-  "exportedAt": "2026-10-25T10:00:00.000",
+  "exportedAt": "2026-10-27T10:00:00.000",
   "data": {
     "investmentPortfolios": [
       {
@@ -99,6 +99,232 @@
         "manualPrices": {
           "us:stock:AVGO": "330",
           "us:stock:GOOG": "110"
+        },
+        "allowFinancing": false,
+        "anchorIncludedIds": {},
+        "marketPriceIds": [],
+        "valuationSnapshots": []
+      },
+      {
+        "accountId": "acc_investment_cny",
+        "bookId": "book_investment",
+        "currencyCode": "CNY",
+        "openedAt": "2026-10-01T00:00:00.000",
+        "openingCash": "20000",
+        "includedEntryIds": [],
+        "securities": [
+          {
+            "symbol": "600026",
+            "name": "中远海能",
+            "market": "cn",
+            "currencyCode": "CNY"
+          }
+        ],
+        "openingHoldings": [],
+        "events": [
+          {
+            "id": "test_cosco_buy",
+            "securityId": "cn:stock:600026",
+            "kind": "buy",
+            "occurredAt": "2026-10-07T10:00:00.000",
+            "sequence": 1,
+            "quantity": "1000",
+            "price": "10",
+            "fee": "5",
+            "note": "验收示例：中远海能A股固定测试买价，不是港股01138或真实成交",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_cosco_sell",
+            "securityId": "cn:stock:600026",
+            "kind": "sell",
+            "occurredAt": "2026-10-08T10:00:00.000",
+            "sequence": 2,
+            "quantity": "400",
+            "price": "12",
+            "fee": "5",
+            "note": "验收示例：中远海能部分卖出，保留六百股",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          }
+        ],
+        "manualPrices": {
+          "cn:stock:600026": "12"
+        },
+        "allowFinancing": false,
+        "anchorIncludedIds": {},
+        "marketPriceIds": [],
+        "valuationSnapshots": []
+      },
+      {
+        "accountId": "acc_investment_hkd",
+        "bookId": "book_investment",
+        "currencyCode": "HKD",
+        "openedAt": "2026-10-01T00:00:00.000",
+        "openingCash": "100000",
+        "includedEntryIds": [],
+        "securities": [
+          {
+            "symbol": "00700",
+            "name": "腾讯控股",
+            "market": "hk",
+            "currencyCode": "HKD"
+          },
+          {
+            "symbol": "TEST-TCH-CALL-20261230-440",
+            "name": "腾讯控股认购期权示例",
+            "market": "hk",
+            "currencyCode": "HKD",
+            "option": {
+              "underlyingId": "hk:stock:00700",
+              "expiry": "2026-12-30",
+              "right": "call",
+              "strike": "440",
+              "premiumMultiplier": "100",
+              "settlement": "physical",
+              "deliverableShares": "100",
+              "exerciseCash": "44000",
+              "specification": "本地虚构验收合约，非真实挂牌代码；参考港交所TCH标准100股、港元每股权利金、美式及实物交割，日期、行权价和价格均为固定测试输入",
+              "confirmed": true
+            }
+          },
+          {
+            "symbol": "TEST-TCH-PUT-20261230-380",
+            "name": "腾讯控股认沽期权示例",
+            "market": "hk",
+            "currencyCode": "HKD",
+            "option": {
+              "underlyingId": "hk:stock:00700",
+              "expiry": "2026-12-30",
+              "right": "put",
+              "strike": "380",
+              "premiumMultiplier": "100",
+              "settlement": "physical",
+              "deliverableShares": "100",
+              "exerciseCash": "38000",
+              "specification": "本地虚构验收合约，非真实挂牌代码；参考港交所TCH标准100股、港元每股权利金、美式及实物交割，日期、行权价和价格均为固定测试输入",
+              "confirmed": true
+            }
+          }
+        ],
+        "openingHoldings": [],
+        "events": [
+          {
+            "id": "test_tencent_buy",
+            "securityId": "hk:stock:00700",
+            "kind": "buy",
+            "occurredAt": "2026-10-07T10:00:00.000",
+            "sequence": 1,
+            "quantity": "200",
+            "price": "400",
+            "fee": "20",
+            "note": "验收示例：腾讯控股固定测试买价，不是历史成交或现价",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_tencent_sell",
+            "securityId": "hk:stock:00700",
+            "kind": "sell",
+            "occurredAt": "2026-10-08T10:00:00.000",
+            "sequence": 2,
+            "quantity": "100",
+            "price": "420",
+            "fee": "20",
+            "note": "验收示例：腾讯控股部分卖出，保留一百股",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_tencent_call_open",
+            "securityId": "hk:option:TEST-TCH-CALL-20261230-440",
+            "kind": "optionBuyOpen",
+            "occurredAt": "2026-10-09T10:00:00.000",
+            "sequence": 3,
+            "quantity": "2",
+            "price": "10",
+            "fee": "10",
+            "note": "验收示例：本地虚构腾讯认购合约买开两张，乘数一百",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_tencent_call_close",
+            "securityId": "hk:option:TEST-TCH-CALL-20261230-440",
+            "kind": "optionSellClose",
+            "occurredAt": "2026-10-10T10:00:00.000",
+            "sequence": 4,
+            "quantity": "1",
+            "price": "15",
+            "fee": "10",
+            "note": "验收示例：腾讯认购卖平一张，保留一张多头",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_tencent_put_open",
+            "securityId": "hk:option:TEST-TCH-PUT-20261230-380",
+            "kind": "optionSellOpen",
+            "occurredAt": "2026-10-11T10:00:00.000",
+            "sequence": 5,
+            "quantity": "2",
+            "price": "8",
+            "fee": "10",
+            "note": "验收示例：本地虚构腾讯认沽合约卖开两张；冻结为测试确认额，不是券商保证金规则",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": "20000",
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_tencent_put_close",
+            "securityId": "hk:option:TEST-TCH-PUT-20261230-380",
+            "kind": "optionBuyClose",
+            "occurredAt": "2026-10-12T10:00:00.000",
+            "sequence": 6,
+            "quantity": "1",
+            "price": "4",
+            "fee": "10",
+            "note": "验收示例：腾讯认沽买平一张，保留一张空头；冻结调为一万",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": "10000",
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          }
+        ],
+        "manualPrices": {
+          "hk:stock:00700": "420",
+          "hk:option:TEST-TCH-CALL-20261230-440": "15",
+          "hk:option:TEST-TCH-PUT-20261230-380": "4"
         },
         "allowFinancing": false,
         "anchorIncludedIds": {},

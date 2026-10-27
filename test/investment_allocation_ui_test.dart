@@ -120,7 +120,7 @@ Future<void> _expectPositionShare(
   expect(tester.takeException(), isNull);
 }
 
-/// 覆盖双标的配置、实时改价、零资产和空头义务的用户可见行为。
+/// 覆盖三地模板、实时改价、零资产和空头义务的用户可见行为。
 /// 无参数、无返回值；所有场景使用隔离控制器，不连接设备或真实行情服务。
 void main() {
   useTestDatabases();
@@ -188,6 +188,78 @@ void main() {
         expect(after, before);
       },
     );
+  }
+
+  for (final width in [393.0, 360.0]) {
+    testWidgets('三地模板：中远海能 A 股持仓与占比 $width', (tester) async {
+      final controller = await _sampleController();
+      addTearDown(controller.dispose);
+      await _pumpAllocationPage(
+        tester,
+        controller,
+        accountId: 'acc_investment_cny',
+        width: width,
+      );
+      final l = AppLocalizations.of(
+        tester.element(find.byType(InvestmentPage)),
+      );
+      expect(
+        _metric(tester, l.investCash).detail,
+        '${l.investCashShare} 67.3%',
+      );
+      expect(
+        _metric(tester, l.investLongValue).detail,
+        '${l.investHoldingsShare} 32.7%',
+      );
+      await _expectPositionShare(tester, '中远海能 · 600026', '32.7%', l);
+    });
+
+    testWidgets('三地模板：腾讯股票及认购多头、认沽空头 $width', (tester) async {
+      final controller = await _sampleController();
+      addTearDown(controller.dispose);
+      await _pumpAllocationPage(
+        tester,
+        controller,
+        accountId: 'acc_investment_hkd',
+        width: width,
+      );
+      final l = AppLocalizations.of(
+        tester.element(find.byType(InvestmentPage)),
+      );
+      expect(
+        _metric(tester, l.investCash).detail,
+        '${l.investCashShare} 59.0%',
+      );
+      expect(
+        _metric(tester, l.investLongValue).detail,
+        '${l.investHoldingsShare} 41.0%',
+      );
+      expect(
+        _metric(tester, l.investShortObligation).detail,
+        '${l.investShortShare} 0.4%',
+      );
+      await _expectPositionShare(tester, '腾讯控股 · 00700', '39.6%', l);
+      await _expectPositionShare(
+        tester,
+        '腾讯控股认购期权示例 · TEST-TCH-CALL-20261230-440',
+        '1.4%',
+        l,
+      );
+      await _expectPositionShare(
+        tester,
+        '腾讯控股认沽期权示例 · TEST-TCH-PUT-20261230-380',
+        '0.4%',
+        l,
+        short: true,
+      );
+      expect(
+        controller
+            .investmentProjection('acc_investment_hkd')!
+            .frozenMargin
+            .toDouble(),
+        10000,
+      );
+    });
   }
 
   testWidgets('更新 GOOG 参考价会重算占比，现金与成交事实不变', (tester) async {

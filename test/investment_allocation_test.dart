@@ -37,7 +37,11 @@ void main() {
     final data = root['data'] as Map<String, dynamic>;
     final portfolio = InvestmentPortfolio.fromJson(
       Map<String, Object?>.from(
-        (data['investmentPortfolios'] as List).single as Map,
+        (data['investmentPortfolios'] as List).singleWhere(
+              (portfolio) =>
+                  (portfolio as Map)['accountId'] == 'acc_investment_usd',
+            )
+            as Map,
       ),
     );
     final cash = investmentCashBalance(portfolio: portfolio, entries: []);
