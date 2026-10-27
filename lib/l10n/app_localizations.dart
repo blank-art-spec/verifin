@@ -12539,7 +12539,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketAutomatic.
   ///
   /// In zh, this message translates to:
-  /// **'仅此页前台每 5 分钟刷新'**
+  /// **'应用前台每 5 分钟自动刷新'**
   String get marketAutomatic;
 
   /// No description provided for @marketRefresh.
@@ -12551,7 +12551,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketConsent.
   ///
   /// In zh, this message translates to:
-  /// **'开启后仅向已通过评审的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。离页、退后台或锁屏停止刷新。'**
+  /// **'开启后仅向已通过评审的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。开启自动刷新后，打开应用或回前台检查当前账本持仓；退后台或锁屏暂停。'**
   String get marketConsent;
 
   /// No description provided for @marketGatePending.
@@ -12563,7 +12563,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketResearchConsent.
   ///
   /// In zh, this message translates to:
-  /// **'此诊断版本可向腾讯公开来源发送股票代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。离页、退后台或锁屏停止刷新。'**
+  /// **'此诊断版本可向腾讯公开来源发送股票代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。开启自动刷新后，开屏或回前台检查当前账本持仓；退后台或锁屏暂停。'**
   String get marketResearchConsent;
 
   /// No description provided for @marketResearchNote.

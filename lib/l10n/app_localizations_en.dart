@@ -7163,14 +7163,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketAutomatic =>
-      'Refresh every 5 minutes while this page is visible';
+      'Refresh every 5 minutes while the app is in the foreground';
 
   @override
   String get marketRefresh => 'Refresh reference quotes';
 
   @override
   String get marketConsent =>
-      'When enabled, only security/contract codes go to approved sources, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. Refresh stops when leaving this page, backgrounding or locking.';
+      'When enabled, only security/contract codes go to approved sources, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
 
   @override
   String get marketGatePending =>
@@ -7178,7 +7178,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketResearchConsent =>
-      'This diagnostic build can send stock symbols to Tencent\'s public source, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. This tests requests and valuation; release usage terms remain under review. Refresh stops when leaving this page, backgrounding or locking.';
+      'This diagnostic build can send stock symbols to Tencent\'s public source, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. This tests requests and valuation; release usage terms remain under review. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
 
   @override
   String get marketResearchNote =>

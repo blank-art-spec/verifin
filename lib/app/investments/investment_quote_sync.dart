@@ -1,4 +1,4 @@
-/// 仅在获准且可见的页面刷新参考行情；偏好/短缓存留设备，不进入账目备份。
+/// 仅在获准的前台会话中刷新参考行情；偏好/短缓存留设备，不进入账目备份。
 library;
 
 import 'dart:async';
@@ -94,6 +94,8 @@ class InvestmentQuoteSync {
   int _generation = 0;
   bool _disposed = false, _enabled = false, _automatic = false;
   String? _visible;
+  bool _applicationManaged = false, _applicationActive = false;
+  final _foregroundOwners = <String>{};
   Future<void> _writeTail = Future.value();
 
   /// 只有实际估值依据改变时通知资产消费者，进度及偏好使用 state 单独通知。
@@ -101,6 +103,9 @@ class InvestmentQuoteSync {
   static const _settingsKey = 'investment_quote_settings_v1',
       _cacheKey = 'investment_quote_cache_v1';
   static const interval = Duration(minutes: 5);
+
+  /// 是否已由应用级协调器接管生命周期；页面据此避免另建一套自动请求。
+  bool get applicationManaged => _applicationManaged;
 
   /// 使用明确数组编码账户键，避免任意账户 ID 内分隔符造成跨账本碰撞。
   String _owner(InvestmentPortfolio p) => jsonEncode([p.bookId, p.accountId]);
@@ -197,7 +202,8 @@ class InvestmentQuoteSync {
   }
 
   /// 更新 [owner] 对应账户的结果；省略时更新当前可见账户。
-  /// 只有该账户仍可见才通知页面，另一账户的完成/失败不能覆盖当前显示。
+  /// 页面始终只显示所选账户；应用级调度仍能收到其他账户的完成信号，
+  /// 但不能把另一账户的完成/失败覆盖到当前显示。
   void _publish(QuoteSyncStatus status, {int changed = 0, String? owner}) {
     if (_disposed) return;
     final key = owner ?? _visible;
@@ -206,7 +212,11 @@ class InvestmentQuoteSync {
       account.status = status;
       account.changed = changed;
     }
-    if (owner != null && owner != _visible) return;
+    if (owner != null && owner != _visible) {
+      // 应用协调器也需要收到非可见账户完成信号；页面仍只展示自己的快照。
+      if (_applicationManaged) _publishVisible();
+      return;
+    }
     _publishVisible(fallback: status);
   }
 
@@ -214,11 +224,20 @@ class InvestmentQuoteSync {
   /// [fallback] 仅在没有可见账户时提供授权操作的结果。
   void _publishVisible({QuoteSyncStatus fallback = QuoteSyncStatus.idle}) {
     if (_disposed) return;
-    final account = _accounts[_visible];
-    state.value = QuoteSyncState(
+    state.value = _stateForOwner(_visible, fallback: fallback);
+  }
+
+  /// 返回 [owner] 的独立快照，不改变当前页面选择，也不通知其他账户。
+  /// [fallback] 只用于尚未产生账户结果的授权操作。
+  QuoteSyncState _stateForOwner(
+    String? owner, {
+    QuoteSyncStatus fallback = QuoteSyncStatus.idle,
+  }) {
+    final account = _accounts[owner];
+    return QuoteSyncState(
       enabled: _enabled,
       automatic: _automatic,
-      status: _enabled && _runningOwners.contains(_visible)
+      status: _enabled && _runningOwners.contains(owner)
           ? QuoteSyncStatus.loading
           : account?.status ?? fallback,
       changed: account?.changed ?? 0,
@@ -226,6 +245,40 @@ class InvestmentQuoteSync {
       cooldownUntil: account?.automaticAt,
     );
   }
+
+  /// 读取 [portfolio] 的请求、运行及自动计时状态，供应用级协调器逐账户排程。
+  QuoteSyncState stateFor(InvestmentPortfolio portfolio) =>
+      _stateForOwner(_owner(portfolio));
+
+  /// 声明当前前台、已解锁且属于当前账本的 [portfolios]；null 表示暂停联网。
+  /// 此方法只更新授权范围，不自行发请求。相同账户范围保持修订不变，避免报价
+  /// 通知重建界面时误撤销自己；后台/锁屏/换账本则撤销旧响应和页面遗留定时器。
+  void setForegroundPortfolios(Iterable<InvestmentPortfolio>? portfolios) {
+    if (_disposed) return;
+    final next = portfolios == null
+        ? <String>{}
+        : portfolios.map(_owner).toSet();
+    final active = portfolios != null;
+    if (_applicationManaged &&
+        _applicationActive == active &&
+        setEquals(_foregroundOwners, next)) {
+      return;
+    }
+    _applicationManaged = true;
+    _applicationActive = active;
+    _foregroundOwners
+      ..clear()
+      ..addAll(next);
+    _generation++;
+    _timer?.cancel();
+    _timer = null;
+    _scheduledRefresh = null;
+  }
+
+  /// 核对 [owner] 是否仍获当前前台会话允许；独立页面保持原有可见上下文入口。
+  bool _allowsRequest(String owner) => _applicationManaged
+      ? _applicationActive && _foregroundOwners.contains(owner)
+      : _visible == owner;
 
   /// 用户主动启停联网；授权先持久成功才生效，关闭立即废弃所有在途结果和定时器。
   Future<bool> configure({
@@ -236,13 +289,20 @@ class InvestmentQuoteSync {
       _publish(QuoteSyncStatus.unavailable);
       return false;
     }
-    // 用户关闭的意图立即撤销在途请求；即使设备偏好写入失败，也不继续本次会话联网。
+    // 用户关闭的意图立即撤销在途请求；即使设备偏好写入失败，也不继续被关闭的行为。
     final configuration = ++_configurationRevision;
     _generation++;
     _timer?.cancel();
     _timer = null;
     _scheduledRefresh = null;
     if (!enabled) _enabled = false;
+    if (!automatic) _automatic = false;
+    if (!enabled || !automatic) {
+      // 应用批次可能正等待上一账户响应，必须在异步保存前通知其停止，不能
+      // 等写入成功才让后续账户知道自动刷新已关闭。保存失败时仍保留本会话
+      // 的停止意图；返回 false 及既有失败提示说明该偏好尚未持久保存。
+      _publish(QuoteSyncStatus.idle);
+    }
     try {
       final writing = _settingsWrites.then(
         (_) => store.writeAndFlush(
@@ -305,11 +365,16 @@ class InvestmentQuoteSync {
     _publish(QuoteSyncStatus.idle);
   }
 
-  /// 选择可见页面；null 表示离页、退后台或锁屏，立即停止定时与废弃在途结果。
+  /// 选择页面展示的账户；应用级模式下离页不撤销其他前台页面的自动请求。
+  /// 未装配应用协调器的独立页面仍以可见上下文管理自己的请求与测试生命周期。
   void setVisible(InvestmentPortfolio? p) {
     final key = p == null ? null : _owner(p);
     if (key == _visible) return;
     _visible = key;
+    if (_applicationManaged) {
+      _publishVisible();
+      return;
+    }
     _generation++;
     _timer?.cancel();
     _timer = null;
@@ -321,6 +386,7 @@ class InvestmentQuoteSync {
   /// [refresh] 是页面提供的自动入口；重新进入页面不重新累计五分钟，
   /// 手动刷新也不会改变截止时间。离页和销毁会清除这个短命页面引用。
   void scheduleVisibleRefresh(Future<void> Function() refresh) {
+    if (_applicationManaged) return;
     _scheduledRefresh = refresh;
     _armAutomaticRefresh();
   }
@@ -333,6 +399,7 @@ class InvestmentQuoteSync {
     _timer = null;
     final owner = _visible, refresh = _scheduledRefresh;
     if (_disposed ||
+        _applicationManaged ||
         !_enabled ||
         !_automatic ||
         owner == null ||
@@ -408,6 +475,31 @@ class InvestmentQuoteSync {
     return Map.unmodifiable(result);
   }
 
+  /// 返回 [portfolio] 当前持有且已准入来源明确支持的公开请求，按来源各取最多20项。
+  /// 所有账户信息只用于本地选择，实际传给适配器的对象仍仅含公开证券身份。
+  Map<MarketQuoteAdapter, List<MarketQuoteRequest>> _requestGroups(
+    InvestmentPortfolio portfolio,
+  ) {
+    final groups = <MarketQuoteAdapter, List<MarketQuoteRequest>>{};
+    final held = projectStocks(
+      portfolio,
+    ).positions.map((position) => position.securityId).toSet();
+    for (final security in portfolio.securities.where(
+      (security) => held.contains(security.id),
+    )) {
+      final request = MarketQuoteRequest(security);
+      final adapter = client.adapterFor(request);
+      if (adapter == null) continue;
+      final group = groups.putIfAbsent(adapter, () => []);
+      if (group.length < 20) group.add(request);
+    }
+    return groups;
+  }
+
+  /// [portfolio] 有可请求的真实持仓时才参与应用级排程，避免空账户或不支持品种空转。
+  bool hasSupportedHoldings(InvestmentPortfolio portfolio) =>
+      _requestGroups(portfolio).isNotEmpty;
+
   /// 合并同来源的最多20个身份，串行来源请求、每批15秒上限；不抓全市场再筛持仓。
   /// [isCurrent] 在请求前及提交前重读账本、持仓和手填修订，旧响应不会跨上下文生效。
   /// [automatic] 默认为 false，表示用户手动刷新，不等待本地五分钟间隔。
@@ -418,7 +510,7 @@ class InvestmentQuoteSync {
     required bool Function() isCurrent,
     bool automatic = false,
   }) async {
-    if (_disposed || !_enabled || _visible != _owner(p) || !isCurrent()) {
+    if (_disposed || !_enabled || !_allowsRequest(_owner(p)) || !isCurrent()) {
       return false;
     }
     final owner = _owner(p);
@@ -431,18 +523,9 @@ class InvestmentQuoteSync {
       _publish(QuoteSyncStatus.cooldown, owner: owner);
       return false;
     }
-    final groups = <MarketQuoteAdapter, List<MarketQuoteRequest>>{};
-    final held = projectStocks(p).positions.map((p) => p.securityId).toSet();
-    for (final s in p.securities.where((s) => held.contains(s.id))) {
-      final request = MarketQuoteRequest(s),
-          adapter = client.adapterFor(MarketQuoteRequest(s));
-      if (adapter != null) {
-        final group = groups.putIfAbsent(adapter, () => []);
-        if (group.length < 20) group.add(request);
-      }
-    }
+    final groups = _requestGroups(p);
     if (groups.isEmpty) {
-      _publish(QuoteSyncStatus.unavailable);
+      _publish(QuoteSyncStatus.unavailable, owner: owner);
       return false;
     }
     account.attemptedAt = now;
@@ -463,7 +546,7 @@ class InvestmentQuoteSync {
         if (_disposed ||
             revision != _generation ||
             !_enabled ||
-            _visible != owner ||
+            !_allowsRequest(owner) ||
             !isCurrent()) {
           return false;
         }
@@ -474,7 +557,7 @@ class InvestmentQuoteSync {
           if (_disposed ||
               revision != _generation ||
               !_enabled ||
-              _visible != owner ||
+              !_allowsRequest(owner) ||
               !isCurrent()) {
             return false;
           }
@@ -532,7 +615,7 @@ class InvestmentQuoteSync {
           identical(_accounts[owner], account) &&
           account.status == QuoteSyncStatus.loading) {
         _publish(QuoteSyncStatus.idle, owner: owner);
-      } else if (!_disposed && _visible == owner) {
+      } else if (!_disposed && (_visible == owner || _applicationManaged)) {
         // 配置改变可能已把内部结果改成空闲，仍须移除页面上的请求中状态。
         _publishVisible();
       }

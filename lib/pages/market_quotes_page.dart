@@ -76,7 +76,8 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
       _unlocked &&
       (ModalRoute.of(context)?.isCurrent ?? true);
 
-  /// 页面进入时按本账户的自动间隔检查，自动模式仅对这个可见页面排程。
+  /// 绑定当前展示账户；正式应用的自动请求由应用级会话统一管理。
+  /// 未装配应用门卫的独立页面仍保留原有自动入口，供组件隔离验证。
   void _activate({bool force = false}) {
     final p = _controller!.investmentFor(widget.accountId);
     if (!_interactive || p == null) {
@@ -88,7 +89,7 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
     if (!force && identical(p, _boundPortfolio)) return;
     _boundPortfolio = p;
     _sync!.setVisible(p);
-    if (_sync!.state.value.enabled) {
+    if (_sync!.state.value.enabled && !_sync!.applicationManaged) {
       // 请求内有修订与异常保护，页面只声明一次可见生命周期。
       unawaited(_refreshAutomatically());
       _sync!.scheduleVisibleRefresh(_refreshAutomatically);
@@ -134,7 +135,8 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
     _activate(force: true);
   }
 
-  /// 离开路由立即取消页面定时并撤销在途结果；Controller 的缓存仍可供离线估值。
+  /// 离开路由清理页面选择；应用级前台自动刷新不依赖本页是否仍然打开。
+  /// 页面手动请求仍由 isCurrent 拒绝离页后的旧结果，缓存可继续供离线估值。
   @override
   void dispose() {
     _sync?.setVisible(null);

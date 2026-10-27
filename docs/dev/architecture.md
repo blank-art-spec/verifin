@@ -11,10 +11,16 @@ Veri Fin 仅交付 Android，权威账目在本机 SQLite，无账号或自有�
 Controller 经 repository 写库。`VeriFinController.create()` 是生产初始化入口；
 主题、语言等设备偏好通过 KV 和独立 ValueNotifier 驱动。
 
+参考行情自动调度由 `InvestmentQuoteSession` 负责，根级 `MarketQuoteSessionGate`
+在隐私同意、应用锁及首次引导通过后连接应用生命周期。已开启联网和自动刷新时，
+开屏/回前台/解锁检查当前账本全部证券账户的已支持持仓，前台按账户自己的到期时间续刷；
+不必打开参考行情页。退后台、锁屏或退出停止后续请求，页面只承担显示和手动刷新。
+
 | 领域 | 源码与维护文档 |
 | --- | --- |
 | 根初始化、生命周期 | `lib/main.dart`；备份、周期补记、提醒、小组件与应用锁挂钩 |
 | Controller | 核心 `veri_fin_controller.dart` / `state` / `ops`；领域 part：`veri_fin_controller_account_reminders.dart`、`veri_fin_controller_workday_calendar.dart`、`veri_fin_controller_credit_hierarchy.dart`；生产 `create` 异步载入本地状态，日历客户端可注入测试 |
+| 证券参考行情会话 | `investments/investment_quote_sync.dart` 保存逐账户状态/缓存，`investments/investment_quote_session.dart` 负责当前账本到期调度，`pages/market_quote_session_gate.dart` 连接根级前台、隐私/引导及解锁状态；[当前范围](public-quote-research.md) |
 | 父子账户与汇率 | Controller part `veri_fin_controller_credit_hierarchy.dart`；纯归并 `credit_hierarchy.dart`、只读统计 `statistics_currency.dart`、联网 `frankfurter_client.dart`；[当前金额及统一还款口径](credit-hierarchy-currency.md) |
 | SQLite 与持久化 | `lib/data/`；[技术决策](tech-decisions.md)、repository contract 与 migration matrix 测试 |
 | 模型 | `lib/app/models/`，`models.dart` 稳定导出；信用主体在 `credit_account.dart`，具体币种子账户仍是 `Account`；JSON/SQLite 映射须同步 |

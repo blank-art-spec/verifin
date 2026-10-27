@@ -6914,21 +6914,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketEnable => '开启参考行情联网';
 
   @override
-  String get marketAutomatic => '仅此页前台每 5 分钟刷新';
+  String get marketAutomatic => '应用前台每 5 分钟自动刷新';
 
   @override
   String get marketRefresh => '刷新参考行情';
 
   @override
   String get marketConsent =>
-      '开启后仅向已通过评审的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。离页、退后台或锁屏停止刷新。';
+      '开启后仅向已通过评审的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。开启自动刷新后，打开应用或回前台检查当前账本持仓；退后台或锁屏暂停。';
 
   @override
   String get marketGatePending => '来源尚未通过自动估值门禁，继续使用手填参考价。';
 
   @override
   String get marketResearchConsent =>
-      '此诊断版本可向腾讯公开来源发送股票代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。离页、退后台或锁屏停止刷新。';
+      '此诊断版本可向腾讯公开来源发送股票代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。开启自动刷新后，开屏或回前台检查当前账本持仓；退后台或锁屏暂停。';
 
   @override
   String get marketResearchNote => '公开股票行情实验验证已启用，仅此诊断调试版本可用。报价可能延迟，手填后备价继续保留。';
