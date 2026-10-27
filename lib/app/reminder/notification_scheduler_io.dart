@@ -1,11 +1,11 @@
 import 'dart:io';
 
-import 'package:flutter/services.dart' show rootBundle;
 import 'package:flutter_local_notifications/flutter_local_notifications.dart';
 import 'package:flutter_timezone/flutter_timezone.dart';
 import 'package:timezone/timezone.dart' as tz;
 
 import '../currency_math.dart';
+import '../timezone_database.dart';
 import 'financial_reminder.dart';
 import 'reminder_settings.dart';
 import '../../l10n/app_localizations.dart';
@@ -57,19 +57,15 @@ class NotificationScheduler {
     _initialized = true;
   }
 
+  /// 准备提醒所需的共享 IANA 数据及设备本地时区，无参数，成功后完成 Future。
+  /// 数据库与行情复用同一次载入；设备时区读取暂时失败时仍保留后续重试机会。
   Future<void> _ensureTimezone() async {
     if (_timezoneReady) {
       return;
     }
     if (!_timezoneDatabaseLoaded) {
-      // 保留 latest_all 的全部历史/别名数据，只改变包内存储形式。
-      // scripts/prepare_timezone_asset.dart --check 保证解压后与锁定依赖逐字节相同。
-      final data = await rootBundle.load('assets/timezone/latest_all.tzf.gz');
-      final packed = data.buffer.asUint8List(
-        data.offsetInBytes,
-        data.lengthInBytes,
-      );
-      tz.initializeDatabase(gzip.decode(packed));
+      // 提醒与公开行情共用完整资产及同一次初始化，不重复覆盖全局时区数据库。
+      await ensureTimezoneDatabase();
       _timezoneDatabaseLoaded = true;
     }
     try {

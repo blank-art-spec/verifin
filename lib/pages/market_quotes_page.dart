@@ -1,4 +1,4 @@
-/// 参考行情设置与状态；没有通过来源门禁时明确保留手填，不提供假自动估值开关。
+/// 参考行情设置与状态；按构建区分发布准入与实验验证，没有可用来源时保留手填。
 library;
 
 import 'dart:async';
@@ -154,6 +154,16 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
     }
     final sync = c.investmentQuoteSync;
     final held = projectStocks(p).positions.map((h) => h.securityId).toSet();
+    // 实际装配来源优先展示，未装配的候选继续显示待核对，避免接入后仍只列旧候选。
+    final registeredIds = sync.client.adapters
+        .map((adapter) => adapter.capability.id)
+        .toSet();
+    final sources = [
+      ...sync.client.adapters.map((adapter) => adapter.capability),
+      ...MarketQuoteClient.pendingSources.where(
+        (source) => !registeredIds.contains(source.id),
+      ),
+    ];
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
@@ -168,18 +178,24 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                   children: [
                     VeriHeader(title: l.marketTitle, showBack: true),
                     const SizedBox(height: 12),
-                    InvestmentHint(l.marketConsent),
+                    InvestmentHint(
+                      sync.client.hasResearchSources
+                          ? l.marketResearchConsent
+                          : l.marketConsent,
+                    ),
                     const SizedBox(height: 8),
                     InvestmentSection(
                       title: l.marketTitle,
                       children: [
-                        if (!sync.client.hasApprovedSources)
+                        if (!sync.client.hasAvailableSources)
                           InvestmentHint(l.marketGatePending),
+                        if (sync.client.hasResearchSources)
+                          InvestmentHint(l.marketResearchNote),
                         CompactSwitchRow(
                           icon: Icons.cloud_outlined,
                           value: state.enabled,
                           title: Text(l.marketEnable),
-                          onChanged: _saving || !sync.client.hasApprovedSources
+                          onChanged: _saving || !sync.client.hasAvailableSources
                               ? null
                               : (v) => _configure(v, state.automatic),
                         ),
@@ -215,11 +231,16 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                     InvestmentSection(
                       title: l.marketSourceReview,
                       children: [
-                        for (final source in MarketQuoteClient.pendingSources)
+                        for (final source in sources)
                           DetailInfoRow(
                             inline: true,
                             label: source.id,
-                            value: l.marketAwaitingReview,
+                            value: source.approved
+                                ? l.marketSourceConnected
+                                : source.researchOnly &&
+                                      sync.client.allowResearchSources
+                                ? l.marketSourceResearch
+                                : l.marketAwaitingReview,
                           ),
                       ],
                     ),
@@ -291,7 +312,14 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                                   q.delayMinutes == null)
                                 Text(l.marketStateUnknown),
                             ] else
-                              InvestmentHint(l.marketNoQuote),
+                              InvestmentHint(
+                                sync.client.adapterFor(MarketQuoteRequest(s)) !=
+                                        null
+                                    ? l.marketNoQuote
+                                    : s.option != null
+                                    ? l.marketOptionUnsupported
+                                    : l.marketSecurityUnsupported,
+                              ),
                             DetailInfoRow(
                               inline: true,
                               label: l.marketManualFallback,

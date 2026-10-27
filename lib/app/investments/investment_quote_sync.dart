@@ -52,7 +52,7 @@ class QuoteSyncState {
 
 /// 设备端轻量同步器；构造只读本地，不获取网络、不保存持仓。
 class InvestmentQuoteSync {
-  /// [client] 是已评审来源集合；[clock] 可用于稳定的冷却/旧报价测试。
+  /// [client] 是当前构建允许的来源集合；[clock] 可用于稳定的冷却/旧报价测试。
   InvestmentQuoteSync({
     required this.store,
     required this.client,
@@ -109,7 +109,7 @@ class InvestmentQuoteSync {
       final raw = store.read(_settingsKey);
       if (raw != null) {
         final json = jsonDecode(raw) as Map;
-        _enabled = json['enabled'] == true && client.hasApprovedSources;
+        _enabled = json['enabled'] == true && client.hasAvailableSources;
         _automatic = json['automatic'] == true;
       }
       final cached = store.read(_cacheKey);
@@ -125,7 +125,7 @@ class InvestmentQuoteSync {
           payload['cooldownUntil'] as String? ?? '',
         );
         final longest = client.adapters
-            .where((a) => a.capability.approved)
+            .where(client.allowsAdapter)
             .fold<Duration>(
               interval,
               (value, a) => a.capability.minimumInterval > value
@@ -177,7 +177,7 @@ class InvestmentQuoteSync {
     required bool enabled,
     required bool automatic,
   }) async {
-    if (_disposed || enabled && !client.hasApprovedSources) {
+    if (_disposed || enabled && !client.hasAvailableSources) {
       _publish(QuoteSyncStatus.unavailable);
       return false;
     }
@@ -353,7 +353,7 @@ class InvestmentQuoteSync {
               !isCurrent()) {
             return false;
           }
-          if (!group.key.capability.approved) {
+          if (!client.allowsAdapter(group.key)) {
             failed = true;
             continue;
           }

@@ -254,7 +254,11 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 期权投资：`models/option_contract.dart` 定义独立的权利金乘数、交割股数与每张行权现金；`stock_projection.dart` 的 part `option_projection.dart` 重放开平仓/到期/交割及保证金，`securityPositionValue` 统一股数/张数估值、`optionExpired` 只判断待确认。`OptionEditorPage` 复用现有组件并要求预览，Controller 的 `previewOptionEvent` 零写入，`saveOptionEvent` / `saveOptionSpecification` 原子校验提交。详见 [期权阶段](securities-stage03-implementation.md)。
 
-- 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与代码来源门禁；`InvestmentQuoteSync` 独立设备通知源及有界缓存/冷却/页面定时，`MarketQuotesPage` 复用应用解锁作用域暂停网络；`quote_format.dart` 的 `formatQuoteTime` 共用时间格式。当前没有通过自动估值门禁的生产适配器，不能将测试夹具当成真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
+- 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与来源门禁；`MarketQuoteClient.allowsAdapter` 统一来源、请求和缓存判断，`hasApprovedSources` 与 `hasAvailableSources`/`hasResearchSources` 区分正式准入和显式诊断研究。`InvestmentQuoteSync` 负责独立通知、有界缓存/冷却/页面定时，`MarketQuotesPage` 复用应用解锁作用域暂停网络，`formatQuoteTime` 共用时间格式。普通构建仍无已准入来源，不能将测试夹具当作真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
+
+- 公开股票研究：`investments/tencent_quote_adapter.dart` 的 `TencentQuoteAdapter` / `TencentHttpQuoteTransport` 实现固定 HTTPS、每批 20 个身份/15 秒/512 KiB、GBK 及源时间校验；支持沪深 CNY、港股 HKD 及首批 AVGO/GOOG，期权和 TEST 代码不查询，`approved: false`/`researchOnly: true`。`production_market_quotes.dart` 的 `permitsQuoteResearch` / `buildProductionMarketQuoteClient` 由 `main.dart` 在 debug + diagnostic + 显式 `PUBLIC_QUOTE_RESEARCH=true` 时装配，通用 Controller 默认空客户端。技术/发布边界见[诊断研究记录](public-quote-research.md)。
+
+- 共享时区数据库：`timezone_database.dart` 的 `ensureTimezoneDatabase()` 共用既有完整 `latest_all.tzf.gz` 资产；提醒调度与美股报价源时间解析等待同一次初始化，失败允许重试，不修改设备时区、不联网。纽约源时间使用 IANA `America/New_York`，不固定减四/五小时，也不重复打包时区表。
 
 - 证券资产与历史：`investment_valuation.dart` 的 `valueInvestmentAccount` / `valueLedgerAccounts` / `accountCashAt` / `investmentRevision` / `investmentSnapshotAt` 是纯计算入口；`currency_math.dart` 的 `AccountAssetAmounts` 和 `ConvertedAccountBalances` 保留总资产/负债分解。`models/investment_valuation_snapshot.dart` 保存实际观察点依据，`InvestmentHistoryPage` 复用 `InteractiveTrendChart`。详见 [阶段 5](securities-stage05-implementation.md)。
 - 证券资产占比：`InvestmentAccountValuation.cashShare` / `holdingsShare` / `shortObligationShare` 与 `shareOfAssets(value)` 统一以本币种账户的正现金加多头市值为分母；分母为零、估值不完整或输入无效时返回 null。概览复用 `SummaryMetric.detail`，持仓卡复用 `DetailInfoRow`；空头义务独立标注且允许超过 100%，冻结不重复扣减。百分比经 l10n `investAllocationPercent` 按语言显示一位小数。

@@ -29,10 +29,15 @@ class QuoteSourceCapability {
     this.id, {
     required this.approved,
     required this.reviewNote,
+    this.researchOnly = false,
     this.minimumInterval = const Duration(minutes: 5),
   });
   final String id, reviewNote;
   final bool approved;
+
+  /// 只供显式诊断构建验证的来源；不等于发布准入，也不能由设备偏好或缓存开启。
+  /// 必须同时由构建工厂允许研究来源，才会参与查询及参考估值。
+  final bool researchOnly;
 
   /// 来源要求的最短间隔；同步器取它与默认五分钟中更严格的一方。
   final Duration minimumInterval;
@@ -189,11 +194,17 @@ abstract class MarketQuoteAdapter {
   Future<List<MarketQuote>> fetch(List<MarketQuoteRequest> requests);
 }
 
-/// 来源分发器；只执行已评审来源，未准入来源不会因为 UI 开关打开而发请求。
+/// 来源分发器；正式来源须评审，研究来源另受独立诊断构建限制，设备开关不能替代。
 class MarketQuoteClient {
-  /// [adapters] 为代码注入，测试可用有界 fixture；生产默认没有已准入自动估值来源。
-  const MarketQuoteClient({this.adapters = const []});
+  /// [adapters] 是代码注入的来源；默认空集合，构造及通用测试不会访问网络。
+  /// [allowResearchSources] 仅由独立 diagnostic 调试构建的显式参数启用，
+  /// 不写入设备偏好，不把研究来源的 [QuoteSourceCapability.approved] 改成 true。
+  const MarketQuoteClient({
+    this.adapters = const [],
+    this.allowResearchSources = false,
+  });
   final List<MarketQuoteAdapter> adapters;
+  final bool allowResearchSources;
 
   /// 当前尚未通过应用自动估值门禁的公开候选，状态供页面如实说明。
   static const pendingSources = [
@@ -209,11 +220,25 @@ class MarketQuoteClient {
     ),
   ];
 
-  /// 返回已准入且明确覆盖该证券的适配器；不提供 URL/任意主机的用户覆盖入口。
+  /// 判断 [adapter] 能否在本构建使用：正式准入，或显式诊断构建中的研究来源。
+  /// 同步、缓存恢复和页面开关共用此判断，避免仅放开界面却绕过请求/缓存校验。
+  bool allowsAdapter(MarketQuoteAdapter adapter) =>
+      adapter.capability.approved ||
+      (allowResearchSources && adapter.capability.researchOnly);
+
+  /// 返回本构建允许且明确覆盖该证券的适配器；不提供任意主机的用户覆盖入口。
   MarketQuoteAdapter? adapterFor(MarketQuoteRequest request) => adapters
-      .where((a) => a.capability.approved && a.supports(request))
+      .where((a) => allowsAdapter(a) && a.supports(request))
       .firstOrNull;
 
   /// 有通过来源门禁的代码适配器时才允许用户启用联网。
   bool get hasApprovedSources => adapters.any((a) => a.capability.approved);
+
+  /// 本构建是否有可用来源；正式构建仍只接受 approved，不受旧设备开关影响。
+  bool get hasAvailableSources => adapters.any(allowsAdapter);
+
+  /// 当前是否启用了未获发布准入的诊断来源，供界面明确标示验证范围。
+  bool get hasResearchSources =>
+      allowResearchSources &&
+      adapters.any((a) => a.capability.researchOnly && !a.capability.approved);
 }

@@ -12644,6 +12644,42 @@ abstract class AppLocalizations {
   /// **'来源尚未通过自动估值门禁，继续使用手填参考价。'**
   String get marketGatePending;
 
+  /// No description provided for @marketResearchConsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'此诊断版本可向腾讯公开来源发送股票代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。离页、退后台或锁屏停止刷新。'**
+  String get marketResearchConsent;
+
+  /// No description provided for @marketResearchNote.
+  ///
+  /// In zh, this message translates to:
+  /// **'公开股票行情实验验证已启用，仅此诊断调试版本可用。报价可能延迟，手填后备价继续保留。'**
+  String get marketResearchNote;
+
+  /// No description provided for @marketSourceResearch.
+  ///
+  /// In zh, this message translates to:
+  /// **'实验验证（发布待核对）'**
+  String get marketSourceResearch;
+
+  /// No description provided for @marketSourceConnected.
+  ///
+  /// In zh, this message translates to:
+  /// **'已接入'**
+  String get marketSourceConnected;
+
+  /// No description provided for @marketSecurityUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前来源尚不支持此证券，继续使用手填参考价。'**
+  String get marketSecurityUnsupported;
+
+  /// No description provided for @marketOptionUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前来源不支持期权报价，本地 TEST 示例不会联网查询；继续使用手填参考价。'**
+  String get marketOptionUnsupported;
+
   /// No description provided for @marketSourceReview.
   ///
   /// In zh, this message translates to:

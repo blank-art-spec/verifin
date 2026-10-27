@@ -7225,6 +7225,28 @@ class AppLocalizationsEn extends AppLocalizations {
       'No source has passed automatic valuation review. Manual reference prices remain available.';
 
   @override
+  String get marketResearchConsent =>
+      'This diagnostic build can send stock symbols to Tencent\'s public source, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. This tests requests and valuation; release usage terms remain under review. Refresh stops when leaving this page, backgrounding or locking.';
+
+  @override
+  String get marketResearchNote =>
+      'Experimental public stock quotes are available only in this diagnostic debug build. Quotes may be delayed. Manual fallback prices are retained.';
+
+  @override
+  String get marketSourceResearch => 'Experimental; release review pending';
+
+  @override
+  String get marketSourceConnected => 'Connected';
+
+  @override
+  String get marketSecurityUnsupported =>
+      'This source does not cover this security. Using the manual reference price.';
+
+  @override
+  String get marketOptionUnsupported =>
+      'This source does not provide option quotes. Local TEST examples are never queried. Using the manual reference price.';
+
+  @override
   String get marketSourceReview => 'Source terms and field review';
 
   @override

@@ -8,6 +8,7 @@ import 'app/app_theme.dart';
 import 'app/backup/backup_coordinator.dart';
 import 'app/feedback.dart';
 import 'app/home_widget_service.dart';
+import 'app/investments/production_market_quotes.dart';
 import 'app/l10n_outside_context.dart';
 import 'app/logging/app_logger.dart';
 import 'app/models.dart';
@@ -27,6 +28,11 @@ import 'pages/privacy_consent_gate.dart';
 import 'pages/onboarding_page.dart';
 import 'pages/shell.dart';
 
+/// 初始化正式 Android 页面入口，无参数；返回初始化调度完成的 Future。
+///
+/// 先载入设备偏好、日志及 SQLite，再创建统一控制器并注入当前构建允许的行情来源。
+/// 行情装配不发请求；只有用户进入可见页面并主动启用后才联网。未捕获错误继续交给
+/// 根级日志处理，初始化失败保留原数据库，不通过清数据掩盖问题。
 Future<void> main() async {
   // 应用运行的顶层 zone，故意不 await（fire-and-forget）；未捕获错误交给下方 onError。
   unawaited(
@@ -52,6 +58,8 @@ Future<void> main() async {
             store,
             repository: SqliteLedgerRepository(database),
             logger: logger,
+            // 来源集合由构建条件决定；构造不联网，仍须在参考行情页主动开启。
+            marketQuoteClient: buildProductionMarketQuoteClient(),
             // 语言偏好为「跟随系统」时，首启动播种的默认数据（账本/分类/简介）按系统语言选文案。
             systemIsEnglish:
                 PlatformDispatcher.instance.locale.languageCode.toLowerCase() !=
