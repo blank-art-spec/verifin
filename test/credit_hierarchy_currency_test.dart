@@ -2,6 +2,7 @@ import 'dart:async';
 import 'dart:convert';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
+import 'package:verifin/app/credit_card.dart';
 import 'package:verifin/app/credit_hierarchy.dart';
 import 'package:verifin/app/frankfurter_client.dart';
 import 'package:verifin/app/common_widgets.dart';
@@ -450,6 +451,50 @@ void main() {
     ).copyWith(clearReferenceBaseAmount: true);
     expect(LedgerEntry.fromJson(cleared.toJson()).referenceBaseAmount, isNull);
   });
+  test('未出账随明确账单日结转，出账日当天新消费仍归下一期', () {
+    final account = card('usd', 'USD');
+    final octoberExpense = expense(
+      'october-expense',
+      account.id,
+      'USD',
+      5,
+      date: DateTime(2026, 10, 5),
+    );
+    // 原失败用例把这笔固定历史消费永久当作未出账。明确时点证明：
+    // 25 日前应保留未出账，到了账单日则正确结转为待还，不能改坏生产口径。
+    final before = creditStatementOverview(
+      account: account,
+      entries: [octoberExpense],
+      statements: const [],
+      now: DateTime(2026, 10, 24, 23, 59),
+    );
+    expect(before.billedOutstanding, 0);
+    expect(before.unbilledAmount, 5);
+    final billed = creditStatementOverview(
+      account: account,
+      entries: [octoberExpense],
+      statements: const [],
+      now: DateTime(2026, 10, 25),
+    );
+    expect(billed.billedOutstanding, 5);
+    expect(billed.unbilledAmount, 0);
+    // 本项目约定账单日当天新消费属于下一期。因此当日生成的未出账夹具，
+    // 即使测试恰好在每月 25 日运行，也不会被误算进已经结转的这一期。
+    final statementDayExpense = octoberExpense.copyWith(
+      id: 'statement-day-expense',
+      occurredAt: DateTime(2026, 10, 25),
+    );
+    for (final now in [DateTime(2026, 10, 25), DateTime(2026, 10, 26)]) {
+      final nextCycle = creditStatementOverview(
+        account: account,
+        entries: [statementDayExpense],
+        statements: const [],
+        now: now,
+      );
+      expect(nextCycle.billedOutstanding, 0);
+      expect(nextCycle.unbilledAmount, 5);
+    }
+  });
   test('当前全额结清原币账单，未填折算也允许，未出账保留，整批删除恢复', () async {
     final f = await setup();
     final c = f.c;
@@ -460,7 +505,8 @@ void main() {
           'usd',
           'USD',
           5,
-          date: DateTime(2026, 10, 5),
+          // 这是相对实际查看日仍未出账的新消费，不能固定在已过账单日的历史账期。
+          date: DateTime.now(),
         ),
         isNew: true,
       )).isSuccess,
@@ -470,6 +516,8 @@ void main() {
       f.parent,
       CreditRepaymentScope.current,
     );
+    expect(c.creditOverview(f.usd).unbilledAmount, 5);
+    expect(lines.singleWhere((line) => line.accountId == f.usd.id).amount, 10);
     expect(c.repaymentMissingReferences(f.parent, lines), isEmpty);
     final result = await c.recordCreditRepaymentBatch(
       batchId: 'batch',
@@ -546,12 +594,15 @@ void main() {
     final c = f.c;
     expect(
       (await c.saveEntryAggregateDraftResult(
-        entry: expense('future', 'usd', 'USD', 5, date: DateTime(2026, 10, 5)),
+        // 名称 future 指尚未出账的后续账期，不代表发生时间晚于今天。
+        entry: expense('future', 'usd', 'USD', 5, date: DateTime.now()),
         isNew: true,
       )).isSuccess,
       isTrue,
     );
     final lines = c.creditRepaymentDefaults(f.parent, CreditRepaymentScope.all);
+    expect(c.creditOverview(f.usd).unbilledAmount, 5);
+    expect(lines.singleWhere((line) => line.accountId == f.usd.id).amount, 15);
     expect(c.repaymentMissingReferences(f.parent, lines).map((e) => e.id), [
       'future',
     ]);

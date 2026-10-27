@@ -930,99 +930,178 @@ void main() {
     );
   });
 
-  test('跨账本退款只匹配目标账本的账户和原支出', () async {
-    final controller = await makeController();
-    final sourceBookId = controller.activeBook.id;
-    const sourceAccount = Account(
-      id: 'source-refund-card',
-      bookId: 'default',
-      name: '来源银行卡',
-      type: AccountType.debitCard,
-      groupId: null,
-      initialBalance: 0,
-      iconCode: 'credit',
-      note: '',
-      includeInAssets: true,
-      hidden: false,
-      cardLast4: '4185',
+  for (final automaticallyPost in [false, true]) {
+    test(
+      automaticallyPost ? '已自动入账的退款不能再次跨账本复核或重复落账' : '跨账本退款只匹配目标账本的账户和原支出',
+      () async {
+        final controller = await makeController();
+        addTearDown(controller.dispose);
+        // 复核场景必须先关闭高置信度自动入账，否则唯一匹配的退款会在采集阶段完成。
+        // 另一分支显式开启，验证已落账事件不能再被搬到其他账本生成第二份退款。
+        expect(
+          await controller.saveAutoCaptureSettingsDraft(
+            controller.autoCaptureSettings.copyWith(
+              autoPostHighConfidence: automaticallyPost,
+            ),
+          ),
+          isTrue,
+        );
+        final sourceBookId = controller.activeBook.id;
+        const sourceAccount = Account(
+          id: 'source-refund-card',
+          bookId: 'default',
+          name: '来源银行卡',
+          type: AccountType.debitCard,
+          groupId: null,
+          initialBalance: 0,
+          iconCode: 'credit',
+          note: '',
+          includeInAssets: true,
+          hidden: false,
+          cardLast4: '4185',
+        );
+        expect(await controller.addAccountDraft(sourceAccount), isTrue);
+        final category = controller.categories.firstWhere(
+          (item) => item.type == EntryType.expense,
+        );
+        final receivedAt = DateTime(2026, 10, 2);
+        final original = LedgerEntry(
+          id: 'source-refund-expense',
+          bookId: sourceBookId,
+          type: EntryType.expense,
+          amount: 59.49,
+          categoryId: category.id,
+          accountId: sourceAccount.id,
+          note: '消费',
+          occurredAt: DateTime(2026, 10, 1),
+        );
+        controller.addEntry(original);
+        await controller.ingestCaptureInputs([
+          RawCaptureInput(
+            sourceKind: CaptureSourceKind.notification,
+            sourceId: 'test-bank',
+            sourceEventId: 'cross-book-refund',
+            rawText: '尾号4185退款59.49元，商户麦当劳',
+            receivedAt: receivedAt,
+          ),
+        ]);
+        final event = controller.captureEvents.single;
+        expect(event.confidence, CaptureConfidence.high);
+        expect(
+          event.status,
+          automaticallyPost
+              ? CaptureStatus.autoPosted
+              : CaptureStatus.pendingReview,
+        );
+        if (automaticallyPost) {
+          expect(event.linkedEntryId, isNotNull);
+          expect(controller.entries, hasLength(2));
+        } else {
+          expect(event.linkedEntryId, isNull);
+          expect(controller.entries.single.id, original.id);
+        }
+        controller.addLedgerBook('退款目标');
+        final targetBookId = controller.activeBook.id;
+        // 没有目标账户/原支出时不回退到来源账本，原事件保持不变。
+        expect(
+          await controller.confirmParsedCaptureEvent(
+            event.id,
+            sourceBookId: sourceBookId,
+            targetBookId: targetBookId,
+          ),
+          isNull,
+        );
+        final targetAccount = sourceAccount.copyWith(
+          id: 'target-refund-card',
+          bookId: targetBookId,
+          name: '目标银行卡',
+        );
+        expect(await controller.addAccountDraft(targetAccount), isTrue);
+        controller.addEntry(
+          original.copyWith(
+            id: 'target-refund-expense',
+            bookId: targetBookId,
+            accountId: targetAccount.id,
+          ),
+        );
+        if (automaticallyPost) {
+          // 即便目标账本已补齐同卡尾号账户和原支出，已落账来源也不允许重新复核。
+          expect(
+            controller.captureEventForReview(
+              event.id,
+              sourceBookId: sourceBookId,
+              targetBookId: targetBookId,
+            ),
+            isNull,
+          );
+          expect(
+            await controller.confirmParsedCaptureEvent(
+              event.id,
+              sourceBookId: sourceBookId,
+              targetBookId: targetBookId,
+            ),
+            isNull,
+          );
+          expect(controller.captureEvents, isEmpty);
+          expect(controller.entries.single.id, 'target-refund-expense');
+          controller.switchLedgerBook(sourceBookId);
+          expect(controller.entries, hasLength(2));
+          expect(
+            controller.entries.where((item) => item.type == EntryType.refund),
+            hasLength(1),
+          );
+          expect(
+            controller.captureEvents.single.status,
+            CaptureStatus.autoPosted,
+          );
+          expect(
+            controller.captureEvents.single.linkedEntryId,
+            event.linkedEntryId,
+          );
+          final sourceRefund = controller.entries.singleWhere(
+            (item) => item.type == EntryType.refund,
+          );
+          expect(sourceRefund.id, event.linkedEntryId);
+          expect(sourceRefund.refundOf, original.id);
+          expect(sourceRefund.amount, 59.49);
+          expect(
+            controller.entries
+                .singleWhere((item) => item.id == original.id)
+                .refundedBaseAmount,
+            59.49,
+          );
+          return;
+        }
+        final preview = controller.captureEventForReview(
+          event.id,
+          sourceBookId: sourceBookId,
+          targetBookId: targetBookId,
+        );
+        expect(preview, isNotNull);
+        expect(preview!.accountCandidateId, targetAccount.id);
+        expect(controller.entries, hasLength(1));
+        final refund = await controller.confirmParsedCaptureEvent(
+          event.id,
+          sourceBookId: sourceBookId,
+          targetBookId: targetBookId,
+        );
+        expect(refund, isNotNull);
+        expect(refund!.bookId, targetBookId);
+        expect(refund.accountId, targetAccount.id);
+        expect(refund.refundOf, 'target-refund-expense');
+        expect(controller.captureEvents.single.status, CaptureStatus.confirmed);
+        expect(
+          controller.entries
+              .singleWhere((item) => item.id == 'target-refund-expense')
+              .refundedBaseAmount,
+          59.49,
+        );
+        controller.switchLedgerBook(sourceBookId);
+        expect(controller.captureEvents, isEmpty);
+        expect(controller.entries.single.refundedBaseAmount, 0);
+      },
     );
-    expect(await controller.addAccountDraft(sourceAccount), isTrue);
-    final category = controller.categories.firstWhere(
-      (item) => item.type == EntryType.expense,
-    );
-    final receivedAt = DateTime(2026, 10, 2);
-    final original = LedgerEntry(
-      id: 'source-refund-expense',
-      bookId: sourceBookId,
-      type: EntryType.expense,
-      amount: 59.49,
-      categoryId: category.id,
-      accountId: sourceAccount.id,
-      note: '消费',
-      occurredAt: DateTime(2026, 10, 1),
-    );
-    controller.addEntry(original);
-    await controller.ingestCaptureInputs([
-      RawCaptureInput(
-        sourceKind: CaptureSourceKind.notification,
-        sourceId: 'test-bank',
-        sourceEventId: 'cross-book-refund',
-        rawText: '尾号4185退款59.49元，商户麦当劳',
-        receivedAt: receivedAt,
-      ),
-    ]);
-    final event = controller.captureEvents.single;
-    controller.addLedgerBook('退款目标');
-    final targetBookId = controller.activeBook.id;
-    // 没有目标账户/原支出时不回退到来源账本，原事件保持不变。
-    expect(
-      await controller.confirmParsedCaptureEvent(
-        event.id,
-        sourceBookId: sourceBookId,
-        targetBookId: targetBookId,
-      ),
-      isNull,
-    );
-    final targetAccount = sourceAccount.copyWith(
-      id: 'target-refund-card',
-      bookId: targetBookId,
-      name: '目标银行卡',
-    );
-    expect(await controller.addAccountDraft(targetAccount), isTrue);
-    controller.addEntry(
-      original.copyWith(
-        id: 'target-refund-expense',
-        bookId: targetBookId,
-        accountId: targetAccount.id,
-      ),
-    );
-    final preview = controller.captureEventForReview(
-      event.id,
-      sourceBookId: sourceBookId,
-      targetBookId: targetBookId,
-    );
-    expect(preview!.accountCandidateId, targetAccount.id);
-    expect(controller.entries, hasLength(1));
-    final refund = await controller.confirmParsedCaptureEvent(
-      event.id,
-      sourceBookId: sourceBookId,
-      targetBookId: targetBookId,
-    );
-    expect(refund!.bookId, targetBookId);
-    expect(refund.accountId, targetAccount.id);
-    expect(refund.refundOf, 'target-refund-expense');
-    expect(controller.captureEvents.single.status, CaptureStatus.confirmed);
-    expect(
-      controller.entries
-          .singleWhere((item) => item.id == 'target-refund-expense')
-          .refundedBaseAmount,
-      59.49,
-    );
-    controller.switchLedgerBook(sourceBookId);
-    expect(controller.captureEvents, isEmpty);
-    expect(controller.entries.single.refundedBaseAmount, 0);
-    controller.dispose();
-  });
+  }
 
   test('删除账户会清理规则动作并停用失去全部动作的规则', () async {
     final controller = await makeController();
