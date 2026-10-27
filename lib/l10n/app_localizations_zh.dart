@@ -6971,7 +6971,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketFailed => '来源失败或字段无效，保留旧缓存及其原时间';
 
   @override
-  String get marketCooldown => '来源冷却中，请稍后刷新';
+  String get marketCooldown => '尚未到此账户的自动刷新时间，可手动刷新';
 
   @override
   String get marketNotCached => '本次报价未缓存，当前结果仅在内存可用';
@@ -6983,7 +6983,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketAttempt => '最近尝试';
 
   @override
-  String get marketNextRefresh => '最早下次刷新';
+  String get marketNextRefresh => '最早下次自动刷新';
 
   @override
   String get marketQuoteTime => '来源报价时间';

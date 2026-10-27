@@ -7228,7 +7228,8 @@ class AppLocalizationsEn extends AppLocalizations {
       'Source failure or invalid fields. Older cached quotes keep their original timestamps.';
 
   @override
-  String get marketCooldown => 'Source cooldown. Refresh later.';
+  String get marketCooldown =>
+      'This account\'s automatic refresh is not due yet. You can refresh manually.';
 
   @override
   String get marketNotCached =>
@@ -7241,7 +7242,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketAttempt => 'Last attempt';
 
   @override
-  String get marketNextRefresh => 'Next allowed refresh';
+  String get marketNextRefresh => 'Next automatic refresh from';
 
   @override
   String get marketQuoteTime => 'Source quote time';

@@ -254,7 +254,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 期权投资：`models/option_contract.dart` 定义独立的权利金乘数、交割股数与每张行权现金；`stock_projection.dart` 的 part `option_projection.dart` 重放开平仓/到期/交割及保证金，`securityPositionValue` 统一股数/张数估值、`optionExpired` 只判断待确认。`OptionEditorPage` 复用现有组件并要求预览，Controller 的 `previewOptionEvent` 零写入，`saveOptionEvent` / `saveOptionSpecification` 原子校验提交。详见 [期权阶段](securities-stage03-implementation.md)。
 
-- 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与来源门禁；`MarketQuoteClient.allowsAdapter` 统一来源、请求和缓存判断，`hasApprovedSources` 与 `hasAvailableSources`/`hasResearchSources` 区分正式准入和显式诊断研究。`InvestmentQuoteSync` 负责独立通知、有界缓存/冷却/页面定时，`MarketQuotesPage` 复用应用解锁作用域暂停网络，`formatQuoteTime` 共用时间格式。普通构建仍无已准入来源，不能将测试夹具当作真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
+- 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与来源门禁；`MarketQuoteClient.allowsAdapter` 统一来源、请求和缓存判断，`hasApprovedSources` 与 `hasAvailableSources`/`hasResearchSources` 区分正式准入和显式诊断研究。`InvestmentQuoteSync.refresh` 区分手动和自动：手动不受本地五分钟等待限制，自动按账本及币种账户独立计时，取默认五分钟与来源更严格间隔；请求中仍防重复。状态、尝试时间及下次自动刷新时间随当前账户切换，设备缓存 v2 保存账户计时，兼容 v1 报价但不沿用旧全局冷却。`MarketQuotesPage` 复用应用解锁作用域暂停网络，`formatQuoteTime(includeSeconds: true)` 在行情页显示到秒，便于辨别同一分钟内的手动抓取；历史等其他调用默认保留分钟级格式。普通构建仍无已准入来源，不能将测试夹具当作真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
 
 - 公开股票研究：`investments/tencent_quote_adapter.dart` 的 `TencentQuoteAdapter` / `TencentHttpQuoteTransport` 实现固定 HTTPS、每批 20 个身份/15 秒/512 KiB、GBK 及源时间校验；支持沪深 CNY、港股 HKD 及首批 AVGO/GOOG，期权和 TEST 代码不查询，`approved: false`/`researchOnly: true`。`production_market_quotes.dart` 的 `permitsQuoteResearch` / `buildProductionMarketQuoteClient` 由 `main.dart` 在 debug + diagnostic + 显式 `PUBLIC_QUOTE_RESEARCH=true` 时装配，通用 Controller 默认空客户端。技术/发布边界见[诊断研究记录](public-quote-research.md)。
 

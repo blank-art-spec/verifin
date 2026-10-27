@@ -131,7 +131,7 @@ void main() {
     expect(await sync.refresh(holding(), isCurrent: () => true), isFalse);
     expect(sync.quotesFor(holding()), isEmpty);
   });
-  test('来源要求更长刷新间隔时遵守更严格冷却', () async {
+  test('自动刷新遵守来源更长间隔并在冷启动后继续计时', () async {
     var now = t;
     final p = holding(),
         adapter = FixtureQuoteAdapter(
@@ -148,7 +148,10 @@ void main() {
     sync.reconcile([p]);
     await sync.configure(enabled: true, automatic: false);
     sync.setVisible(p);
-    expect(await sync.refresh(p, isCurrent: () => true), isTrue);
+    expect(
+      await sync.refresh(p, isCurrent: () => true, automatic: true),
+      isTrue,
+    );
     now = now.add(const Duration(minutes: 1));
     sync.dispose();
     sync = InvestmentQuoteSync(
@@ -159,10 +162,16 @@ void main() {
     sync.reconcile([p]);
     sync.setVisible(p);
     now = now.add(const Duration(minutes: 5));
-    expect(await sync.refresh(p, isCurrent: () => true), isFalse);
+    expect(
+      await sync.refresh(p, isCurrent: () => true, automatic: true),
+      isFalse,
+    );
     expect(adapter.requests, 1);
     now = now.add(const Duration(minutes: 5));
-    expect(await sync.refresh(p, isCurrent: () => true), isTrue);
+    expect(
+      await sync.refresh(p, isCurrent: () => true, automatic: true),
+      isTrue,
+    );
     expect(adapter.requests, 2);
   });
 
@@ -247,7 +256,7 @@ void main() {
     expect(inverted.reference(request, t)!.midpoint, isFalse);
   });
 
-  test('冷却、缓存冷启动、旧源时间不覆盖新值，断网继续保留旧时间', () async {
+  test('自动间隔、缓存冷启动、旧源时间不覆盖新值，断网继续保留旧时间', () async {
     var now = t, reported = t;
     var fail = false;
     final store = LocalKeyValueStore(), p = holding();
@@ -264,9 +273,15 @@ void main() {
     sync.reconcile([p]);
     expect(await sync.configure(enabled: true, automatic: false), isTrue);
     sync.setVisible(p);
-    expect(await sync.refresh(p, isCurrent: () => true), isTrue);
+    expect(
+      await sync.refresh(p, isCurrent: () => true, automatic: true),
+      isTrue,
+    );
     expect(adapter.lastRequests.single.symbol, 'AVGO');
-    expect(await sync.refresh(p, isCurrent: () => true), isFalse);
+    expect(
+      await sync.refresh(p, isCurrent: () => true, automatic: true),
+      isFalse,
+    );
     expect(adapter.requests, 1);
     sync.dispose();
     sync = InvestmentQuoteSync(store: store, client: client, clock: () => now);
@@ -274,14 +289,20 @@ void main() {
     sync.reconcile([p]);
     sync.setVisible(p);
     expect(sync.quotesFor(p).singleValue.last, '330');
-    expect(await sync.refresh(p, isCurrent: () => true), isFalse);
+    expect(
+      await sync.refresh(p, isCurrent: () => true, automatic: true),
+      isFalse,
+    );
     now = now.add(const Duration(minutes: 6));
     reported = t.subtract(const Duration(minutes: 1));
-    await sync.refresh(p, isCurrent: () => true);
+    await sync.refresh(p, isCurrent: () => true, automatic: true);
     expect(sync.quotesFor(p).singleValue.lastAt, t);
     now = now.add(const Duration(minutes: 6));
     fail = true;
-    expect(await sync.refresh(p, isCurrent: () => true), isFalse);
+    expect(
+      await sync.refresh(p, isCurrent: () => true, automatic: true),
+      isFalse,
+    );
     expect(sync.state.value.status, QuoteSyncStatus.failed);
     expect(sync.quotesFor(p).singleValue.lastAt, t);
   });

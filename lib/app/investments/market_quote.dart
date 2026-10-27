@@ -39,7 +39,8 @@ class QuoteSourceCapability {
   /// 必须同时由构建工厂允许研究来源，才会参与查询及参考估值。
   final bool researchOnly;
 
-  /// 来源要求的最短间隔；同步器取它与默认五分钟中更严格的一方。
+  /// 自动轮询的最短间隔；取它与默认五分钟中更严格的一方。
+  /// 用户主动刷新不受本地轮询计时限制，来源实际拒绝仍按请求失败处理。
   final Duration minimumInterval;
 }
 

@@ -12647,7 +12647,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketCooldown.
   ///
   /// In zh, this message translates to:
-  /// **'来源冷却中，请稍后刷新'**
+  /// **'尚未到此账户的自动刷新时间，可手动刷新'**
   String get marketCooldown;
 
   /// No description provided for @marketNotCached.
@@ -12671,7 +12671,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketNextRefresh.
   ///
   /// In zh, this message translates to:
-  /// **'最早下次刷新'**
+  /// **'最早下次自动刷新'**
   String get marketNextRefresh;
 
   /// No description provided for @marketQuoteTime.

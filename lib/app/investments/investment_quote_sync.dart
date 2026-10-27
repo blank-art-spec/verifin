@@ -35,7 +35,9 @@ enum QuoteSyncStatus {
 
 /// 给页面独立通知同步状态，不把开关/请求进度广播成所有账目变化。
 class QuoteSyncState {
-  /// [changed] 是本次接受的新报价数；失败会继续保留旧缓存及原报价时间。
+  /// [changed] 是当前账户本次接受的新报价数；失败保留旧缓存及原报价时间。
+  /// [attemptedAt] 为该账户最近一次真实请求；[cooldownUntil] 仅表示自动刷新
+  /// 最早可再次请求的时间，手动刷新不受它限制，也不会推迟这个时间。
   const QuoteSyncState({
     this.enabled = false,
     this.automatic = false,
@@ -48,6 +50,17 @@ class QuoteSyncState {
   final QuoteSyncStatus status;
   final int changed;
   final DateTime? attemptedAt, cooldownUntil;
+}
+
+/// 每个账本及原币账户各自保存的刷新状态；不会发送给行情来源。
+class _AccountRefreshState {
+  /// [attemptedAt] 记录最近一次真实请求；[automaticAt] 只约束自动请求。
+  /// 状态和计数只在当前进程使用，冷启动仅恢复时间，不恢复过期的“处理中”。
+  _AccountRefreshState({this.attemptedAt, this.automaticAt});
+
+  DateTime? attemptedAt, automaticAt;
+  QuoteSyncStatus status = QuoteSyncStatus.idle;
+  int changed = 0;
 }
 
 /// 设备端轻量同步器；构造只读本地，不获取网络、不保存持仓。
@@ -74,14 +87,13 @@ class InvestmentQuoteSync {
   int _configurationRevision = 0;
   final _cache = <String, ({String digest, MarketQuote quote})>{};
   final _contexts = <String, String>{};
+  final _accounts = <String, _AccountRefreshState>{};
+  final _runningOwners = <String>{};
   Timer? _timer;
+  Future<void> Function()? _scheduledRefresh;
   int _generation = 0;
-  bool _disposed = false,
-      _enabled = false,
-      _automatic = false,
-      _running = false;
+  bool _disposed = false, _enabled = false, _automatic = false;
   String? _visible;
-  DateTime? _attempt, _cooldown;
   Future<void> _writeTail = Future.value();
 
   /// 只有实际估值依据改变时通知资产消费者，进度及偏好使用 state 单独通知。
@@ -118,12 +130,10 @@ class InvestmentQuoteSync {
           throw const FormatException('行情缓存超过设备上限');
         }
         final payload = jsonDecode(cached) as Map;
-        if (payload['version'] != 1) throw const FormatException('行情缓存版本无效');
+        if (payload['version'] != 1 && payload['version'] != 2) {
+          throw const FormatException('行情缓存版本无效');
+        }
         final rows = payload['rows'] as List;
-        _attempt = DateTime.tryParse(payload['attemptedAt'] as String? ?? '');
-        final cooldown = DateTime.tryParse(
-          payload['cooldownUntil'] as String? ?? '',
-        );
         final longest = client.adapters
             .where(client.allowsAdapter)
             .fold<Duration>(
@@ -132,8 +142,34 @@ class InvestmentQuoteSync {
                   ? a.capability.minimumInterval
                   : value,
             );
-        if (cooldown != null && !cooldown.isAfter(clock().add(longest))) {
-          _cooldown = cooldown;
+        // v1 的全局请求时间无法归属具体账户，只保留其报价，不复制全局冷却。
+        if (payload['version'] == 2) {
+          final accounts = payload['accounts'] as List;
+          if (accounts.length > 100) {
+            throw const FormatException('行情账户状态超过设备上限');
+          }
+          for (final raw in accounts) {
+            final row = raw as Map;
+            final owner = row['owner'] as String;
+            final identity = jsonDecode(owner);
+            if (identity is! List ||
+                identity.length != 2 ||
+                identity.any((value) => value is! String)) {
+              throw const FormatException('行情账户状态身份无效');
+            }
+            final cooldown = DateTime.tryParse(
+              row['cooldownUntil'] as String? ?? '',
+            );
+            _accounts[owner] = _AccountRefreshState(
+              attemptedAt: DateTime.tryParse(
+                row['attemptedAt'] as String? ?? '',
+              ),
+              automaticAt:
+                  cooldown != null && !cooldown.isAfter(clock().add(longest))
+                  ? cooldown
+                  : null,
+            );
+          }
         }
         if (rows.length > 100) throw const FormatException('行情缓存条目超过上限');
         for (final raw in rows) {
@@ -154,21 +190,40 @@ class InvestmentQuoteSync {
       // 仅设备偏好/派生缓存损坏，默认关闭并丢弃；不会改动 SQLite 中的账户和持仓。
       _enabled = false;
       _cache.clear();
+      _accounts.clear();
       logger?.warning('参考行情设备缓存无效，已停用联网并保留账目', source: 'investment_quote');
     }
     _publish(QuoteSyncStatus.idle);
   }
 
-  /// 发布不可变状态；异步退出后不再调用已销毁的通知器。
-  void _publish(QuoteSyncStatus status, {int changed = 0}) {
+  /// 更新 [owner] 对应账户的结果；省略时更新当前可见账户。
+  /// 只有该账户仍可见才通知页面，另一账户的完成/失败不能覆盖当前显示。
+  void _publish(QuoteSyncStatus status, {int changed = 0, String? owner}) {
     if (_disposed) return;
+    final key = owner ?? _visible;
+    if (key != null) {
+      final account = _accounts.putIfAbsent(key, _AccountRefreshState.new);
+      account.status = status;
+      account.changed = changed;
+    }
+    if (owner != null && owner != _visible) return;
+    _publishVisible(fallback: status);
+  }
+
+  /// 只读取当前账户状态并通知页面，不把上一账户的时间、计数或错误复制过来。
+  /// [fallback] 仅在没有可见账户时提供授权操作的结果。
+  void _publishVisible({QuoteSyncStatus fallback = QuoteSyncStatus.idle}) {
+    if (_disposed) return;
+    final account = _accounts[_visible];
     state.value = QuoteSyncState(
       enabled: _enabled,
       automatic: _automatic,
-      status: status,
-      changed: changed,
-      attemptedAt: _attempt,
-      cooldownUntil: _cooldown,
+      status: _enabled && _runningOwners.contains(_visible)
+          ? QuoteSyncStatus.loading
+          : account?.status ?? fallback,
+      changed: account?.changed ?? 0,
+      attemptedAt: account?.attemptedAt,
+      cooldownUntil: account?.automaticAt,
     );
   }
 
@@ -184,9 +239,9 @@ class InvestmentQuoteSync {
     // 用户关闭的意图立即撤销在途请求；即使设备偏好写入失败，也不继续本次会话联网。
     final configuration = ++_configurationRevision;
     _generation++;
-    _running = false;
     _timer?.cancel();
     _timer = null;
+    _scheduledRefresh = null;
     if (!enabled) _enabled = false;
     try {
       final writing = _settingsWrites.then(
@@ -212,9 +267,9 @@ class InvestmentQuoteSync {
     _enabled = enabled;
     _automatic = automatic;
     _generation++;
-    _running = false;
     _timer?.cancel();
     _timer = null;
+    _scheduledRefresh = null;
     _publish(QuoteSyncStatus.idle);
     return true;
   }
@@ -228,7 +283,10 @@ class InvestmentQuoteSync {
     final hasOrphans = _cache.entries.any(
       (e) => next[e.key.substring(0, e.key.lastIndexOf('|'))] != e.value.digest,
     );
-    if (!altered && !hasOrphans) return;
+    final hasAccountOrphans = _accounts.keys.any(
+      (owner) => !next.containsKey(owner),
+    );
+    if (!altered && !hasOrphans && !hasAccountOrphans) return;
     _contexts
       ..clear()
       ..addAll(next);
@@ -236,11 +294,13 @@ class InvestmentQuoteSync {
       final owner = key.substring(0, key.lastIndexOf('|'));
       return next[owner] != row.digest;
     });
+    _accounts.removeWhere((owner, _) => !next.containsKey(owner));
     _generation++;
-    _running = false;
     _timer?.cancel();
     _timer = null;
+    _scheduledRefresh = null;
     if (_visible != null && !next.containsKey(_visible)) _visible = null;
+    // 清理的是派生缓存；失败由持久化方法记录，不覆盖此时其他账户的页面状态。
     unawaited(_persistCache());
     _publish(QuoteSyncStatus.idle);
   }
@@ -251,21 +311,78 @@ class InvestmentQuoteSync {
     if (key == _visible) return;
     _visible = key;
     _generation++;
-    _running = false;
     _timer?.cancel();
     _timer = null;
-    _publish(QuoteSyncStatus.idle);
+    _scheduledRefresh = null;
+    _publishVisible();
   }
 
-  /// 为当前页面设置五分钟定时器；每次执行仍检查授权、可见性及调用方账本修订。
-  /// [refresh] 是页面提供的短命回调，dispose/setVisible(null) 会清理引用。
+  /// 为当前页面绑定自动回调，并按该账户原有截止时间排程。
+  /// [refresh] 是页面提供的自动入口；重新进入页面不重新累计五分钟，
+  /// 手动刷新也不会改变截止时间。离页和销毁会清除这个短命页面引用。
   void scheduleVisibleRefresh(Future<void> Function() refresh) {
+    _scheduledRefresh = refresh;
+    _armAutomaticRefresh();
+  }
+
+  /// 根据当前账户的最早自动时间设置一次定时器；实际请求完成后再排下一次。
+  /// [notBefore] 仅供未能发起请求的自动回调退让，避免无支持证券时零延时空转。
+  /// 当前已有请求时暂不设置定时器，等其 finally 解除防重复保护后重新排程。
+  void _armAutomaticRefresh({DateTime? notBefore}) {
     _timer?.cancel();
     _timer = null;
-    if (_disposed || !_enabled || !_automatic || _visible == null) return;
-    _timer = Timer.periodic(interval, (_) {
-      if (!_running) unawaited(refresh());
+    final owner = _visible, refresh = _scheduledRefresh;
+    if (_disposed ||
+        !_enabled ||
+        !_automatic ||
+        owner == null ||
+        refresh == null ||
+        _runningOwners.contains(owner)) {
+      return;
+    }
+    final now = clock();
+    var due = _accounts[owner]?.automaticAt ?? now.add(interval);
+    if (notBefore != null && due.isBefore(notBefore)) due = notBefore;
+    final delay = due.isAfter(now) ? due.difference(now) : Duration.zero;
+    final generation = _generation;
+    _timer = Timer(delay, () {
+      _timer = null;
+      if (_disposed ||
+          generation != _generation ||
+          _visible != owner ||
+          _runningOwners.contains(owner)) {
+        return;
+      }
+      unawaited(_runAutomaticRefresh(refresh, owner, generation));
     });
+  }
+
+  /// 执行 [refresh] 后继续排程；[owner] 与 [generation] 阻止旧页面重新挂回定时器。
+  /// 没有可请求证券时不反复立即重试；回调异常仅记安全类别并反馈当前账户失败。
+  Future<void> _runAutomaticRefresh(
+    Future<void> Function() refresh,
+    String owner,
+    int generation,
+  ) async {
+    final previous = _accounts[owner]?.automaticAt;
+    try {
+      await refresh();
+    } catch (_) {
+      logger?.warning('参考行情自动刷新回调失败', source: 'investment_quote');
+      if (!_disposed && generation == _generation && _visible == owner) {
+        _publish(QuoteSyncStatus.failed, owner: owner);
+      }
+    } finally {
+      if (!_disposed &&
+          generation == _generation &&
+          _visible == owner &&
+          identical(_scheduledRefresh, refresh)) {
+        final unchanged = _accounts[owner]?.automaticAt == previous;
+        _armAutomaticRefresh(
+          notBefore: unchanged ? clock().add(interval) : null,
+        );
+      }
+    }
   }
 
   /// 返回该账户已验证的缓存；关闭联网不会抹除已有参考价，也不会接受撤销准入来源。
@@ -293,17 +410,25 @@ class InvestmentQuoteSync {
 
   /// 合并同来源的最多20个身份，串行来源请求、每批15秒上限；不抓全市场再筛持仓。
   /// [isCurrent] 在请求前及提交前重读账本、持仓和手填修订，旧响应不会跨上下文生效。
+  /// [automatic] 默认为 false，表示用户手动刷新，不等待本地五分钟间隔。
+  /// 页面进入及定时调用传 true，只受该账户自己的自动间隔约束；手动请求
+  /// 不推迟自动计时。同一账户已有请求时直接返回 false，避免连续点击产生并发。
   Future<bool> refresh(
     InvestmentPortfolio p, {
     required bool Function() isCurrent,
+    bool automatic = false,
   }) async {
     if (_disposed || !_enabled || _visible != _owner(p) || !isCurrent()) {
       return false;
     }
-    if (_running) return false;
+    final owner = _owner(p);
+    if (_runningOwners.contains(owner)) return false;
     final now = clock();
-    if (_cooldown != null && now.isBefore(_cooldown!)) {
-      _publish(QuoteSyncStatus.cooldown);
+    final account = _accounts.putIfAbsent(owner, _AccountRefreshState.new);
+    if (automatic &&
+        account.automaticAt != null &&
+        now.isBefore(account.automaticAt!)) {
+      _publish(QuoteSyncStatus.cooldown, owner: owner);
       return false;
     }
     final groups = <MarketQuoteAdapter, List<MarketQuoteRequest>>{};
@@ -320,17 +445,17 @@ class InvestmentQuoteSync {
       _publish(QuoteSyncStatus.unavailable);
       return false;
     }
-    _attempt = now;
+    account.attemptedAt = now;
     final minimum = groups.keys.fold<Duration>(
       interval,
       (value, a) => a.capability.minimumInterval > value
           ? a.capability.minimumInterval
           : value,
     );
-    _cooldown = now.add(minimum);
-    _running = true;
-    final revision = _generation, owner = _owner(p), digest = _digest(p);
-    _publish(QuoteSyncStatus.loading);
+    if (automatic) account.automaticAt = now.add(minimum);
+    _runningOwners.add(owner);
+    final revision = _generation, digest = _digest(p);
+    _publish(QuoteSyncStatus.loading, owner: owner);
     var changed = 0, failed = false;
     try {
       for (final group in groups.entries) {
@@ -385,7 +510,6 @@ class InvestmentQuoteSync {
         }
       }
       if (_disposed || revision != _generation || !isCurrent()) return false;
-      _running = false;
       final persisted = await _persistCache();
       if (_disposed || revision != _generation || !isCurrent()) return false;
       _publish(
@@ -397,16 +521,22 @@ class InvestmentQuoteSync {
             ? QuoteSyncStatus.ready
             : QuoteSyncStatus.unavailable,
         changed: changed,
+        owner: owner,
       );
       if (changed > 0) onPricesChanged?.call();
       return changed > 0;
     } finally {
-      if (!_disposed && revision == _generation) {
-        _running = false;
-        if (state.value.status == QuoteSyncStatus.loading) {
-          _publish(QuoteSyncStatus.idle);
-        }
+      // 即使离页已撤销结果，也要等真实请求退出后才解除该账户的防重复保护。
+      _runningOwners.remove(owner);
+      if (!_disposed &&
+          identical(_accounts[owner], account) &&
+          account.status == QuoteSyncStatus.loading) {
+        _publish(QuoteSyncStatus.idle, owner: owner);
+      } else if (!_disposed && _visible == owner) {
+        // 配置改变可能已把内部结果改成空闲，仍须移除页面上的请求中状态。
+        _publishVisible();
       }
+      if (!_disposed && _visible == owner) _armAutomaticRefresh();
     }
   }
 
@@ -422,10 +552,34 @@ class InvestmentQuoteSync {
         _cache.remove(key);
       }
     }
+    if (_accounts.length > 100) {
+      final owners = _accounts.keys.toList()
+        ..sort(
+          (a, b) => (_accounts[a]!.attemptedAt ?? DateTime(1970)).compareTo(
+            _accounts[b]!.attemptedAt ?? DateTime(1970),
+          ),
+        );
+      final removable = owners.where(
+        (owner) => owner != _visible && !_runningOwners.contains(owner),
+      );
+      for (final owner in removable.take(_accounts.length - 100)) {
+        _accounts.remove(owner);
+      }
+    }
+    if (_accounts.length > 100) {
+      // 极端并发时不淘汰正在使用的状态，也不写入下次无法恢复的超限缓存。
+      return false;
+    }
     final raw = jsonEncode({
-      'version': 1,
-      'attemptedAt': _attempt?.toIso8601String(),
-      'cooldownUntil': _cooldown?.toIso8601String(),
+      'version': 2,
+      'accounts': [
+        for (final entry in _accounts.entries)
+          {
+            'owner': entry.key,
+            'attemptedAt': entry.value.attemptedAt?.toIso8601String(),
+            'cooldownUntil': entry.value.automaticAt?.toIso8601String(),
+          },
+      ],
       'rows': [
         for (final e in _cache.entries)
           {
@@ -436,7 +590,6 @@ class InvestmentQuoteSync {
       ],
     });
     if (raw.length > 512 * 1024) {
-      _publish(QuoteSyncStatus.notCached);
       return false;
     }
     final operation = _writeTail.then(
@@ -450,7 +603,6 @@ class InvestmentQuoteSync {
       return true;
     } catch (_) {
       logger?.warning('参考行情缓存保存失败，当前报价仅在内存可用', source: 'investment_quote');
-      _publish(QuoteSyncStatus.notCached);
       return false;
     }
   }
@@ -458,10 +610,11 @@ class InvestmentQuoteSync {
   /// 显式恢复/初始化时清缓存并撤销在途修订，设备授权偏好保留。
   Future<void> clearCache() async {
     _generation++;
-    _running = false;
     _cache.clear();
+    _accounts.clear();
     _timer?.cancel();
     _timer = null;
+    _scheduledRefresh = null;
     final persisted = await _persistCache();
     _publish(persisted ? QuoteSyncStatus.idle : QuoteSyncStatus.notCached);
   }
@@ -471,6 +624,7 @@ class InvestmentQuoteSync {
     _disposed = true;
     _generation++;
     _timer?.cancel();
+    _scheduledRefresh = null;
     onPricesChanged = null;
     state.dispose();
   }

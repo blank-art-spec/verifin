@@ -49,6 +49,56 @@ Future<({VeriFinController controller, Account account})> quoteController({
 
 void main() {
   useTestDatabases();
+  testWidgets('页面进入遵守自动间隔，按钮可在五分钟内连续手动刷新', (tester) async {
+    final adapter = FixtureQuoteAdapter(
+      (_) async => [stockQuote(DateTime.now())],
+    );
+    final fixture = await quoteController(adapter: adapter);
+    final c = fixture.controller;
+    addTearDown(c.dispose);
+    await c.investmentQuoteSync.configure(enabled: true, automatic: true);
+    final app = VeriFinScope(
+      controller: c,
+      child: zhMaterialApp(
+        home: MarketQuotesPage(accountId: fixture.account.id),
+      ),
+    );
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+    expect(adapter.requests, 1);
+    final nextAutomatic = c.investmentQuoteSync.state.value.cooldownUntil;
+    final button = find.widgetWithText(FilledButton, '刷新参考行情');
+    for (var count = 2; count <= 3; count++) {
+      await tester.ensureVisible(button);
+      await tester.tap(button);
+      await tester.pumpAndSettle();
+      expect(adapter.requests, count);
+      expect(
+        c.investmentQuoteSync.state.value.cooldownUntil,
+        nextAutomatic,
+        reason: '手动刷新不能把自动请求时间向后推迟',
+      );
+    }
+    // 再次进入同账户不发过早自动请求，但原有每五分钟定时仍可在前台工作。
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+    await tester.pumpWidget(app);
+    await tester.pumpAndSettle();
+    expect(adapter.requests, 3);
+    expect(
+      c.investmentQuoteSync.state.value.status.name,
+      'cooldown',
+      reason: '重新进入同账户应检查它的自动截止时间',
+    );
+    await tester.scrollUntilVisible(
+      find.text('尚未到此账户的自动刷新时间，可手动刷新'),
+      150,
+      scrollable: firstVerticalScrollable(),
+    );
+    expect(find.text('尚未到此账户的自动刷新时间，可手动刷新'), findsOneWidget);
+    await tester.pumpWidget(const SizedBox.shrink());
+    await tester.pumpAndSettle();
+  });
   test('冷启动未打开行情页就恢复，也必须清除上次设备缓存而非复活旧价', () async {
     final store = LocalKeyValueStore(),
         adapter = FixtureQuoteAdapter(

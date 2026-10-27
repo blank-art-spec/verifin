@@ -76,7 +76,7 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
       _unlocked &&
       (ModalRoute.of(context)?.isCurrent ?? true);
 
-  /// 页面进入时检查缓存/冷却，自动模式仅对这个仍可见的页面排程。
+  /// 页面进入时按本账户的自动间隔检查，自动模式仅对这个可见页面排程。
   void _activate({bool force = false}) {
     final p = _controller!.investmentFor(widget.accountId);
     if (!_interactive || p == null) {
@@ -90,13 +90,18 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
     _sync!.setVisible(p);
     if (_sync!.state.value.enabled) {
       // 请求内有修订与异常保护，页面只声明一次可见生命周期。
-      unawaited(_refresh());
-      _sync!.scheduleVisibleRefresh(_refresh);
+      unawaited(_refreshAutomatically());
+      _sync!.scheduleVisibleRefresh(_refreshAutomatically);
     }
   }
 
-  /// 刷新前后都核对同一聚合实例及账本；字段/持仓/恢复改变会使旧结果失效。
-  Future<void> _refresh() async {
+  /// 为页面进入及五分钟定时器提供自动入口；不消耗其他币种账户的间隔。
+  Future<void> _refreshAutomatically() => _refresh(automatic: true);
+
+  /// 刷新前后核对同一聚合及账本；字段/持仓/恢复改变会使旧结果失效。
+  /// [automatic] 仅由页面进入或定时器传 true，按钮保留默认 false，
+  /// 因此手动点击无五分钟等待，也不会重置自动计时；请求中仍禁止重复点击。
+  Future<void> _refresh({bool automatic = false}) async {
     final c = _controller!, p = c.investmentFor(widget.accountId);
     if (!_interactive || p == null) {
       _sync!.setVisible(null);
@@ -104,6 +109,7 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
     }
     await _sync!.refresh(
       p,
+      automatic: automatic,
       isCurrent: () =>
           _interactive &&
           c.activeBook.id == p.bookId &&
@@ -206,11 +212,11 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                         InvestmentHint(state.status.label(l)),
                         if (state.attemptedAt != null)
                           Text(
-                            '${l.marketAttempt}: ${formatQuoteTime(context, state.attemptedAt!)}',
+                            '${l.marketAttempt}: ${formatQuoteTime(context, state.attemptedAt!, includeSeconds: true)}',
                           ),
-                        if (state.cooldownUntil != null)
+                        if (state.automatic && state.cooldownUntil != null)
                           Text(
-                            '${l.marketNextRefresh}: ${formatQuoteTime(context, state.cooldownUntil!)}',
+                            '${l.marketNextRefresh}: ${formatQuoteTime(context, state.cooldownUntil!, includeSeconds: true)}',
                           ),
                       ],
                     ),
@@ -289,10 +295,10 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                                 '${q.source} · ${formatUserSecurityPrice(q.reference(MarketQuoteRequest(s), sync.clock())!.price, p.currencyCode)}',
                               ),
                               Text(
-                                '${l.marketQuoteTime}: ${formatQuoteTime(context, q.reference(MarketQuoteRequest(s), sync.clock())!.time)}',
+                                '${l.marketQuoteTime}: ${formatQuoteTime(context, q.reference(MarketQuoteRequest(s), sync.clock())!.time, includeSeconds: true)}',
                               ),
                               Text(
-                                '${l.investFetchedAt}: ${formatQuoteTime(context, q.fetchedAt)}',
+                                '${l.investFetchedAt}: ${formatQuoteTime(context, q.fetchedAt, includeSeconds: true)}',
                               ),
                               Text(q.tradeState.label(l)),
                               if (q.delayMinutes != null)
