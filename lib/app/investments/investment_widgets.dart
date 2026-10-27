@@ -2,6 +2,7 @@
 library;
 
 import 'package:flutter/material.dart';
+import '../../l10n/app_localizations.dart';
 import '../app_theme.dart';
 import '../common_widgets.dart';
 
@@ -154,6 +155,76 @@ class InvestmentSection extends StatelessWidget {
       ),
     ),
   );
+}
+
+/// 持仓卡内已采用报价的来源说明，独立于数量、成本及盈亏指标排列。
+class InvestmentQuoteDetails extends StatelessWidget {
+  /// [source] 为报价返回的公开来源名称；[quoteTime] 为调用方已按应用语言、
+  /// 设备时区格式化的来源报价时刻，不得传入抓取时间来代替来源时间。
+  /// 本组件只负责展示，不读取行情缓存或改变估值，长文字随字号自然换行。
+  const InvestmentQuoteDetails({
+    super.key,
+    required this.source,
+    required this.quoteTime,
+  });
+
+  final String source, quoteTime;
+
+  /// 以主题画布实色弱化来源区；来源与时间分两层，避免长说明打断金额行。
+  /// 装饰图标不重复朗读；不固定高度、不省略日期，保留系统大字号和浅深主题。
+  @override
+  Widget build(BuildContext context) {
+    final theme = Theme.of(context), l = AppLocalizations.of(context);
+    final color = theme.colorScheme.onSurfaceVariant;
+    final caption = theme.textTheme.labelMedium?.copyWith(
+      color: color,
+      height: 1.4,
+    );
+    return MergeSemantics(
+      child: DecoratedBox(
+        decoration: BoxDecoration(
+          color: theme.scaffoldBackgroundColor,
+          borderRadius: BorderRadius.circular(veriRadiusSm),
+        ),
+        child: Padding(
+          padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              ExcludeSemantics(
+                child: Icon(Icons.cloud_outlined, size: 16, color: color),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    Text(
+                      source,
+                      style: theme.textTheme.bodySmall?.copyWith(
+                        color: color,
+                        fontWeight: FontWeight.w600,
+                        height: 1.4,
+                      ),
+                    ),
+                    const SizedBox(height: 4),
+                    Wrap(
+                      spacing: 6,
+                      runSpacing: 2,
+                      children: [
+                        Text(l.marketQuoteTime, style: caption),
+                        Text(quoteTime, style: caption),
+                      ],
+                    ),
+                  ],
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
 }
 
 /// 带图标的次级说明，避免长说明与金额混成同一段正文。

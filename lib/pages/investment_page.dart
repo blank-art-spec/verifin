@@ -571,11 +571,8 @@ class _StockPositionCard extends StatelessWidget {
                 ? l.investUnknown
                 : formatUserSecurityPrice(price, portfolio.currencyCode),
           ),
-          if (quoteReference != null)
-            InvestmentHint(
-              '${quote!.source} · ${l.marketQuoteTime}: ${formatQuoteTime(context, quoteReference.time)}',
-            )
-          else if (portfolio.marketPriceIds.contains(security.id))
+          if (quoteReference == null &&
+              portfolio.marketPriceIds.contains(security.id))
             InvestmentHint(l.marketNoQuote),
           DetailInfoRow(
             inline: true,
@@ -597,6 +594,18 @@ class _StockPositionCard extends StatelessWidget {
               pnl?.toDouble() ?? 0,
             ),
           ),
+          if (quoteReference != null) ...[
+            const SizedBox(height: 12),
+            // 来源是价格依据，集中放在指标之后；短日期仍保留年份、时刻与时区。
+            InvestmentQuoteDetails(
+              source: quote!.source,
+              quoteTime: formatQuoteTime(
+                context,
+                quoteReference.time,
+                compact: true,
+              ),
+            ),
+          ],
           const Divider(height: 20),
           Wrap(
             spacing: 4,
