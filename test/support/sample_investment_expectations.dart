@@ -4,14 +4,15 @@ import 'package:verifin/app/investments/stock_projection.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 
-/// 核对可导入模板中的三地证券父子账户、股票及腾讯认购/认沽固定组合。
+/// 核对可导入模板中的两个证券父账户、六个币种子账户及各自独立的固定持仓。
 ///
 /// [controller] 必须已通过正式导入或 SQLite 冷启动载入模板；本方法临时切换到
 /// 日常账本与投资账本，检查它们的账户、汇率和持仓互不串用，结束时恢复调用前的
 /// 活动账本。所有价格和金额均为虚构验收输入，不表示历史成交或真实行情。
 ///
 /// 该检查由内存导入、导出后恢复和 SQLite 重读用例共用，保证三条读取路径面对
-/// 相同业务预期：总账户只聚合，各市场证券只在对应结算币种子账户中记仓位与资金。
+/// 相同业务预期：总账户只聚合，各市场证券只在对应结算币种子账户中记仓位与资金；
+/// 两个 USD 子账户即使持有同一 GOOG，数量、成交成本及手填参考价也不互相合并。
 void expectSampleInvestmentPortfolio(VeriFinController controller) {
   final originalBookId = controller.activeBook.id;
   try {
@@ -25,18 +26,21 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
       isNot(contains('parent_investment')),
     );
     expect(controller.investmentFor('acc_investment_usd'), isNull);
+    expect(controller.investmentFor('acc_investment_2_usd'), isNull);
 
     controller.switchLedgerBook('book_investment');
     expect(controller.activeBook.id, 'book_investment');
     expect(controller.activeBook.baseCurrencyCode, 'CNY');
-    final parent = controller.accountParents.single;
+    final parent = controller.accountParents.singleWhere(
+      (parent) => parent.id == 'parent_investment',
+    );
     expect(parent.id, 'parent_investment');
     expect(parent.name, '投资账户');
     expect(parent.currencyCode, 'CNY');
     expect(controller.creditAccounts, isEmpty);
     expect(
-      controller.accountParentsForType(AccountType.investment).single.id,
-      parent.id,
+      controller.accountParentsForType(AccountType.investment).map((p) => p.id),
+      unorderedEquals([parent.id, 'credit-account-acc_investment_2_cny']),
     );
 
     final children = controller.accountsForParent(parent.id);
@@ -50,7 +54,12 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
     );
     expect(
       controller.accounts.map((account) => account.id),
-      unorderedEquals(children.map((account) => account.id)),
+      unorderedEquals([
+        ...children.map((account) => account.id),
+        'acc_investment_2_cny',
+        'acc_investment_2_usd',
+        'acc_investment_2_hkd',
+      ]),
     );
     expect(
       children.map((account) => account.currencyCode),
@@ -173,16 +182,153 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
     final parentBalances = controller.parentAccountBalances(parent);
     expect(parentBalances.isComplete, isTrue);
     expect(parentBalances.completeTotal, 189910);
+    _expectSecondBrokerSample(controller);
     // 父账户当前 API 只提供净值；资产页的正式汇总负责分别折算多头和空头。
     final ledgerBalances = controller.accountBalancesInBase();
     expect(ledgerBalances.isComplete, isTrue);
-    expect(ledgerBalances.completeAssets, 190270);
+    expect(ledgerBalances.completeAssets, 281108);
     expect(ledgerBalances.completeLiabilities, 360);
-    expect(ledgerBalances.completeTotal, 189910);
+    expect(ledgerBalances.completeTotal, 280748);
   } finally {
     // 即使某条断言失败，也恢复调用方账本，避免检查助手改变后续断言的读取范围。
     controller.switchLedgerBook(originalBookId);
   }
+}
+
+/// 核对第二个证券主账户的三币种层级、独立 GOOG 持仓及国电电力 A 股。
+///
+/// [controller] 必须已选择投资账本。量价均为固定验收输入：第二个 USD 子账户
+/// 只持有五股 GOOG，不能借用第一个 USD 子账户的六股、成本或 110 手填价；
+/// CNY 子账户持有 600795，HKD 保留已启用但无资金、无持仓的空账户。
+/// 本方法只读取聚合及正式估值接口，不修改手填价、触发联网或另外生成入金。
+void _expectSecondBrokerSample(VeriFinController controller) {
+  const parentId = 'credit-account-acc_investment_2_cny';
+  final parent = controller.accountParents.singleWhere(
+    (parent) => parent.id == parentId,
+  );
+  expect(controller.accountParents, hasLength(2));
+  expect(parent.name, '投资账户二');
+  expect(parent.currencyCode, 'CNY');
+  expect(controller.investmentFor(parentId), isNull);
+  final children = controller.accountsForParent(parentId);
+  expect(
+    children.map((account) => account.id),
+    unorderedEquals([
+      'acc_investment_2_cny',
+      'acc_investment_2_usd',
+      'acc_investment_2_hkd',
+    ]),
+  );
+  expect(
+    children.map((account) => account.currencyCode),
+    unorderedEquals(['CNY', 'USD', 'HKD']),
+  );
+  for (final account in children) {
+    expect(account.name, '投资账户二.${account.currencyCode}');
+    expect(account.bookId, 'book_investment');
+    expect(account.type, AccountType.investment);
+    expect(account.initialBalance, 0);
+    expect(account.creditAccountId, parentId);
+    expect(controller.parentForAccount(account)?.id, parentId);
+    final portfolio = controller.investmentFor(account.id)!;
+    expect(portfolio.bookId, account.bookId);
+    expect(portfolio.currencyCode, account.currencyCode);
+    expect(portfolio.openedAt, DateTime(2026, 10, 1));
+    expect(portfolio.openingHoldings, isEmpty);
+    expect(portfolio.includedEntryIds, isEmpty);
+    expect(portfolio.anchorIncludedIds, isEmpty);
+    expect(portfolio.marketPriceIds, isEmpty);
+    expect(portfolio.valuationSnapshots, isEmpty);
+    expect(portfolio.allowFinancing, isFalse);
+  }
+
+  const expected = {
+    'USD': (
+      securityId: 'us:stock:GOOG',
+      name: '谷歌',
+      market: StockMarket.us,
+      openingCash: '10000',
+      eventId: 'test_second_goog_buy',
+      day: 13,
+      quantity: '5',
+      price: '300',
+      fee: '1',
+      referencePrice: '310',
+      cost: 1501.0,
+      cash: 8499.0,
+      value: 1550.0,
+      unrealized: 49.0,
+      netValue: 10049.0,
+    ),
+    'CNY': (
+      securityId: 'cn:stock:600795',
+      name: '国电电力',
+      market: StockMarket.cn,
+      openingCash: '20000',
+      eventId: 'test_second_gdep_buy',
+      day: 14,
+      quantity: '1000',
+      price: '5',
+      fee: '5',
+      referencePrice: '5.5',
+      cost: 5005.0,
+      cash: 14995.0,
+      value: 5500.0,
+      unrealized: 495.0,
+      netValue: 20495.0,
+    ),
+  };
+  for (final item in expected.entries) {
+    final account = children.singleWhere(
+      (account) => account.currencyCode == item.key,
+    );
+    final portfolio = controller.investmentFor(account.id)!;
+    expect(portfolio.openingCash, item.value.openingCash);
+    final security = portfolio.securities.single;
+    expect(security.id, item.value.securityId);
+    expect(security.name, item.value.name);
+    expect(security.market, item.value.market);
+    expect(security.currencyCode, item.key);
+    expect(security.option, isNull);
+    expect(portfolio.manualPrices, {security.id: item.value.referencePrice});
+    final event = portfolio.events.single;
+    expect(event.id, item.value.eventId);
+    expect(event.securityId, security.id);
+    expect(event.kind, StockEventKind.buy);
+    expect(event.occurredAt, DateTime(2026, 10, item.value.day, 10));
+    expect(event.sequence, 1);
+    expect(event.quantity, item.value.quantity);
+    expect(event.price, item.value.price);
+    expect(event.fee, item.value.fee);
+    expect(event.note, contains('固定测试价格'));
+    final projection = controller.investmentProjection(account.id)!;
+    final position = projection.positions.single;
+    expect(position.short, isFalse);
+    expect(position.quantity.toString(), item.value.quantity);
+    expect(position.cost?.toDouble(), item.value.cost);
+    expect(projection.realizedComplete, isTrue);
+    expect(projection.realized.toDouble(), 0);
+    expect(controller.accountBalance(account), item.value.cash);
+    final valuation = valueInvestmentAccount(portfolio, item.value.cash);
+    expect(valuation.longValue, item.value.value);
+    expect(valuation.shortObligation, 0);
+    expect(valuation.frozen, 0);
+    expect(valuation.unrealized, item.value.unrealized);
+    expect(controller.accountAssetValue(account), item.value.netValue);
+  }
+
+  final hkd = children.singleWhere((account) => account.currencyCode == 'HKD');
+  final hkdPortfolio = controller.investmentFor(hkd.id)!;
+  expect(hkdPortfolio.openingCash, '0');
+  expect(hkdPortfolio.securities, isEmpty);
+  expect(hkdPortfolio.events, isEmpty);
+  expect(hkdPortfolio.manualPrices, isEmpty);
+  expect(controller.investmentProjection(hkd.id)!.positions, isEmpty);
+  expect(controller.accountBalance(hkd), 0);
+  expect(controller.accountAssetValue(hkd), 0);
+  final balances = controller.parentAccountBalances(parent);
+  expect(balances.isComplete, isTrue);
+  expect(balances.completeTotal, 90838);
 }
 
 /// 核对中远海能 A 股的稳定身份、两笔成交、剩余成本及原币资金。

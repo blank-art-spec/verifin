@@ -330,6 +330,108 @@
         "anchorIncludedIds": {},
         "marketPriceIds": [],
         "valuationSnapshots": []
+      },
+      {
+        "accountId": "acc_investment_2_usd",
+        "bookId": "book_investment",
+        "currencyCode": "USD",
+        "openedAt": "2026-10-01T00:00:00.000",
+        "openingCash": "10000",
+        "includedEntryIds": [],
+        "securities": [
+          {
+            "symbol": "GOOG",
+            "name": "谷歌",
+            "market": "us",
+            "currencyCode": "USD"
+          }
+        ],
+        "openingHoldings": [],
+        "events": [
+          {
+            "id": "test_second_goog_buy",
+            "securityId": "us:stock:GOOG",
+            "kind": "buy",
+            "occurredAt": "2026-10-13T10:00:00.000",
+            "sequence": 1,
+            "quantity": "5",
+            "price": "300",
+            "fee": "1",
+            "note": "验收示例：第二证券账户独立买入谷歌 GOOG，固定测试价格，不是真实成交或现价",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          }
+        ],
+        "manualPrices": {
+          "us:stock:GOOG": "310"
+        },
+        "allowFinancing": false,
+        "anchorIncludedIds": {},
+        "marketPriceIds": [],
+        "valuationSnapshots": []
+      },
+      {
+        "accountId": "acc_investment_2_cny",
+        "bookId": "book_investment",
+        "currencyCode": "CNY",
+        "openedAt": "2026-10-01T00:00:00.000",
+        "openingCash": "20000",
+        "includedEntryIds": [],
+        "securities": [
+          {
+            "symbol": "600795",
+            "name": "国电电力",
+            "market": "cn",
+            "currencyCode": "CNY"
+          }
+        ],
+        "openingHoldings": [],
+        "events": [
+          {
+            "id": "test_second_gdep_buy",
+            "securityId": "cn:stock:600795",
+            "kind": "buy",
+            "occurredAt": "2026-10-14T10:00:00.000",
+            "sequence": 1,
+            "quantity": "1000",
+            "price": "5",
+            "fee": "5",
+            "note": "验收示例：第二证券账户买入国电电力 A 股 600795，固定测试价格，不是真实成交或现价",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
+          }
+        ],
+        "manualPrices": {
+          "cn:stock:600795": "5.5"
+        },
+        "allowFinancing": false,
+        "anchorIncludedIds": {},
+        "marketPriceIds": [],
+        "valuationSnapshots": []
+      },
+      {
+        "accountId": "acc_investment_2_hkd",
+        "bookId": "book_investment",
+        "currencyCode": "HKD",
+        "openedAt": "2026-10-01T00:00:00.000",
+        "openingCash": "0",
+        "includedEntryIds": [],
+        "securities": [],
+        "openingHoldings": [],
+        "events": [],
+        "manualPrices": {},
+        "allowFinancing": false,
+        "anchorIncludedIds": {},
+        "marketPriceIds": [],
+        "valuationSnapshots": []
       }
     ],
     "ledgerBooks": [
@@ -922,6 +1024,48 @@
         "hidden": false,
         "currencyCode": "HKD",
         "creditAccountId": "parent_investment"
+      },
+      {
+        "id": "acc_investment_2_cny",
+        "bookId": "book_investment",
+        "name": "投资账户二.CNY",
+        "type": "investment",
+        "groupId": null,
+        "initialBalance": 0.0,
+        "iconCode": "investment",
+        "note": "第二证券账户验收示例：期初现金 20000 CNY，国电电力 600795 一千股；量价为固定测试值",
+        "includeInAssets": true,
+        "hidden": false,
+        "currencyCode": "CNY",
+        "creditAccountId": "credit-account-acc_investment_2_cny"
+      },
+      {
+        "id": "acc_investment_2_usd",
+        "bookId": "book_investment",
+        "name": "投资账户二.USD",
+        "type": "investment",
+        "groupId": null,
+        "initialBalance": 0.0,
+        "iconCode": "investment",
+        "note": "第二证券账户验收示例：期初现金 10000 USD，谷歌 GOOG 五股；量价为固定测试值",
+        "includeInAssets": true,
+        "hidden": false,
+        "currencyCode": "USD",
+        "creditAccountId": "credit-account-acc_investment_2_cny"
+      },
+      {
+        "id": "acc_investment_2_hkd",
+        "bookId": "book_investment",
+        "name": "投资账户二.HKD",
+        "type": "investment",
+        "groupId": null,
+        "initialBalance": 0.0,
+        "iconCode": "investment",
+        "note": "第二证券账户验收示例：港币子账户，期初现金为零，暂无持仓",
+        "includeInAssets": true,
+        "hidden": false,
+        "currencyCode": "HKD",
+        "creditAccountId": "credit-account-acc_investment_2_cny"
       }
     ],
     "accountGroups": [
@@ -1188,6 +1332,15 @@
         "id": "parent_investment",
         "bookId": "book_investment",
         "name": "投资账户",
+        "institution": "",
+        "cardLast4": "",
+        "currencyCode": "CNY",
+        "dueRuleType": "fixedDay"
+      },
+      {
+        "id": "credit-account-acc_investment_2_cny",
+        "bookId": "book_investment",
+        "name": "投资账户二",
         "institution": "",
         "cardLast4": "",
         "currencyCode": "CNY",

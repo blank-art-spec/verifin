@@ -5,6 +5,7 @@
 总体方案及后续 P0–P7 见 [开发方案](dev/securities-trading-plan.md)，完整操作与数字见 [专项验收](dev/securities-trading-acceptance.md)。当前股票及期权阶段已编写精确持仓、独立事件及手填估值，早期博通来源验证的实际已运行/未运行项目见 [阶段 0–2 历史记录](dev/securities-stage02-implementation.md)；旧 Yahoo/Nasdaq 验证页面及查询客户端已移除。博通股票、认购/认沽公开字段验证与真正期权记账分别判定；期权当前验收见 [阶段 3](dev/securities-stage03-implementation.md)；参考行情机制及来源门禁见 [阶段 4](dev/securities-stage04-implementation.md)，新增[腾讯股票诊断研究](dev/public-quote-research.md)，仅 debug + diagnostic + 显式参数允许真实查询，生产自动行情与三地全品种覆盖仍未准入。资产分解、历史依据、小组件/只读查询与 JSON v12 恢复见 [阶段 5](dev/securities-stage05-implementation.md)。Android 手动操作未执行部分不能勾为完成。模拟器保留原数据及标为验收示例的股票交易，后续编译仍按用户手动操作约定。
 
 - 证券占比：三地模板的 USD 仍显示现金 74.6%、多头持仓 25.4%、AVGO 19.0%、GOOG 6.3%；HKD 显示腾讯股票及示例认购多头/认沽空头，CNY 显示中远海能 600026，固定金额见[模板说明](dev/sample-investment-template.md)。改参考价后同步更新，现金和成交记录不变。
+- 双证券账户模板：两个主账户各有 CNY/USD/HKD 子账户；原组合不变，第二组 USD 持 GOOG 5 股、CNY 持国电电力 600795 共 1,000 股、HKD 零现金空持仓。同一 GOOG 身份在两组账户的数量、成本及手填价互不覆盖；原父净值 189,910、第二父 90,838、投资账本 280,748 CNY，导入、再恢复及冷启动层级与金额一致。
 - 空头义务独立显示占比，融资与保证金不重复抵减总资产分母；零资产、缺价时显示未知。检查中英文、393/360 宽度、大字号和浅深主题。
 - 顶部概览按主净值、现金/多头面板、次级资产、盈亏和补充明细分层；普通手机双列，窄容器或大字号改单列，长正负金额完整显示。所有原指标保留，查看和滚动不改账目；用 diagnostic 模拟器覆盖安装后冷启动核对。
 - 股票研究构建：仅 debug、diagnostic、`PUBLIC_QUOTE_RESEARCH=true` 三项同时满足时装配来源；任缺一项、正式渠道及 release/R8 都不装配，旧偏好和缓存不能开启。来源须继续显示诊断研究，`approved` 不改成 true。

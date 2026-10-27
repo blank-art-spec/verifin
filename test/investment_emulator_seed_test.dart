@@ -14,15 +14,16 @@ import 'package:verifin/data/app_database.dart';
 import 'package:verifin/data/ledger_repository.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
-/// 注册显式模拟器副本的三地证券准备用例，无参数、无返回值。
+/// 注册显式模拟器副本的双主账户三地证券准备用例，无参数、无返回值。
 ///
 /// 仅在设置 VERIFIN_EMULATOR_DB 时运行；路径必须指向 build/validation
 /// 内已存在的数据库副本。兼容旧版转账入金基线和新版模板的期初现金，
 /// 所有事件使用稳定 ID，重复运行不会重复入金或追加同一笔买卖；港股、A 股
-/// 从可导入模板读取，并仅补入未使用的模板账户，不替换设备中的其他账目。
+/// 从可导入模板读取，第二主账户及币种子账户通过生产新建命令补齐；
+/// 仅补入尚未使用的模板账户，不替换设备中的其他账目。
 void main() {
   final explicitPath = Platform.environment['VERIFIN_EMULATOR_DB'];
-  test('在已备份的模拟器数据库副本中通过生产命令准备三地证券示例', () async {
+  test('在已备份的模拟器数据库副本中通过生产命令准备双主账户三地证券示例', () async {
     final path = paths.normalize(paths.absolute(explicitPath!));
     final allowed = paths.join(Directory.current.path, 'build', 'validation');
     if (!paths.isWithin(allowed, path) || !File(path).existsSync()) {
@@ -244,6 +245,7 @@ void main() {
             .initialBalance,
         0,
       );
+      await _ensureSecondInvestmentAccounts(c);
       await _ensureAdditionalMarketExamples(c);
       await c.waitForPendingWrites();
     } finally {
@@ -299,7 +301,74 @@ Future<bool> _saveMissingUsdEvent(
   );
 }
 
-/// 将模板中的港股和 A 股示例补入已备份的模拟器数据库副本。
+/// 为第二证券主账户补齐三种币种，只新增模板明确列出的账户。
+///
+/// [controller] 必须已选择投资账本。先用 CNY 子账户调用生产新建命令，
+/// 得到稳定派生的主账户 ID，再保存模板主账户名称并添加其余币种。
+/// 重复运行时逐字段核对已有账户；有同 ID 内容差异立即停止，不覆盖用户编辑。
+/// 本方法不修改原证券主账户、普通交易或设备偏好，也不连接模拟器。
+Future<void> _ensureSecondInvestmentAccounts(
+  VeriFinController controller,
+) async {
+  final root =
+      jsonDecode(File('docs/dev/verifin-sample-backup.json').readAsStringSync())
+          as Map<String, dynamic>;
+  final data = root['data'] as Map<String, dynamic>;
+  const parentId = 'credit-account-acc_investment_2_cny';
+  final parent = CreditAccount.fromJson(
+    Map<String, Object?>.from(
+      (data['creditAccounts'] as List).singleWhere(
+            (value) => (value as Map)['id'] == parentId,
+          )
+          as Map,
+    ),
+  );
+  final children = (data['accounts'] as List)
+      .map((value) => Account.fromJson(Map<String, Object?>.from(value as Map)))
+      .where((value) => value.creditAccountId == parentId)
+      .toList();
+  expect(children, hasLength(3));
+  final existing = controller.accountParents
+      .where((value) => value.id == parentId)
+      .firstOrNull;
+  if (existing == null) {
+    final first = children.singleWhere((value) => value.currencyCode == 'CNY');
+    expect(
+      controller.accounts.any((value) => value.id == first.id),
+      isFalse,
+      reason: '同 ID 的独立账户不能被解释为新的模板主账户',
+    );
+    expect(
+      await controller.addAccountDraft(
+        first.copyWith(clearCreditAccountId: true),
+      ),
+      isTrue,
+    );
+    expect(
+      controller
+          .parentForAccount(
+            controller.accounts.singleWhere((value) => value.id == first.id),
+          )
+          ?.id,
+      parentId,
+    );
+    expect(await controller.saveAccountParentDraft(parent), isTrue);
+  } else {
+    expect(existing.toJson(), parent.toJson(), reason: '已有第二主账户不能被模板重写');
+  }
+  for (final child in children) {
+    final saved = controller.accounts
+        .where((value) => value.id == child.id)
+        .firstOrNull;
+    if (saved == null) {
+      expect(await controller.addAccountDraft(child), isTrue);
+    } else {
+      expect(saved.toJson(), child.toJson(), reason: '已有第二账户币种资料不能被模板覆盖');
+    }
+  }
+}
+
+/// 将模板中的原港股、A 股及第二主账户示例补入已备份的模拟器数据库副本。
 ///
 /// [controller] 必须已选择投资账本，且币种子账户已存在。只使用生产启用、股票
 /// 和期权命令写入，因此每步都会经过正式账务校验；失败会让外层用例停止，调用方
@@ -325,9 +394,12 @@ Future<void> _ensureAdditionalMarketExamples(
         (value) => const {
           'acc_investment_cny',
           'acc_investment_hkd',
+          'acc_investment_2_cny',
+          'acc_investment_2_usd',
+          'acc_investment_2_hkd',
         }.contains(value.accountId),
       );
-  expect(templates, hasLength(2));
+  expect(templates, hasLength(5));
   for (final template in templates) {
     final account = controller.accounts.singleWhere(
       (value) => value.id == template.accountId,

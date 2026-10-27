@@ -164,7 +164,7 @@ lib/
 | [`docs/acceptance-checklist.md`](docs/acceptance-checklist.md) | 功能验收清单 |
 | [`docs/automation.md`](docs/automation.md) | 自动化接入（Intent 接口，配 Tasker 示例） |
 | [`docs/dev/i18n-verification.md`](docs/dev/i18n-verification.md) | 多语言真机验证清单 |
-| [`docs/dev/verifin-sample-backup.json`](docs/dev/verifin-sample-backup.json) | 可导入的测试备份：投资总账户下设 CNY / USD / HKD，分别包含中远海能 A 股、GOOG 与 AVGO、腾讯控股及本地示例认购/认沽；[固定金额与手动验收](docs/dev/sample-investment-template.md) |
+| [`docs/dev/verifin-sample-backup.json`](docs/dev/verifin-sample-backup.json) | 可导入的测试备份：两个证券主账户均有 CNY / USD / HKD；原账户保留中远海能、GOOG / AVGO、腾讯及示例期权，第二账户包含国电电力、独立 GOOG 持仓及空港币账户；[固定金额与手动验收](docs/dev/sample-investment-template.md) |
 | [`CONTRIBUTING.md`](CONTRIBUTING.md) | 贡献指南（上手路线 + 提交前检查清单） |
 | [`AGENTS.md`](AGENTS.md) | 贡献与 Agent 开发规范（含代码规范·组件化） |
 | [`docs/dev/components.md`](docs/dev/components.md) | 组件清单（写新组件前先查） |
