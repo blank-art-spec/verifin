@@ -3,6 +3,9 @@
 更新日期：2026-10-27。本文记录免账号、免 API Key、无自有后台的真实股票查询验证，
 配套机制见[参考行情阶段 4](securities-stage04-implementation.md)。
 
+天天基金的货币基金接口与指定香港基金 `HK0001039582` 的独立验证见
+[货币基金接口研究](money-fund-api-research.md)；本页的股票验证结果不外推为基金覆盖。
+
 ## 当前范围
 
 新增 `TencentQuoteAdapter`，由 Android 客户端直接请求腾讯公开股票端点。
