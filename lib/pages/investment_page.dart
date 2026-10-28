@@ -36,8 +36,13 @@ class InvestmentPage extends StatelessWidget {
   final String accountId;
 
   /// 根据 [event] 的业务类型显示量价、总额或拆股比例，避免把股息总额称为成交价。
-  /// [currency] 是结算币种；金额复用现有格式，数量及拆股比例保留原始精度。
-  String _eventDetails(StockEvent event, AppLocalizations l, String currency) {
+  /// [currency] 是结算币种；[fund] 表示份额而非股数，数量和价格均保留原始精度。
+  String _eventDetails(
+    StockEvent event,
+    AppLocalizations l,
+    String currency, {
+    bool fund = false,
+  }) {
     final fees =
         '${l.investFees} ${formatUserMoney(InvestmentDecimal.parse(event.fee).toDouble(), currency)}';
     return switch (event.kind) {
@@ -45,8 +50,8 @@ class InvestmentPage extends StatelessWidget {
         '${l.investTotalAmount} ${formatUserMoney(InvestmentDecimal.parse(event.price).toDouble(), currency)} · $fees',
       StockEventKind.split =>
         '${l.investSplitNew} ${event.quantity} : ${l.investSplitOld} ${event.price}',
-      StockEventKind.transferIn ||
-      StockEventKind.transferOut => '${l.investQuantity} ${event.quantity}',
+      StockEventKind.transferIn || StockEventKind.transferOut =>
+        '${fund ? l.investFundQuantity : l.investQuantity} ${event.quantity}',
       StockEventKind.optionMargin =>
         '${l.optionMargin}: ${event.marginAfter == null ? l.investUnknown : formatUserMoney(InvestmentDecimal.parse(event.marginAfter!).toDouble(), currency)}',
       StockEventKind.optionPhysicalSettle || StockEventKind.optionExpire =>
@@ -59,7 +64,7 @@ class InvestmentPage extends StatelessWidget {
       StockEventKind.optionBuyClose =>
         '${l.optionContracts} ${event.quantity} · ${l.optionPremium} ${formatUserSecurityPrice(event.price, currency)} · $fees',
       _ =>
-        '${l.investQuantity} ${event.quantity} × ${formatUserSecurityPrice(event.price, currency)} · $fees',
+        '${fund ? l.investFundQuantity : l.investQuantity} ${event.quantity} × ${formatUserSecurityPrice(event.price, currency)} · $fees',
     };
   }
 
@@ -103,6 +108,7 @@ class InvestmentPage extends StatelessWidget {
   /// 以同一纯计算结果展示净值、资产构成、盈亏及占总资产比例。
   /// 净值为主信息，现金/多头用实色面板，次级明细与盈亏分组排列；
   /// 窄屏与大字号允许完整换行。占比仍使用该币种账户的正现金与多头市值。
+  /// 已有基金清仓后仍提供按原身份新增交易的入口，再次买入不会误建成同代码股票。
   @override
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
@@ -320,6 +326,19 @@ class InvestmentPage extends StatelessWidget {
                       icon: const Icon(Icons.add),
                       label: Text(l.investNewTrade),
                     ),
+                    for (final fund in portfolio.securities.where(
+                      (security) =>
+                          security.isFund &&
+                          !projection.positions.any(
+                            (position) => position.securityId == security.id,
+                          ),
+                    ))
+                      OutlinedButton(
+                        key: ValueKey('fund-trade-${fund.id}'),
+                        style: investmentOutlineButtonStyle(context),
+                        onPressed: () => _edit(context, securityId: fund.id),
+                        child: Text('${l.investFundNewTrade} · ${fund.symbol}'),
+                      ),
                     OutlinedButton(
                       style: investmentOutlineButtonStyle(context),
                       onPressed: () => Navigator.of(context).push<void>(
@@ -384,6 +403,8 @@ class InvestmentPage extends StatelessWidget {
                     portfolio: portfolio,
                     position: position,
                     accountValuation: detail,
+                    onTrade: () =>
+                        _edit(context, securityId: position.securityId),
                     onTransfer: () => _edit(
                       context,
                       securityId: position.securityId,
@@ -407,11 +428,20 @@ class InvestmentPage extends StatelessWidget {
                       crossAxisAlignment: CrossAxisAlignment.start,
                       children: [
                         Text(
-                          '${event.kind.label(l)} · ${portfolio.securities.firstWhere((s) => s.id == event.securityId).symbol}',
+                          '${event.kind.label(l, fund: portfolio.securities.firstWhere((s) => s.id == event.securityId).isFund)} · ${portfolio.securities.firstWhere((s) => s.id == event.securityId).symbol}',
                           style: Theme.of(context).textTheme.titleSmall,
                         ),
                         const SizedBox(height: 8),
-                        Text(_eventDetails(event, l, account.currencyCode)),
+                        Text(
+                          _eventDetails(
+                            event,
+                            l,
+                            account.currencyCode,
+                            fund: portfolio.securities
+                                .firstWhere((s) => s.id == event.securityId)
+                                .isFund,
+                          ),
+                        ),
                         const SizedBox(height: 6),
                         Text(
                           MaterialLocalizations.of(
@@ -451,13 +481,14 @@ class _StockPositionCard extends StatelessWidget {
     required this.portfolio,
     required this.position,
     required this.accountValuation,
+    required this.onTrade,
     required this.onTransfer,
   });
   final String accountId;
   final InvestmentPortfolio portfolio;
   final StockPosition position;
   final InvestmentAccountValuation accountValuation;
-  final VoidCallback onTransfer;
+  final VoidCallback onTransfer, onTrade;
 
   /// 展示方向、数量、总成本、参考价及占总资产比例；未知成本不显示成零。
   /// 多头以市值计算持仓占比，空头以回补义务单列，期权沿用显式权利金乘数。
@@ -475,6 +506,9 @@ class _StockPositionCard extends StatelessWidget {
       MarketQuoteRequest(security),
       c.investmentQuoteSync.clock(),
     );
+    final referenceDay = security.isFund
+        ? c.fundReferenceHistoryFor(accountId, security.id).lastOrNull
+        : null;
     final value = price == null
         ? null
         : securityPositionValue(
@@ -512,7 +546,7 @@ class _StockPositionCard extends StatelessWidget {
           ),
           const SizedBox(height: 8),
           Text(
-            security.market.label(l),
+            security.market.label(l, fund: security.isFund),
             style: Theme.of(context).textTheme.bodySmall?.copyWith(
               color: Theme.of(context).colorScheme.onSurfaceVariant,
             ),
@@ -521,7 +555,9 @@ class _StockPositionCard extends StatelessWidget {
           DetailInfoRow(
             inline: true,
             label: security.option == null
-                ? l.investQuantity
+                ? security.isFund
+                      ? l.investFundQuantity
+                      : l.investQuantity
                 : l.optionContracts,
             value: position.quantity.toString(),
           ),
@@ -594,15 +630,39 @@ class _StockPositionCard extends StatelessWidget {
               pnl?.toDouble() ?? 0,
             ),
           ),
+          if (referenceDay != null) ...[
+            DetailInfoRow(
+              inline: true,
+              label: l.fundReferenceDailyProfit,
+              value: referenceDay.dailyProfit == null
+                  ? l.investUnknown
+                  : formatSignedUserMoney(
+                      referenceDay.dailyProfit!.toDouble(),
+                      portfolio.currencyCode,
+                    ),
+            ),
+            DetailInfoRow(
+              inline: true,
+              label: l.fundReferenceCumulativeProfit,
+              value: referenceDay.cumulativeProfit == null
+                  ? l.investUnknown
+                  : formatSignedUserMoney(
+                      referenceDay.cumulativeProfit!.toDouble(),
+                      portfolio.currencyCode,
+                    ),
+            ),
+          ],
           if (quoteReference != null) ...[
             const SizedBox(height: 12),
             // 来源是价格依据，集中放在指标之后；短日期仍保留年份、时刻与时区。
             InvestmentQuoteDetails(
               source: quote!.source,
+              dateOnly: quote.dateOnly,
               quoteTime: formatQuoteTime(
                 context,
                 quoteReference.time,
                 compact: true,
+                dateOnly: quote.dateOnly,
               ),
             ),
           ],
@@ -610,6 +670,11 @@ class _StockPositionCard extends StatelessWidget {
           Wrap(
             spacing: 4,
             children: [
+              if (security.isFund)
+                TextButton(
+                  onPressed: onTrade,
+                  child: Text(l.investFundNewTrade),
+                ),
               TextButton(
                 onPressed: () async {
                   final raw = await showTextInputDialog(
@@ -727,7 +792,7 @@ class _StockPositionCard extends StatelessWidget {
   }
 }
 
-/// 股票期初、成交和转移的完整页面；未点保存不会产生任何用户数据。
+/// 股票或已有基金的期初、成交和转移页面；未点保存不会产生任何用户数据。
 class StockEditorPage extends StatefulWidget {
   /// [setup] 表示显式启用；[event] 非空表示编辑；[transfer] 表示跨账户原子批次。
   const StockEditorPage({
@@ -753,6 +818,7 @@ class StockEditorPage extends StatefulWidget {
 class _StockEditorPageState extends State<StockEditorPage> {
   final _fields = <String, TextEditingController>{};
   StockMarket _market = StockMarket.us;
+  InvestmentSecurityType _securityType = InvestmentSecurityType.stock;
   StockEventKind _kind = StockEventKind.buy;
   late DateTime _date;
   late String _id, _bookId;
@@ -761,7 +827,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
       _saving = false,
       _financing = false,
       _short = false;
-  String? _error, _target;
+  String? _error, _target, _initialReference;
 
   /// 延迟初始化到可读取 Scope 时；保留已有事件 ID/序号，重试不会重复成交。
   @override
@@ -788,8 +854,11 @@ class _StockEditorPageState extends State<StockEditorPage> {
         .where((s) => s.id == (e?.securityId ?? widget.securityId))
         .firstOrNull;
     _market = security?.market ?? _market;
+    _securityType = security?.type ?? InvestmentSecurityType.stock;
     _kind = e?.kind ?? StockEventKind.buy;
-    _short = widget.initialShort;
+    _short = _securityType == InvestmentSecurityType.fund
+        ? false
+        : widget.initialShort;
     _date = e?.occurredAt ?? DateTime.now();
     _id = e?.id ?? 'stock-${DateTime.now().microsecondsSinceEpoch}';
     _sequence =
@@ -800,13 +869,14 @@ class _StockEditorPageState extends State<StockEditorPage> {
             ) ??
             0);
     _financing = p?.allowFinancing ?? false;
+    _initialReference = p?.manualPrices[security?.id];
     for (final pair in {
       'symbol': security?.symbol ?? '',
       'name': security?.name ?? '',
       'quantity': e?.quantity ?? '',
       'price': e?.price ?? '',
       'fee': e?.fee ?? '0',
-      'reference': p?.manualPrices[security?.id] ?? '',
+      'reference': _initialReference ?? '',
       'cash': c
           .accountBalance(account)
           .toStringAsFixed(
@@ -849,6 +919,8 @@ class _StockEditorPageState extends State<StockEditorPage> {
   );
 
   /// 提交前核对仍在同一账本；校验失败保留所有输入，保存中禁止重复点击。
+  /// 已有基金的后备价数值未变时不重设价格依据，使买卖或编辑交易后仍可采用净值并重算历史。
+  /// 用户确实改变后备价时才传入新值，由 Controller 切回手填；股票沿用既有保存语义。
   Future<void> _save() async {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
     if (_saving || c.activeBook.id != _bookId) return;
@@ -865,6 +937,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
         name: _fields['name']!.text.trim(),
         market: _market,
         currencyCode: account.currencyCode,
+        type: _securityType,
       );
       final quantity = _fields['quantity']!.text.trim();
       final reference = _fields['reference']!.text.trim();
@@ -923,11 +996,18 @@ class _StockEditorPageState extends State<StockEditorPage> {
           fee: _kind == StockEventKind.split ? '0' : _fields['fee']!.text,
           note: _fields['note']!.text.trim(),
         );
+        final keepFundPriceSource =
+            security.isFund &&
+            _initialReference != null &&
+            InvestmentDecimal.parse(
+                  reference,
+                ).compareTo(InvestmentDecimal.parse(_initialReference!)) ==
+                0;
         ok = await c.saveStockEvent(
           accountId: account.id,
           security: security,
           event: event,
-          referencePrice: reference,
+          referencePrice: keepFundPriceSource ? null : reference,
         );
       }
     } on FormatException {
@@ -990,6 +1070,8 @@ class _StockEditorPageState extends State<StockEditorPage> {
                       ? l.investEnableOpening
                       : widget.transfer
                       ? l.investTransfer
+                      : _securityType == InvestmentSecurityType.fund
+                      ? l.investFundNewTrade
                       : l.investNewTrade,
                   showBack: true,
                 ),
@@ -1004,24 +1086,33 @@ class _StockEditorPageState extends State<StockEditorPage> {
                   children: [
                     if (!widget.setup && !widget.transfer)
                       VeriAnchoredChoice<StockEventKind>(
-                        values: const [
+                        values: [
                           StockEventKind.buy,
                           StockEventKind.sell,
-                          StockEventKind.shortSell,
-                          StockEventKind.cover,
+                          if (_securityType != InvestmentSecurityType.fund) ...[
+                            StockEventKind.shortSell,
+                            StockEventKind.cover,
+                          ],
                           StockEventKind.dividend,
                           StockEventKind.fee,
-                          StockEventKind.split,
+                          if (_securityType != InvestmentSecurityType.fund)
+                            StockEventKind.split,
                         ],
                         selected: _kind,
                         idOf: (v) => v.name,
-                        labelOf: (v) => v.label(l),
+                        labelOf: (v) => v.label(
+                          l,
+                          fund: _securityType == InvestmentSecurityType.fund,
+                        ),
                         onSelected: (v) => setState(() => _kind = v),
                         semanticLabel: l.investEventType,
                         builder: (context, open, active) => SettingsRow(
                           icon: Icons.swap_horiz,
                           title: l.investEventType,
-                          trailing: _kind.label(l),
+                          trailing: _kind.label(
+                            l,
+                            fund: _securityType == InvestmentSecurityType.fund,
+                          ),
                           trailingMaxLines: null,
                           trailingIcon: Icons.unfold_more,
                           onTap: open,
@@ -1031,16 +1122,25 @@ class _StockEditorPageState extends State<StockEditorPage> {
                       values: StockMarket.values,
                       selected: _market,
                       idOf: (v) => v.name,
-                      labelOf: (v) => v.label(l),
+                      labelOf: (v) => v.label(
+                        l,
+                        fund: _securityType == InvestmentSecurityType.fund,
+                      ),
                       onSelected: (v) => setState(() => _market = v),
                       semanticLabel: l.investMarket,
                       builder: (context, open, active) => SettingsRow(
                         icon: Icons.public,
                         title: l.investMarket,
-                        trailing: _market.label(l),
+                        trailing: _market.label(
+                          l,
+                          fund: _securityType == InvestmentSecurityType.fund,
+                        ),
                         trailingMaxLines: null,
                         trailingIcon: Icons.unfold_more,
-                        onTap: widget.transfer || widget.event != null
+                        onTap:
+                            widget.transfer ||
+                                widget.event != null ||
+                                widget.securityId != null
                             ? null
                             : open,
                       ),
@@ -1048,7 +1148,10 @@ class _StockEditorPageState extends State<StockEditorPage> {
                     _field(
                       'symbol',
                       l.investSymbol,
-                      readOnly: widget.transfer || widget.event != null,
+                      readOnly:
+                          widget.transfer ||
+                          widget.event != null ||
+                          widget.securityId != null,
                     ),
                     _field('name', l.investName, readOnly: widget.transfer),
                   ],
@@ -1066,20 +1169,25 @@ class _StockEditorPageState extends State<StockEditorPage> {
                       _field(
                         'quantity',
                         widget.setup
-                            ? l.investOpeningQuantity
+                            ? _securityType == InvestmentSecurityType.fund
+                                  ? l.investFundOpeningQuantity
+                                  : l.investOpeningQuantity
                             : _kind == StockEventKind.split
                             ? l.investSplitNew
+                            : _securityType == InvestmentSecurityType.fund
+                            ? l.investFundQuantity
                             : l.investQuantity,
                         numeric: true,
                       ),
                     if (widget.setup) ...[
                       _field('cost', l.investOpeningCost, numeric: true),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: _short,
-                        onChanged: (v) => setState(() => _short = v),
-                        title: Text(l.investShortPosition),
-                      ),
+                      if (_securityType != InvestmentSecurityType.fund)
+                        SwitchListTile(
+                          contentPadding: EdgeInsets.zero,
+                          value: _short,
+                          onChanged: (v) => setState(() => _short = v),
+                          title: Text(l.investShortPosition),
+                        ),
                       SwitchListTile(
                         contentPadding: EdgeInsets.zero,
                         value: _financing,
@@ -1142,11 +1250,12 @@ class _StockEditorPageState extends State<StockEditorPage> {
                                 setState(() => _target = selected);
                               },
                       ),
-                      SwitchListTile(
-                        value: _short,
-                        onChanged: (v) => setState(() => _short = v),
-                        title: Text(l.investShortPosition),
-                      ),
+                      if (_securityType != InvestmentSecurityType.fund)
+                        SwitchListTile(
+                          value: _short,
+                          onChanged: (v) => setState(() => _short = v),
+                          title: Text(l.investShortPosition),
+                        ),
                     ],
                     ListTile(
                       contentPadding: EdgeInsets.zero,

@@ -396,7 +396,7 @@ void main() {
     expect(c.accountAssetValue(account) + c.accountAssetValue(target), 10000);
   });
 
-  test('v11 预览零写入、JSON 往返、未知事件拒绝及旧备份兼容', () async {
+  test('v13 预览零写入、JSON 往返、未知事件拒绝及旧备份兼容', () async {
     await enable();
     expect(
       await save(
@@ -406,11 +406,19 @@ void main() {
     );
     final raw = c.exportDataJson(),
         snapshot = jsonDecode(c.exportDataJson()) as Map<String, dynamic>;
-    expect(snapshot['version'], 12);
+    expect(snapshot['version'], 13);
     c.importDataJson(raw, dryRun: true);
     expect(c.investmentFor(account.id)!.events, hasLength(1));
     c.importDataJson(raw);
     await c.waitForPendingWrites();
+    expect(c.accountBalance(account), 6999);
+    // v12 股票没有基金类型字段；新版必须保留原身份与原现金，不自动改为基金。
+    final legacyV12 = jsonDecode(raw) as Map<String, dynamic>;
+    legacyV12['version'] = 12;
+    c.importDataJson(jsonEncode(legacyV12));
+    await c.waitForPendingWrites();
+    expect(c.investmentFor(account.id)!.securities.single.isStock, isTrue);
+    expect(c.investmentFor(account.id)!.securities.single.id, avgoFixture.id);
     expect(c.accountBalance(account), 6999);
     final broken = jsonDecode(raw) as Map<String, dynamic>;
     final data = broken['data'] as Map<String, dynamic>;

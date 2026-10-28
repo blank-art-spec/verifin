@@ -29,6 +29,7 @@ import 'investments/stock_cash_math.dart';
 import 'investments/market_quote.dart';
 import 'investments/investment_quote_sync.dart';
 import 'investments/investment_valuation.dart';
+import 'investments/fund_reference_history.dart';
 import 'credit_card.dart';
 import 'demo_data.dart';
 import 'entry_audit.dart';

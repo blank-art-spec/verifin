@@ -24,6 +24,107 @@ import 'support/investment_fixture.dart';
 ///   不是映射 bug）。
 void main() {
   setUpAll(sqfliteFfiInit);
+  test('基金类型、精确份额和日期型净值依据 JSON/SQLite 四向映射完整保留', () async {
+    const fund = StockSecurity(
+      symbol: 'HK0001039582',
+      name: '招商美元货币市场基金 B类',
+      market: StockMarket.hk,
+      currencyCode: 'USD',
+      type: InvestmentSecurityType.fund,
+    );
+    // 本用例使用非默认值验证四条映射；日期精度不能在导出或冷读时退回时刻。
+    final source = InvestmentPortfolio(
+      accountId: 'fund-usd',
+      bookId: defaultLedgerBookId,
+      currencyCode: 'USD',
+      openedAt: DateTime(2026, 10, 1),
+      openingCash: '10000',
+      securities: [fund],
+      events: [
+        StockEvent(
+          id: 'fund-buy-roundtrip',
+          securityId: fund.id,
+          kind: StockEventKind.buy,
+          occurredAt: DateTime(2026, 10, 15, 10),
+          sequence: 1,
+          quantity: '10.125',
+          price: '100.00000001',
+          fee: '0.01',
+          note: '映射验收示例：虚构份额与成交，不是基金历史价格',
+        ),
+      ],
+      manualPrices: {fund.id: '109.80612345'},
+      marketPriceIds: {fund.id},
+      valuationSnapshots: [
+        InvestmentValuationSnapshot(
+          capturedAt: DateTime.utc(2026, 10, 28, 2, 30),
+          revision: 'b' * 64,
+          baseCurrencyCode: 'CNY',
+          rateToBase: 7,
+          rateDate: DateTime(2026, 10, 1),
+          prices: {
+            fund.id: InvestmentPriceFact(
+              price: '109.80612345',
+              quotedAt: DateTime.utc(2026, 10, 27),
+              source: '基金日期精度测试来源',
+              manual: false,
+              dateOnly: true,
+            ),
+          },
+        ),
+      ],
+    );
+    final decoded = InvestmentPortfolio.fromJson(
+      Map<String, Object?>.from(jsonDecode(jsonEncode(source.toJson())) as Map),
+    );
+    expect(fund.id, 'hk:fund:HK0001039582');
+    expect(decoded.securities.single.type, InvestmentSecurityType.fund);
+    expect(decoded.securities.single.isFund, isTrue);
+    expect(decoded.valuationSnapshots.single.prices[fund.id]!.dateOnly, isTrue);
+    expect(decoded.toJson(), source.toJson());
+    final db = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    try {
+      final repo = SqliteLedgerRepository(db);
+      await repo.saveInvestmentPortfolios([source]);
+      final restored = (await repo.loadInvestmentPortfolios()).single;
+      expect(restored.securities.single.id, fund.id);
+      expect(
+        restored.valuationSnapshots.single.prices[fund.id]!.dateOnly,
+        isTrue,
+      );
+      expect(restored.toJson(), source.toJson());
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('旧版股票与价格依据缺少新增字段时保持原序列化形状', () {
+    // 修订摘要依赖证券 JSON；默认字段继续省略，避免旧股票快照无故失效。
+    final legacySecurity = <String, Object?>{
+      'symbol': 'AVGO',
+      'name': '博通',
+      'market': 'us',
+      'currencyCode': 'USD',
+    };
+    final stock = StockSecurity.fromJson(legacySecurity);
+    expect(stock.type, InvestmentSecurityType.stock);
+    expect(stock.isStock, isTrue);
+    expect(stock.id, 'us:stock:AVGO');
+    expect(stock.toJson(), legacySecurity);
+    final legacyPrice = <String, Object?>{
+      'price': '330',
+      'quotedAt': '2026-10-24T00:00:00.000Z',
+      'source': '旧价格来源',
+      'manual': false,
+    };
+    final fact = InvestmentPriceFact.fromJson(legacyPrice);
+    expect(fact.dateOnly, isFalse);
+    expect(fact.toJson(), legacyPrice);
+  });
+
   test('期权规格、显式结算及保证金 JSON/SQLite 四向映射完整保留', () async {
     final s = optionFixture(
       shares: '10',

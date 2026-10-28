@@ -47,7 +47,7 @@ void main() {
     await db.close();
   });
 
-  test('历史依据 SQLite 保存失败零发布，重试、冷启动和 v12 完整恢复一致', () async {
+  test('历史依据 SQLite 保存失败零发布，重试、冷启动和 v13 完整恢复一致', () async {
     final before = c.investmentFor(account.id)!.toJson();
     await db.db.execute(
       "CREATE TRIGGER snapshot_failure BEFORE INSERT ON investment_portfolios BEGIN SELECT RAISE(ABORT,'历史依据注入失败'); END",
@@ -85,7 +85,7 @@ void main() {
       s.toJson(),
     );
     final raw = c.exportDataJson();
-    expect((jsonDecode(raw) as Map)['version'], 12);
+    expect((jsonDecode(raw) as Map)['version'], 13);
     final beforePreview = c.investmentFor(account.id)!.toJson();
     c.importDataJson(raw, dryRun: true);
     expect(c.investmentFor(account.id)!.toJson(), beforePreview);
@@ -97,6 +97,21 @@ void main() {
       s.toJson(),
     );
     expect(c.accountAssetValue(account), 11000);
+    // 旧版没有 type/dateOnly 默认字段；恢复后原修订摘要和历史估值仍应有效。
+    final legacyV12 = jsonDecode(raw) as Map<String, dynamic>;
+    legacyV12['version'] = 12;
+    c.importDataJson(jsonEncode(legacyV12));
+    await c.waitForPendingWrites();
+    final legacySnapshot = c
+        .investmentFor(account.id)!
+        .valuationSnapshots
+        .single;
+    expect(legacySnapshot.prices[avgoFixture.id]!.dateOnly, isFalse);
+    expect(
+      c.investmentSnapshotValuation(account.id, legacySnapshot)!.amounts!.net,
+      10660,
+    );
+    expect(legacySnapshot.toJson(), s.toJson());
   });
   test('v11 旧聚合默认无历史，非法快照预览拒绝且不写；删账户清理附属依据', () async {
     await c.captureInvestmentValuation(account.id);

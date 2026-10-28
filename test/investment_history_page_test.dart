@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/chart_painters.dart';
+import 'package:verifin/l10n/app_localizations.dart';
 import 'package:verifin/pages/investment_history_page.dart';
 import 'support/test_harness.dart';
 import 'support/investment_fixture.dart';
@@ -91,7 +92,11 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    expect(find.textContaining('尚无历史'), findsOneWidget);
+    final l = AppLocalizations.of(
+      tester.element(find.byType(InvestmentHistoryPage)),
+    );
+    // 空态描述区分主动保存依据与基金自动参考历史，断言真实本地化文案而非旧片段。
+    expect(find.text(l.investHistoryEmpty), findsOneWidget);
     await tester.tap(find.byKey(const Key('capture_investment_valuation')));
     await tester.pumpAndSettle();
     expect(c.investmentFor(a.id)!.valuationSnapshots, hasLength(1));

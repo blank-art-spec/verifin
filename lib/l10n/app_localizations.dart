@@ -11933,7 +11933,7 @@ abstract class AppLocalizations {
   /// No description provided for @investIncome.
   ///
   /// In zh, this message translates to:
-  /// **'净股息与费用'**
+  /// **'净股息、分红与费用'**
   String get investIncome;
 
   /// No description provided for @investPositions.
@@ -12061,6 +12061,48 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'数量（股）'**
   String get investQuantity;
+
+  /// No description provided for @investFundQuantity.
+  ///
+  /// In zh, this message translates to:
+  /// **'数量（份）'**
+  String get investFundQuantity;
+
+  /// No description provided for @investFundOpeningQuantity.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初份额（可留空）'**
+  String get investFundOpeningQuantity;
+
+  /// No description provided for @investFundNewTrade.
+  ///
+  /// In zh, this message translates to:
+  /// **'记录基金交易'**
+  String get investFundNewTrade;
+
+  /// No description provided for @investFundDistribution.
+  ///
+  /// In zh, this message translates to:
+  /// **'分红'**
+  String get investFundDistribution;
+
+  /// No description provided for @investFundMarketUS.
+  ///
+  /// In zh, this message translates to:
+  /// **'美国基金'**
+  String get investFundMarketUS;
+
+  /// No description provided for @investFundMarketCN.
+  ///
+  /// In zh, this message translates to:
+  /// **'内地基金'**
+  String get investFundMarketCN;
+
+  /// No description provided for @investFundMarketHK.
+  ///
+  /// In zh, this message translates to:
+  /// **'香港基金'**
+  String get investFundMarketHK;
 
   /// No description provided for @investPrice.
   ///
@@ -12563,13 +12605,13 @@ abstract class AppLocalizations {
   /// No description provided for @marketResearchConsent.
   ///
   /// In zh, this message translates to:
-  /// **'此诊断版本可向腾讯公开来源发送股票代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。开启自动刷新后，开屏或回前台检查当前账本持仓；退后台或锁屏暂停。'**
+  /// **'此诊断版本可向腾讯公开来源发送股票代码，向招商官方发送公开基金标识和页面语言，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。开启自动刷新后，开屏或回前台检查当前账本持仓；退后台或锁屏暂停。'**
   String get marketResearchConsent;
 
   /// No description provided for @marketResearchNote.
   ///
   /// In zh, this message translates to:
-  /// **'公开股票行情实验验证已启用，仅此诊断调试版本可用。报价可能延迟，手填后备价继续保留。'**
+  /// **'股票参考价与招商美元货币市场基金 B 类日净值的实验验证已启用，仅此诊断调试版本可用。股票报价可能延迟，基金只提供净值日期；手填后备价继续保留，自动计算参考收益，不生成收入流水。'**
   String get marketResearchNote;
 
   /// No description provided for @marketSourceResearch.
@@ -12680,6 +12722,12 @@ abstract class AppLocalizations {
   /// **'来源报价时间'**
   String get marketQuoteTime;
 
+  /// No description provided for @marketNavDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'净值日期'**
+  String get marketNavDate;
+
   /// No description provided for @marketStateUnknown.
   ///
   /// In zh, this message translates to:
@@ -12725,13 +12773,13 @@ abstract class AppLocalizations {
   /// No description provided for @investHistoryHint.
   ///
   /// In zh, this message translates to:
-  /// **'仅记录主动保存的观察点及当时价格、汇率。缺失日期不补值；补录或修改此前账务后，受影响的记录需重新核对。'**
+  /// **'主动保存的估值依据保留当时价格与汇率，独立于基金自动参考历史。缺失日期不补值；补录或修改此前账务后，受影响的观察点需重新核对。'**
   String get investHistoryHint;
 
   /// No description provided for @investHistoryEmpty.
   ///
   /// In zh, this message translates to:
-  /// **'尚无历史估值依据。保存当前观察点后可在这里查看。'**
+  /// **'尚无主动保存的估值依据。保存当前观察点后可在这里查看。'**
   String get investHistoryEmpty;
 
   /// No description provided for @investHistoryGap.
@@ -12865,6 +12913,120 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'占比以正现金和多头持仓价值之和计算；空头义务和融资计入负债。'**
   String get investAllocationLiabilityHint;
+
+  /// No description provided for @fundReferenceHistoryTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'基金参考历史'**
+  String get fundReferenceHistoryTitle;
+
+  /// No description provided for @fundReferenceDailyProfit.
+  ///
+  /// In zh, this message translates to:
+  /// **'净值日参考收益'**
+  String get fundReferenceDailyProfit;
+
+  /// No description provided for @fundReferenceCumulativeProfit.
+  ///
+  /// In zh, this message translates to:
+  /// **'累计参考盈亏'**
+  String get fundReferenceCumulativeProfit;
+
+  /// No description provided for @fundReferenceMarketValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'基金参考市值'**
+  String get fundReferenceMarketValue;
+
+  /// No description provided for @fundReferenceAccountNetValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户参考净资产'**
+  String get fundReferenceAccountNetValue;
+
+  /// No description provided for @fundReferenceAccountAssets.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户参考资产'**
+  String get fundReferenceAccountAssets;
+
+  /// No description provided for @fundReferenceAccountLiabilities.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户参考负债'**
+  String get fundReferenceAccountLiabilities;
+
+  /// No description provided for @fundReferenceCash.
+  ///
+  /// In zh, this message translates to:
+  /// **'历史现金'**
+  String get fundReferenceCash;
+
+  /// No description provided for @fundReferenceNav.
+  ///
+  /// In zh, this message translates to:
+  /// **'单位净值'**
+  String get fundReferenceNav;
+
+  /// No description provided for @fundReferenceDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'净值日明细'**
+  String get fundReferenceDetails;
+
+  /// No description provided for @fundReferenceHistoryEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚无可用的基金净值历史。请在参考行情中开启联网、刷新并采用此基金的合格行情。'**
+  String get fundReferenceHistoryEmpty;
+
+  /// No description provided for @fundReferenceHistoryHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'按官网实际净值日和真实持仓计算，金额为账户原币。跨周末等区间不拆成每日到账收益；修改或删除交易后重算，不生成收入流水。'**
+  String get fundReferenceHistoryHint;
+
+  /// No description provided for @fundReferenceMissingPrices.
+  ///
+  /// In zh, this message translates to:
+  /// **'部分日期缺少其他证券的同日有效价格，完整账户资产显示未知，不用当前价格补齐；基金自身市值和参考收益仍可查看。'**
+  String get fundReferenceMissingPrices;
+
+  /// No description provided for @fundReferenceMissingSecurities.
+  ///
+  /// In zh, this message translates to:
+  /// **'缺少历史价格：{securities}'**
+  String fundReferenceMissingSecurities(String securities);
+
+  /// No description provided for @fundReferenceUnknownProfitHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'首个净值日或持仓转移区间的参考收益为未知；成本依据不完整时，累计参考盈亏也显示未知。参考收益不表示已经到账。'**
+  String get fundReferenceUnknownProfitHint;
+
+  /// No description provided for @fundReferenceSinglePoint.
+  ///
+  /// In zh, this message translates to:
+  /// **'只有一个净值观察点，暂不绘制趋势。'**
+  String get fundReferenceSinglePoint;
+
+  /// No description provided for @fundReferenceShowAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'查看全部 {count} 个净值日'**
+  String fundReferenceShowAll(int count);
+
+  /// No description provided for @fundReferenceShowRecent.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅看最近 20 个净值日'**
+  String get fundReferenceShowRecent;
+
+  /// No description provided for @fundReferenceHistoryLimited.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅展示最近 {limit} 个净值日。'**
+  String fundReferenceHistoryLimited(int limit);
 
   /// 资产占比，显示一位小数；空头义务占比可超过 100%。
   ///

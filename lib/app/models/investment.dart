@@ -1,4 +1,4 @@
-/// 股票投资的权威数据：每个真实币种账户一份聚合，事件与现金规则原子保存。
+/// 证券投资的权威数据：每个真实币种账户一份聚合，事件与现金规则原子保存。
 library;
 
 import '../../l10n/app_localizations.dart';
@@ -10,13 +10,23 @@ enum StockMarket {
   cn,
   hk;
 
-  /// 返回市场本地化名称；市场参与证券身份，不能只按代码去重。
-  String label(AppLocalizations l) => switch (this) {
-    us => l.investMarketUS,
-    cn => l.investMarketCN,
-    hk => l.investMarketHK,
-  };
+  /// 返回市场本地化名称；[l] 为当前应用文案，[fund] 区分基金与股票的地区称谓。
+  /// 市场参与证券身份，不能只按代码去重；香港美元基金不能显示为港元股票。
+  String label(AppLocalizations l, {bool fund = false}) => fund
+      ? switch (this) {
+          us => l.investFundMarketUS,
+          cn => l.investFundMarketCN,
+          hk => l.investFundMarketHK,
+        }
+      : switch (this) {
+          us => l.investMarketUS,
+          cn => l.investMarketCN,
+          hk => l.investMarketHK,
+        };
 }
+
+/// 非期权证券的真实品种；旧备份缺少类型时仍按股票读取，期权沿用独立合约字段。
+enum InvestmentSecurityType { stock, fund }
 
 enum StockEventKind {
   buy,
@@ -37,13 +47,14 @@ enum StockEventKind {
   optionPhysicalSettle,
   optionMargin;
 
-  /// 返回事件动作名称，投资事件不映射为日常收入/支出。
-  String label(AppLocalizations l) => switch (this) {
+  /// 返回事件动作名称；[l] 为当前文案，[fund] 将基金现金分配显示为分红。
+  /// 投资事件不映射为日常收入/支出，也不据来源净值自动生成分红事实。
+  String label(AppLocalizations l, {bool fund = false}) => switch (this) {
     buy => l.investBuy,
     sell => l.investSell,
     shortSell => l.investShort,
     cover => l.investCover,
-    dividend => l.investDividend,
+    dividend => fund ? l.investFundDistribution : l.investDividend,
     fee => l.investFee,
     split => l.investSplit,
     transferIn => l.investTransferIn,
@@ -59,23 +70,35 @@ enum StockEventKind {
   };
 }
 
-/// 证券稳定身份，沿用股票阶段命名；[option] 非空时表示独立期权合约。
+/// 证券稳定身份，沿用股票阶段命名；基金使用独立身份，期权由 [option] 描述。
 class StockSecurity {
-  /// [symbol] 为来源代码（港股保留前导零），[currencyCode] 为实际结算币种。
+  /// [symbol] 为来源代码/基金 ISIN（港股保留前导零），[name] 为用户可辨识的名称。
+  /// [market] 参与稳定身份，[currencyCode] 为实际结算币种；[type] 明确股票或基金，
+  /// [option] 非空时描述独立期权合约，不能与基金类型同时使用。
   const StockSecurity({
     required this.symbol,
     required this.name,
     required this.market,
     required this.currencyCode,
     this.option,
+    this.type = InvestmentSecurityType.stock,
   });
   final String symbol, name, currencyCode;
   final StockMarket market;
   final OptionContract? option;
 
+  /// [type] 区分股票与基金；基金不可同时带期权规格，也不能作为单股期权标的。
+  final InvestmentSecurityType type;
+
+  /// 是否为基金份额；用于单位、编辑动作和行情路由，不从名称或代码长度猜品种。
+  bool get isFund => type == InvestmentSecurityType.fund;
+
+  /// 是否为普通股票；基金与期权都不能被股票来源或单股交割路径接纳。
+  bool get isStock => option == null && !isFund;
+
   /// 市场、品种及原始代码共同构成身份，港股前导零不丢失。
   String get id =>
-      '${market.name}:${option == null ? 'stock' : 'option'}:$symbol';
+      '${market.name}:${option == null ? type.name : 'option'}:$symbol';
 
   /// 序列化证券身份，价格和数量不放入静态证券定义。
   Map<String, Object?> toJson() => {
@@ -84,6 +107,8 @@ class StockSecurity {
     'market': market.name,
     'currencyCode': currencyCode,
     if (option != null) 'option': option!.toJson(),
+    // 默认股票省略新增键，保留旧快照的证券 JSON 与修订摘要，避免无修改也失效。
+    if (isFund) 'type': type.name,
   };
 
   /// 严格解析身份；未知市场不能回落为美股。
@@ -92,6 +117,9 @@ class StockSecurity {
     name: json['name'] as String,
     market: StockMarket.values.byName(json['market'] as String),
     currencyCode: json['currencyCode'] as String,
+    type: json['type'] == null
+        ? InvestmentSecurityType.stock
+        : InvestmentSecurityType.values.byName(json['type'] as String),
     option: json['option'] == null
         ? null
         : OptionContract.fromJson(

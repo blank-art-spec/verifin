@@ -203,6 +203,8 @@ void main() {
         expect(adapter.requests, 0);
         final enableRow = find.widgetWithText(CompactSwitchRow, l.marketEnable);
         expect(tester.widget<CompactSwitchRow>(enableRow).onChanged, isNotNull);
+        // 英文说明在窄屏会完整换行，先像用户一样滚入视口，再点击实际可见的开关。
+        await _reveal(tester, enableRow);
         await tester.tap(enableRow);
         await tester.pumpAndSettle();
         expect(controller.investmentQuoteSync.state.value.enabled, isTrue);

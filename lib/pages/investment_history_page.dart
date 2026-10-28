@@ -1,4 +1,4 @@
-/// 历史估值页面只展示实际保存的观察点，不用当前参考价补齐缺失日期。
+/// 历史页区分基金公开净值推演与用户主动保存的估值依据，不用当前价格补齐缺日。
 library;
 
 import 'package:flutter/material.dart';
@@ -12,6 +12,7 @@ import '../app/investments/quote_format.dart';
 import '../app/investments/investment_decimal.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
+import 'fund_reference_history_section.dart';
 
 /// [accountId] 是当前账本真实币种账户，账户删除后不显示其他账户数据。
 class InvestmentHistoryPage extends StatefulWidget {
@@ -46,6 +47,9 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
     final p = c.investmentFor(widget.accountId);
+    final account = c.accounts
+        .where((value) => value.id == widget.accountId)
+        .firstOrNull;
     final snapshots = [...?p?.valuationSnapshots]
       ..sort((a, b) => a.capturedAt.compareTo(b.capturedAt));
     final values = snapshots.map((s) {
@@ -88,6 +92,22 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
             children: [
               VeriHeader(title: l.investHistory, showBack: true),
               const SizedBox(height: 12),
+              if (p != null && account != null)
+                for (final security in p.securities.where(
+                  (value) => value.isFund,
+                ))
+                  Padding(
+                    padding: const EdgeInsets.only(bottom: 16),
+                    child: FundReferenceHistorySection(
+                      key: ValueKey('fund_history_${security.id}'),
+                      account: account,
+                      security: security,
+                      points: c.fundReferenceHistoryFor(
+                        widget.accountId,
+                        security.id,
+                      ),
+                    ),
+                  ),
               InvestmentHint(l.investHistoryHint),
               const SizedBox(height: 12),
               FilledButton.icon(
@@ -243,6 +263,7 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
                                     formatQuoteTime(
                                       context,
                                       fact.value.quotedAt,
+                                      dateOnly: fact.value.dateOnly,
                                     ),
                                     style: Theme.of(context).textTheme.bodySmall
                                         ?.copyWith(

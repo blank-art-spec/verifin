@@ -1,4 +1,4 @@
-/// 只读股票重放：数量、成本、现金腿与盈亏的唯一计算入口。
+/// 只读证券重放：股票/基金份额及期权的数量、成本、现金腿与盈亏唯一计算入口。
 library;
 
 import '../currency_catalog.dart';
@@ -58,7 +58,8 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
   for (final security in securities.values) {
     if (security.symbol.isEmpty ||
         security.name.isEmpty ||
-        security.currencyCode != portfolio.currencyCode) {
+        security.currencyCode != portfolio.currencyCode ||
+        (security.isFund && security.option != null)) {
       throw const FormatException('证券或结算币种不合法');
     }
     if (security.option != null) _validateOptionContract(security, securities);
@@ -92,6 +93,7 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
     if (!securities.containsKey(holding.securityId) ||
         positions.containsKey(key) ||
         quantity.units <= BigInt.zero ||
+        (securities[holding.securityId]!.isFund && holding.short) ||
         (cost != null && cost.units < BigInt.zero)) {
       throw const FormatException('期初持仓不合法');
     }
@@ -126,6 +128,19 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
     }
     final kind = event.kind;
     final security = securities[event.securityId]!;
+    // 本阶段基金只复用明确的份额买卖、现金分红/费用及成本转移，不支持融券或拆股。
+    if (security.isFund &&
+        (event.short ||
+            !const {
+              StockEventKind.buy,
+              StockEventKind.sell,
+              StockEventKind.dividend,
+              StockEventKind.fee,
+              StockEventKind.transferIn,
+              StockEventKind.transferOut,
+            }.contains(kind))) {
+      throw const FormatException('基金不能使用卖空、回补、拆股或期权动作');
+    }
     if (security.option != null) {
       final result = _applyOptionEvent(
         event,

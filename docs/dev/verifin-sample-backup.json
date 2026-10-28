@@ -1,7 +1,7 @@
 {
   "app": "verifin",
-  "version": 12,
-  "exportedAt": "2026-10-27T10:00:00.000",
+  "version": 13,
+  "exportedAt": "2026-10-28T10:00:00.000",
   "data": {
     "investmentPortfolios": [
       {
@@ -344,6 +344,13 @@
             "name": "谷歌",
             "market": "us",
             "currencyCode": "USD"
+          },
+          {
+            "symbol": "HK0001039582",
+            "name": "招商美元货币市场基金 B类",
+            "market": "hk",
+            "currencyCode": "USD",
+            "type": "fund"
           }
         ],
         "openingHoldings": [],
@@ -364,10 +371,28 @@
             "marginAfter": null,
             "settlementConfirmed": false,
             "allowUncoveredAssignment": false
+          },
+          {
+            "id": "test_second_cms_fund_buy",
+            "securityId": "hk:fund:HK0001039582",
+            "kind": "buy",
+            "occurredAt": "2026-10-15T10:00:00.000",
+            "sequence": 2,
+            "quantity": "10",
+            "price": "100",
+            "fee": "0",
+            "note": "验收示例：第二证券账户买入招商美元货币市场基金 B类，固定测试价格，不是真实成交或历史净值",
+            "carriedCost": null,
+            "short": false,
+            "batchId": null,
+            "marginAfter": null,
+            "settlementConfirmed": false,
+            "allowUncoveredAssignment": false
           }
         ],
         "manualPrices": {
-          "us:stock:GOOG": "310"
+          "us:stock:GOOG": "310",
+          "hk:fund:HK0001039582": "100"
         },
         "allowFinancing": false,
         "anchorIncludedIds": {},

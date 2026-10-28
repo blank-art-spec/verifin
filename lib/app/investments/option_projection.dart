@@ -9,7 +9,7 @@ void _validateOptionContract(
   final underlying = securities[o.underlyingId];
   final expiry = DateTime.tryParse(o.expiry);
   if (underlying == null ||
-      underlying.option != null ||
+      !underlying.isStock ||
       underlying.currencyCode != security.currencyCode ||
       underlying.market != security.market ||
       !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(o.expiry) ||

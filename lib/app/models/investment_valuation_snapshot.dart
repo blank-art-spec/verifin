@@ -1,16 +1,19 @@
 /// 历史参考价格的事实；手填与联网来源分开，不能用今天的价格覆盖。
 class InvestmentPriceFact {
-  /// [price] 是每股/每权利金单位价格；[quotedAt] 保留原报价时间。
+  /// [price] 是每股、基金每份或每权利金单位价格；[quotedAt] 保留原报价时间。
   /// [manual] 为用户手填时 [source] 留空，界面通过本地化显示来源。
+  /// [dateOnly] 为 true 时 [quotedAt] 的 UTC 年月日仅承载净值日期，不表示午夜成交；
+  /// 保存后仍按日期显示，禁止因为抓取时刻更精确就补造源时分秒。
   const InvestmentPriceFact({
     required this.price,
     required this.quotedAt,
     this.source = '',
     this.manual = true,
+    this.dateOnly = false,
   });
   final String price, source;
   final DateTime quotedAt;
-  final bool manual;
+  final bool manual, dateOnly;
 
   /// 精确价格以文本保存，不复制网络原始响应。
   Map<String, Object?> toJson() => {
@@ -18,6 +21,7 @@ class InvestmentPriceFact {
     'quotedAt': quotedAt.toIso8601String(),
     'source': source,
     'manual': manual,
+    if (dateOnly) 'dateOnly': true,
   };
 
   /// 读取价格事实；完整性约束在聚合校验中统一检查。
@@ -27,6 +31,7 @@ class InvestmentPriceFact {
         quotedAt: DateTime.parse(json['quotedAt'] as String),
         source: json['source'] as String,
         manual: json['manual'] as bool,
+        dateOnly: json['dateOnly'] as bool? ?? false,
       );
 }
 

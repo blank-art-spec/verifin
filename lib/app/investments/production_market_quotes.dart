@@ -6,6 +6,7 @@ import 'package:flutter/services.dart' show appFlavor;
 
 import 'market_quote.dart';
 import 'tencent_quote_adapter.dart';
+import 'cms_fund_quote_adapter.dart';
 
 /// 判断是否可装配免账号的公开来源研究模式，返回值不代表来源获准发布。
 ///
@@ -20,7 +21,7 @@ bool permitsQuoteResearch({
 
 /// 按当前实际构建生成来源集合，无参数，返回未联网的客户端。
 ///
-/// 只有 diagnostic debug 且带 PUBLIC_QUOTE_RESEARCH=true 时装配腾讯股票来源；
+/// 只有 diagnostic debug 且带 PUBLIC_QUOTE_RESEARCH=true 时装配腾讯股票及招商基金来源；
 /// 正式构建保持原发布准入规则。设备偏好仅控制用户主动启停，不参与决定来源许可。
 MarketQuoteClient buildProductionMarketQuoteClient() {
   final research = permitsQuoteResearch(
@@ -29,7 +30,9 @@ MarketQuoteClient buildProductionMarketQuoteClient() {
     explicitlyEnabled: const bool.fromEnvironment('PUBLIC_QUOTE_RESEARCH'),
   );
   return MarketQuoteClient(
-    adapters: research ? [TencentQuoteAdapter()] : const [],
+    adapters: research
+        ? [TencentQuoteAdapter(), CmsFundQuoteAdapter()]
+        : const [],
     allowResearchSources: research,
   );
 }

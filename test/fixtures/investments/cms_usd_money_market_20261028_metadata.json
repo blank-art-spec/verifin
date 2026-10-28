@@ -1,0 +1,38 @@
+{
+  "description": "官网匿名 POST 的真实原始响应，仅供离线格式、身份映射与净值一致性验证，不代表抓取当天或未来的价格。",
+  "source": "CMS Asset Management (HK)",
+  "endpoint": "https://cms.cmschina.com.hk/api/v1/fund/netVal-info",
+  "method": "POST",
+  "request": {
+    "lang": "zh-CN",
+    "fundName": "CMS_USD_Money_Market_Fund"
+  },
+  "capturedAtUtc": "2026-10-28T02:41:45.7234905Z",
+  "httpStatus": 200,
+  "bytes": 33117,
+  "sha256": "373739c027a13fa35ad668212af96ae13739508fd765f44dbd675cdcb9099c49",
+  "identity": {
+    "isin": "HK0001039582",
+    "class": "B",
+    "currency": "USD",
+    "officialIdentitySource": "https://cms.cmschina.com.hk/js/70.e98f9.js",
+    "note": "净值响应本身没有 ISIN 或币种；B 类与 ISIN、美元的对应来自同官网产品模块。"
+  },
+  "expected": {
+    "firstDate": "20240809",
+    "firstClassBNav": "100",
+    "lastUpdate": "20261027",
+    "lastClassBNav": "109.8150",
+    "dateCount": 543,
+    "classBCount": 543,
+    "classPNullCount": 461
+  },
+  "conditions": {
+    "anonymous": true,
+    "cookies": false,
+    "authorization": false,
+    "followRedirects": false,
+    "systemTlsValidation": true,
+    "approvedForDistribution": false
+  }
+}

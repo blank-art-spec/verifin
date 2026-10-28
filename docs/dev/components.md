@@ -1,5 +1,13 @@
 # 组件清单（Component Registry）
 
+2026-10-28 基金诊断研究与参考历史：
+
+- `StockSecurity.type` / `isFund` / `isStock` 明确股票、基金与期权边界；基金份额使用独立 `fund` 身份。`StockMarket.label(fund: true)` 使用基金地区称谓，交易编辑保留品种并拒绝未经支持的融券/拆股。
+- `CmsFundQuoteAdapter` / `CmsFundHttpQuoteTransport` 固定匿名 POST 招商官方净值，只支持香港 USD 的 B 类 `HK0001039582`；20 身份、15 秒、512 KiB，最新摘要与完整历史一致性校验，保留 `approved: false` / `researchOnly: true`。沿用现有刷新、缓存与显式诊断构建门禁，见[基金研究](cms-fund-api-research.md)。
+- `FundNavPoint` / `FundNavHistory` 保留有界、精确文本、真实净值日期的公开序列；`MarketQuote.dateOnly` 与 `InvestmentPriceFact.dateOnly` 区分纯日期和时刻，`formatQuoteTime(dateOnly: true)` 不换设备时区或补午夜。`InvestmentQuoteDetails(dateOnly: true)` 显示“净值日期”。
+- `buildFundReferenceHistory` 是只读纯计算入口，按各净值日日末真实份额、现金和可用历史依据派生 `FundReferenceDay`；缺其他证券同日价不借今日价回填，首个基准或转移当期收益未知。Controller 公共读取 `fundReferenceHistoryFor` 不写流水或权威快照。
+- `FundReferenceHistorySection` 接收账户、证券和派生序列，复用标准指标与交互折线展示基金市值/完整账户历史及净值日明细；默认最近 20 点，可展开全量。公开历史只随设备行情缓存保存，账务修改后重新计算。
+
 2026-10-22 通用多币种主账户扩展：
 
 | 组件/函数 | 入口与约定 |
@@ -204,7 +212,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `InteractiveBarChart` | Widget | `chart_painters.dart` | 可交互柱状图；`values, xLabels, yLabels, tooltipOf`。交互与无障碍同上 |
 | `TrendLinePainter` / `BarChartPainter` | CustomPainter | `chart_painters.dart` | 上面两个控件的绘制实现。**自绘保留**：曾评估改用 `fl_chart`，实测其坐标轴刻度与既有内边距约定对不齐（出现重复刻度与刻度/线错位），故维持自绘；不要为「换库」而替换，除非同时解决刻度对齐 |
 | `BudgetRingPainter` | CustomPainter | `chart_painters.dart` | 预算进度圆环，**保持自研**：`SweepGradient` + `GradientRotation(-π/2)` 的接缝处理是规范硬要求，有像素级回归测试（`budget_ring_test.dart`）。不要换成通用进度环组件 |
-| `trendChartRect` / `barChartRect` / `chartNearestIndex` / `chartSlotIndex` / `drawChartTooltip` | 纯函数 | `chart_painters.dart` | 预算趋势组合图（`budget_trend_chart.dart`，自绘画布）仍在用的几何与命中计算；有 `chart_hit_test.dart` 覆盖 |
+| `trendChartRect` / `barChartRect` / `chartNearestIndex` / `chartSlotIndex` / `drawChartTooltip` | 纯函数 | `chart_painters.dart` | 预算趋势组合图（`budget_trend_chart.dart`，自绘画布）仍在用的几何与命中计算；气泡标题与内容按可用宽度及系统字号换行，圆点宽度单独预留，绘制限制在画布与气泡内。`chart_hit_test.dart` 覆盖命中及 360dp 英文大字号长提示的实际像素边界 |
 | `ChartTooltip` / `ChartTooltipLine` | 值类 | `chart_painters.dart` | 气泡数据模型 |
 
 ## 族 10 — 纯计算（领域逻辑，无 Flutter 依赖或仅叶子级）

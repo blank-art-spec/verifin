@@ -6838,7 +6838,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investUnrealized => 'Unrealized P/L';
 
   @override
-  String get investIncome => 'Net dividends and expenses';
+  String get investIncome => 'Net dividends, distributions and fees';
 
   @override
   String get investPositions => 'Holdings';
@@ -6903,6 +6903,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investQuantity => 'Quantity (shares)';
+
+  @override
+  String get investFundQuantity => 'Quantity (units)';
+
+  @override
+  String get investFundOpeningQuantity => 'Opening fund units (optional)';
+
+  @override
+  String get investFundNewTrade => 'Record fund transaction';
+
+  @override
+  String get investFundDistribution => 'Distribution';
+
+  @override
+  String get investFundMarketUS => 'US fund';
+
+  @override
+  String get investFundMarketCN => 'Mainland China fund';
+
+  @override
+  String get investFundMarketHK => 'Hong Kong fund';
 
   @override
   String get investPrice => 'Trade price';
@@ -7178,11 +7199,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketResearchConsent =>
-      'This diagnostic build can send stock symbols to Tencent\'s public source, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. This tests requests and valuation; release usage terms remain under review. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
+      'This diagnostic build can send stock symbols to Tencent and a public fund identifier and page language to CMS\'s official source. Providers can see your IP. Quantities, costs, accounts, balances and notes are not sent. This tests requests and valuation; release usage terms remain under review. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
 
   @override
   String get marketResearchNote =>
-      'Experimental public stock quotes are available only in this diagnostic debug build. Quotes may be delayed. Manual fallback prices are retained.';
+      'Experimental stock reference prices and daily NAV for CMS USD Money Market Fund Class B are available only in this diagnostic debug build. Stock quotes may be delayed; fund NAV has date precision only. Manual fallback prices are retained. Reference returns are calculated automatically; no income entries are created.';
 
   @override
   String get marketSourceResearch => 'Experimental; release review pending';
@@ -7248,6 +7269,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketQuoteTime => 'Source quote time';
 
   @override
+  String get marketNavDate => 'NAV date';
+
+  @override
   String get marketStateUnknown =>
       'Trading state or delay may be unknown; cached quotes are not guaranteed real-time';
 
@@ -7272,11 +7296,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investHistoryHint =>
-      'Only saved observations and their price and exchange-rate evidence are shown. Missing dates stay empty. Earlier ledger edits require affected observations to be reviewed.';
+      'Manually saved valuation evidence retains its prices and exchange rates, separately from automatic fund reference history. Missing dates stay empty. Earlier ledger edits require affected observations to be reviewed.';
 
   @override
   String get investHistoryEmpty =>
-      'No saved valuation evidence yet. Save a current observation to view it here.';
+      'No manually saved valuation evidence yet. Save a current observation to view it here.';
 
   @override
   String get investHistoryGap =>
@@ -7349,6 +7373,75 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get investAllocationLiabilityHint =>
       'Shares use positive cash plus long position value. Short obligations and financing count as liabilities.';
+
+  @override
+  String get fundReferenceHistoryTitle => 'Fund reference history';
+
+  @override
+  String get fundReferenceDailyProfit => 'NAV-period reference return';
+
+  @override
+  String get fundReferenceCumulativeProfit =>
+      'Cumulative reference profit/loss';
+
+  @override
+  String get fundReferenceMarketValue => 'Fund reference value';
+
+  @override
+  String get fundReferenceAccountNetValue => 'Account reference net assets';
+
+  @override
+  String get fundReferenceAccountAssets => 'Account reference assets';
+
+  @override
+  String get fundReferenceAccountLiabilities => 'Account reference liabilities';
+
+  @override
+  String get fundReferenceCash => 'Historical cash';
+
+  @override
+  String get fundReferenceNav => 'NAV per unit';
+
+  @override
+  String get fundReferenceDetails => 'NAV-date details';
+
+  @override
+  String get fundReferenceHistoryEmpty =>
+      'No eligible fund NAV history. Enable networking, refresh, and adopt eligible quotes for this fund in Reference quotes.';
+
+  @override
+  String get fundReferenceHistoryHint =>
+      'Calculated from published NAV dates and actual holdings in the account currency. Intervals spanning weekends are not split into daily cash income. Transaction edits or deletions recalculate these figures without creating income entries.';
+
+  @override
+  String get fundReferenceMissingPrices =>
+      'Some dates lack valid same-date prices for other securities. Complete account assets remain unknown; current prices never fill the gaps. Fund value and reference returns remain available.';
+
+  @override
+  String fundReferenceMissingSecurities(String securities) {
+    return 'Missing historical prices: $securities';
+  }
+
+  @override
+  String get fundReferenceUnknownProfitHint =>
+      'The first NAV period and periods with position transfers have unknown returns. Incomplete cost evidence also leaves cumulative profit/loss unknown. Reference returns do not mean cash has been received.';
+
+  @override
+  String get fundReferenceSinglePoint =>
+      'Only one NAV observation is available. A trend is not drawn yet.';
+
+  @override
+  String fundReferenceShowAll(int count) {
+    return 'View all $count NAV dates';
+  }
+
+  @override
+  String get fundReferenceShowRecent => 'Show only the latest 20 NAV dates';
+
+  @override
+  String fundReferenceHistoryLimited(int limit) {
+    return 'Only the latest $limit NAV dates are shown.';
+  }
 
   @override
   String investAllocationPercent(double value) {

@@ -6609,7 +6609,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investUnrealized => '未实现盈亏';
 
   @override
-  String get investIncome => '净股息与费用';
+  String get investIncome => '净股息、分红与费用';
 
   @override
   String get investPositions => '持仓';
@@ -6673,6 +6673,27 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get investQuantity => '数量（股）';
+
+  @override
+  String get investFundQuantity => '数量（份）';
+
+  @override
+  String get investFundOpeningQuantity => '期初份额（可留空）';
+
+  @override
+  String get investFundNewTrade => '记录基金交易';
+
+  @override
+  String get investFundDistribution => '分红';
+
+  @override
+  String get investFundMarketUS => '美国基金';
+
+  @override
+  String get investFundMarketCN => '内地基金';
+
+  @override
+  String get investFundMarketHK => '香港基金';
 
   @override
   String get investPrice => '成交价';
@@ -6928,10 +6949,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get marketResearchConsent =>
-      '此诊断版本可向腾讯公开来源发送股票代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。开启自动刷新后，开屏或回前台检查当前账本持仓；退后台或锁屏暂停。';
+      '此诊断版本可向腾讯公开来源发送股票代码，向招商官方发送公开基金标识和页面语言，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。开启自动刷新后，开屏或回前台检查当前账本持仓；退后台或锁屏暂停。';
 
   @override
-  String get marketResearchNote => '公开股票行情实验验证已启用，仅此诊断调试版本可用。报价可能延迟，手填后备价继续保留。';
+  String get marketResearchNote =>
+      '股票参考价与招商美元货币市场基金 B 类日净值的实验验证已启用，仅此诊断调试版本可用。股票报价可能延迟，基金只提供净值日期；手填后备价继续保留，自动计算参考收益，不生成收入流水。';
 
   @override
   String get marketSourceResearch => '实验验证（发布待核对）';
@@ -6989,6 +7011,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketQuoteTime => '来源报价时间';
 
   @override
+  String get marketNavDate => '净值日期';
+
+  @override
   String get marketStateUnknown => '交易状态或延迟未确认；缓存不代表实时';
 
   @override
@@ -7011,10 +7036,10 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get investHistoryHint =>
-      '仅记录主动保存的观察点及当时价格、汇率。缺失日期不补值；补录或修改此前账务后，受影响的记录需重新核对。';
+      '主动保存的估值依据保留当时价格与汇率，独立于基金自动参考历史。缺失日期不补值；补录或修改此前账务后，受影响的观察点需重新核对。';
 
   @override
-  String get investHistoryEmpty => '尚无历史估值依据。保存当前观察点后可在这里查看。';
+  String get investHistoryEmpty => '尚无主动保存的估值依据。保存当前观察点后可在这里查看。';
 
   @override
   String get investHistoryGap =>
@@ -7084,6 +7109,73 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get investAllocationLiabilityHint => '占比以正现金和多头持仓价值之和计算；空头义务和融资计入负债。';
+
+  @override
+  String get fundReferenceHistoryTitle => '基金参考历史';
+
+  @override
+  String get fundReferenceDailyProfit => '净值日参考收益';
+
+  @override
+  String get fundReferenceCumulativeProfit => '累计参考盈亏';
+
+  @override
+  String get fundReferenceMarketValue => '基金参考市值';
+
+  @override
+  String get fundReferenceAccountNetValue => '账户参考净资产';
+
+  @override
+  String get fundReferenceAccountAssets => '账户参考资产';
+
+  @override
+  String get fundReferenceAccountLiabilities => '账户参考负债';
+
+  @override
+  String get fundReferenceCash => '历史现金';
+
+  @override
+  String get fundReferenceNav => '单位净值';
+
+  @override
+  String get fundReferenceDetails => '净值日明细';
+
+  @override
+  String get fundReferenceHistoryEmpty =>
+      '尚无可用的基金净值历史。请在参考行情中开启联网、刷新并采用此基金的合格行情。';
+
+  @override
+  String get fundReferenceHistoryHint =>
+      '按官网实际净值日和真实持仓计算，金额为账户原币。跨周末等区间不拆成每日到账收益；修改或删除交易后重算，不生成收入流水。';
+
+  @override
+  String get fundReferenceMissingPrices =>
+      '部分日期缺少其他证券的同日有效价格，完整账户资产显示未知，不用当前价格补齐；基金自身市值和参考收益仍可查看。';
+
+  @override
+  String fundReferenceMissingSecurities(String securities) {
+    return '缺少历史价格：$securities';
+  }
+
+  @override
+  String get fundReferenceUnknownProfitHint =>
+      '首个净值日或持仓转移区间的参考收益为未知；成本依据不完整时，累计参考盈亏也显示未知。参考收益不表示已经到账。';
+
+  @override
+  String get fundReferenceSinglePoint => '只有一个净值观察点，暂不绘制趋势。';
+
+  @override
+  String fundReferenceShowAll(int count) {
+    return '查看全部 $count 个净值日';
+  }
+
+  @override
+  String get fundReferenceShowRecent => '仅看最近 20 个净值日';
+
+  @override
+  String fundReferenceHistoryLimited(int limit) {
+    return '仅展示最近 $limit 个净值日。';
+  }
 
   @override
   String investAllocationPercent(double value) {
