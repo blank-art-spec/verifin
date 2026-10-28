@@ -182,8 +182,10 @@ WebView 网络验证也不能代替后续 Flutter `HttpClient` 接入、实体�
 - `android/probe-cms-android.cjs`：本次有界探测脚本，只有 Android 内的 `fetch` 访问基金接口，
   桌面 Node 的网络访问仅连接 adb 转发的本机调试端口。
 
-这些资料只含公开基金数据，不含用户账目或凭证。本轮已检查原始字段、数组对应、日期顺序、
-文本数值、真实匿名请求头、TLS、完整下载及开发机/Android 字节一致性；没有编译应用。
+上述 `desktop/`、`android/` 请求证据只含公开基金数据，不含用户账目或凭证。
+初步验证已检查原始字段、数组对应、日期顺序、文本数值、真实匿名请求头、TLS、完整下载及
+开发机/Android 字节一致性；该阶段没有编译应用。后文 `emulator-view/` 包含诊断应用私有备份，
+仅本机保留并已被 Git 忽略，不能当作公开请求附件上传。
 诊断代码的实际检查结果如下；Android 浏览器请求证据不用于推定 Flutter 应用验收通过。
 
 ### 2026-10-28 代码检查结果
@@ -200,14 +202,14 @@ WebView 网络验证也不能代替后续 Flutter `HttpClient` 接入、实体�
 - 检查日志为 `.toolchain/logs/cms-fund-suite-20261028.log`、
   `cms-fund-page-recheck-20261028.log` 与 `cms-fund-baseline-calendar-20261028.log`；
   基线来源、依赖路径及文件摘要见本机证据目录的 `baseline-144351c/baseline-manifest.json`。
-- ARB 键配对、JSON v13 模板、文档相对链接及差异空白检查通过。没有编译、安装或发布 APK，
-  没有修改模拟器账目；新增 Flutter 功能的设备运行仍按下节由用户手动构建验证。
+- ARB 键配对、JSON v13 模板、文档相对链接及差异空白检查通过。上述代码检查阶段没有编译、
+  安装或发布 APK，也没有修改模拟器账目；随后用户明确要求的一次构建与设备结果见下文。
 
 ## 手动运行新增功能
 
-本机现有入口为 `.toolchain/手动构建参考行情实验版.cmd`，由用户手动执行，使用隔离的
+本机现有入口为 `.toolchain/手动构建参考行情实验版.cmd`，由用户主动发起，使用隔离的
 `diagnostic` debug 构建，显式启用 `UNIFIED_DESIGN_PREVIEW=true`、
-`PUBLIC_QUOTE_RESEARCH=true`；本次没有执行该入口、编译 APK 或覆盖安装。
+`PUBLIC_QUOTE_RESEARCH=true`；不注册文件监听或后台自动编译。
 普通包、release/R8 或缺研究参数的包不会装配本来源。
 
 手动构建后，在可替换的隔离测试实例中恢复更新后的
@@ -216,5 +218,37 @@ WebView 网络验证也不能代替后续 Flutter `HttpClient` 接入、实体�
 恢复会替换该实例账目，先保存需要保留的数据；不要向尚未支持 v13 的旧应用写入新版模板。
 详细固定金额、交易修改、清仓与后备价切换验收见[模板说明](sample-investment-template.md#手动验收)。
 
-Android WebView 的匿名 POST 已在本次验证成功；新增 Flutter 界面的实际运行、Dart 网络传输、
-冷启动及前后台刷新仍须在上述手动构建后确认。现有公开截图不作为基金功能的设备验收证据。
+新实例可按上面的完整模板恢复；本机已有诊断实例使用下节的保留式追加，未整库恢复模板。
+现有公开截图不作为基金功能的设备验收证据。
+
+## 2026-10-28 用户授权后的模拟器运行验证
+
+用户随后明确要求“构建到模拟器上停留我查看”，据此完成一次本地构建与运行：
+
+- Flutter 3.47.2、JDK 17、`diagnostic` debug / x86_64，显式带上述两个构建参数，
+  正式入口 `lib/main.dart` 构建成功，并通过 `adb install -r` 覆盖安装到
+  `verifin_x300_lite`（Android 15/API 35、`emulator-5556`）。包标识仍为
+  `top.talyra42.verifin.graphicsdiagnostic`，版本 `1.19.9-graphics-diagnostic` / 158。
+- 安装前停止诊断应用，完整备份私有目录及现存数据库伴随文件，核对备份前后与本地文件摘要。
+  在独立副本通过生产 Controller 命令仅追加 `test_second_cms_fund_buy`；逐表保留检查及第二次
+  准备的完整逻辑摘要一致。除第二 USD 投资聚合外全部原表行保留，原证券、交易、采用选择、
+  手填价和快照不被重写。现金从 8,499 变为 7,499 USD，唯一新增买入为 10 份、成本 1,000 USD。
+  写回前再次核对设备原数据库与全部现存伴随文件摘要，传输后核对新副本摘要，并保留设备原文件；
+  没有卸载、清应用数据或恢复整份模板。
+- **应用内 Dart `HttpClient` 直连成功**：北京时间 15:03:19 接受 CMS B 类净值
+  `109.8150` USD，源日期 `2026-10-27`，完整历史仍为 543 点。
+  该结果来自新构建应用的真实请求与设备缓存，不是桌面注入或 WebView 响应代发。
+  前几次出现 `Failed host lookup: 'cms.cmschina.com.hk'`，后续正常刷新恢复；没有改动证书校验、
+  请求身份或配置额外代理。故需区分接口字段可用与当前网络解析的暂时失败，保留旧缓存及原日期。
+- 在第二 USD 页面仅采用目标基金净值后，实际现金仍为 7,499 USD、份额仍为 10、手填后备价仍为
+  100。基金参考市值 1,098.15 USD、净值日参考收益 +0.09 USD、累计参考盈亏 +98.15 USD；
+  这些金额对应虚构模板成本，不能解释为真实投资业绩或已到账收益。
+  GOOG 保留 5 股和 310 手填价，账户当前参考净值 10,147.15 USD。
+- 强停后冷启动，重新进入第二 USD 历史页；已采用净值、543 点设备缓存和基金参考历史均保留。
+  缓存使用 `fundUnit`、USD、`dateOnly: true`，独立保留源日期与抓取时刻；GOOG 缺同日历史价，
+  完整账户历史资产仍明确未知。未见本轮应用崩溃或 Flutter 错误；本轮没有验证 release/R8 或实体手机。
+
+最终模拟器保持运行并停留在“投资账本 → 投资账户二 → USD → 证券投资 → 历史估值”的基金参考历史。
+本机证据位于 `emulator-view/`：`preservation-validation.json`、`android-native-success.json`、
+`fund-quote-native-success.png` 与 `fund-reference-history-after-restart.png`。
+构建日志为 `.toolchain/logs/cms-fund-android-build-20261028.log`。
