@@ -4,7 +4,7 @@ library;
 import '../currency_catalog.dart';
 import 'investment_decimal.dart';
 
-/// 两个金额入口共同返回的精确量价结果；只是输入预览，不代表券商已经确认份额。
+/// 基金录入共同返回的精确量价结果；金额申购预览本身不代表券商已经确认份额。
 sealed class FundAmountResult {
   /// [details] 由本文件的共同计算入口生成，包含已校验的币种、净值、份额和差额。
   /// 构造保持私有，防止调用方跳过现金精度、正数和溢出校验后伪造计算结果。
@@ -78,6 +78,20 @@ final class FundOpeningAmountResult extends FundAmountResult {
   final InvestmentDecimal cost, reportedUnrealized, marketValue;
 }
 
+/// 根据已有份额和总成本计算的持仓结果；未实现盈亏由市值减成本派生，不要求用户填写。
+final class FundHoldingAmountResult extends FundAmountResult {
+  /// [cost] 为用户核对的原币总成本，[marketValue] 是份额乘对应净值后的原币市值，
+  /// [unrealized] 为两者差额；[details] 保留用户提供的份额和原始净值精度，不反推第二份份额。
+  FundHoldingAmountResult._({
+    required this.cost,
+    required this.marketValue,
+    required this.unrealized,
+    required _FundQuantityFields details,
+  }) : super._(details);
+
+  final InvestmentDecimal cost, marketValue, unrealized;
+}
+
 /// 按含费总扣款计算参考申购份额，返回值不会自动创建成交或改变真实扣款。
 ///
 /// [cashAmount] 是原币实际总扣款，[fee] 是已包含在总扣款内的非负费用；二者都必须
@@ -120,7 +134,7 @@ FundPurchaseAmountResult calculateFundPurchaseByAmount({
   );
 }
 
-/// 按已有持仓的成本与报告浮盈计算参考市值及份额，不把浮盈写作收入。
+/// 兼容旧版已有持仓的成本、报告浮盈及份额推算；新表单使用 calculateFundOpeningByQuantity。
 ///
 /// [cost] 是已经发生的原币成本，可为零但不能为负；[reportedUnrealized] 是同一原币的
 /// 未实现盈亏，可正可负，也接受显式正号，例如 `+1.20`。两者都必须符合 [currencyCode]
@@ -164,6 +178,52 @@ FundOpeningAmountResult calculateFundOpeningByUnrealized({
       cashDigits: currency.digits,
       quantityDigits: quantityDigits,
       confirmedQuantity: confirmedQuantity,
+    ),
+  );
+}
+
+/// 按用户已有的 [quantity]、总成本 [cost] 和对应净值 [nav] 计算市值及未实现盈亏。
+///
+/// [quantity] 必须为正数且最多八位小数；本入口不会用当前净值从成本倒推份额，避免抹去真实盈亏。
+/// [cost] 为非负原币总成本，须符合 [currencyCode] 的最小现金单位；[nav] 为正的精确净值文本。
+/// 市值按币种最小单位舍入，未实现盈亏为该市值减成本，可正可负；微小份额的舍入市值允许为零。
+/// 结果保留实际份额、成本和净值，不创建现金、收益流水或另一份可编辑盈亏；净值变化后应重新计算。
+FundHoldingAmountResult calculateFundOpeningByQuantity({
+  required String cost,
+  required String quantity,
+  required String nav,
+  required String currencyCode,
+}) {
+  final currency = _fundCashCurrency(currencyCode);
+  final principal = _fundCashValue(cost, currency.digits, '持仓成本');
+  final units = InvestmentDecimal.parse(quantity);
+  final price = InvestmentDecimal.parse(nav);
+  if (principal.units < BigInt.zero ||
+      units.units <= BigInt.zero ||
+      price.units <= BigInt.zero) {
+    throw const FormatException('基金份额和净值须为正数，总成本不能为负数');
+  }
+  final marketValue = units.moneyProduct(price, currency.digits);
+  _requireFundAmountRange(marketValue, '持仓市值');
+  final unrealized = marketValue - principal;
+  _requireFundAmountRange(unrealized, '未实现盈亏');
+  return FundHoldingAmountResult._(
+    cost: principal,
+    marketValue: marketValue,
+    unrealized: unrealized,
+    details: (
+      currencyCode: currency.code,
+      quantityDigits: 8,
+      navText: nav.trim(),
+      nav: price,
+      // 已有持仓直接沿用用户份额；没有独立的目标市值或量价差额需要通过反推来凑齐。
+      estimatedQuantity: units,
+      confirmedQuantity: units,
+      quantity: units,
+      pricedAmount: marketValue,
+      roundingDifference: InvestmentDecimal.zero,
+      exactPriceAmount: _fundScaledText(units.units * price.units, 16),
+      exactDifference: '0',
     ),
   );
 }

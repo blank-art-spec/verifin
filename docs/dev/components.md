@@ -143,7 +143,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `showNumberPadSheet` | Sheet 函数 | `sheets.dart` | **数字键盘弹窗**（四则算式 + 结果预览）；数字区支持设置中的标准（7 8 9 / 4 5 6 / 1 2 3）与电话（1 2 3 / 4 5 6 / 7 8 9）布局，默认标准；货币金额传 `currencyCode` 自动遵循 ISO minor unit，汇率输入才显式用 `maxFractionDigits:10`；`maxAmount` 的展示/比较也随币种精度，JPY 自动禁用小数点。触感偏好内部自取。**输金额一律用它**，不要弹系统 TextField、不要裸包 `showModalBottomSheet` |
 | `NumberPadSheet` | Widget | `entry_sheets.dart` | 上面 helper 的内部 widget（一般经 `showNumberPadSheet`） |
 
-允许负数的金额键盘（`allowNegative:true`）可首按减号直接录入负值，供未实现亏损及余额等字段复用；非负金额仍拒绝首位运算符，四则算式和币种精度保持一致。
+允许负数的金额键盘（`allowNegative:true`）可首按减号直接录入负值，供负余额等字段复用；非负金额仍拒绝首位运算符，四则算式和币种精度保持一致。
 | `showCurrencyPickerSheet` | Sheet 函数 | `sheets.dart` | 可搜索的离线 ISO 4217 法定货币选择器（代码/中英文名/符号，支持常用/业务优先币种与排除项）；取消返回 `null` |
 | `evaluateAmountExpression` / `amountExpressionHasOperator` | 纯函数 | `calc_expression.dart` | 算式求值（不完整返回 null，结果已规整到分）/ 是否含运算符 |
 | `CurrencyCatalog` | 静态目录 | `currency_catalog.dart` | 离线 ISO 4217 法定货币定义、常用币种排序与中英文搜索；业务层不得另建货币清单 |
@@ -272,7 +272,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 共享时区数据库：`timezone_database.dart` 的 `ensureTimezoneDatabase()` 共用既有完整 `latest_all.tzf.gz` 资产；提醒调度与美股报价源时间解析等待同一次初始化，失败允许重试，不修改设备时区、不联网。纽约源时间使用 IANA `America/New_York`，不固定减四/五小时，也不重复打包时区表。
 
-- 香港基金金额与结算：`fund_amount_math.dart` 的 `calculateFundPurchaseByAmount` / `calculateFundOpeningByUnrealized` 提供精确份额与金额残差；`fund_workflow_math.dart` 的 `fundSubscriptionEffectiveAt` / `fundSubscriptionCashLegs` / `fundSubscriptionPendingValue` / `validateFundSubscriptions` 统一起算、资金腿、在途和校验。`models/fund_subscription.dart` 保存实际时刻与香港纯日期；`veri_fin_controller_funds.dart` 原子处理申购、确认、取消退款及持仓基准。共享 `FundOperationsButton`、`FundSubscriptionCard`、`fundSubscriptionStatusLabel` 和专用 `FundEntryPage` 位于 `pages/fund_entry_page.dart`，证券页/基金卡复用。详见[金额与结算](fund-amount-settlement.md)。
+- 香港基金录入与结算：`fund_amount_math.dart` 的 `calculateFundPurchaseByAmount` 提供新申购参考份额与金额残差；`calculateFundOpeningByQuantity` / `FundHoldingAmountResult` 按已有实际份额、总成本及 NAV 计算市值和未实现盈亏。`calculateFundOpeningByUnrealized` / `FundOpeningAmountResult` 仅保留旧账目与算法兼容，新界面不提供报告浮盈输入，不借旧浮盈重推已存份额。`fund_workflow_math.dart` 的 `fundSubscriptionEffectiveAt` / `fundSubscriptionCashLegs` / `fundSubscriptionPendingValue` / `validateFundSubscriptions` 统一起算、资金腿、在途和校验。`models/fund_subscription.dart` 保存实际时刻与香港纯日期；`veri_fin_controller_funds.dart` 原子处理申购、确认、取消退款及持仓基准。共享 `FundOperationsButton`、`FundSubscriptionCard`、`fundSubscriptionStatusLabel` 和专用 `FundEntryPage` 位于 `pages/fund_entry_page.dart`，证券页/基金卡复用。详见[录入与结算](fund-amount-settlement.md)。
 - 证券资产与历史：`investment_valuation.dart` 的 `valueInvestmentAccount` / `valueLedgerAccounts` / `accountCashAt` / `investmentRevision` / `investmentSnapshotAt` 是纯计算入口，历史显式传 `at`，统一资产及占比包含基金在途款；`currency_math.dart` 的 `AccountAssetAmounts` 和 `ConvertedAccountBalances` 保留总资产/负债分解。`models/investment_valuation_snapshot.dart` 保存实际观察点依据，`InvestmentHistoryPage` 复用 `InteractiveTrendChart`。详见 [阶段 5](securities-stage05-implementation.md)。
 - 证券资产占比：`InvestmentAccountValuation.cashShare` / `holdingsShare` / `shortObligationShare` 与 `shareOfAssets(value)` 统一以本币种账户的正现金加多头市值为分母；分母为零、估值不完整或输入无效时返回 null。概览复用 `SummaryMetric.detail`，持仓卡复用 `DetailInfoRow`；空头义务独立标注且允许超过 100%，冻结不重复扣减。百分比经 l10n `investAllocationPercent` 按语言显示一位小数。
 

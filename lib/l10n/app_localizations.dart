@@ -13079,7 +13079,7 @@ abstract class AppLocalizations {
   /// No description provided for @fundOpeningHint.
   ///
   /// In zh, this message translates to:
-  /// **'录入的是核对时刻已有的总持仓，不再扣现金，也不生成收入。基准替换该基金此时的份额和成本，之后的交易继续重算。'**
+  /// **'填写核对时刻的实际份额、总成本和对应净值，系统自动计算未实现盈亏。基准替换该基金此时的份额和成本，不再扣现金或生成收入；之后的交易继续重算。'**
   String get fundOpeningHint;
 
   /// No description provided for @fundNetAmount.
@@ -13109,7 +13109,7 @@ abstract class AppLocalizations {
   /// No description provided for @fundQuantityInferredHint.
   ///
   /// In zh, this message translates to:
-  /// **'由金额反推的份额是参考值。券商浮盈可能已舍入，请核对确认份额；不会用差额改写实际扣款或成本。'**
+  /// **'由申购金额反推的份额是参考值，请核对券商确认份额；差额不会改写实际扣款或成本。'**
   String get fundQuantityInferredHint;
 
   /// No description provided for @fundMismatchHint.
@@ -13249,6 +13249,48 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'已有持仓总成本'**
   String get fundHoldingCost;
+
+  /// No description provided for @fundHoldingQuantity.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际持有份额（必填）'**
+  String get fundHoldingQuantity;
+
+  /// No description provided for @fundHoldingMarketValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'按填写净值估算的市值'**
+  String get fundHoldingMarketValue;
+
+  /// No description provided for @fundCalculatedUnrealized.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动计算的未实现盈亏'**
+  String get fundCalculatedUnrealized;
+
+  /// No description provided for @fundHoldingCalculationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'未实现盈亏 = 实际份额 × 当前填写净值 − 总成本。净值变化后重新计算，不另记收入流水。'**
+  String get fundHoldingCalculationHint;
+
+  /// No description provided for @fundHoldingNoPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写总成本、实际份额和对应净值后，自动显示市值与未实现盈亏。'**
+  String get fundHoldingNoPreview;
+
+  /// No description provided for @fundHoldingCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'已核对实际份额、总成本、净值及各日期'**
+  String get fundHoldingCheck;
+
+  /// No description provided for @fundLegacyInferredQuantityHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'这些旧份额曾由金额反推。请与券商持仓核对；份额数值未改时会保留原推算标记。'**
+  String get fundLegacyInferredQuantityHint;
 
   /// No description provided for @fundReportedUnrealized.
   ///

@@ -7465,7 +7465,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fundOpeningHint =>
-      'Record the total holding owned at the reconciliation time without another cash payment or income entry. The baseline replaces this fund\'s units and cost at that time; later trades are replayed.';
+      'Enter actual units, total cost and the matching NAV at reconciliation. Unrealized profit/loss is calculated automatically. The baseline replaces units and cost without another cash payment or income entry; later trades are replayed.';
 
   @override
   String get fundNetAmount => 'Net subscription amount';
@@ -7482,7 +7482,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fundQuantityInferredHint =>
-      'Units inferred from an amount are a reference. Broker profit/loss may be rounded; check confirmed units. Differences never overwrite actual payment or cost.';
+      'Units inferred from a subscription amount are a reference. Check broker-confirmed units; differences never overwrite actual payment or cost.';
 
   @override
   String get fundMismatchHint =>
@@ -7556,6 +7556,31 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fundHoldingCost => 'Existing holding total cost';
+
+  @override
+  String get fundHoldingQuantity => 'Actual units held (required)';
+
+  @override
+  String get fundHoldingMarketValue => 'Market value at entered NAV';
+
+  @override
+  String get fundCalculatedUnrealized => 'Calculated unrealized profit/loss';
+
+  @override
+  String get fundHoldingCalculationHint =>
+      'Unrealized profit/loss = actual units × entered NAV − total cost. It is recalculated when NAV changes and creates no income entry.';
+
+  @override
+  String get fundHoldingNoPreview =>
+      'Enter total cost, actual units and the matching NAV to calculate market value and unrealized profit/loss.';
+
+  @override
+  String get fundHoldingCheck =>
+      'I checked actual units, total cost, NAV and all dates';
+
+  @override
+  String get fundLegacyInferredQuantityHint =>
+      'These legacy units were inferred from an amount. Check the broker holding; unchanged units retain their original inferred status.';
 
   @override
   String get fundReportedUnrealized =>

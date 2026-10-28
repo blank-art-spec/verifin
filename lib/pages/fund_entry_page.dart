@@ -254,6 +254,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
   _FundFormAction _action = _FundFormAction.application;
 
   /// 仅在首次读取 Scope 时复制草稿；后续净值更新不能覆盖用户正在填写的金额。
+  /// 已有基准直接带入已保存份额，历史报告浮盈只留作原事件证据，不作为新表单输入。
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -308,13 +309,12 @@ class _FundEntryPageState extends State<FundEntryPage> {
       'cashAmount': subscription?.cashAmount ?? '',
       'fee': subscription?.fee ?? '0',
       'cost': baseline?.carriedCost ?? '',
-      'unrealized': baseline?.reportedUnrealized ?? '0',
       'nav': subscription?.confirmation?.nav ?? baseline?.price ?? '',
       'confirmedQuantity':
+          baseline?.quantity ??
           (acquisition?.quantityInferred == false
               ? subscription?.confirmation?.quantity
               : null) ??
-          (baseline?.quantityInferred == false ? baseline?.quantity : null) ??
           '',
       'refundAmount': subscription?.refundAmount ?? '',
       'note': subscription?.note ?? baseline?.note ?? '',
@@ -388,12 +388,11 @@ class _FundEntryPageState extends State<FundEntryPage> {
   }
 
   /// 金额使用共享数字键盘；[key]/[label] 标识草稿及本地化字段，净值和份额保留文本精度。
-  /// [money] 是原币现金、[signed] 允许报告负浮盈、[readOnly] 禁止改写已发生的金额。
+  /// [money] 是非负原币现金、[readOnly] 禁止改写已发生的金额；盈亏由持仓份额和净值计算。
   Widget _field(
     String key,
     String label, {
     bool money = false,
-    bool signed = false,
     bool readOnly = false,
   }) {
     return InvestmentInputField(
@@ -411,7 +410,6 @@ class _FundEntryPageState extends State<FundEntryPage> {
                   title: label,
                   initialAmount: double.tryParse(_fields[key]!.text),
                   currencyCode: _currency,
-                  allowNegative: signed,
                   allowZero: key != 'cashAmount',
                 );
                 if (!mounted || value == null) return;
@@ -481,17 +479,17 @@ class _FundEntryPageState extends State<FundEntryPage> {
     );
   }
 
-  /// 按当前输入生成只读金额预览；编辑中的空值/非法值是正常草稿，不弹全局错误。
+  /// 按当前输入生成只读金额预览；已有持仓用必填实际份额计算市值与盈亏，新申购仍按金额估算。
+  /// 编辑中的空值/非法值是正常草稿，不弹全局错误，也不从旧报告浮盈反推份额。
   FundAmountResult? _preview() {
     try {
       final quantity = _fields['confirmedQuantity']!.text.trim();
       if (widget.mode == FundEntryMode.holdingBaseline) {
-        return calculateFundOpeningByUnrealized(
+        return calculateFundOpeningByQuantity(
           cost: _fields['cost']!.text,
-          reportedUnrealized: _fields['unrealized']!.text,
+          quantity: quantity,
           nav: _fields['nav']!.text,
           currencyCode: _currency,
-          confirmedQuantity: quantity.isEmpty ? null : quantity,
         );
       }
       return calculateFundPurchaseByAmount(
@@ -537,13 +535,46 @@ class _FundEntryPageState extends State<FundEntryPage> {
     );
   }
 
-  /// 展示 [result] 的原币金额、参考/确认份额及差额；不通过显示舍入改写现金或成本。
+  /// 展示 [result] 的原币金额；已有持仓直接显示份额、估算市值和自动盈亏，申购保留参考份额与差额。
+  /// 展示舍入不会反向改写现金或成本，已有持仓不再用浮盈或金额差额推测份额。
   Widget _previewPanel(FundAmountResult? result, AppLocalizations l) {
-    if (result == null) return InvestmentHint(l.fundNoPreview);
+    if (result == null) {
+      return InvestmentHint(
+        widget.mode == FundEntryMode.holdingBaseline
+            ? l.fundHoldingNoPreview
+            : l.fundNoPreview,
+      );
+    }
 
     /// [value] 按当前原币现金精度展示；预览永远不反向覆盖输入的扣款和成本。
     String money(InvestmentDecimal value) =>
         formatUserMoney(value.toDouble(), _currency);
+    if (result is FundHoldingAmountResult) {
+      return InvestmentSection(
+        title: l.investValuationBasis,
+        children: [
+          DetailInfoRow(
+            inline: true,
+            label: l.fundHoldingQuantity,
+            value: result.quantity.toString(),
+          ),
+          DetailInfoRow(
+            inline: true,
+            label: l.fundHoldingMarketValue,
+            value: money(result.marketValue),
+          ),
+          DetailInfoRow(
+            inline: true,
+            label: l.fundCalculatedUnrealized,
+            value: formatSignedUserMoney(
+              result.unrealized.toDouble(),
+              _currency,
+            ),
+          ),
+          InvestmentHint(l.fundHoldingCalculationHint),
+        ],
+      );
+    }
     return InvestmentSection(
       title: l.investValuationBasis,
       children: [
@@ -552,12 +583,6 @@ class _FundEntryPageState extends State<FundEntryPage> {
             inline: true,
             label: l.fundNetAmount,
             value: money(result.netAmount),
-          ),
-        if (result is FundOpeningAmountResult)
-          DetailInfoRow(
-            inline: true,
-            label: l.fundTargetMarketValue,
-            value: money(result.marketValue),
           ),
         DetailInfoRow(
           inline: true,
@@ -590,6 +615,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
   }
 
   /// 提交前核对账本及基金身份，确认必须显式勾选；只有 Controller 保存成功才退出。
+  /// 新持仓基准采用实际份额且不写报告浮盈；旧基准依据未变才保留其原浮盈证据，份额未变保留推算标记。
   Future<void> _save() async {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
     if (_saving || c.activeBook.id != _bookId) return;
@@ -611,7 +637,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
     try {
       if (widget.mode == FundEntryMode.holdingBaseline) {
         final result = _preview();
-        if (result is! FundOpeningAmountResult || !_reviewed) {
+        if (result is! FundHoldingAmountResult || !_reviewed) {
           throw const FormatException('已有持仓资料尚未核对');
         }
         final sequence =
@@ -621,6 +647,29 @@ class _FundEntryPageState extends State<FundEntryPage> {
               (value, event) =>
                   event.sequence >= value ? event.sequence + 1 : value,
             );
+        final previous = widget.baselineEvent;
+        String? reportedUnrealized;
+        var quantityInferred = false;
+        if (previous != null) {
+          final sameQuantity =
+              InvestmentDecimal.parse(
+                previous.quantity,
+              ).compareTo(result.quantity) ==
+              0;
+          // 旧份额未变不能仅因表单改名就冒充实际确认；新录入份额默认明确为实际持仓。
+          quantityInferred = sameQuantity && previous.quantityInferred;
+          if (sameQuantity &&
+              previous.carriedCost != null &&
+              InvestmentDecimal.parse(
+                    previous.carriedCost!,
+                  ).compareTo(result.cost) ==
+                  0 &&
+              InvestmentDecimal.parse(previous.price).compareTo(result.nav) ==
+                  0 &&
+              previous.occurredAt.isAtSameMomentAs(_baselineDate)) {
+            reportedUnrealized = previous.reportedUnrealized;
+          }
+        }
         ok = await c.saveFundHoldingBaseline(
           accountId: widget.accountId,
           security: security,
@@ -633,9 +682,9 @@ class _FundEntryPageState extends State<FundEntryPage> {
             quantity: result.quantity.toString(),
             price: result.navText,
             carriedCost: result.cost.toString(),
-            reportedUnrealized: result.reportedUnrealized.toString(),
+            reportedUnrealized: reportedUnrealized,
             fundNavDate: _navDate,
-            quantityInferred: !result.quantityConfirmed,
+            quantityInferred: quantityInferred,
             note: _fields['note']!.text.trim(),
           ),
           referencePrice: result.navText,
@@ -885,12 +934,9 @@ class _FundEntryPageState extends State<FundEntryPage> {
                 children: [
                   if (baseline) ...[
                     _field('cost', l.fundHoldingCost, money: true),
-                    _field(
-                      'unrealized',
-                      l.fundReportedUnrealized,
-                      money: true,
-                      signed: true,
-                    ),
+                    _field('confirmedQuantity', l.fundHoldingQuantity),
+                    if (widget.baselineEvent?.quantityInferred == true)
+                      InvestmentHint(l.fundLegacyInferredQuantityHint),
                     _dateField(
                       l.fundBaselineDate,
                       _baselineDate,
@@ -971,10 +1017,11 @@ class _FundEntryPageState extends State<FundEntryPage> {
                         (value) => _navDate = value,
                         dateOnly: true,
                       ),
-                      _field(
-                        'confirmedQuantity',
-                        l.fundConfirmedQuantityOptional,
-                      ),
+                      if (!baseline)
+                        _field(
+                          'confirmedQuantity',
+                          l.fundConfirmedQuantityOptional,
+                        ),
                     ],
                   ],
                   if (!baseline && _action == _FundFormAction.confirmation) ...[
@@ -1026,7 +1073,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
                   ],
                   if (baseline || _action == _FundFormAction.application)
                     _field('note', l.investNote),
-                  InvestmentHint(l.fundScheduleHint),
+                  if (!baseline) InvestmentHint(l.fundScheduleHint),
                 ],
               ),
               const SizedBox(height: 12),
@@ -1040,7 +1087,9 @@ class _FundEntryPageState extends State<FundEntryPage> {
                     key: const Key('fund-reviewed'),
                     contentPadding: EdgeInsets.zero,
                     value: _reviewed,
-                    title: Text(l.fundConfirmationCheck),
+                    title: Text(
+                      baseline ? l.fundHoldingCheck : l.fundConfirmationCheck,
+                    ),
                     onChanged: _saving
                         ? null
                         : (value) => setState(() => _reviewed = value ?? false),

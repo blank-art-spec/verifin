@@ -232,7 +232,8 @@ mixin _FundOps on _InvestmentOps {
   });
 
   /// 保存或编辑已有基金持仓的 [event] 基准，份额/成本在基准日替换而非叠加，不产生现金扣款。
-  /// [referencePrice] 是用户核对的基准后备净值；录入浮盈只保留证据，不另外生成收入或费用。
+  /// [referencePrice] 是用户核对的基准后备净值；未实现盈亏由份额、成本和净值计算，无需手填。
+  /// 旧事件的报告浮盈仅作兼容证据，不另外生成收入或费用，也不覆盖实际份额。
   /// 同日开户时截点不早于账户启用时刻；更早的基准不能用来回填不存在的账户历史。
   Future<bool> saveFundHoldingBaseline({
     required String accountId,

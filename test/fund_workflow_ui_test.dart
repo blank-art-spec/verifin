@@ -2,6 +2,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/calendar_days.dart';
 import 'package:verifin/app/common_widgets.dart';
+import 'package:verifin/app/currency_math.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
@@ -131,6 +132,18 @@ Future<void> _decimal(WidgetTester tester, String field, String value) async {
   await tester.pumpAndSettle();
 }
 
+/// 显式核对当前基准后保存；仅供已经填齐的旧基准编辑场景复用用户点击顺序。
+Future<void> _saveReviewedHolding(WidgetTester tester) async {
+  final reviewed = find.byKey(const Key('fund-reviewed'));
+  await _reveal(tester, reviewed);
+  await tester.tap(reviewed);
+  await tester.pumpAndSettle();
+  final save = find.byKey(const Key('fund-save'));
+  await _reveal(tester, save);
+  await tester.tap(save);
+  await tester.pumpAndSettle();
+}
+
 /// 验收真实页面的金额入口、未确认资金和显式核对行为，不用替代页面镜像生产布局。
 void main() {
   useTestDatabases();
@@ -225,8 +238,11 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  for (final profit in ['1.20', '-1.20']) {
-    testWidgets('窄屏已有持仓可填写正负浮盈 $profit，核对前不保存且不会重复扣现金', (tester) async {
+  for (final holding in [
+    (nav: '140.251', profit: 1.2),
+    (nav: '140.011', profit: -1.2),
+  ]) {
+    testWidgets('窄屏实际份额自动计算浮盈 ${holding.profit}，无需手填浮盈且不重复扣现金', (tester) async {
       final ready = await _ready();
       final c = ready.controller;
       await _pumpEntry(
@@ -240,10 +256,32 @@ void main() {
         size: const Size(320, 640),
       );
       final l = AppLocalizations.of(tester.element(find.byType(FundEntryPage)));
+      expect(find.byKey(const ValueKey('fund-unrealized')), findsNothing);
       await _money(tester, 'cost', '1401.31');
-      await _money(tester, 'unrealized', profit);
-      await _decimal(tester, 'nav', '109.8290');
+      await _decimal(tester, 'nav', holding.nav);
       final save = find.byKey(const Key('fund-save'));
+      if (holding.profit > 0) {
+        // 先明确核对但漏填实际份额，仍不能保存；金额与净值不再被用来反推已有份额。
+        await _reveal(tester, find.byKey(const Key('fund-reviewed')));
+        await tester.tap(find.byKey(const Key('fund-reviewed')));
+        await tester.pumpAndSettle();
+        await _reveal(tester, save);
+        await tester.tap(save);
+        await tester.pumpAndSettle();
+        expect(c.investmentFor(ready.account.id)!.events, isEmpty);
+        expect(find.text(l.fundSaveValidation), findsOneWidget);
+      }
+      await _decimal(tester, 'confirmedQuantity', '10');
+      final calculated = find.byWidgetPredicate(
+        (widget) =>
+            widget is DetailInfoRow &&
+            widget.label == l.fundCalculatedUnrealized,
+      );
+      await _reveal(tester, calculated);
+      expect(
+        tester.widget<DetailInfoRow>(calculated).value,
+        formatSignedUserMoney(holding.profit, 'USD'),
+      );
       await _reveal(tester, save);
       await tester.tap(save);
       await tester.pumpAndSettle();
@@ -260,18 +298,96 @@ void main() {
       final baseline = c.investmentFor(ready.account.id)!.events.single;
       expect(baseline.kind, StockEventKind.fundHoldingBaseline);
       expect(baseline.carriedCost, '1401.31');
-      expect(
-        baseline.reportedUnrealized,
-        profit.startsWith('-') ? '-1.2' : '1.2',
-      );
-      expect(baseline.quantityInferred, isTrue);
-      if (!profit.startsWith('-')) expect(baseline.quantity, '12.76994236');
+      expect(baseline.reportedUnrealized, isNull);
+      expect(baseline.quantityInferred, isFalse);
+      expect(baseline.quantity, '10');
       expect(c.accountBalance(ready.account), 10000);
       expect(c.entries, isEmpty);
       expect(find.byType(FundEntryPage), findsNothing);
       expect(tester.takeException(), isNull);
     });
   }
+
+  testWidgets('旧推算份额编辑时加载原份额，保留原始证据直到实际基准依据改变', (tester) async {
+    final ready = await _ready();
+    final c = ready.controller;
+    final at = DateTime.now().subtract(const Duration(hours: 2));
+    expect(
+      await c.saveFundHoldingBaseline(
+        accountId: ready.account.id,
+        security: _fund,
+        referencePrice: '100',
+        event: StockEvent(
+          id: 'legacy-baseline',
+          securityId: _fund.id,
+          kind: StockEventKind.fundHoldingBaseline,
+          occurredAt: at,
+          sequence: 1,
+          quantity: '10',
+          price: '100',
+          carriedCost: '1000',
+          reportedUnrealized: '0',
+          fundNavDate: hongKongFundDate(at),
+          quantityInferred: true,
+        ),
+      ),
+      isTrue,
+    );
+    var baseline = c.investmentFor(ready.account.id)!.events.single;
+    await _pumpEntry(
+      tester,
+      c,
+      FundEntryPage(
+        accountId: ready.account.id,
+        mode: FundEntryMode.holdingBaseline,
+        baselineEvent: baseline,
+      ),
+    );
+    final quantity = find.byKey(const ValueKey('fund-confirmedQuantity'));
+    await _reveal(tester, quantity);
+    expect(tester.widget<TextField>(quantity).controller!.text, '10');
+    expect(find.byKey(const ValueKey('fund-unrealized')), findsNothing);
+    await _saveReviewedHolding(tester);
+    baseline = c.investmentFor(ready.account.id)!.events.single;
+    expect(baseline.quantityInferred, isTrue);
+    expect(baseline.reportedUnrealized, '0');
+
+    // 只改成本不改份额：旧报告浮盈不再约束新基准，份额本身仍保留原推算来源。
+    await _pumpEntry(
+      tester,
+      c,
+      FundEntryPage(
+        accountId: ready.account.id,
+        mode: FundEntryMode.holdingBaseline,
+        baselineEvent: baseline,
+      ),
+    );
+    await _money(tester, 'cost', '1100');
+    await _saveReviewedHolding(tester);
+    baseline = c.investmentFor(ready.account.id)!.events.single;
+    expect(baseline.carriedCost, '1100');
+    expect(baseline.reportedUnrealized, isNull);
+    expect(baseline.quantityInferred, isTrue);
+
+    // 明确录入不同的实际份额后，才把份额从历史推算状态改为实际持仓状态。
+    await _pumpEntry(
+      tester,
+      c,
+      FundEntryPage(
+        accountId: ready.account.id,
+        mode: FundEntryMode.holdingBaseline,
+        baselineEvent: baseline,
+      ),
+    );
+    await _decimal(tester, 'confirmedQuantity', '11');
+    await _saveReviewedHolding(tester);
+    baseline = c.investmentFor(ready.account.id)!.events.single;
+    expect(baseline.quantity, '11');
+    expect(baseline.quantityInferred, isFalse);
+    expect(c.accountBalance(ready.account), 10000);
+    expect(c.entries, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('待确认申请保留独立日期和真实扣款限制，确认必须再次核对', (tester) async {
     final ready = await _ready();

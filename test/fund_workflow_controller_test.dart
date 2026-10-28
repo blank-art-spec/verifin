@@ -593,7 +593,77 @@ void main() {
     expect(controller.entries, isEmpty);
   });
 
-  test('已有持仓 1401.31 成本加 1.20 浮盈反推份额，基准只增加持仓不扣现金', () async {
+  test('已有持仓录入实际份额、成本和净值即可自动计算浮盈，更新净值不改变份额或成本', () async {
+    // 12.77是用户从券商取得的实际份额夹具，不是用成本或当前净值反推的数量。
+    final reference = calculateFundOpeningByQuantity(
+      cost: '1401.31',
+      quantity: '12.77',
+      nav: '109.8290',
+      currencyCode: 'USD',
+    );
+    final baseline = clock.baseline(
+      day: -7,
+      quantity: reference.quantity.toString(),
+      nav: reference.navText,
+      cost: reference.cost.toString(),
+    );
+    expect(
+      await controller.saveFundHoldingBaseline(
+        accountId: account.id,
+        security: _fund,
+        event: baseline,
+        referencePrice: reference.navText,
+      ),
+      isTrue,
+    );
+    final original = current().events.single.toJson();
+    expect(current().events.single.quantityInferred, isFalse);
+    expect(current().events.single.reportedUnrealized, isNull);
+    expect(original.containsKey('reportedUnrealized'), isFalse);
+    expect(original.containsKey('quantityInferred'), isFalse);
+    expect(current().fundSubscriptions, isEmpty);
+    expect(current().openingHoldings, isEmpty);
+    expect(controller.accountBalance(account), 5000);
+    final first = valueInvestmentAccount(
+      current(),
+      controller.accountBalance(account),
+    );
+    expect(first.longValue, 1402.52);
+    expect(first.unrealized, closeTo(1.21, 0.000001));
+    expect(first.amounts!.net, 6402.52);
+    expect(
+      await controller.setStockReferencePrice(account.id, _fund.id, '110'),
+      isTrue,
+    );
+    final refreshed = valueInvestmentAccount(
+      current(),
+      controller.accountBalance(account),
+    );
+    expect(refreshed.longValue, 1404.7);
+    expect(refreshed.unrealized, closeTo(3.39, 0.000001));
+    expect(refreshed.amounts!.net, 6404.7);
+    expect(current().events.single.toJson(), original);
+    final position = projectStocks(current()).positions.single;
+    expect(position.quantity.toString(), '12.77');
+    expect(position.cost.toString(), '1401.31');
+    expect(controller.accountBalance(account), 5000);
+    final days = history({-8: '109', -7: '109.8290', -6: '110'});
+    expect(days.map((day) => day.date), [clock.date(-7), clock.date(-6)]);
+    expect(days.first.dailyProfit, isNull);
+    expect(days.first.cumulativeProfit?.toString(), '1.21');
+    expect(days.last.dailyProfit?.toString(), '2.18');
+    expect(days.last.cumulativeProfit?.toString(), '3.39');
+    expect(controller.entries, isEmpty);
+    expect(current().valuationSnapshots, isEmpty);
+    expect(await repository.loadEntries(), isEmpty);
+    final restored =
+        (await repository.loadInvestmentPortfolios()).single.events.single;
+    expect(restored.reportedUnrealized, isNull);
+    expect(restored.quantityInferred, isFalse);
+    expect(restored.quantity, '12.77');
+  });
+
+  test('旧版报告浮盈反推的基准仍可恢复，证据字段不被当作固定收益或收入', () async {
     final reference = calculateFundOpeningByUnrealized(
       cost: '1401.31',
       reportedUnrealized: '+1.20',
@@ -636,6 +706,15 @@ void main() {
     expect(controller.entries, isEmpty);
     expect(current().valuationSnapshots, isEmpty);
     expect(await repository.loadEntries(), isEmpty);
+    final legacyEvidence = current().events.single.toJson();
+    final backup = controller.exportDataJson();
+    controller.importDataJson(backup);
+    await controller.waitForPendingWrites();
+    expect(current().events.single.toJson(), legacyEvidence);
+    expect(current().events.single.reportedUnrealized, '1.2');
+    expect(current().events.single.quantityInferred, isTrue);
+    expect(valuationAt(clock.at(-1)).unrealized, closeTo(1.2, 0.000001));
+    expect(controller.entries, isEmpty);
   });
 
   test('后续基准替换持仓与成本，跨基准收益未知而后续区间恢复', () async {
@@ -647,7 +726,6 @@ void main() {
         quantity: '8',
         nav: '110',
         cost: '800',
-        reportedUnrealized: '80',
       ),
     ]) {
       expect(
@@ -696,7 +774,6 @@ void main() {
       quantity: '7',
       nav: '110',
       cost: '700',
-      reportedUnrealized: '70',
     );
     expect(
       await controller.saveFundHoldingBaseline(
@@ -1054,15 +1131,16 @@ class _FundClock {
     quantity: quantity,
   );
 
-  /// 构造已有持仓核对基准；[day] 控制生效日，[cost] 与 [reportedUnrealized] 保留原币证据。
-  /// [inferred] 表达份额来自反推参考值；sequence 交由生产命令分配，不能由测试伪造重放顺序。
+  /// 构造当前持仓基准；[day] 控制生效日，[quantity] 是用户提供的实际份额，[cost] 是实际成本。
+  /// [reportedUnrealized]/[inferred] 只供旧备份兼容用例显式填写，当前录入无需报告浮盈或反推份额。
+  /// sequence交由生产命令分配，不能由测试伪造重放顺序。
   StockEvent baseline({
     String id = 'baseline',
     required int day,
     String quantity = '10',
     String nav = '100',
     String cost = '1000',
-    String reportedUnrealized = '0',
+    String? reportedUnrealized,
     bool inferred = false,
   }) => StockEvent(
     id: id,
