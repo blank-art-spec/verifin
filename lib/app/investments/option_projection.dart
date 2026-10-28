@@ -60,7 +60,7 @@ _applyOptionEvent(
       q = InvestmentDecimal.parse(e.quantity),
       price = InvestmentDecimal.parse(e.price),
       fee = InvestmentDecimal.parse(e.fee);
-  if (e.kind.index < StockEventKind.optionBuyOpen.index || e.batchId != null) {
+  if (!e.kind.isOptionEvent || e.batchId != null) {
     throw const FormatException('期权必须使用独立的开平仓或结算动作');
   }
   final trade = {

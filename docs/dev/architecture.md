@@ -4,7 +4,7 @@
 
 执行规则以 [AGENTS.md](../../AGENTS.md) 为准；这里仅提供源码导航，不重复维护规则。
 
-股票阶段现已实现精确持仓、独立事件和手填估值，早期博通来源验证见 [阶段 0–2 历史记录](securities-stage02-implementation.md)。当前持久化为 SQLite v28 投资聚合及 JSON v13 完整备份，命令入口为 `veri_fin_controller_investments.dart`；v13 增加真实基金品种与净值日期精度，旧股票/期权默认字段的 JSON 保持原形状。期权生命周期见 [阶段 3](securities-stage03-implementation.md)；参考行情机制及门禁见 [阶段 4](securities-stage04-implementation.md)，仅诊断包可显式装配的腾讯股票来源见 [公开股票研究](public-quote-research.md)，招商官方基金净值及参考历史见 [基金研究](cms-fund-api-research.md)。旧 Yahoo/Nasdaq 验证页、查询客户端和待核对来源配置已移除。资产分解、主动保存依据与恢复见 [阶段 5](securities-stage05-implementation.md)；未准入的生产自动行情仍待后续验证，见 [总体方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。
+股票阶段现已实现精确持仓、独立事件和手填估值，早期博通来源验证见 [阶段 0–2 历史记录](securities-stage02-implementation.md)。当前持久化为 SQLite v28 投资聚合及 JSON v14 完整备份，普通证券命令入口为 `veri_fin_controller_investments.dart`，基金逐笔结算入口为 `veri_fin_controller_funds.dart`。v13 增加真实基金品种与净值日期精度；v14 增加金额申购阶段、确认关联与已有持仓基准，继续兼容 v1–v13，旧股票/期权默认字段的 JSON 保持原形状。两个金额入口、实际扣款与净在途、逐笔收益起算及实际时刻基准见[基金金额与结算](fund-amount-settlement.md)。期权生命周期见 [阶段 3](securities-stage03-implementation.md)；参考行情机制及门禁见 [阶段 4](securities-stage04-implementation.md)，仅诊断包可显式装配的腾讯股票来源见 [公开股票研究](public-quote-research.md)，招商官方基金净值及参考历史见 [基金研究](cms-fund-api-research.md)。旧 Yahoo/Nasdaq 验证页、查询客户端和待核对来源配置已移除。资产分解、主动保存依据与恢复见 [阶段 5](securities-stage05-implementation.md)；未准入的生产自动行情仍待后续验证，见 [总体方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。
 
 Veri Fin 仅交付 Android，权威账目在本机 SQLite，无账号或自有服务端。
 正式入口为 `lib/main.dart`；UI 通过 `VeriFinScope` 读取 `VeriFinController`，
@@ -22,6 +22,7 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 | Controller | 核心 `veri_fin_controller.dart` / `state` / `ops`；领域 part：`veri_fin_controller_account_reminders.dart`、`veri_fin_controller_workday_calendar.dart`、`veri_fin_controller_credit_hierarchy.dart`；生产 `create` 异步载入本地状态，日历客户端可注入测试 |
 | 证券参考行情会话 | `investments/investment_quote_sync.dart` 保存逐账户状态/缓存，`investments/investment_quote_session.dart` 负责当前账本到期调度，`pages/market_quote_session_gate.dart` 连接根级前台、隐私/引导及解锁状态；[当前范围](public-quote-research.md) |
 | 基金净值与参考历史 | `investments/cms_fund_quote_adapter.dart` 匿名查询固定基金；`market_quote.dart` 的有界 `FundNavHistory` 留设备缓存；`fund_reference_history.dart` 按各日真实份额/现金重算参考收益与资产，Controller 公共读取 `fundReferenceHistoryFor`，`pages/fund_reference_history_section.dart` 展示。缺其他证券当日历史价不回填，无收入流水或自动权威快照；[研究边界](cms-fund-api-research.md) |
+| 基金金额与逐笔结算 | `pages/fund_entry_page.dart` 共用金额买入/已有持仓入口；`investments/fund_amount_math.dart` 计算参考份额和精确差额；`models/fund_subscription.dart` 保存申请、实际付款、确认及收益起算事实，`investments/fund_workflow_math.dart` 派生资金腿与净在途；`veri_fin_controller_funds.dart` 原子保存。`fundAcquire` 零现金增份额，`fundHoldingBaseline` 在实际核对时刻替换持仓，净在途进入统一资产估值；[口径与验收](fund-amount-settlement.md) |
 | 父子账户与汇率 | Controller part `veri_fin_controller_credit_hierarchy.dart`；纯归并 `credit_hierarchy.dart`、只读统计 `statistics_currency.dart`、联网 `frankfurter_client.dart`；[当前金额及统一还款口径](credit-hierarchy-currency.md) |
 | SQLite 与持久化 | `lib/data/`；[技术决策](tech-decisions.md)、repository contract 与 migration matrix 测试 |
 | 模型 | `lib/app/models/`，`models.dart` 稳定导出；信用主体在 `credit_account.dart`，具体币种子账户仍是 `Account`；JSON/SQLite 映射须同步 |

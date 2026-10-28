@@ -7372,7 +7372,226 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investAllocationLiabilityHint =>
-      'Shares use positive cash plus long position value. Short obligations and financing count as liabilities.';
+      'Shares use positive cash, long positions, and pending subscription assets. Short obligations and financing count as liabilities.';
+
+  @override
+  String get fundOperations => 'Fund actions';
+
+  @override
+  String get fundBuyByAmount => 'Buy by amount';
+
+  @override
+  String get fundRecordHolding => 'Record existing holding';
+
+  @override
+  String get fundAcquireEvent => 'Subscription confirmation';
+
+  @override
+  String get fundHoldingBaselineEvent => 'Holding baseline';
+
+  @override
+  String get fundChoose => 'Choose fund';
+
+  @override
+  String get fundCmsUsdName => 'CMS USD Money Market Fund Class B';
+
+  @override
+  String get fundNoEligible =>
+      'No Hong Kong fund is available in this account. The verified additional fund is CMS USD Money Market Fund Class B in a USD account.';
+
+  @override
+  String get fundCashAmount => 'Total cash payment, including fees';
+
+  @override
+  String get fundRequestFee => 'Fees included in total payment';
+
+  @override
+  String get fundEstimatedNav =>
+      'Estimated NAV (optional; does not confirm a trade)';
+
+  @override
+  String get fundConfirmedNav => 'Broker-confirmed NAV';
+
+  @override
+  String get fundHoldingNav => 'Holding baseline NAV';
+
+  @override
+  String get fundConfirmedQuantityOptional =>
+      'Broker-confirmed units (optional check)';
+
+  @override
+  String get fundEstimatedQuantity => 'Calculated reference units';
+
+  @override
+  String get fundUsedQuantity => 'Units used for this record';
+
+  @override
+  String get fundRequestedAt => 'Application time';
+
+  @override
+  String get fundPaidAt => 'Actual payment time';
+
+  @override
+  String get fundAlreadyPaid => 'Payment has actually occurred';
+
+  @override
+  String get fundExpectedConfirmationDate =>
+      'Expected confirmation date (reference only)';
+
+  @override
+  String get fundHasExpectedConfirmationDate =>
+      'Enter an expected confirmation date';
+
+  @override
+  String get fundConfirmedAt => 'Actual confirmation time';
+
+  @override
+  String get fundNavDate => 'Confirmed NAV date (Hong Kong date)';
+
+  @override
+  String get fundEarningStartDate => 'Return start date (Hong Kong date)';
+
+  @override
+  String get fundConfirmationCheck =>
+      'I checked broker units, NAV, amount differences and dates';
+
+  @override
+  String get fundSubmissionHint =>
+      'An application is not a completed trade. Actual payment reduces cash and becomes a pending subscription asset. Public NAV is an estimate and never confirms your personal application automatically.';
+
+  @override
+  String get fundConfirmationHint =>
+      'Enter the broker\'s confirmation. Confirmation, NAV and return start dates are stored separately. Before the return start date, the amount remains a pending activation asset without early returns.';
+
+  @override
+  String get fundOpeningHint =>
+      'Record the total holding owned at the reconciliation time without another cash payment or income entry. The baseline replaces this fund\'s units and cost at that time; later trades are replayed.';
+
+  @override
+  String get fundNetAmount => 'Net subscription amount';
+
+  @override
+  String get fundTargetMarketValue =>
+      'Cost plus reported unrealized profit/loss';
+
+  @override
+  String get fundQuantityValue => 'NAV value of the units used';
+
+  @override
+  String get fundAmountDifference => 'Target amount minus unit value';
+
+  @override
+  String get fundQuantityInferredHint =>
+      'Units inferred from an amount are a reference. Broker profit/loss may be rounded; check confirmed units. Differences never overwrite actual payment or cost.';
+
+  @override
+  String get fundMismatchHint =>
+      'Confirmed units differ from the entered amount. Check the difference first. Actual amounts remain unchanged and unrealized profit/loss is not recorded as income.';
+
+  @override
+  String get fundNoPreview =>
+      'Enter valid amounts and the matching NAV to preview units. An unconfirmed application can leave NAV blank.';
+
+  @override
+  String get fundPendingTitle => 'Fund applications and in-transit assets';
+
+  @override
+  String get fundStatusUnpaid => 'Awaiting payment';
+
+  @override
+  String get fundStatusPending => 'Paid; awaiting confirmation';
+
+  @override
+  String get fundStatusScheduled => 'Confirmed; awaiting return start';
+
+  @override
+  String get fundStatusEffective => 'Confirmed and effective';
+
+  @override
+  String get fundStatusRefundPending => 'Cancelled; awaiting refund';
+
+  @override
+  String get fundStatusRefunded => 'Refund received';
+
+  @override
+  String get fundStatusCancelled => 'Cancelled before payment';
+
+  @override
+  String get fundRecordPayment => 'Record payment or edit application';
+
+  @override
+  String get fundConfirmSubscription => 'Enter confirmation';
+
+  @override
+  String get fundEditConfirmation => 'Review confirmation';
+
+  @override
+  String get fundCancelSubscription => 'Cancel application or record refund';
+
+  @override
+  String get fundRefundReceived => 'Refund has actually arrived';
+
+  @override
+  String get fundCancelledAt => 'Actual cancellation time';
+
+  @override
+  String get fundRefundedAt => 'Actual refund time';
+
+  @override
+  String get fundRefundAmount => 'Actual refund amount';
+
+  @override
+  String get fundSaveCancellation => 'Save cancellation / refund';
+
+  @override
+  String get fundCancelHint =>
+      'A paid amount awaiting refund remains an asset; unreturned money is not a loss. A confirmed subscription cannot be cancelled here; record a sale when appropriate.';
+
+  @override
+  String get fundDeleteRequest => 'Delete unpaid application';
+
+  @override
+  String get fundDeleteRequestHint =>
+      'Only an unpaid, unconfirmed application can be deleted. Actual payments and confirmations cannot be erased by deleting an application.';
+
+  @override
+  String get fundHoldingCost => 'Existing holding total cost';
+
+  @override
+  String get fundReportedUnrealized =>
+      'Unrealized profit/loss at the same time (may be negative)';
+
+  @override
+  String get fundBaselineDate => 'Holding reconciliation time';
+
+  @override
+  String get fundReadCachedNav => 'Use cached NAV as a reference';
+
+  @override
+  String get fundPendingValue =>
+      'Unconfirmed / not-yet-effective subscriptions';
+
+  @override
+  String get fundSaveRequest => 'Save subscription application';
+
+  @override
+  String get fundScheduleHint =>
+      'An expected date never confirms a trade automatically. Enter actual payment, confirmation and refund times only after they occur. The return start date is separate; delayed display does not mean a later start date.';
+
+  @override
+  String get fundSaveValidation =>
+      'Check amounts, dates, NAV, units and confirmation. The record has not been saved.';
+
+  @override
+  String get fundPaidAmountLocked =>
+      'The actual total payment is read-only. Its fee allocation may be corrected from the broker confirmation without another cash deduction.';
+
+  @override
+  String get fundTotalCost => 'Total holding cost, including fees';
+
+  @override
+  String get fundCashNotDeducted =>
+      'An existing holding baseline does not deduct cash again.';
 
   @override
   String get fundReferenceHistoryTitle => 'Fund reference history';
@@ -7411,7 +7630,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fundReferenceHistoryHint =>
-      'Calculated from published NAV dates and actual holdings in the account currency. Intervals spanning weekends are not split into daily cash income. Transaction edits or deletions recalculate these figures without creating income entries.';
+      'Reference returns use published NAV dates, actual holdings and in-transit subscriptions in the account currency. Principal movements are excluded. Intervals spanning weekends are not split into daily cash income. Edits recalculate figures without creating income entries.';
 
   @override
   String get fundReferenceMissingPrices =>
@@ -7424,7 +7643,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fundReferenceUnknownProfitHint =>
-      'The first NAV period and periods with position transfers have unknown returns. Incomplete cost evidence also leaves cumulative profit/loss unknown. Reference returns do not mean cash has been received.';
+      'The first NAV period and intervals containing transfers or holding reconciliations have unknown returns. Incomplete costs also leave cumulative profit/loss unknown. Existing holdings continue cumulative profit/loss from the latest baseline. Reference returns do not mean cash was received.';
 
   @override
   String get fundReferenceSinglePoint =>

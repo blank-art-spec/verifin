@@ -7,6 +7,7 @@ import 'investment_decimal.dart';
 import 'investment_valuation.dart';
 import 'market_quote.dart';
 import 'stock_projection.dart';
+import 'fund_workflow_math.dart';
 
 /// 一个来源实际公布净值日的参考结果；所有金额沿用账户原币，不做汇率换算。
 class FundReferenceDay {
@@ -29,10 +30,16 @@ class FundReferenceDay {
     required this.accountLiabilities,
     required this.accountNetValue,
     required Set<String> missingSecurityIds,
-  }) : missingSecurityIds = Set.unmodifiable(missingSecurityIds);
+    InvestmentDecimal? pendingSubscriptionValue,
+  }) : pendingSubscriptionValue =
+           pendingSubscriptionValue ?? InvestmentDecimal.zero,
+       missingSecurityIds = Set.unmodifiable(missingSecurityIds);
 
   final DateTime date;
   final InvestmentDecimal nav, quantity, marketValue;
+
+  /// 已实际付款但尚未起算或待实际退款的本基金资产；不参与份额与净值乘积。
+  final InvestmentDecimal pendingSubscriptionValue;
   final InvestmentDecimal? dailyProfit, cumulativeProfit;
   final double cash;
   final double? accountAssets, accountLiabilities, accountNetValue;
@@ -75,18 +82,60 @@ List<FundReferenceDay> buildFundReferenceHistory({
   final digits = CurrencyCatalog.require(portfolio.currencyCode).minorUnit;
   final result = <FundReferenceDay>[];
   DateTime? previousCutoff;
-  InvestmentDecimal? previousMarketValue;
+  InvestmentDecimal? previousCapitalValue;
+  final baselines =
+      portfolio.events
+          .where(
+            (event) =>
+                event.securityId == security.id &&
+                event.kind == StockEventKind.fundHoldingBaseline,
+          )
+          .toList()
+        ..sort(compareStockEvents);
+  final firstBaseline = baselines.firstOrNull;
+  final hasFactsBeforeBaseline =
+      firstBaseline == null ||
+      portfolio.openingHoldings.any((h) => h.securityId == security.id) ||
+      portfolio.events.any(
+        (event) =>
+            event.securityId == security.id &&
+            event.occurredAt.isBefore(firstBaseline.occurredAt),
+      ) ||
+      portfolio.fundSubscriptions.any(
+        (subscription) =>
+            subscription.securityId == security.id &&
+            subscription.paidAt != null &&
+            subscription.paidAt!.isBefore(firstBaseline.occurredAt),
+      );
   for (final point in history.points) {
     final cutoff = _hongKongDayEnd(point.date);
     if (cutoff.isBefore(portfolio.openedAt)) continue;
+    // 第一次录入已有持仓不等于此前持仓为零；没有更早事实时，不给开户日至基准日补造历史。
+    if (!hasFactsBeforeBaseline && cutoff.isBefore(firstBaseline.occurredAt)) {
+      continue;
+    }
     final past = investmentAt(portfolio, cutoff);
-    final fund = _fundProjection(past, security);
+    final baseline = baselines
+        .where((event) => !event.occurredAt.isAfter(cutoff))
+        .lastOrNull;
+    final fund = _fundProjection(
+      past,
+      security,
+      at: cutoff,
+      baseline: baseline,
+    );
     final position = fund.positions
         .where((value) => value.securityId == security.id && !value.short)
         .firstOrNull;
     final quantity = position?.quantity ?? InvestmentDecimal.zero;
     final nav = InvestmentDecimal.parse(point.price);
     final marketValue = securityPositionValue(security, quantity, nav, digits);
+    final pending = fundSubscriptionPendingValue(
+      past,
+      at: cutoff,
+      securityId: security.id,
+    );
+    final capitalValue = marketValue + pending;
     final intervalEvents = past.events.where(
       (event) =>
           event.securityId == security.id &&
@@ -98,13 +147,26 @@ List<FundReferenceDay> buildFundReferenceHistory({
           event.kind == StockEventKind.transferIn ||
           event.kind == StockEventKind.transferOut,
     );
+    final hasBaseline = intervalEvents.any(
+      (event) => event.kind == StockEventKind.fundHoldingBaseline,
+    );
     InvestmentDecimal? dailyProfit;
-    if (previousMarketValue != null && !hasTransfer) {
-      final movement = intervalEvents.fold<InvestmentDecimal>(
+    if (previousCapitalValue != null && !hasTransfer && !hasBaseline) {
+      var movement = intervalEvents.fold<InvestmentDecimal>(
         InvestmentDecimal.zero,
         (sum, event) => sum + fund.cashMovements[event.id]!,
       );
-      dailyProfit = marketValue - previousMarketValue + movement;
+      for (final leg in fundSubscriptionCashLegs(
+        past,
+        at: cutoff,
+        securityId: security.id,
+      )) {
+        if (leg.occurredAt.isAfter(previousCutoff!)) {
+          movement = movement + leg.amount;
+        }
+      }
+      // 付款只是现金转在途，起算只是从在途转为份额，实际退款只是资产形式变换。
+      dailyProfit = capitalValue - previousCapitalValue + movement;
     }
     final cost = position?.cost;
     final cumulativeProfit =
@@ -112,7 +174,13 @@ List<FundReferenceDay> buildFundReferenceHistory({
         ? fund.realized +
               fund.income +
               marketValue -
-              (cost ?? InvestmentDecimal.zero)
+              (cost ?? InvestmentDecimal.zero) +
+              _subscriptionProfitAdjustment(
+                past,
+                security,
+                cutoff,
+                baseline?.occurredAt,
+              )
         : null;
     final cash = accountCashAt(
       account: account,
@@ -121,7 +189,7 @@ List<FundReferenceDay> buildFundReferenceHistory({
       at: cutoff,
       portfolio: portfolio,
     );
-    final held = projectStocks(past).positions;
+    final held = projectStocks(past, at: cutoff).positions;
     final otherIds = held
         .where((value) => value.securityId != security.id)
         .map((value) => value.securityId)
@@ -141,6 +209,7 @@ List<FundReferenceDay> buildFundReferenceHistory({
               manualPrices: {security.id: point.price, ...historicalPrices},
             ),
             cash,
+            at: cutoff,
           ).amounts
         : null;
     result.add(
@@ -149,6 +218,7 @@ List<FundReferenceDay> buildFundReferenceHistory({
         nav: nav,
         quantity: quantity,
         marketValue: marketValue,
+        pendingSubscriptionValue: pending,
         dailyProfit: dailyProfit,
         cumulativeProfit: cumulativeProfit,
         cash: cash,
@@ -159,7 +229,7 @@ List<FundReferenceDay> buildFundReferenceHistory({
       ),
     );
     previousCutoff = cutoff;
-    previousMarketValue = marketValue;
+    previousCapitalValue = capitalValue;
   }
   return List.unmodifiable(result);
 }
@@ -180,21 +250,65 @@ DateTime _hongKongDate(DateTime instant) {
 /// [past] 已按日日末截断；清空无关价格、选择和快照，原聚合及其集合不会被修改。
 StockProjection _fundProjection(
   InvestmentPortfolio past,
-  StockSecurity security,
-) => projectStocks(
+  StockSecurity security, {
+  required DateTime at,
+  StockEvent? baseline,
+}) => projectStocks(
   past.copyWith(
     securities: [security],
     openingHoldings: past.openingHoldings
-        .where((value) => value.securityId == security.id)
+        .where((value) => value.securityId == security.id && baseline == null)
         .toList(),
     events: past.events
-        .where((value) => value.securityId == security.id)
+        .where(
+          (value) =>
+              value.securityId == security.id &&
+              (baseline == null || compareStockEvents(value, baseline) >= 0),
+        )
+        .toList(),
+    fundSubscriptions: past.fundSubscriptions
+        .where((s) => s.securityId == security.id)
         .toList(),
     manualPrices: const {},
     marketPriceIds: const {},
     valuationSnapshots: const [],
   ),
+  at: at,
 );
+
+/// 把尚未进入确认份额成本的费用及已完成退款的实际差额纳入参考累计盈亏。
+/// [baselineAt] 之前已经结清的费用不跨新持仓基准重复累加；未结清申购只确认已明确的费用，
+/// 不能把尚在等待退款的本金当成损失。起算后总成本已包含费用，因此本函数不再重复扣费。
+InvestmentDecimal _subscriptionProfitAdjustment(
+  InvestmentPortfolio portfolio,
+  StockSecurity security,
+  DateTime at,
+  DateTime? baselineAt,
+) {
+  var result = InvestmentDecimal.zero;
+  for (final subscription in portfolio.fundSubscriptions.where(
+    (s) => s.securityId == security.id,
+  )) {
+    if (subscription.paidAt == null || subscription.paidAt!.isAfter(at)) {
+      continue;
+    }
+    final effectiveAt = fundSubscriptionEffectiveAt(subscription);
+    if (effectiveAt != null && !effectiveAt.isAfter(at)) continue;
+    if (subscription.refundedAt != null &&
+        !subscription.refundedAt!.isAfter(at)) {
+      if (baselineAt == null ||
+          !subscription.refundedAt!.isBefore(baselineAt)) {
+        result =
+            result +
+            InvestmentDecimal.parse(subscription.refundAmount!) -
+            InvestmentDecimal.parse(subscription.cashAmount);
+      }
+    } else {
+      result = result - InvestmentDecimal.parse(subscription.fee);
+    }
+  }
+  return result;
+}
 
 /// 为 [securityIds] 读取香港净值日 [date] 的用户历史价格，绝不读取当前后备价。
 /// [cutoff] 是该日日末，[entries]/[anchors] 用于核对保存时和日日末的事实修订；

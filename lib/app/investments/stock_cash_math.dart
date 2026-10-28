@@ -5,15 +5,19 @@ import '../ledger_math.dart';
 import '../models.dart';
 import 'investment_decimal.dart';
 import 'stock_projection.dart';
+import 'fund_workflow_math.dart';
 
 /// 计算已启用证券账户现金；现金锚点只截断资金腿，不截断持仓重放。
 /// [anchor] 是最新用户核对余额；[entries] 可含全部账本，内部严格按账户和账本过滤。
+/// [at] 控制独立基金资金腿的实际生效时刻；历史调用显式传入，当前调用默认当前时刻。
 double investmentCashBalance({
   required InvestmentPortfolio portfolio,
   required Iterable<LedgerEntry> entries,
   BalanceAnchor? anchor,
   bool rejectUnfundedHistory = false,
+  DateTime? at,
 }) {
+  final fundCutoff = at ?? DateTime.now();
   final useAnchor =
       anchor != null &&
       anchor.effectiveAt.millisecondsSinceEpoch >=
@@ -46,7 +50,7 @@ double investmentCashBalance({
       timeline.add((date, '0:${entry.id}', movement));
     }
   }
-  final projection = projectStocks(portfolio);
+  final projection = projectStocks(portfolio, at: fundCutoff);
   for (final event in portfolio.events) {
     if (!useAnchor ||
         event.occurredAt.millisecondsSinceEpoch >
@@ -60,6 +64,15 @@ double investmentCashBalance({
         '1:${event.sequence.toString().padLeft(20, '0')}',
         projection.cashMovements[event.id]!,
       ));
+    }
+  }
+  for (final leg in fundSubscriptionCashLegs(portfolio, at: fundCutoff)) {
+    if (!useAnchor ||
+        leg.occurredAt.isAfter(boundary) ||
+        (leg.occurredAt.isAtSameMomentAs(boundary) &&
+            included != null &&
+            !included.contains(leg.id))) {
+      timeline.add((leg.occurredAt, '2:${leg.id}', leg.amount));
     }
   }
   timeline.sort((a, b) {

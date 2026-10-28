@@ -12911,8 +12911,404 @@ abstract class AppLocalizations {
   /// No description provided for @investAllocationLiabilityHint.
   ///
   /// In zh, this message translates to:
-  /// **'占比以正现金和多头持仓价值之和计算；空头义务和融资计入负债。'**
+  /// **'占比以正现金、多头持仓和申购在途资产之和计算；空头义务和融资计入负债。'**
   String get investAllocationLiabilityHint;
+
+  /// No description provided for @fundOperations.
+  ///
+  /// In zh, this message translates to:
+  /// **'基金操作'**
+  String get fundOperations;
+
+  /// No description provided for @fundBuyByAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'按金额买入'**
+  String get fundBuyByAmount;
+
+  /// No description provided for @fundRecordHolding.
+  ///
+  /// In zh, this message translates to:
+  /// **'录入已有持仓'**
+  String get fundRecordHolding;
+
+  /// No description provided for @fundAcquireEvent.
+  ///
+  /// In zh, this message translates to:
+  /// **'申购确认'**
+  String get fundAcquireEvent;
+
+  /// No description provided for @fundHoldingBaselineEvent.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓基准'**
+  String get fundHoldingBaselineEvent;
+
+  /// No description provided for @fundChoose.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择基金'**
+  String get fundChoose;
+
+  /// No description provided for @fundCmsUsdName.
+  ///
+  /// In zh, this message translates to:
+  /// **'招商美元货币市场基金 B 类'**
+  String get fundCmsUsdName;
+
+  /// No description provided for @fundNoEligible.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账户没有可选香港基金。已核对的新增基金为美元账户下的招商美元货币市场基金 B 类。'**
+  String get fundNoEligible;
+
+  /// No description provided for @fundCashAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'总扣款金额（含费用）'**
+  String get fundCashAmount;
+
+  /// No description provided for @fundRequestFee.
+  ///
+  /// In zh, this message translates to:
+  /// **'总扣款中包含的费用'**
+  String get fundRequestFee;
+
+  /// No description provided for @fundEstimatedNav.
+  ///
+  /// In zh, this message translates to:
+  /// **'估算净值（可留空，不用于确认成交）'**
+  String get fundEstimatedNav;
+
+  /// No description provided for @fundConfirmedNav.
+  ///
+  /// In zh, this message translates to:
+  /// **'券商确认净值'**
+  String get fundConfirmedNav;
+
+  /// No description provided for @fundHoldingNav.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓基准净值'**
+  String get fundHoldingNav;
+
+  /// No description provided for @fundConfirmedQuantityOptional.
+  ///
+  /// In zh, this message translates to:
+  /// **'券商确认份额（可填写以核对参考份额）'**
+  String get fundConfirmedQuantityOptional;
+
+  /// No description provided for @fundEstimatedQuantity.
+  ///
+  /// In zh, this message translates to:
+  /// **'自动计算的参考份额'**
+  String get fundEstimatedQuantity;
+
+  /// No description provided for @fundUsedQuantity.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次采用份额'**
+  String get fundUsedQuantity;
+
+  /// No description provided for @fundRequestedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'申请时间'**
+  String get fundRequestedAt;
+
+  /// No description provided for @fundPaidAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际扣款时间'**
+  String get fundPaidAt;
+
+  /// No description provided for @fundAlreadyPaid.
+  ///
+  /// In zh, this message translates to:
+  /// **'已经实际扣款'**
+  String get fundAlreadyPaid;
+
+  /// No description provided for @fundExpectedConfirmationDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'预计确认日（仅作提醒）'**
+  String get fundExpectedConfirmationDate;
+
+  /// No description provided for @fundHasExpectedConfirmationDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写预计确认日'**
+  String get fundHasExpectedConfirmationDate;
+
+  /// No description provided for @fundConfirmedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际确认时间'**
+  String get fundConfirmedAt;
+
+  /// No description provided for @fundNavDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认净值对应日（香港日期）'**
+  String get fundNavDate;
+
+  /// No description provided for @fundEarningStartDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'收益起算日（香港日期）'**
+  String get fundEarningStartDate;
+
+  /// No description provided for @fundConfirmationCheck.
+  ///
+  /// In zh, this message translates to:
+  /// **'已核对券商份额、净值、金额差额及各日期'**
+  String get fundConfirmationCheck;
+
+  /// No description provided for @fundSubmissionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'申请不等于成交。按实际扣款时间扣现金，并列为待确认申购款；网上净值仅供估算，不会自动确认个人申购。'**
+  String get fundSubmissionHint;
+
+  /// No description provided for @fundConfirmationHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写券商确认结果。确认日、净值日和收益起算日分别保存；收益起算前仍列为待生效资产，不提前生成收益。'**
+  String get fundConfirmationHint;
+
+  /// No description provided for @fundOpeningHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'录入的是核对时刻已有的总持仓，不再扣现金，也不生成收入。基准替换该基金此时的份额和成本，之后的交易继续重算。'**
+  String get fundOpeningHint;
+
+  /// No description provided for @fundNetAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'净申购金额'**
+  String get fundNetAmount;
+
+  /// No description provided for @fundTargetMarketValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'成本加录入浮盈的市值'**
+  String get fundTargetMarketValue;
+
+  /// No description provided for @fundQuantityValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'采用份额按净值估值'**
+  String get fundQuantityValue;
+
+  /// No description provided for @fundAmountDifference.
+  ///
+  /// In zh, this message translates to:
+  /// **'目标金额减份额估值的差额'**
+  String get fundAmountDifference;
+
+  /// No description provided for @fundQuantityInferredHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'由金额反推的份额是参考值。券商浮盈可能已舍入，请核对确认份额；不会用差额改写实际扣款或成本。'**
+  String get fundQuantityInferredHint;
+
+  /// No description provided for @fundMismatchHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认份额与输入金额存在差额，请先核对。保存后仍保留实际金额，浮盈不会被记为收入。'**
+  String get fundMismatchHint;
+
+  /// No description provided for @fundNoPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写有效金额和对应净值后显示参考份额。尚未确认的申请可以不填净值。'**
+  String get fundNoPreview;
+
+  /// No description provided for @fundPendingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'基金申购与在途资金'**
+  String get fundPendingTitle;
+
+  /// No description provided for @fundStatusUnpaid.
+  ///
+  /// In zh, this message translates to:
+  /// **'待扣款'**
+  String get fundStatusUnpaid;
+
+  /// No description provided for @fundStatusPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'已扣款，待确认'**
+  String get fundStatusPending;
+
+  /// No description provided for @fundStatusScheduled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已确认，待收益起算'**
+  String get fundStatusScheduled;
+
+  /// No description provided for @fundStatusEffective.
+  ///
+  /// In zh, this message translates to:
+  /// **'已确认并生效'**
+  String get fundStatusEffective;
+
+  /// No description provided for @fundStatusRefundPending.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消，待退款'**
+  String get fundStatusRefundPending;
+
+  /// No description provided for @fundStatusRefunded.
+  ///
+  /// In zh, this message translates to:
+  /// **'已退款'**
+  String get fundStatusRefunded;
+
+  /// No description provided for @fundStatusCancelled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已取消，未扣款'**
+  String get fundStatusCancelled;
+
+  /// No description provided for @fundRecordPayment.
+  ///
+  /// In zh, this message translates to:
+  /// **'补录扣款或修改申请'**
+  String get fundRecordPayment;
+
+  /// No description provided for @fundConfirmSubscription.
+  ///
+  /// In zh, this message translates to:
+  /// **'录入确认结果'**
+  String get fundConfirmSubscription;
+
+  /// No description provided for @fundEditConfirmation.
+  ///
+  /// In zh, this message translates to:
+  /// **'核对确认结果'**
+  String get fundEditConfirmation;
+
+  /// No description provided for @fundCancelSubscription.
+  ///
+  /// In zh, this message translates to:
+  /// **'取消申购或录入退款'**
+  String get fundCancelSubscription;
+
+  /// No description provided for @fundRefundReceived.
+  ///
+  /// In zh, this message translates to:
+  /// **'退款已经实际到账'**
+  String get fundRefundReceived;
+
+  /// No description provided for @fundCancelledAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际取消时间'**
+  String get fundCancelledAt;
+
+  /// No description provided for @fundRefundedAt.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际退款到账时间'**
+  String get fundRefundedAt;
+
+  /// No description provided for @fundRefundAmount.
+  ///
+  /// In zh, this message translates to:
+  /// **'实际退款金额'**
+  String get fundRefundAmount;
+
+  /// No description provided for @fundSaveCancellation.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存取消／退款结果'**
+  String get fundSaveCancellation;
+
+  /// No description provided for @fundCancelHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'已扣款但退款未到账时仍保留待退款资产，不能把未退金额当损失。已确认申购不能在这里取消，请按实际情况记录卖出。'**
+  String get fundCancelHint;
+
+  /// No description provided for @fundDeleteRequest.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除未扣款申请'**
+  String get fundDeleteRequest;
+
+  /// No description provided for @fundDeleteRequestHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅删除尚未扣款、尚未确认的申请。已经发生的扣款和确认不能通过删除申请抹除。'**
+  String get fundDeleteRequestHint;
+
+  /// No description provided for @fundHoldingCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'已有持仓总成本'**
+  String get fundHoldingCost;
+
+  /// No description provided for @fundReportedUnrealized.
+  ///
+  /// In zh, this message translates to:
+  /// **'同一时点未实现盈亏（可为负）'**
+  String get fundReportedUnrealized;
+
+  /// No description provided for @fundBaselineDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓核对时刻'**
+  String get fundBaselineDate;
+
+  /// No description provided for @fundReadCachedNav.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用已缓存的净值作参考'**
+  String get fundReadCachedNav;
+
+  /// No description provided for @fundPendingValue.
+  ///
+  /// In zh, this message translates to:
+  /// **'待确认／待生效申购款'**
+  String get fundPendingValue;
+
+  /// No description provided for @fundSaveRequest.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存申购申请'**
+  String get fundSaveRequest;
+
+  /// No description provided for @fundScheduleHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'预计确认日不会自动确认成交。实际扣款、确认和退款按已经发生的时间填写；收益起算日可单独指定，不能把收益晚显示误当成晚起算。'**
+  String get fundScheduleHint;
+
+  /// No description provided for @fundSaveValidation.
+  ///
+  /// In zh, this message translates to:
+  /// **'请核对金额、日期、净值、份额及确认状态；保存尚未完成。'**
+  String get fundSaveValidation;
+
+  /// No description provided for @fundPaidAmountLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'已发生的总扣款金额保持只读。费用是其中的分配，可按券商确认结果补正，不会再次扣款。'**
+  String get fundPaidAmountLocked;
+
+  /// No description provided for @fundTotalCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓总成本（含费用）'**
+  String get fundTotalCost;
+
+  /// No description provided for @fundCashNotDeducted.
+  ///
+  /// In zh, this message translates to:
+  /// **'已有持仓基准不会再次扣除账户现金。'**
+  String get fundCashNotDeducted;
 
   /// No description provided for @fundReferenceHistoryTitle.
   ///
@@ -12983,7 +13379,7 @@ abstract class AppLocalizations {
   /// No description provided for @fundReferenceHistoryHint.
   ///
   /// In zh, this message translates to:
-  /// **'按官网实际净值日和真实持仓计算，金额为账户原币。跨周末等区间不拆成每日到账收益；修改或删除交易后重算，不生成收入流水。'**
+  /// **'按官网净值日、实际持仓和申购在途款计算原币参考收益；本金进出不算收益。跨周末等区间不拆成每日到账收益，修改账务后重算，不生成收入流水。'**
   String get fundReferenceHistoryHint;
 
   /// No description provided for @fundReferenceMissingPrices.
@@ -13001,7 +13397,7 @@ abstract class AppLocalizations {
   /// No description provided for @fundReferenceUnknownProfitHint.
   ///
   /// In zh, this message translates to:
-  /// **'首个净值日或持仓转移区间的参考收益为未知；成本依据不完整时，累计参考盈亏也显示未知。参考收益不表示已经到账。'**
+  /// **'首个净值日、持仓转移或跨持仓核对基准的区间收益未知；成本不完整时累计盈亏也未知。已有持仓累计盈亏从最新基准继续计算，参考收益不表示已到账。'**
   String get fundReferenceUnknownProfitHint;
 
   /// No description provided for @fundReferenceSinglePoint.

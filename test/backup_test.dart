@@ -312,7 +312,7 @@ void main() {
 
       final backup = source.exportDataJson();
       final root = jsonDecode(backup) as Map<String, dynamic>;
-      expect(root['version'], 13);
+      expect(root['version'], 14);
       final data = root['data'] as Map<String, dynamic>;
       expect(data['exchangeRates'], hasLength(1));
       expect(data['currencyFractionStyle'], isNotNull);

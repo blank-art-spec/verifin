@@ -11,6 +11,7 @@ import 'package:verifin/data/ledger_repository.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
 import 'support/sample_investment_expectations.dart';
+import 'support/investment_fixture.dart';
 
 void main() {
   setUpAll(sqfliteFfiInit);
@@ -43,6 +44,105 @@ void main() {
     note: '',
     occurredAt: DateTime(2026, 5, int.parse(id)),
   );
+
+  test('v14 已扣款待确认申购在 SQLite 冷读、预览和完整恢复后保留且不生成持仓或收入', () async {
+    final repo = await openRepo();
+    final store = LocalKeyValueStore();
+    var controller = await VeriFinController.create(store, repository: repo);
+    var controllerAlive = true;
+    try {
+      final account = investmentAccountFixture(
+        id: 'backup-pending-fund',
+        bookId: controller.activeBook.id,
+      );
+      const fund = StockSecurity(
+        symbol: 'HK0001039582',
+        name: '备份待确认基金示例',
+        market: StockMarket.hk,
+        currencyCode: 'USD',
+        type: InvestmentSecurityType.fund,
+      );
+      controller.addAccount(account);
+      await controller.waitForPendingWrites();
+      expect(
+        await controller.enableInvestment(
+          accountId: account.id,
+          openingCash: '5000',
+          openedAt: DateTime.utc(2026, 10, 1),
+          securities: [fund],
+          manualPrices: {fund.id: '109.8290'},
+        ),
+        isTrue,
+      );
+      final pending = FundSubscription(
+        id: 'backup-paid-fund-subscription',
+        securityId: fund.id,
+        requestedAt: DateTime.utc(2026, 10, 25, 2),
+        cashAmount: '1401.31',
+        paidAt: DateTime.utc(2026, 10, 25, 2, 5),
+        expectedConfirmationDate: DateTime.utc(2026, 10, 26),
+        note: '固定备份夹具：预计日不表示券商已经确认份额',
+      );
+      // 仓储注入完整合法聚合，只用于独立验证持久化契约，不依赖申购页面或其命令签名。
+      final source = controller
+          .investmentFor(account.id)!
+          .copyWith(fundSubscriptions: [pending]);
+      await repo.saveInvestmentPortfolios([source]);
+      controller.dispose();
+      controllerAlive = false;
+      controller = await VeriFinController.create(store, repository: repo);
+      controllerAlive = true;
+      var loaded = controller.investmentFor(account.id)!;
+      expect(loaded.toJson(), source.toJson());
+      expect(loaded.fundSubscriptions.single.toJson(), pending.toJson());
+      expect(loaded.fundSubscriptions.single.confirmation, isNull);
+      expect(loaded.events, isEmpty);
+      expect(controller.investmentProjection(account.id)!.positions, isEmpty);
+      expect(controller.entries, isEmpty);
+
+      final raw = controller.exportDataJson();
+      expect((jsonDecode(raw) as Map)['version'], 14);
+      final beforePreview = loaded.toJson();
+      controller.importDataJson(raw, dryRun: true);
+      await controller.waitForPendingWrites();
+      expect(controller.investmentFor(account.id)!.toJson(), beforePreview);
+      expect(
+        (await repo.loadInvestmentPortfolios()).single.toJson(),
+        beforePreview,
+      );
+
+      controller.resetAllData();
+      await controller.waitForPendingWrites();
+      expect(await repo.loadInvestmentPortfolios(), isEmpty);
+      controller.importDataJson(raw);
+      await controller.waitForPendingWrites();
+      loaded = controller.investmentFor(account.id)!;
+      expect(loaded.toJson(), source.toJson());
+      expect(loaded.fundSubscriptions.single.cashAmount, '1401.31');
+      expect(
+        loaded.fundSubscriptions.single.paidAt,
+        DateTime.utc(2026, 10, 25, 2, 5),
+      );
+      expect(
+        loaded.fundSubscriptions.single.expectedConfirmationDate,
+        DateTime.utc(2026, 10, 26),
+      );
+      expect(loaded.fundSubscriptions.single.confirmation, isNull);
+      expect(loaded.events, isEmpty);
+      expect(controller.entries, isEmpty);
+
+      controller.dispose();
+      controllerAlive = false;
+      controller = await VeriFinController.create(store, repository: repo);
+      controllerAlive = true;
+      expect(controller.investmentFor(account.id)!.toJson(), source.toJson());
+      expect(controller.investmentProjection(account.id)!.positions, isEmpty);
+      expect(controller.entries, isEmpty);
+    } finally {
+      // 创建新控制器失败时不再释放已经结束的旧实例，避免掩盖真正的初始化失败。
+      if (controllerAlive) controller.dispose();
+    }
+  });
 
   test('SQLite 跨账本复核事务失败不移动事件，重试与重启保持目标账本', () async {
     final repo = await openRepo();

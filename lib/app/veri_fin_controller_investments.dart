@@ -91,6 +91,7 @@ mixin _InvestmentOps on _ControllerOps {
         at: snapshot.capturedAt,
         portfolio: past,
       ),
+      at: snapshot.capturedAt,
     );
   }
 
@@ -205,7 +206,10 @@ mixin _InvestmentOps on _ControllerOps {
     final current = investmentFor(accountId);
     if (current == null ||
         security.option != null ||
-        event.kind.index >= StockEventKind.optionBuyOpen.index ||
+        event.kind.isOptionEvent ||
+        event.kind == StockEventKind.fundAcquire ||
+        event.kind == StockEventKind.fundHoldingBaseline ||
+        event.fundSubscriptionId != null ||
         event.securityId != security.id ||
         security.currencyCode != current.currencyCode) {
       return false;
@@ -213,6 +217,8 @@ mixin _InvestmentOps on _ControllerOps {
     final old = current.events.where((e) => e.id == event.id).firstOrNull;
     // 同一幂等 ID 只能编辑原证券，不能借股票入口替换已存在的期权事实。
     if (old?.batchId != null ||
+        old?.kind == StockEventKind.fundAcquire ||
+        old?.kind == StockEventKind.fundHoldingBaseline ||
         event.batchId != null ||
         (old != null && old.securityId != event.securityId)) {
       return false;
@@ -244,7 +250,10 @@ mixin _InvestmentOps on _ControllerOps {
       _runInvestmentCommand(() async {
         final current = investmentFor(accountId);
         final event = current?.events.where((e) => e.id == eventId).firstOrNull;
-        if (current == null || event == null || event.batchId != null) {
+        if (current == null ||
+            event == null ||
+            event.batchId != null ||
+            event.kind == StockEventKind.fundAcquire) {
           return false;
         }
         final next = current.copyWith(
@@ -449,7 +458,7 @@ mixin _InvestmentOps on _ControllerOps {
         !underlying.isStock ||
         security.option!.underlyingId != underlying.id ||
         event.securityId != security.id ||
-        event.kind.index < StockEventKind.optionBuyOpen.index ||
+        !event.kind.isOptionEvent ||
         event.batchId != null ||
         p.events.any(
           (e) => e.id == event.id && e.securityId != event.securityId,
@@ -652,7 +661,9 @@ void validateInvestmentPortfolios(
       throw const FormatException('投资账户关联不合法');
     }
     InvestmentDecimal.parse(p.openingCash).toDouble();
-    final projection = projectStocks(p);
+    validateFundSubscriptions(p);
+    // 保存/恢复同时验证未来已核准的基金起算事件；当前页面仍按真实当前时点隐藏未生效份额。
+    final projection = projectStocks(p, at: DateTime.utc(9999, 12, 31));
     final times = <int>{};
     for (final snapshot in p.valuationSnapshots) {
       CurrencyCatalog.require(snapshot.baseCurrencyCode);

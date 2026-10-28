@@ -11,6 +11,7 @@ import '../logging/app_logger.dart';
 import '../models/investment.dart';
 import 'market_quote.dart';
 import 'stock_projection.dart';
+import 'fund_workflow_math.dart';
 
 enum QuoteSyncStatus {
   idle,
@@ -471,7 +472,10 @@ class InvestmentQuoteSync {
     final result = <String, MarketQuote>{},
         owner = _owner(p),
         digest = _digest(p);
-    final held = projectStocks(p).positions.map((p) => p.securityId).toSet();
+    final held = projectStocks(
+      p,
+      at: clock(),
+    ).positions.map((p) => p.securityId).toSet();
     for (final s in p.securities.where(
       (s) => held.contains(s.id) || (includeFundHistory && s.isFund),
     )) {
@@ -521,15 +525,27 @@ class InvestmentQuoteSync {
 
   /// 判断已采用的清仓基金是否还缺覆盖最后业务日的公开历史。
   /// [portfolio]/[security] 仅用于本地需求判定；覆盖后不继续为空持仓自动联网。
-  /// 关闭采用、完全没有份额事实或只存在未来交易时不额外查询。
+  /// 尚未起算的有效申请也可获取首次净值，避免必须先有报价才能选择采用的循环依赖。
+  /// 清仓后的补查才要求已采用；完全没有份额或申请事实时不额外查询。
   bool _needsFundHistory(
     InvestmentPortfolio portfolio,
     StockSecurity security,
   ) {
-    if (!security.isFund || !portfolio.marketPriceIds.contains(security.id)) {
-      return false;
-    }
+    if (!security.isFund) return false;
     final now = clock();
+    final subscriptions = portfolio.fundSubscriptions.where(
+      (s) => s.securityId == security.id && !s.requestedAt.isAfter(now),
+    );
+    if (subscriptions.any(
+      (s) =>
+          s.cancelledAt == null &&
+          (s.confirmation == null ||
+              fundSubscriptionEffectiveAt(s)!.isAfter(now)),
+    )) {
+      // 待确认和已确认待起算仍可查看公开净值，但不会据此自动确认个人申购或增加份额。
+      return true;
+    }
+    if (!portfolio.marketPriceIds.contains(security.id)) return false;
     final relevantTimes = [
       if (!portfolio.openedAt.isAfter(now) &&
           portfolio.openingHoldings.any((h) => h.securityId == security.id))
@@ -537,6 +553,12 @@ class InvestmentQuoteSync {
       for (final event in portfolio.events)
         if (event.securityId == security.id && !event.occurredAt.isAfter(now))
           event.occurredAt,
+      for (final leg in fundSubscriptionCashLegs(
+        portfolio,
+        at: now,
+        securityId: security.id,
+      ))
+        leg.occurredAt,
     ];
     if (relevantTimes.isEmpty) return false;
     final latest = relevantTimes.reduce((a, b) => a.isAfter(b) ? a : b);
@@ -554,6 +576,7 @@ class InvestmentQuoteSync {
     final groups = <MarketQuoteAdapter, List<MarketQuoteRequest>>{};
     final held = projectStocks(
       portfolio,
+      at: clock(),
     ).positions.map((position) => position.securityId).toSet();
     for (final security in portfolio.securities.where(
       (security) =>

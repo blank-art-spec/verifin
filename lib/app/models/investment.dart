@@ -4,6 +4,7 @@ library;
 import '../../l10n/app_localizations.dart';
 import 'option_contract.dart';
 import 'investment_valuation_snapshot.dart';
+import 'fund_subscription.dart';
 
 enum StockMarket {
   us,
@@ -45,7 +46,22 @@ enum StockEventKind {
   optionExpire,
   optionCashSettle,
   optionPhysicalSettle,
-  optionMargin;
+  optionMargin,
+  fundAcquire,
+  fundHoldingBaseline;
+
+  /// 是否为原有期权动作；明确列举范围，避免枚举末尾新增基金动作被误判为期权。
+  bool get isOptionEvent => switch (this) {
+    optionBuyOpen ||
+    optionSellClose ||
+    optionSellOpen ||
+    optionBuyClose ||
+    optionExpire ||
+    optionCashSettle ||
+    optionPhysicalSettle ||
+    optionMargin => true,
+    _ => false,
+  };
 
   /// 返回事件动作名称；[l] 为当前文案，[fund] 将基金现金分配显示为分红。
   /// 投资事件不映射为日常收入/支出，也不据来源净值自动生成分红事实。
@@ -67,6 +83,8 @@ enum StockEventKind {
     optionCashSettle => l.optionCashSettlement,
     optionPhysicalSettle => l.optionPhysical,
     optionMargin => l.optionMargin,
+    fundAcquire => l.fundAcquireEvent,
+    fundHoldingBaseline => l.fundHoldingBaselineEvent,
   };
 }
 
@@ -179,6 +197,10 @@ class StockEvent {
     this.marginAfter,
     this.settlementConfirmed = false,
     this.allowUncoveredAssignment = false,
+    this.fundSubscriptionId,
+    this.reportedUnrealized,
+    this.fundNavDate,
+    this.quantityInferred = false,
   });
   final String id, securityId, quantity, price, fee, note;
   final StockEventKind kind;
@@ -192,6 +214,18 @@ class StockEvent {
 
   /// 到期/现金/实物结算必须显式确认；裸认购指派另需确认股票空头义务。
   final bool settlementConfirmed, allowUncoveredAssignment;
+
+  /// 申购确认关联的稳定申请 ID，仅 fundAcquire 使用；付款由对应申请提供，事件自身不再扣现金。
+  final String? fundSubscriptionId;
+
+  /// 已有持仓核对时的券商浮盈文本，仅作基准证据，不是独立收入或后续固定盈亏。
+  final String? reportedUnrealized;
+
+  /// 确认/基准净值所属香港纯日期；与 occurredAt 的经济生效时刻独立，不表示午夜报价。
+  final DateTime? fundNavDate;
+
+  /// 份额是否由金额与净值反推；明确保留推算标记，不能冒充券商确认份额。
+  final bool quantityInferred;
 
   /// 导出成交的完整事实；不保存可与事件不一致的第二份现金余额。
   Map<String, Object?> toJson() => {
@@ -210,6 +244,12 @@ class StockEvent {
     'marginAfter': marginAfter,
     'settlementConfirmed': settlementConfirmed,
     'allowUncoveredAssignment': allowUncoveredAssignment,
+    // 默认字段不输出，保留旧股票/期权事件的 JSON 形状及既有快照修订摘要。
+    if (fundSubscriptionId != null) 'fundSubscriptionId': fundSubscriptionId,
+    if (reportedUnrealized != null) 'reportedUnrealized': reportedUnrealized,
+    if (fundNavDate != null)
+      'fundNavDate': fundCalendarDateToJson(fundNavDate!),
+    if (quantityInferred) 'quantityInferred': true,
   };
 
   /// 严格读取事件，未知动作直接拒绝，不默认为买入。
@@ -230,6 +270,12 @@ class StockEvent {
     settlementConfirmed: json['settlementConfirmed'] as bool? ?? false,
     allowUncoveredAssignment:
         json['allowUncoveredAssignment'] as bool? ?? false,
+    fundSubscriptionId: json['fundSubscriptionId'] as String?,
+    reportedUnrealized: json['reportedUnrealized'] as String?,
+    fundNavDate: json['fundNavDate'] == null
+        ? null
+        : fundCalendarDateFromJson(json['fundNavDate']),
+    quantityInferred: json['quantityInferred'] as bool? ?? false,
   );
 }
 
@@ -251,6 +297,7 @@ class InvestmentPortfolio {
     Map<String, List<String>> anchorIncludedIds = const {},
     Set<String> marketPriceIds = const {},
     List<InvestmentValuationSnapshot> valuationSnapshots = const [],
+    List<FundSubscription> fundSubscriptions = const [],
     this.allowFinancing = false,
   }) : includedEntryIds = List.unmodifiable(includedEntryIds),
        securities = List.unmodifiable(securities),
@@ -259,6 +306,7 @@ class InvestmentPortfolio {
        manualPrices = Map.unmodifiable(manualPrices),
        marketPriceIds = Set.unmodifiable(marketPriceIds),
        valuationSnapshots = List.unmodifiable(valuationSnapshots),
+       fundSubscriptions = List.unmodifiable(fundSubscriptions),
        anchorIncludedIds = Map.unmodifiable({
          for (final entry in anchorIncludedIds.entries)
            entry.key: List<String>.unmodifiable(entry.value),
@@ -277,7 +325,10 @@ class InvestmentPortfolio {
   /// 历史估值依据；不把临时缓存或当前参考价自动回填历史。
   final List<InvestmentValuationSnapshot> valuationSnapshots;
 
-  /// 现金锚点 id → 核对时已包含的同刻交易/投资事件，键带 entry:/stock: 前缀。
+  /// 基金申购的申请、实际付款及确认/退款事实；属于 SQLite 聚合和完整账目备份。
+  final List<FundSubscription> fundSubscriptions;
+
+  /// 现金锚点 id → 核对时已包含的同刻资金事实，键带 entry:/stock: 或基金付款退款的 fund: 前缀。
   final Map<String, List<String>> anchorIncludedIds;
   final bool allowFinancing;
 
@@ -290,6 +341,7 @@ class InvestmentPortfolio {
     List<StockHolding>? openingHoldings,
     Set<String>? marketPriceIds,
     List<InvestmentValuationSnapshot>? valuationSnapshots,
+    List<FundSubscription>? fundSubscriptions,
   }) => InvestmentPortfolio(
     accountId: accountId,
     bookId: bookId,
@@ -305,9 +357,10 @@ class InvestmentPortfolio {
     anchorIncludedIds: anchorIncludedIds ?? this.anchorIncludedIds,
     marketPriceIds: marketPriceIds ?? this.marketPriceIds,
     valuationSnapshots: valuationSnapshots ?? this.valuationSnapshots,
+    fundSubscriptions: fundSubscriptions ?? this.fundSubscriptions,
   );
 
-  /// 完整用户投资数据进入 JSON v12；历史依据保存，临时行情缓存不进入备份。
+  /// 完整用户投资数据进入 JSON v14；申购事实和历史依据保存，临时行情缓存不进入备份。
   Map<String, Object?> toJson() => {
     'accountId': accountId,
     'bookId': bookId,
@@ -323,6 +376,8 @@ class InvestmentPortfolio {
     'anchorIncludedIds': anchorIncludedIds,
     'marketPriceIds': marketPriceIds.toList()..sort(),
     'valuationSnapshots': valuationSnapshots.map((v) => v.toJson()).toList(),
+    if (fundSubscriptions.isNotEmpty)
+      'fundSubscriptions': fundSubscriptions.map((v) => v.toJson()).toList(),
   };
 
   /// 读取聚合；数值语义及跨账户引用还需由投影器、Controller 统一校验。
@@ -353,6 +408,13 @@ class InvestmentPortfolio {
         .map(
           (v) => InvestmentValuationSnapshot.fromJson(
             Map<String, Object?>.from(v as Map),
+          ),
+        )
+        .toList(),
+    fundSubscriptions: (json['fundSubscriptions'] as List? ?? const [])
+        .map(
+          (value) => FundSubscription.fromJson(
+            Map<String, Object?>.from(value as Map),
           ),
         )
         .toList(),

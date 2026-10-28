@@ -179,6 +179,12 @@ class _FundReferenceHistorySectionState
             label: l.fundReferenceMarketValue,
             value: _money(point.marketValue.toDouble()),
           ),
+          if (point.pendingSubscriptionValue.units > BigInt.zero)
+            DetailInfoRow(
+              inline: true,
+              label: l.fundPendingValue,
+              value: _money(point.pendingSubscriptionValue.toDouble()),
+            ),
           DetailInfoRow(
             inline: true,
             label: l.fundReferenceDailyProfit,

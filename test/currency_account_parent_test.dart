@@ -372,7 +372,7 @@ void main() {
     expect(c.accountsForParent(parentId), hasLength(2));
     expect(c.creditAccounts, isEmpty);
     final raw = c.exportDataJson();
-    expect((jsonDecode(raw) as Map)['version'], 13);
+    expect((jsonDecode(raw) as Map)['version'], 14);
     final restored = await makeController();
     addTearDown(restored.dispose);
     restored.importDataJson(raw, dryRun: true);

@@ -7108,7 +7108,213 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investAllocationHint => '占比按本账户总资产计算。';
 
   @override
-  String get investAllocationLiabilityHint => '占比以正现金和多头持仓价值之和计算；空头义务和融资计入负债。';
+  String get investAllocationLiabilityHint =>
+      '占比以正现金、多头持仓和申购在途资产之和计算；空头义务和融资计入负债。';
+
+  @override
+  String get fundOperations => '基金操作';
+
+  @override
+  String get fundBuyByAmount => '按金额买入';
+
+  @override
+  String get fundRecordHolding => '录入已有持仓';
+
+  @override
+  String get fundAcquireEvent => '申购确认';
+
+  @override
+  String get fundHoldingBaselineEvent => '持仓基准';
+
+  @override
+  String get fundChoose => '选择基金';
+
+  @override
+  String get fundCmsUsdName => '招商美元货币市场基金 B 类';
+
+  @override
+  String get fundNoEligible => '当前账户没有可选香港基金。已核对的新增基金为美元账户下的招商美元货币市场基金 B 类。';
+
+  @override
+  String get fundCashAmount => '总扣款金额（含费用）';
+
+  @override
+  String get fundRequestFee => '总扣款中包含的费用';
+
+  @override
+  String get fundEstimatedNav => '估算净值（可留空，不用于确认成交）';
+
+  @override
+  String get fundConfirmedNav => '券商确认净值';
+
+  @override
+  String get fundHoldingNav => '持仓基准净值';
+
+  @override
+  String get fundConfirmedQuantityOptional => '券商确认份额（可填写以核对参考份额）';
+
+  @override
+  String get fundEstimatedQuantity => '自动计算的参考份额';
+
+  @override
+  String get fundUsedQuantity => '本次采用份额';
+
+  @override
+  String get fundRequestedAt => '申请时间';
+
+  @override
+  String get fundPaidAt => '实际扣款时间';
+
+  @override
+  String get fundAlreadyPaid => '已经实际扣款';
+
+  @override
+  String get fundExpectedConfirmationDate => '预计确认日（仅作提醒）';
+
+  @override
+  String get fundHasExpectedConfirmationDate => '填写预计确认日';
+
+  @override
+  String get fundConfirmedAt => '实际确认时间';
+
+  @override
+  String get fundNavDate => '确认净值对应日（香港日期）';
+
+  @override
+  String get fundEarningStartDate => '收益起算日（香港日期）';
+
+  @override
+  String get fundConfirmationCheck => '已核对券商份额、净值、金额差额及各日期';
+
+  @override
+  String get fundSubmissionHint =>
+      '申请不等于成交。按实际扣款时间扣现金，并列为待确认申购款；网上净值仅供估算，不会自动确认个人申购。';
+
+  @override
+  String get fundConfirmationHint =>
+      '请填写券商确认结果。确认日、净值日和收益起算日分别保存；收益起算前仍列为待生效资产，不提前生成收益。';
+
+  @override
+  String get fundOpeningHint =>
+      '录入的是核对时刻已有的总持仓，不再扣现金，也不生成收入。基准替换该基金此时的份额和成本，之后的交易继续重算。';
+
+  @override
+  String get fundNetAmount => '净申购金额';
+
+  @override
+  String get fundTargetMarketValue => '成本加录入浮盈的市值';
+
+  @override
+  String get fundQuantityValue => '采用份额按净值估值';
+
+  @override
+  String get fundAmountDifference => '目标金额减份额估值的差额';
+
+  @override
+  String get fundQuantityInferredHint =>
+      '由金额反推的份额是参考值。券商浮盈可能已舍入，请核对确认份额；不会用差额改写实际扣款或成本。';
+
+  @override
+  String get fundMismatchHint => '确认份额与输入金额存在差额，请先核对。保存后仍保留实际金额，浮盈不会被记为收入。';
+
+  @override
+  String get fundNoPreview => '填写有效金额和对应净值后显示参考份额。尚未确认的申请可以不填净值。';
+
+  @override
+  String get fundPendingTitle => '基金申购与在途资金';
+
+  @override
+  String get fundStatusUnpaid => '待扣款';
+
+  @override
+  String get fundStatusPending => '已扣款，待确认';
+
+  @override
+  String get fundStatusScheduled => '已确认，待收益起算';
+
+  @override
+  String get fundStatusEffective => '已确认并生效';
+
+  @override
+  String get fundStatusRefundPending => '已取消，待退款';
+
+  @override
+  String get fundStatusRefunded => '已退款';
+
+  @override
+  String get fundStatusCancelled => '已取消，未扣款';
+
+  @override
+  String get fundRecordPayment => '补录扣款或修改申请';
+
+  @override
+  String get fundConfirmSubscription => '录入确认结果';
+
+  @override
+  String get fundEditConfirmation => '核对确认结果';
+
+  @override
+  String get fundCancelSubscription => '取消申购或录入退款';
+
+  @override
+  String get fundRefundReceived => '退款已经实际到账';
+
+  @override
+  String get fundCancelledAt => '实际取消时间';
+
+  @override
+  String get fundRefundedAt => '实际退款到账时间';
+
+  @override
+  String get fundRefundAmount => '实际退款金额';
+
+  @override
+  String get fundSaveCancellation => '保存取消／退款结果';
+
+  @override
+  String get fundCancelHint =>
+      '已扣款但退款未到账时仍保留待退款资产，不能把未退金额当损失。已确认申购不能在这里取消，请按实际情况记录卖出。';
+
+  @override
+  String get fundDeleteRequest => '删除未扣款申请';
+
+  @override
+  String get fundDeleteRequestHint => '仅删除尚未扣款、尚未确认的申请。已经发生的扣款和确认不能通过删除申请抹除。';
+
+  @override
+  String get fundHoldingCost => '已有持仓总成本';
+
+  @override
+  String get fundReportedUnrealized => '同一时点未实现盈亏（可为负）';
+
+  @override
+  String get fundBaselineDate => '持仓核对时刻';
+
+  @override
+  String get fundReadCachedNav => '使用已缓存的净值作参考';
+
+  @override
+  String get fundPendingValue => '待确认／待生效申购款';
+
+  @override
+  String get fundSaveRequest => '保存申购申请';
+
+  @override
+  String get fundScheduleHint =>
+      '预计确认日不会自动确认成交。实际扣款、确认和退款按已经发生的时间填写；收益起算日可单独指定，不能把收益晚显示误当成晚起算。';
+
+  @override
+  String get fundSaveValidation => '请核对金额、日期、净值、份额及确认状态；保存尚未完成。';
+
+  @override
+  String get fundPaidAmountLocked =>
+      '已发生的总扣款金额保持只读。费用是其中的分配，可按券商确认结果补正，不会再次扣款。';
+
+  @override
+  String get fundTotalCost => '持仓总成本（含费用）';
+
+  @override
+  String get fundCashNotDeducted => '已有持仓基准不会再次扣除账户现金。';
 
   @override
   String get fundReferenceHistoryTitle => '基金参考历史';
@@ -7146,7 +7352,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fundReferenceHistoryHint =>
-      '按官网实际净值日和真实持仓计算，金额为账户原币。跨周末等区间不拆成每日到账收益；修改或删除交易后重算，不生成收入流水。';
+      '按官网净值日、实际持仓和申购在途款计算原币参考收益；本金进出不算收益。跨周末等区间不拆成每日到账收益，修改账务后重算，不生成收入流水。';
 
   @override
   String get fundReferenceMissingPrices =>
@@ -7159,7 +7365,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fundReferenceUnknownProfitHint =>
-      '首个净值日或持仓转移区间的参考收益为未知；成本依据不完整时，累计参考盈亏也显示未知。参考收益不表示已经到账。';
+      '首个净值日、持仓转移或跨持仓核对基准的区间收益未知；成本不完整时累计盈亏也未知。已有持仓累计盈亏从最新基准继续计算，参考收益不表示已到账。';
 
   @override
   String get fundReferenceSinglePoint => '只有一个净值观察点，暂不绘制趋势。';

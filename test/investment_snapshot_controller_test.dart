@@ -47,7 +47,7 @@ void main() {
     await db.close();
   });
 
-  test('历史依据 SQLite 保存失败零发布，重试、冷启动和 v13 完整恢复一致', () async {
+  test('历史依据 SQLite 保存失败零发布，重试、冷启动和 v14 完整恢复一致', () async {
     final before = c.investmentFor(account.id)!.toJson();
     await db.db.execute(
       "CREATE TRIGGER snapshot_failure BEFORE INSERT ON investment_portfolios BEGIN SELECT RAISE(ABORT,'历史依据注入失败'); END",
@@ -85,7 +85,7 @@ void main() {
       s.toJson(),
     );
     final raw = c.exportDataJson();
-    expect((jsonDecode(raw) as Map)['version'], 13);
+    expect((jsonDecode(raw) as Map)['version'], 14);
     final beforePreview = c.investmentFor(account.id)!.toJson();
     c.importDataJson(raw, dryRun: true);
     expect(c.investmentFor(account.id)!.toJson(), beforePreview);
@@ -97,6 +97,29 @@ void main() {
       s.toJson(),
     );
     expect(c.accountAssetValue(account), 11000);
+    // 真正的 v13 备份没有待确认申购列表；默认空字段不能改变旧快照的修订摘要。
+    final legacyV13 = jsonDecode(raw) as Map<String, dynamic>;
+    legacyV13['version'] = 13;
+    final legacyPortfolioJson =
+        ((legacyV13['data'] as Map)['investmentPortfolios'] as List).single
+            as Map;
+    legacyPortfolioJson.remove('fundSubscriptions');
+    c.importDataJson(jsonEncode(legacyV13));
+    await c.waitForPendingWrites();
+    final legacyPortfolio = c.investmentFor(account.id)!;
+    expect(legacyPortfolio.fundSubscriptions, isEmpty);
+    expect(legacyPortfolio.toJson().containsKey('fundSubscriptions'), isFalse);
+    expect(legacyPortfolio.valuationSnapshots.single.toJson(), s.toJson());
+    expect(
+      c
+          .investmentSnapshotValuation(
+            account.id,
+            legacyPortfolio.valuationSnapshots.single,
+          )!
+          .amounts!
+          .net,
+      10660,
+    );
     // 旧版没有 type/dateOnly 默认字段；恢复后原修订摘要和历史估值仍应有效。
     final legacyV12 = jsonDecode(raw) as Map<String, dynamic>;
     legacyV12['version'] = 12;

@@ -248,6 +248,10 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                               (p.openingHoldings.any(
                                     (h) => h.securityId == s.id,
                                   ) ||
+                                  p.fundSubscriptions.any(
+                                    (subscription) =>
+                                        subscription.securityId == s.id,
+                                  ) ||
                                   p.events.any((e) => e.securityId == s.id))),
                     )) ...[
                       const SizedBox(height: 12),

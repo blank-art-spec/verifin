@@ -19,6 +19,7 @@ import 'sheets.dart';
 import 'option_editor_page.dart';
 import 'market_quotes_page.dart';
 import 'investment_history_page.dart';
+import 'fund_entry_page.dart';
 import '../app/investments/investment_valuation.dart';
 
 /// 将资产占比按当前语言显示为一位小数的百分比，不修改原始精度。
@@ -50,6 +51,10 @@ class InvestmentPage extends StatelessWidget {
         '${l.investTotalAmount} ${formatUserMoney(InvestmentDecimal.parse(event.price).toDouble(), currency)} · $fees',
       StockEventKind.split =>
         '${l.investSplitNew} ${event.quantity} : ${l.investSplitOld} ${event.price}',
+      StockEventKind.fundHoldingBaseline =>
+        '${l.investFundQuantity} ${event.quantity} · ${l.fundTotalCost} ${event.carriedCost == null ? l.investUnknown : formatUserMoney(InvestmentDecimal.parse(event.carriedCost!).toDouble(), currency)}',
+      StockEventKind.fundAcquire =>
+        '${l.investFundQuantity} ${event.quantity} × ${formatUserSecurityPrice(event.price, currency)} · ${l.fundCashAmount} ${event.carriedCost == null ? l.investUnknown : formatUserMoney(InvestmentDecimal.parse(event.carriedCost!).toDouble(), currency)}',
       StockEventKind.transferIn || StockEventKind.transferOut =>
         '${fund ? l.investFundQuantity : l.investQuantity} ${event.quantity}',
       StockEventKind.optionMargin =>
@@ -68,7 +73,8 @@ class InvestmentPage extends StatelessWidget {
     };
   }
 
-  /// 推入完整编辑页面，取消只丢弃本地草稿。
+  /// 推入对应业务的完整编辑页面，取消只丢弃本地草稿。
+  /// 基金申购确认按原申请进入核对页，基准进入专用表单，避免误改为普通股票买入。
   void _edit(
     BuildContext context, {
     StockEvent? event,
@@ -78,6 +84,30 @@ class InvestmentPage extends StatelessWidget {
     bool short = false,
   }) {
     final p = VeriFinScope.of(context).investmentFor(accountId);
+    if (event?.kind == StockEventKind.fundAcquire ||
+        event?.kind == StockEventKind.fundHoldingBaseline) {
+      if (event!.kind == StockEventKind.fundAcquire &&
+          event.fundSubscriptionId == null) {
+        return;
+      }
+      unawaited(
+        Navigator.of(context).push<void>(
+          MaterialPageRoute(
+            builder: (_) => FundEntryPage(
+              accountId: accountId,
+              mode: event.kind == StockEventKind.fundHoldingBaseline
+                  ? FundEntryMode.holdingBaseline
+                  : FundEntryMode.purchase,
+              subscriptionId: event.fundSubscriptionId,
+              baselineEvent: event.kind == StockEventKind.fundHoldingBaseline
+                  ? event
+                  : null,
+            ),
+          ),
+        ),
+      );
+      return;
+    }
     final isOption =
         p?.securities.any(
           (s) => s.id == (event?.securityId ?? securityId) && s.option != null,
@@ -107,7 +137,7 @@ class InvestmentPage extends StatelessWidget {
 
   /// 以同一纯计算结果展示净值、资产构成、盈亏及占总资产比例。
   /// 净值为主信息，现金/多头用实色面板，次级明细与盈亏分组排列；
-  /// 窄屏与大字号允许完整换行。占比仍使用该币种账户的正现金与多头市值。
+  /// 窄屏与大字号允许完整换行。申购在途资产单独披露，净值采用统一估值结果。
   /// 已有基金清仓后仍提供按原身份新增交易的入口，再次买入不会误建成同代码股票。
   @override
   Widget build(BuildContext context) {
@@ -200,9 +230,9 @@ class InvestmentPage extends StatelessWidget {
                       ),
                       const SizedBox(height: 6),
                       Text(
-                        valuation!.marketValue == null
+                        detail!.amounts == null
                             ? l.investNoQuotes
-                            : money(cash + valuation.marketValue!.toDouble()),
+                            : money(detail.amounts!.net),
                         style: Theme.of(context).textTheme.headlineMedium
                             ?.copyWith(
                               fontSize: 32,
@@ -217,7 +247,7 @@ class InvestmentPage extends StatelessWidget {
                           value: money(cash),
                           color: surfaceText,
                           detail:
-                              '${l.investCashShare} ${_investmentShareText(l, detail!.cashShare)}',
+                              '${l.investCashShare} ${_investmentShareText(l, detail.cashShare)}',
                           allowValueWrap: true,
                         ),
                         second: SummaryMetric(
@@ -236,7 +266,7 @@ class InvestmentPage extends StatelessWidget {
                         filled: false,
                         first: SummaryMetric(
                           label: l.investMarketValue,
-                          value: valuation.marketValue == null
+                          value: valuation!.marketValue == null
                               ? l.investUnknown
                               : money(valuation.marketValue!.toDouble()),
                           color: secondaryText,
@@ -304,6 +334,14 @@ class InvestmentPage extends StatelessWidget {
                           ),
                         ),
                       ],
+                      if (detail.pendingSubscriptionValue > 0) ...[
+                        const SizedBox(height: 10),
+                        DetailInfoRow(
+                          inline: true,
+                          label: l.fundPendingValue,
+                          value: money(detail.pendingSubscriptionValue),
+                        ),
+                      ],
                       const SizedBox(height: 8),
                       Text(
                         (detail.amounts?.liabilities ?? 0) > 0
@@ -325,6 +363,10 @@ class InvestmentPage extends StatelessWidget {
                       onPressed: () => _edit(context),
                       icon: const Icon(Icons.add),
                       label: Text(l.investNewTrade),
+                    ),
+                    FundOperationsButton(
+                      key: const Key('fund-operations'),
+                      accountId: accountId,
                     ),
                     for (final fund in portfolio.securities.where(
                       (security) =>
@@ -392,6 +434,33 @@ class InvestmentPage extends StatelessWidget {
                 ),
                 if (portfolio.securities.any((s) => s.option != null))
                   InvestmentHint(l.optionMarginHint),
+                if (portfolio.fundSubscriptions.any(
+                  (subscription) =>
+                      subscription.confirmation == null ||
+                      hongKongFundDayStart(
+                        subscription.confirmation!.earningStartDate,
+                      ).isAfter(DateTime.now()),
+                )) ...[
+                  const SizedBox(height: 16),
+                  SectionTitle(title: l.fundPendingTitle),
+                  const SizedBox(height: 8),
+                  for (final subscription in [
+                    ...portfolio.fundSubscriptions,
+                  ]..sort((a, b) => b.requestedAt.compareTo(a.requestedAt)))
+                    if (subscription.confirmation == null ||
+                        hongKongFundDayStart(
+                          subscription.confirmation!.earningStartDate,
+                        ).isAfter(DateTime.now())) ...[
+                      FundSubscriptionCard(
+                        account: account,
+                        security: portfolio.securities.firstWhere(
+                          (security) => security.id == subscription.securityId,
+                        ),
+                        subscription: subscription,
+                      ),
+                      const SizedBox(height: 8),
+                    ],
+                ],
                 const SizedBox(height: 16),
                 SectionTitle(title: l.investPositions),
                 const SizedBox(height: 8),
@@ -670,6 +739,12 @@ class _StockPositionCard extends StatelessWidget {
           Wrap(
             spacing: 4,
             children: [
+              if (security.isFund && security.market == StockMarket.hk)
+                FundOperationsButton(
+                  accountId: accountId,
+                  securityId: security.id,
+                  compact: true,
+                ),
               if (security.isFund)
                 TextButton(
                   onPressed: onTrade,
