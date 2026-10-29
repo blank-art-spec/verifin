@@ -188,7 +188,9 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
   /// 将证券映射到严格的公开股票代码；返回 null 表示不支持，调用方不能猜市场。
   /// [request] 的 HKD/CNY 必须和市场相符；前导零保留在来源代码及证券 ID 中。
   static String? _queryCode(MarketQuoteRequest request) {
-    if (request.option || request.symbol.toUpperCase().startsWith('TEST-')) {
+    if (request.option ||
+        request.fund ||
+        request.symbol.toUpperCase().startsWith('TEST-')) {
       return null;
     }
     if (request.market == StockMarket.cn &&

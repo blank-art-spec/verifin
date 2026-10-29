@@ -2,6 +2,7 @@ import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:verifin/app/investments/investment_valuation.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/reminder/account_entry_reminder.dart';
 import 'package:verifin/app/reminder/workday_calendar_sync.dart';
@@ -24,6 +25,366 @@ import 'support/investment_fixture.dart';
 ///   不是映射 bug）。
 void main() {
   setUpAll(sqfliteFfiInit);
+  test('v13 基金聚合缺少待确认字段时保持原 JSON 与冻结的历史修订摘要', () async {
+    final legacyJson = _legacyV13FundPortfolioJson();
+    final source = InvestmentPortfolio.fromJson(legacyJson);
+    expect(source.fundSubscriptions, isEmpty);
+    expect(source.events.single.fundSubscriptionId, isNull);
+    expect(source.events.single.reportedUnrealized, isNull);
+    expect(source.events.single.fundNavDate, isNull);
+    expect(source.events.single.quantityInferred, isFalse);
+    expect(source.toJson(), legacyJson);
+    expect(source.toJson().containsKey('fundSubscriptions'), isFalse);
+    final at = DateTime.utc(2026, 10, 15, 12);
+    expect(
+      investmentRevision(source, const [], const [], at),
+      _legacyV13Revision,
+    );
+    expect(
+      investmentSnapshotAt(source, at, const [], const [])?.toJson(),
+      source.valuationSnapshots.single.toJson(),
+    );
+    final db = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    try {
+      final repo = SqliteLedgerRepository(db);
+      await repo.saveInvestmentPortfolios([source]);
+      final restored = (await repo.loadInvestmentPortfolios()).single;
+      expect(restored.toJson(), legacyJson);
+      expect(
+        investmentRevision(restored, const [], const [], at),
+        _legacyV13Revision,
+      );
+      expect(restored.fundSubscriptions, isEmpty);
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('v14 申购各阶段和已有持仓基准的 JSON 与 SQLite 映射完整保留精确文本', () async {
+    const fund = StockSecurity(
+      symbol: 'HK0001039582',
+      name: '基金金额录入映射夹具',
+      market: StockMarket.hk,
+      currencyCode: 'USD',
+      type: InvestmentSecurityType.fund,
+    );
+    // 所有日期和数值只作为映射输入，不表示真实申购或来源净值。
+    final confirmation = FundSubscriptionConfirmation(
+      confirmedAt: DateTime.utc(2026, 10, 28, 3),
+      navDate: DateTime.utc(2026, 10, 27),
+      earningStartDate: DateTime.utc(2026, 10, 28),
+      nav: '109.8290',
+      quantity: '12.75901629',
+    );
+    final source = InvestmentPortfolio(
+      accountId: 'fund-amount-roundtrip',
+      bookId: defaultLedgerBookId,
+      currencyCode: 'USD',
+      openedAt: DateTime.utc(2026, 10, 1),
+      openingCash: '10000',
+      securities: [fund],
+      manualPrices: {fund.id: '109.8290'},
+      events: [
+        StockEvent(
+          id: 'fund-existing-baseline',
+          securityId: fund.id,
+          kind: StockEventKind.fundHoldingBaseline,
+          occurredAt: DateTime.utc(2026, 10, 15, 2),
+          sequence: 1,
+          quantity: '12.76994236',
+          price: '109.8290',
+          carriedCost: '1401.31',
+          reportedUnrealized: '1.20',
+          fundNavDate: DateTime.utc(2026, 10, 15),
+          quantityInferred: true,
+          note: '映射示例：反推份额不表示已确认实际成交',
+        ),
+        StockEvent(
+          id: 'fund-confirmed-acquire',
+          securityId: fund.id,
+          kind: StockEventKind.fundAcquire,
+          occurredAt: hongKongFundDayStart(confirmation.earningStartDate),
+          sequence: 2,
+          quantity: confirmation.quantity,
+          price: confirmation.nav,
+          carriedCost: '1401.31',
+          fundSubscriptionId: 'fund-confirmed-subscription',
+          fundNavDate: confirmation.navDate,
+          note: '映射示例：持仓确认不重复扣款',
+        ),
+      ],
+      fundSubscriptions: [
+        FundSubscription(
+          id: 'fund-request-only',
+          securityId: fund.id,
+          requestedAt: DateTime.utc(2026, 10, 25, 2),
+          cashAmount: '500.00',
+          fee: '2.00',
+          expectedConfirmationDate: DateTime.utc(2026, 10, 29),
+          note: '仅申请，尚未实际付款',
+        ),
+        FundSubscription(
+          id: 'fund-paid-pending',
+          securityId: fund.id,
+          requestedAt: DateTime.utc(2026, 10, 25, 3),
+          cashAmount: '1000.00',
+          fee: '1.00',
+          paidAt: DateTime.utc(2026, 10, 25, 3, 5),
+          expectedConfirmationDate: DateTime.utc(2026, 10, 29),
+          note: '已扣款，尚未确认份额',
+        ),
+        FundSubscription(
+          id: 'fund-confirmed-subscription',
+          securityId: fund.id,
+          requestedAt: DateTime.utc(2026, 10, 26, 2),
+          cashAmount: '1401.31',
+          paidAt: DateTime.utc(2026, 10, 26, 2, 5),
+          expectedConfirmationDate: DateTime.utc(2026, 10, 28),
+          confirmation: confirmation,
+          note: '已收到券商确认回执',
+        ),
+        FundSubscription(
+          id: 'fund-cancelled-refunded',
+          securityId: fund.id,
+          requestedAt: DateTime.utc(2026, 10, 20, 2),
+          cashAmount: '300.00',
+          fee: '0.01',
+          paidAt: DateTime.utc(2026, 10, 20, 2, 5),
+          cancelledAt: DateTime.utc(2026, 10, 21, 2),
+          refundedAt: DateTime.utc(2026, 10, 22, 2),
+          refundAmount: '299.99',
+          note: '已撤销并按实际退款金额核对',
+        ),
+      ],
+    );
+    final originalJson = source.toJson();
+    final decoded = InvestmentPortfolio.fromJson(
+      Map<String, Object?>.from(jsonDecode(jsonEncode(originalJson)) as Map),
+    );
+    expect(decoded.toJson(), originalJson);
+    expect(decoded.fundSubscriptions, hasLength(4));
+    expect(decoded.fundSubscriptions[0].paidAt, isNull);
+    expect(decoded.fundSubscriptions[1].confirmation, isNull);
+    expect(decoded.fundSubscriptions[2].confirmation!.nav, '109.8290');
+    expect(decoded.fundSubscriptions[2].confirmation!.quantity, '12.75901629');
+    expect(decoded.fundSubscriptions[3].refundAmount, '299.99');
+    expect(decoded.events.first.reportedUnrealized, '1.20');
+    expect(decoded.events.first.quantityInferred, isTrue);
+    expect(
+      decoded.events.last.fundSubscriptionId,
+      'fund-confirmed-subscription',
+    );
+    final confirmationJson = confirmation.toJson();
+    expect(confirmationJson['navDate'], '2026-10-27');
+    expect(confirmationJson['earningStartDate'], '2026-10-28');
+    expect(confirmationJson['confirmedAt'], '2026-10-28T03:00:00.000Z');
+    expect(decoded.events.first.toJson()['fundNavDate'], '2026-10-15');
+    expect(() => decoded.fundSubscriptions.clear(), throwsUnsupportedError);
+    final db = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    try {
+      final repo = SqliteLedgerRepository(db);
+      await repo.saveInvestmentPortfolios([source]);
+      final restored = (await repo.loadInvestmentPortfolios()).single;
+      expect(restored.toJson(), originalJson);
+      expect(restored.events.first.reportedUnrealized, '1.20');
+      expect(restored.events.first.quantityInferred, isTrue);
+      expect(
+        restored.fundSubscriptions[2].confirmation!.earningStartDate,
+        DateTime.utc(2026, 10, 28),
+      );
+      expect(
+        restored.fundSubscriptions[3].refundedAt,
+        DateTime.utc(2026, 10, 22, 2),
+      );
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('v15 非默认成交净值收益规则及日末事件在 JSON 和 SQLite 四向映射保留', () async {
+    const fund = StockSecurity(
+      symbol: 'HK0001039582',
+      name: '收益规则映射夹具',
+      market: StockMarket.hk,
+      currencyCode: 'USD',
+      type: InvestmentSecurityType.fund,
+    );
+    final date = DateTime.utc(2026, 10, 23);
+    final confirmation = FundSubscriptionConfirmation(
+      confirmedAt: DateTime.utc(2026, 10, 26, 2),
+      navDate: date,
+      earningStartDate: date,
+      nav: '109.8290',
+      quantity: '12.759',
+      accrualRule: FundAccrualRule.dealNavDate,
+    );
+    final source = InvestmentPortfolio(
+      accountId: 'rule-roundtrip',
+      bookId: defaultLedgerBookId,
+      currencyCode: 'USD',
+      openedAt: DateTime.utc(2026, 10, 1),
+      openingCash: '5000',
+      securities: [fund],
+      fundSubscriptions: [
+        FundSubscription(
+          id: 'rule-order',
+          securityId: fund.id,
+          requestedAt: DateTime.utc(2026, 10, 23, 1),
+          paidAt: DateTime.utc(2026, 10, 23, 2),
+          cashAmount: '1401.31',
+          confirmation: confirmation,
+        ),
+      ],
+      events: [
+        StockEvent(
+          id: 'rule-acquire',
+          securityId: fund.id,
+          kind: StockEventKind.fundAcquire,
+          occurredAt: hongKongFundDayEnd(date),
+          sequence: 1,
+          quantity: confirmation.quantity,
+          price: confirmation.nav,
+          carriedCost: '1401.31',
+          fundSubscriptionId: 'rule-order',
+          fundNavDate: date,
+        ),
+      ],
+    );
+    final json = source.toJson();
+    final decoded = InvestmentPortfolio.fromJson(
+      Map<String, Object?>.from(jsonDecode(jsonEncode(json)) as Map),
+    );
+    expect(decoded.toJson(), json);
+    expect(
+      decoded.fundSubscriptions.single.confirmation!.toJson()['accrualRule'],
+      'dealNavDate',
+    );
+    final db = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    try {
+      final repository = SqliteLedgerRepository(db);
+      await repository.saveInvestmentPortfolios([decoded]);
+      final loaded = (await repository.loadInvestmentPortfolios()).single;
+      expect(loaded.toJson(), json);
+      expect(loaded.events.single.occurredAt, hongKongFundDayEnd(date));
+      expect(
+        loaded.fundSubscriptions.single.confirmation!.accrualRule,
+        FundAccrualRule.dealNavDate,
+      );
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('基金类型、精确份额和日期型净值依据 JSON/SQLite 四向映射完整保留', () async {
+    const fund = StockSecurity(
+      symbol: 'HK0001039582',
+      name: '招商美元货币市场基金 B类',
+      market: StockMarket.hk,
+      currencyCode: 'USD',
+      type: InvestmentSecurityType.fund,
+    );
+    // 本用例使用非默认值验证四条映射；日期精度不能在导出或冷读时退回时刻。
+    final source = InvestmentPortfolio(
+      accountId: 'fund-usd',
+      bookId: defaultLedgerBookId,
+      currencyCode: 'USD',
+      openedAt: DateTime(2026, 10, 1),
+      openingCash: '10000',
+      securities: [fund],
+      events: [
+        StockEvent(
+          id: 'fund-buy-roundtrip',
+          securityId: fund.id,
+          kind: StockEventKind.buy,
+          occurredAt: DateTime(2026, 10, 15, 10),
+          sequence: 1,
+          quantity: '10.125',
+          price: '100.00000001',
+          fee: '0.01',
+          note: '映射验收示例：虚构份额与成交，不是基金历史价格',
+        ),
+      ],
+      manualPrices: {fund.id: '109.80612345'},
+      marketPriceIds: {fund.id},
+      valuationSnapshots: [
+        InvestmentValuationSnapshot(
+          capturedAt: DateTime.utc(2026, 10, 28, 2, 30),
+          revision: 'b' * 64,
+          baseCurrencyCode: 'CNY',
+          rateToBase: 7,
+          rateDate: DateTime(2026, 10, 1),
+          prices: {
+            fund.id: InvestmentPriceFact(
+              price: '109.80612345',
+              quotedAt: DateTime.utc(2026, 10, 27),
+              source: '基金日期精度测试来源',
+              manual: false,
+              dateOnly: true,
+            ),
+          },
+        ),
+      ],
+    );
+    final decoded = InvestmentPortfolio.fromJson(
+      Map<String, Object?>.from(jsonDecode(jsonEncode(source.toJson())) as Map),
+    );
+    expect(fund.id, 'hk:fund:HK0001039582');
+    expect(decoded.securities.single.type, InvestmentSecurityType.fund);
+    expect(decoded.securities.single.isFund, isTrue);
+    expect(decoded.valuationSnapshots.single.prices[fund.id]!.dateOnly, isTrue);
+    expect(decoded.toJson(), source.toJson());
+    final db = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    try {
+      final repo = SqliteLedgerRepository(db);
+      await repo.saveInvestmentPortfolios([source]);
+      final restored = (await repo.loadInvestmentPortfolios()).single;
+      expect(restored.securities.single.id, fund.id);
+      expect(
+        restored.valuationSnapshots.single.prices[fund.id]!.dateOnly,
+        isTrue,
+      );
+      expect(restored.toJson(), source.toJson());
+    } finally {
+      await db.close();
+    }
+  });
+
+  test('旧版股票与价格依据缺少新增字段时保持原序列化形状', () {
+    // 修订摘要依赖证券 JSON；默认字段继续省略，避免旧股票快照无故失效。
+    final legacySecurity = <String, Object?>{
+      'symbol': 'AVGO',
+      'name': '博通',
+      'market': 'us',
+      'currencyCode': 'USD',
+    };
+    final stock = StockSecurity.fromJson(legacySecurity);
+    expect(stock.type, InvestmentSecurityType.stock);
+    expect(stock.isStock, isTrue);
+    expect(stock.id, 'us:stock:AVGO');
+    expect(stock.toJson(), legacySecurity);
+    final legacyPrice = <String, Object?>{
+      'price': '330',
+      'quotedAt': '2026-10-24T00:00:00.000Z',
+      'source': '旧价格来源',
+      'manual': false,
+    };
+    final fact = InvestmentPriceFact.fromJson(legacyPrice);
+    expect(fact.dateOnly, isFalse);
+    expect(fact.toJson(), legacyPrice);
+  });
+
   test('期权规格、显式结算及保证金 JSON/SQLite 四向映射完整保留', () async {
     final s = optionFixture(
       shares: '10',
@@ -744,3 +1105,77 @@ void main() {
     });
   });
 }
+
+/// v13 旧修订算法对下方固定事实计算的 SHA-256，不能随新模型的序列化结果重新生成。
+const _legacyV13Revision =
+    'fb2f64fb31c2bf99a86b56b68a777d1e4d425598a1513a1eae1da8f2fe0972aa';
+
+/// 返回冻结的 v13 基金聚合；无参数，不读取当前模板或调用新模型 toJson。
+/// 缺少 v14 的申购列表与事件附属字段，保留原事件、纯日期价格依据和历史修订摘要。
+/// 测试必须同时证明 JSON 形状与旧摘要未变，不能只在新版先生成摘要后再声称兼容。
+Map<String, Object?> _legacyV13FundPortfolioJson() => {
+  'accountId': 'legacy-fund-usd',
+  'bookId': 'default',
+  'currencyCode': 'USD',
+  'openedAt': '2026-10-01T00:00:00.000Z',
+  'openingCash': '1000',
+  'includedEntryIds': <String>[],
+  'securities': [
+    {
+      'symbol': 'HK0001039582',
+      'name': '旧版基金',
+      'market': 'hk',
+      'currencyCode': 'USD',
+      'type': 'fund',
+    },
+  ],
+  'openingHoldings': [
+    {
+      'securityId': 'hk:fund:HK0001039582',
+      'short': false,
+      'quantity': '10',
+      'cost': '100',
+    },
+  ],
+  'events': [
+    {
+      'id': 'legacy-sell',
+      'securityId': 'hk:fund:HK0001039582',
+      'kind': 'sell',
+      'occurredAt': '2026-10-02T02:00:00.000Z',
+      'sequence': 1,
+      'quantity': '1',
+      'price': '11',
+      'fee': '0',
+      'note': '旧版固定夹具',
+      'carriedCost': null,
+      'short': false,
+      'batchId': null,
+      'marginAfter': null,
+      'settlementConfirmed': false,
+      'allowUncoveredAssignment': false,
+    },
+  ],
+  'manualPrices': {'hk:fund:HK0001039582': '11'},
+  'allowFinancing': false,
+  'anchorIncludedIds': <String, Object?>{},
+  'marketPriceIds': <String>[],
+  'valuationSnapshots': [
+    {
+      'capturedAt': '2026-10-15T12:00:00.000Z',
+      'revision': _legacyV13Revision,
+      'baseCurrencyCode': 'CNY',
+      'prices': {
+        'hk:fund:HK0001039582': {
+          'price': '11',
+          'quotedAt': '2026-10-15T00:00:00.000Z',
+          'source': '旧基金净值来源',
+          'manual': false,
+          'dateOnly': true,
+        },
+      },
+      'rateToBase': 7.0,
+      'rateDate': '2026-10-01T00:00:00.000Z',
+    },
+  ],
+};

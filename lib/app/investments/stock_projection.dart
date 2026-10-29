@@ -1,4 +1,4 @@
-/// 只读股票重放：数量、成本、现金腿与盈亏的唯一计算入口。
+/// 只读证券重放：股票/基金份额及期权的数量、成本、现金腿与盈亏唯一计算入口。
 library;
 
 import '../currency_catalog.dart';
@@ -47,7 +47,10 @@ class StockProjection {
 
 /// 按业务时间及稳定序号计算整个账户；非法事件、悬空证券或超量平仓直接抛错。
 /// [portfolio] 为不可变用户事实；返回值不修改原始数据，便于保存前完整预览/验证。
-StockProjection projectStocks(InvestmentPortfolio portfolio) {
+/// [at] 指定基金申购确认/持仓基准的生效截点，默认当前时刻；未来起算的确认不能提前变成持仓。
+/// 普通股票/期权沿用既有完整事件重放，历史调用仍应先截取 investmentAt 的全部证券事实。
+StockProjection projectStocks(InvestmentPortfolio portfolio, {DateTime? at}) {
+  final fundCutoff = at ?? DateTime.now();
   final digits = CurrencyCatalog.require(portfolio.currencyCode).minorUnit;
   final securities = {
     for (final security in portfolio.securities) security.id: security,
@@ -58,7 +61,8 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
   for (final security in securities.values) {
     if (security.symbol.isEmpty ||
         security.name.isEmpty ||
-        security.currencyCode != portfolio.currencyCode) {
+        security.currencyCode != portfolio.currencyCode ||
+        (security.isFund && security.option != null)) {
       throw const FormatException('证券或结算币种不合法');
     }
     if (security.option != null) _validateOptionContract(security, securities);
@@ -92,6 +96,7 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
     if (!securities.containsKey(holding.securityId) ||
         positions.containsKey(key) ||
         quantity.units <= BigInt.zero ||
+        (securities[holding.securityId]!.isFund && holding.short) ||
         (cost != null && cost.units < BigInt.zero)) {
       throw const FormatException('期初持仓不合法');
     }
@@ -126,6 +131,34 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
     }
     final kind = event.kind;
     final security = securities[event.securityId]!;
+    // 本阶段基金只复用明确的份额买卖、现金分红/费用及成本转移，不支持融券或拆股。
+    if (security.isFund &&
+        (event.short ||
+            !const {
+              StockEventKind.buy,
+              StockEventKind.sell,
+              StockEventKind.dividend,
+              StockEventKind.fee,
+              StockEventKind.transferIn,
+              StockEventKind.transferOut,
+              StockEventKind.fundAcquire,
+              StockEventKind.fundHoldingBaseline,
+            }.contains(kind))) {
+      throw const FormatException('基金不能使用卖空、回补、拆股或期权动作');
+    }
+    if ((kind == StockEventKind.fundAcquire ||
+            kind == StockEventKind.fundHoldingBaseline) &&
+        (!security.isFund || event.short || event.batchId != null)) {
+      throw const FormatException('基金确认或持仓基准的证券品种不合法');
+    }
+    if ((kind == StockEventKind.fundAcquire ||
+            kind == StockEventKind.fundHoldingBaseline) &&
+        event.occurredAt.isAfter(fundCutoff)) {
+      // 未到已保存规则的日级生效截点时仍是待生效资产；新成交净值规则以净值日末为基准，
+      // 旧规则沿用独立起算日日初。实际现金扣款始终由独立申购事实表达，不随回执重复扣款。
+      cash[event.id] = InvestmentDecimal.zero;
+      continue;
+    }
     if (security.option != null) {
       final result = _applyOptionEvent(
         event,
@@ -141,7 +174,7 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
       complete = complete && result.complete;
       continue;
     }
-    if (kind.index >= StockEventKind.optionBuyOpen.index ||
+    if (kind.isOptionEvent ||
         event.marginAfter != null ||
         event.settlementConfirmed ||
         event.allowUncoveredAssignment) {
@@ -171,6 +204,30 @@ StockProjection projectStocks(InvestmentPortfolio portfolio) {
     final pos = position(event.securityId, short);
     final gross = q.moneyProduct(p, digits);
     switch (kind) {
+      case StockEventKind.fundAcquire:
+      case StockEventKind.fundHoldingBaseline:
+        final cost = event.carriedCost == null
+            ? null
+            : InvestmentDecimal.parse(event.carriedCost!);
+        if (q.units <= BigInt.zero ||
+            p.units <= BigInt.zero ||
+            fee.units != BigInt.zero ||
+            cost == null ||
+            cost.units < BigInt.zero ||
+            cost.compareTo(cost.rounded(digits)) != 0 ||
+            (kind == StockEventKind.fundAcquire &&
+                event.fundSubscriptionId == null)) {
+          throw const FormatException('基金确认份额、净值或实际总成本不合法');
+        }
+        if (kind == StockEventKind.fundHoldingBaseline ||
+            pos.quantity.units == BigInt.zero) {
+          pos.quantity = q;
+          pos.cost = cost;
+        } else {
+          pos.quantity = pos.quantity + q;
+          pos.cost = pos.cost == null ? null : pos.cost! + cost;
+        }
+      // 申购款已在实际扣款日减少现金；已有持仓基准也不应再次扣现金。
       case StockEventKind.buy:
       case StockEventKind.shortSell:
         movement = kind == StockEventKind.buy ? -gross - fee : gross - fee;

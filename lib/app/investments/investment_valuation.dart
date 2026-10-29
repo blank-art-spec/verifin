@@ -10,10 +10,12 @@ import '../models.dart';
 import 'investment_decimal.dart';
 import 'stock_projection.dart';
 import 'stock_cash_math.dart';
+import 'fund_workflow_math.dart';
 
 /// 投资账户原币估值；未知成本只影响盈亏，缺价格则资产与净值均不完整。
 class InvestmentAccountValuation {
   /// [cash] 是真实现金，[frozen] 仅作冻结披露，不在净值中再次扣减。
+  /// [pendingSubscriptionValue] 为已扣款但未起算或待退款的基金在途资产，不伪装成现金或份额。
   const InvestmentAccountValuation({
     required this.cash,
     required this.frozen,
@@ -22,17 +24,19 @@ class InvestmentAccountValuation {
     required this.unrealized,
     required this.realized,
     required this.costComplete,
+    this.pendingSubscriptionValue = 0,
   });
   final double cash, frozen;
   final double? longValue, shortObligation, unrealized, realized;
   final bool costComplete;
+  final double pendingSubscriptionValue;
 
   /// 多头、正现金归资产；空头、负现金归负债，不能按账户净额正负抵销。
   AccountAssetAmounts? get amounts =>
       longValue == null || shortObligation == null
       ? null
       : AccountAssetAmounts(
-          (cash > 0 ? cash : 0) + longValue!,
+          (cash > 0 ? cash : 0) + longValue! + pendingSubscriptionValue,
           (cash < 0 ? -cash : 0) + shortObligation!,
         );
 
@@ -45,9 +49,13 @@ class InvestmentAccountValuation {
 
   /// 多头持仓市值占总资产的比例，范围为 0–1；股票与期权沿用已计算的 [longValue]。
   ///
-  /// 分母为正现金与多头市值之和，不采用扣除融资或空头义务后的净值。
+  /// 分母为正现金、多头市值和基金在途资产之和，不采用扣除融资或空头义务后的净值。
   /// 成本未知不会阻止计算；价格不完整、非有限或总资产不大于 0 时返回 null。
   double? get holdingsShare => shareOfAssets(longValue);
+
+  /// 已付款申购在途资产占统一总资产的比例，不额外扣减现金，也不计为已确认基金持仓。
+  double? get pendingSubscriptionShare =>
+      shareOfAssets(pendingSubscriptionValue);
 
   /// 空头回补义务占总资产的比例，仅作负债披露，不加入现金和多头的资产分布。
   ///
@@ -59,7 +67,7 @@ class InvestmentAccountValuation {
   ///
   /// [value] 应为已按结算币种舍入的市值或空头义务；股票与期权的市值仍由
   /// securityPositionValue 计算，本方法不重算数量、价格或乘数。分母复用
-  /// [amounts] 的正现金加多头市值，冻结额不重复扣除，负债不抵销分母。
+  /// [amounts] 的正现金、多头市值和基金在途资产，冻结额不重复扣除，负债不抵销分母。
   ///
   /// 输入为 null、负数或非有限数，整体估值不完整/含非有限数、多头市值或空头义务
   /// 为负数、总资产不大于 0，
@@ -75,7 +83,9 @@ class InvestmentAccountValuation {
         longs < 0 ||
         shorts == null ||
         !shorts.isFinite ||
-        shorts < 0) {
+        shorts < 0 ||
+        !pendingSubscriptionValue.isFinite ||
+        pendingSubscriptionValue < 0) {
       return null;
     }
     final assetAmounts = amounts;
@@ -93,11 +103,14 @@ class InvestmentAccountValuation {
 }
 
 /// 统一股票/期权乘数与多空方向；[portfolio] 的价格须是调用方选定的时点依据。
+/// [at] 为基金申购及起算的真实截点，默认当前时刻；历史估值必须显式传入以保留在途资产。
 InvestmentAccountValuation valueInvestmentAccount(
   InvestmentPortfolio portfolio,
-  double cash,
-) {
-  final projection = projectStocks(portfolio),
+  double cash, {
+  DateTime? at,
+}) {
+  final cutoff = at ?? DateTime.now();
+  final projection = projectStocks(portfolio, at: cutoff),
       digits = CurrencyCatalog.require(portfolio.currencyCode).minorUnit;
   var longs = InvestmentDecimal.zero, shorts = InvestmentDecimal.zero;
   var complete = true;
@@ -136,6 +149,10 @@ InvestmentAccountValuation valueInvestmentAccount(
     costComplete:
         projection.realizedComplete &&
         projection.positions.every((p) => p.cost != null),
+    pendingSubscriptionValue: fundSubscriptionPendingValue(
+      portfolio,
+      at: cutoff,
+    ).toDouble(),
   );
 }
 
@@ -143,16 +160,21 @@ InvestmentAccountValuation valueInvestmentAccount(
 InvestmentPortfolio investmentAt(InvestmentPortfolio portfolio, DateTime at) =>
     portfolio.copyWith(
       events: portfolio.events.where((e) => !e.occurredAt.isAfter(at)).toList(),
+      fundSubscriptions: portfolio.fundSubscriptions
+          .where((s) => !s.requestedAt.isAfter(at))
+          .toList(),
     );
 
 /// 计算指定时点现金；现金锚点只取当时已生效的最新一条，不能回填较晚校准。
 /// [portfolio] 非空时复用投资资金腿，普通账户则沿用余额与日常交易差额。
+/// [fundAt] 仅供当前汇总保留普通证券完整事实时，独立限制基金实际资金腿；历史读取省略并沿用 [at]。
 double accountCashAt({
   required Account account,
   required Iterable<LedgerEntry> entries,
   required Iterable<BalanceAnchor> anchors,
   required DateTime at,
   InvestmentPortfolio? portfolio,
+  DateTime? fundAt,
 }) {
   final available =
       anchors
@@ -173,6 +195,7 @@ double accountCashAt({
       portfolio: investmentAt(portfolio, at),
       entries: relevant,
       anchor: anchor,
+      at: fundAt ?? at,
     );
   }
   var balance = anchor?.balance ?? account.initialBalance;
@@ -187,6 +210,10 @@ double accountCashAt({
 
 /// 对截止时点会影响现金/仓位/成本的事实做稳定摘要；不包含现价、缓存及快照自身。
 /// 历史补录、删除或改规格后旧快照失效；未来成交和日后改参考价不重写过去。
+/// [p] 为目标投资账户聚合，[entries]/[anchors] 可包含其他账本或账户，内部只保留
+/// 与该账户有关且不晚于真实截点 [at] 的事实；只生成校验文本，不修改原数据或已有快照。
+/// 普通交易及余额锚点的行时间按 SQLite 实际保存的毫秒/本地表达参与摘要，避免原始
+/// UTC/微秒文本在冷读后改变摘要；仅规范摘要副本，不修改账户余额的真实截点或原对象。
 String investmentRevision(
   InvestmentPortfolio p,
   Iterable<LedgerEntry> entries,
@@ -197,6 +224,9 @@ String investmentRevision(
   final ids = {
     ...p.openingHoldings.map((h) => h.securityId),
     ...past.events.map((e) => e.securityId),
+    ...past.fundSubscriptions
+        .where((s) => s.paidAt != null && !s.paidAt!.isAfter(at))
+        .map((s) => s.securityId),
   };
   for (final s in p.securities.where((s) => ids.contains(s.id)).toList()) {
     if (s.option != null) ids.add(s.option!.underlyingId);
@@ -204,6 +234,29 @@ String investmentRevision(
   final securities = p.securities.where((s) => ids.contains(s.id)).toList()
     ..sort((a, b) => a.id.compareTo(b.id));
   final events = [...past.events]..sort(compareStockEvents);
+  // 只摘要该时点已发生的资金事实。日后补录确认信息不会无故使此前在途快照失效；
+  // 真正改变持仓的确认已由生效日期对应的 fundAcquire 事件进入上面的 events 摘要。
+  final subscriptions = [
+    for (final subscription in past.fundSubscriptions)
+      if (subscription.paidAt != null && !subscription.paidAt!.isAfter(at))
+        {
+          'id': subscription.id,
+          'securityId': subscription.securityId,
+          // 经济事实按精确数值摘要；0 与 0.00 等值，不应让编辑确认无故作废旧在途快照。
+          'cashAmount': InvestmentDecimal.parse(
+            subscription.cashAmount,
+          ).toString(),
+          'fee': InvestmentDecimal.parse(subscription.fee).toString(),
+          'paidAt': subscription.paidAt!.toUtc().toIso8601String(),
+          if (subscription.refundedAt != null &&
+              !subscription.refundedAt!.isAfter(at)) ...{
+            'refundedAt': subscription.refundedAt!.toUtc().toIso8601String(),
+            'refundAmount': InvestmentDecimal.parse(
+              subscription.refundAmount!,
+            ).toString(),
+          },
+        },
+  ]..sort((a, b) => a['id']!.compareTo(b['id']!));
   final relatedEntries =
       entries
           .where(
@@ -214,16 +267,18 @@ String investmentRevision(
           )
           .toList()
         ..sort((a, b) => a.id.compareTo(b.id));
-  final relatedAnchors =
-      anchors
-          .where(
-            (a) =>
-                a.accountId == p.accountId &&
-                a.bookId == p.bookId &&
-                !a.effectiveAt.isAfter(at),
-          )
-          .toList()
-        ..sort((a, b) => a.id.compareTo(b.id));
+  final relatedAnchors = anchors
+      .where(
+        (a) =>
+            a.accountId == p.accountId &&
+            a.bookId == p.bookId &&
+            !a.effectiveAt.isAfter(at),
+      )
+      .toList();
+  // 正常保存按毫秒复用锚点 ID；旧导入若有同毫秒多条记录，不能因规范时间副本而
+  // 隐藏实际选用余额的变化。先按历史现金入口的原顺序选择，再对摘要事实按 ID 排序。
+  final selectedCollisionAnchor = _collidingAnchorSelection(relatedAnchors);
+  relatedAnchors.sort((a, b) => a.id.compareTo(b.id));
   return sha256
       .convert(
         utf8.encode(
@@ -233,14 +288,16 @@ String investmentRevision(
             'currencyCode': p.currencyCode,
             'openedAt': p.openedAt.toIso8601String(),
             'openingCash': p.openingCash,
+            if (subscriptions.isNotEmpty) 'fundSubscriptions': subscriptions,
             'includedEntryIds': p.includedEntryIds,
             'openingHoldings': p.openingHoldings
                 .map((v) => v.toJson())
                 .toList(),
             'securities': securities.map((v) => v.toJson()).toList(),
             'events': events.map((v) => v.toJson()).toList(),
-            'entries': relatedEntries.map((v) => v.toJson()).toList(),
-            'anchors': relatedAnchors.map((v) => v.toJson()).toList(),
+            'entries': relatedEntries.map(_entryRevisionFact).toList(),
+            'anchors': relatedAnchors.map(_anchorRevisionFact).toList(),
+            'selectedCollisionAnchor': ?selectedCollisionAnchor,
             'anchorIncludedIds': {
               for (final a in relatedAnchors) a.id: p.anchorIncludedIds[a.id],
             },
@@ -249,6 +306,47 @@ String investmentRevision(
       )
       .toString();
 }
+
+/// 为 [anchors] 中同毫秒多条核对记录保留历史现金入口实际采用的记录 ID。
+/// 无碰撞时返回 null，保持正常旧记录的摘要形状；碰撞可能来自旧导入，按与 accountCashAt
+/// 相同的原列表顺序和真实生效时刻排序。冷读后选择改变应使旧依据失效，不能伪装成同一余额。
+String? _collidingAnchorSelection(List<BalanceAnchor> anchors) {
+  final milliseconds = <int>{};
+  if (!anchors.any(
+    (a) => !milliseconds.add(a.effectiveAt.millisecondsSinceEpoch),
+  )) {
+    return null;
+  }
+  final ordered = [...anchors]
+    ..sort((a, b) => b.effectiveAt.compareTo(a.effectiveAt));
+  return ordered.first.id;
+}
+
+/// 将真实时刻 [instant] 表达为 SQLite 行读取得到的本地毫秒文本，仅供修订摘要使用。
+/// 不修改账目对象、普通账户的微秒先后判断或已有快照；已有效的本地毫秒旧文本原样保持。
+String _sqliteRevisionTime(DateTime instant) =>
+    DateTime.fromMillisecondsSinceEpoch(
+      instant.millisecondsSinceEpoch,
+    ).toIso8601String();
+
+/// 复制交易 [entry] 的修订依据，仅规范以整数毫秒保存的发生/银行记账/退款到账时间。
+/// 来源证据及修改审计本来以 JSON 原文保存，其微秒与时区文本不在这里改写；金额、分类、
+/// 账户和其他事实仍完整进入摘要，真实账务变更继续使旧依据失效。
+Map<String, Object?> _entryRevisionFact(LedgerEntry entry) => {
+  ...entry.toJson(),
+  'occurredAt': _sqliteRevisionTime(entry.occurredAt),
+  if (entry.postDate != null) 'postDate': _sqliteRevisionTime(entry.postDate!),
+  if (entry.settledAt != null)
+    'settledAt': _sqliteRevisionTime(entry.settledAt!),
+};
+
+/// 复制余额锚点 [anchor] 的摘要依据；两个行时间均使用数据库真实持久化精度。
+/// 锚点身份、余额和备注仍按原事实保存，不截断内存对象时刻，也不重算旧快照冒充核准。
+Map<String, Object?> _anchorRevisionFact(BalanceAnchor anchor) => {
+  ...anchor.toJson(),
+  'effectiveAt': _sqliteRevisionTime(anchor.effectiveAt),
+  'createdAt': _sqliteRevisionTime(anchor.createdAt),
+};
 
 /// 读取某一历史日最后保存的真实依据；无该日快照或账务修订不匹配时返回 null。
 InvestmentValuationSnapshot? investmentSnapshotAt(
@@ -288,6 +386,8 @@ ConvertedAccountBalances valueLedgerAccounts({
   double Function(Account)? currentCashOf,
 }) {
   final selectedAccounts = accounts.where((a) => a.bookId == bookId).toList();
+  // 当前汇总的 at 可以只表示汇率日期；基金经济时点必须仍是现在，历史汇总则使用明确截点。
+  final fundCutoff = current ? DateTime.now() : at;
   final cutoff = current ? DateTime.utc(9999) : at;
   final normalCash = currentCashOf == null || !current
       ? _cashBalancesAt(selectedAccounts, entries, anchors, cutoff)
@@ -326,6 +426,7 @@ ConvertedAccountBalances valueLedgerAccounts({
             anchors: anchors,
             at: current ? DateTime.utc(9999) : time,
             portfolio: p,
+            fundAt: fundCutoff,
           );
     final selected = p == null
         ? null
@@ -336,7 +437,7 @@ ConvertedAccountBalances valueLedgerAccounts({
           );
     final parts = selected == null
         ? AccountAssetAmounts.balance(cash)
-        : valueInvestmentAccount(selected, cash).amounts;
+        : valueInvestmentAccount(selected, cash, at: fundCutoff).amounts;
     if (parts == null) {
       incomplete.add(account.id);
       continue;

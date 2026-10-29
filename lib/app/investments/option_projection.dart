@@ -9,7 +9,7 @@ void _validateOptionContract(
   final underlying = securities[o.underlyingId];
   final expiry = DateTime.tryParse(o.expiry);
   if (underlying == null ||
-      underlying.option != null ||
+      !underlying.isStock ||
       underlying.currencyCode != security.currencyCode ||
       underlying.market != security.market ||
       !RegExp(r'^\d{4}-\d{2}-\d{2}$').hasMatch(o.expiry) ||
@@ -60,7 +60,7 @@ _applyOptionEvent(
       q = InvestmentDecimal.parse(e.quantity),
       price = InvestmentDecimal.parse(e.price),
       fee = InvestmentDecimal.parse(e.fee);
-  if (e.kind.index < StockEventKind.optionBuyOpen.index || e.batchId != null) {
+  if (!e.kind.isOptionEvent || e.batchId != null) {
     throw const FormatException('期权必须使用独立的开平仓或结算动作');
   }
   final trade = {

@@ -2299,6 +2299,18 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
                 if (e.occurredAt.millisecondsSinceEpoch ==
                     effectiveAt.millisecondsSinceEpoch)
                   'stock:${e.id}',
+              for (final leg in fundSubscriptionCashLegs(
+                portfolio,
+                // 锚点在 SQLite 只保留毫秒；同毫秒已知事实全部视为校准已包含，
+                // 与普通流水/证券事件一致，但不扩展到下个毫秒的付款或退款。
+                at: DateTime.fromMillisecondsSinceEpoch(
+                  effectiveAt.millisecondsSinceEpoch,
+                  isUtc: true,
+                ).add(const Duration(microseconds: 999)),
+              ))
+                if (leg.occurredAt.millisecondsSinceEpoch ==
+                    effectiveAt.millisecondsSinceEpoch)
+                  leg.id,
             ],
           },
         ),
@@ -7942,11 +7954,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     notifyListeners();
   }
 
-  /// 导出完整 JSON v12 用户数据，包含历史价格/汇率依据，不导出临时行情缓存或凭证。
+  /// 导出完整 JSON v15 用户数据，保留基金确认的收益归属规则，不导出临时行情缓存或凭证。
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 12,
+      'version': 15,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'investmentPortfolios': _investmentPortfolios
@@ -8040,7 +8052,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 12) {
+    if (version < 1 || version > 15) {
       throw FormatException('不支持的备份版本：$version');
     }
 

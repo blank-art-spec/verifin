@@ -6838,7 +6838,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investUnrealized => 'Unrealized P/L';
 
   @override
-  String get investIncome => 'Net dividends and expenses';
+  String get investIncome => 'Net dividends, distributions and fees';
 
   @override
   String get investPositions => 'Holdings';
@@ -6903,6 +6903,27 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investQuantity => 'Quantity (shares)';
+
+  @override
+  String get investFundQuantity => 'Quantity (units)';
+
+  @override
+  String get investFundOpeningQuantity => 'Opening fund units (optional)';
+
+  @override
+  String get investFundNewTrade => 'Record fund transaction';
+
+  @override
+  String get investFundDistribution => 'Distribution';
+
+  @override
+  String get investFundMarketUS => 'US fund';
+
+  @override
+  String get investFundMarketCN => 'Mainland China fund';
+
+  @override
+  String get investFundMarketHK => 'Hong Kong fund';
 
   @override
   String get investPrice => 'Trade price';
@@ -7178,11 +7199,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketResearchConsent =>
-      'This diagnostic build can send stock symbols to Tencent\'s public source, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. This tests requests and valuation; release usage terms remain under review. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
+      'This diagnostic build can send stock symbols to Tencent and a public fund identifier and page language to CMS\'s official source. Providers can see your IP. Quantities, costs, accounts, balances and notes are not sent. This tests requests and valuation; release usage terms remain under review. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
 
   @override
   String get marketResearchNote =>
-      'Experimental public stock quotes are available only in this diagnostic debug build. Quotes may be delayed. Manual fallback prices are retained.';
+      'Experimental stock reference prices and daily NAV for CMS USD Money Market Fund Class B are available only in this diagnostic debug build. Stock quotes may be delayed; fund NAV has date precision only. Manual fallback prices are retained. Reference returns are calculated automatically; no income entries are created.';
 
   @override
   String get marketSourceResearch => 'Experimental; release review pending';
@@ -7248,6 +7269,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketQuoteTime => 'Source quote time';
 
   @override
+  String get marketNavDate => 'NAV date';
+
+  @override
   String get marketStateUnknown =>
       'Trading state or delay may be unknown; cached quotes are not guaranteed real-time';
 
@@ -7272,11 +7296,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investHistoryHint =>
-      'Only saved observations and their price and exchange-rate evidence are shown. Missing dates stay empty. Earlier ledger edits require affected observations to be reviewed.';
+      'Manually saved valuation evidence retains its prices and exchange rates, separately from automatic fund reference history. Missing dates stay empty. Earlier ledger edits require affected observations to be reviewed.';
 
   @override
   String get investHistoryEmpty =>
-      'No saved valuation evidence yet. Save a current observation to view it here.';
+      'No manually saved valuation evidence yet. Save a current observation to view it here.';
 
   @override
   String get investHistoryGap =>
@@ -7348,7 +7372,354 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investAllocationLiabilityHint =>
-      'Shares use positive cash plus long position value. Short obligations and financing count as liabilities.';
+      'Shares use positive cash, long positions, and pending subscription assets. Short obligations and financing count as liabilities.';
+
+  @override
+  String get fundOperations => 'Fund actions';
+
+  @override
+  String get fundBuyByAmount => 'Buy by amount';
+
+  @override
+  String get fundRecordHolding => 'Record existing holding';
+
+  @override
+  String get fundAcquireEvent => 'Subscription confirmation';
+
+  @override
+  String get fundHoldingBaselineEvent => 'Holding baseline';
+
+  @override
+  String get fundChoose => 'Choose fund';
+
+  @override
+  String get fundCmsUsdName => 'CMS USD Money Market Fund Class B';
+
+  @override
+  String get fundNoEligible =>
+      'No Hong Kong fund is available in this account. The verified additional fund is CMS USD Money Market Fund Class B in a USD account.';
+
+  @override
+  String get fundCashAmount => 'Total cash payment, including fees';
+
+  @override
+  String get fundRequestFee => 'Fees included in total payment';
+
+  @override
+  String get fundEstimatedNav =>
+      'Estimated NAV (optional; does not confirm a trade)';
+
+  @override
+  String get fundConfirmedNav => 'Broker-confirmed NAV';
+
+  @override
+  String get fundHoldingNav => 'Holding baseline NAV';
+
+  @override
+  String get fundConfirmedQuantityOptional =>
+      'Broker-confirmed units (optional check)';
+
+  @override
+  String get fundEstimatedQuantity => 'Calculated reference units';
+
+  @override
+  String get fundUsedQuantity => 'Units used for this record';
+
+  @override
+  String get fundRequestedAt => 'Application time';
+
+  @override
+  String get fundPaidAt => 'Actual payment time';
+
+  @override
+  String get fundAlreadyPaid => 'Payment has actually occurred';
+
+  @override
+  String get fundExpectedConfirmationDate =>
+      'Expected confirmation date (reference only)';
+
+  @override
+  String get fundHasExpectedConfirmationDate =>
+      'Enter an expected confirmation date';
+
+  @override
+  String get fundConfirmedAt => 'Actual confirmation time';
+
+  @override
+  String get fundNavDate => 'Confirmed NAV date (Hong Kong date)';
+
+  @override
+  String get fundEarningStartDate => 'Return start date (Hong Kong date)';
+
+  @override
+  String get fundAccrualRule => 'Return attribution rule';
+
+  @override
+  String get fundAccrualDealNavDate => 'Actual dealing NAV date';
+
+  @override
+  String get fundAccrualExplicitStartDate =>
+      'Separate start date (original rule)';
+
+  @override
+  String get fundDealNavBasisDate =>
+      'Dealing NAV baseline date (Hong Kong date)';
+
+  @override
+  String get fundDealNavDateHint =>
+      'CMS USD Money Market Fund Class B establishes the holding baseline on the actual dealing NAV date. Later NAV changes belong to their published intervals; a delayed confirmation notice does not defer returns. The dealing date establishes the baseline only; fees and dealing differences are shown separately. Hong Kong day-end is a daily reporting boundary, not an actual execution time. Enter the actual dealing NAV and date, not the latest available NAV.';
+
+  @override
+  String get fundLegacyAccrualHint =>
+      'This record retains its separate start date. After checking actual dealing NAV, units and dates, you may switch to the dealing NAV date rule and review again. The saved record stays unchanged until you save.';
+
+  @override
+  String get fundConfirmationCheck =>
+      'I checked broker units, NAV, amount differences and dates';
+
+  @override
+  String get fundSubmissionHint =>
+      'An application is not a completed trade. Actual payment reduces cash and becomes a pending subscription asset. Public NAV is an estimate and never confirms your personal application automatically.';
+
+  @override
+  String get fundConfirmationHint =>
+      'Enter the broker\'s confirmation. Confirmation, NAV and return start dates are stored separately. Before the return start date, the amount remains a pending activation asset without early returns.';
+
+  @override
+  String get fundOpeningHint =>
+      'Enter actual units, total cost and the matching NAV at reconciliation. Unrealized profit/loss is calculated automatically. The baseline replaces units and cost without another cash payment or income entry; later trades are replayed.';
+
+  @override
+  String get fundNetAmount => 'Net subscription amount';
+
+  @override
+  String get fundTargetMarketValue =>
+      'Cost plus reported unrealized profit/loss';
+
+  @override
+  String get fundQuantityValue => 'NAV value of the units used';
+
+  @override
+  String get fundAmountDifference => 'Target amount minus unit value';
+
+  @override
+  String get fundQuantityInferredHint =>
+      'Units inferred from a subscription amount are a reference. Check broker-confirmed units; differences never overwrite actual payment or cost.';
+
+  @override
+  String get fundMismatchHint =>
+      'Confirmed units differ from the entered amount. Check the difference first. Actual amounts remain unchanged and unrealized profit/loss is not recorded as income.';
+
+  @override
+  String get fundNoPreview =>
+      'Enter valid amounts and the matching NAV to preview units. An unconfirmed application can leave NAV blank.';
+
+  @override
+  String get fundPendingTitle => 'Fund applications and in-transit assets';
+
+  @override
+  String get fundStatusUnpaid => 'Awaiting payment';
+
+  @override
+  String get fundStatusPending => 'Paid; awaiting confirmation';
+
+  @override
+  String get fundStatusScheduled => 'Confirmed; not yet effective';
+
+  @override
+  String get fundStatusEffective => 'Confirmed and effective';
+
+  @override
+  String get fundStatusRefundPending => 'Cancelled; awaiting refund';
+
+  @override
+  String get fundStatusRefunded => 'Refund received';
+
+  @override
+  String get fundStatusCancelled => 'Cancelled before payment';
+
+  @override
+  String get fundRecordPayment => 'Record payment or edit application';
+
+  @override
+  String get fundConfirmSubscription => 'Enter confirmation';
+
+  @override
+  String get fundEditConfirmation => 'Review confirmation';
+
+  @override
+  String get fundCancelSubscription => 'Cancel application or record refund';
+
+  @override
+  String get fundRefundReceived => 'Refund has actually arrived';
+
+  @override
+  String get fundCancelledAt => 'Actual cancellation time';
+
+  @override
+  String get fundRefundedAt => 'Actual refund time';
+
+  @override
+  String get fundRefundAmount => 'Actual refund amount';
+
+  @override
+  String get fundSaveCancellation => 'Save cancellation / refund';
+
+  @override
+  String get fundCancelHint =>
+      'A paid amount awaiting refund remains an asset; unreturned money is not a loss. A confirmed subscription cannot be cancelled here; record a sale when appropriate.';
+
+  @override
+  String get fundDeleteRequest => 'Delete unpaid application';
+
+  @override
+  String get fundDeleteRequestHint =>
+      'Only an unpaid, unconfirmed application can be deleted. Actual payments and confirmations cannot be erased by deleting an application.';
+
+  @override
+  String get fundHoldingCost => 'Existing holding total cost';
+
+  @override
+  String get fundHoldingQuantity => 'Actual units held (required)';
+
+  @override
+  String get fundHoldingMarketValue => 'Market value at entered NAV';
+
+  @override
+  String get fundCalculatedUnrealized => 'Calculated unrealized profit/loss';
+
+  @override
+  String get fundHoldingCalculationHint =>
+      'Baseline profit/loss = actual units × corresponding NAV − total cost. No income entry is created. Any existing current reference price is retained and can be updated in Reference quotes.';
+
+  @override
+  String get fundHoldingNoPreview =>
+      'Enter total cost, actual units and the matching NAV to calculate market value and unrealized profit/loss.';
+
+  @override
+  String get fundHoldingCheck =>
+      'I checked actual units, total cost, NAV and all dates';
+
+  @override
+  String get fundLegacyInferredQuantityHint =>
+      'These legacy units were inferred from an amount. Check the broker holding; unchanged units retain their original inferred status.';
+
+  @override
+  String get fundReportedUnrealized =>
+      'Unrealized profit/loss at the same time (may be negative)';
+
+  @override
+  String get fundBaselineDate => 'Holding reconciliation time';
+
+  @override
+  String get fundReadCachedNav => 'Use cached NAV as a reference';
+
+  @override
+  String get fundPendingValue =>
+      'Unconfirmed / not-yet-effective subscriptions';
+
+  @override
+  String get fundSaveRequest => 'Save subscription application';
+
+  @override
+  String get fundScheduleHint =>
+      'An expected date never confirms a trade automatically. Enter actual payment, confirmation and refund times only after they occur. Returns follow the rule saved with the record; delayed display does not mean a later start.';
+
+  @override
+  String get fundSaveValidation =>
+      'Check amounts, dates, NAV, units and confirmation. The record has not been saved.';
+
+  @override
+  String get fundPaidAmountLocked =>
+      'The actual total payment is read-only. Its fee allocation may be corrected from the broker confirmation without another cash deduction.';
+
+  @override
+  String get fundTotalCost => 'Total holding cost, including fees';
+
+  @override
+  String get fundCashNotDeducted =>
+      'An existing holding baseline does not deduct cash again.';
+
+  @override
+  String get fundReferenceHistoryTitle => 'Fund reference history';
+
+  @override
+  String get fundReferenceDailyProfit => 'NAV-period reference return';
+
+  @override
+  String get fundReferenceProfitIntervalLabel => 'Return interval';
+
+  @override
+  String fundReferenceProfitInterval(String start, String end) {
+    return '$start to $end';
+  }
+
+  @override
+  String get fundReferenceSubscriptionAdjustment =>
+      'Of which: subscription fees and settlement adjustments';
+
+  @override
+  String get fundReferenceCumulativeProfit =>
+      'Cumulative reference profit/loss';
+
+  @override
+  String get fundReferenceMarketValue => 'Fund reference value';
+
+  @override
+  String get fundReferenceAccountNetValue => 'Account reference net assets';
+
+  @override
+  String get fundReferenceAccountAssets => 'Account reference assets';
+
+  @override
+  String get fundReferenceAccountLiabilities => 'Account reference liabilities';
+
+  @override
+  String get fundReferenceCash => 'Historical cash';
+
+  @override
+  String get fundReferenceNav => 'NAV per unit';
+
+  @override
+  String get fundReferenceDetails => 'NAV-date details';
+
+  @override
+  String get fundReferenceHistoryEmpty =>
+      'No eligible fund NAV history. Enable networking, refresh, and adopt eligible quotes for this fund in Reference quotes.';
+
+  @override
+  String get fundReferenceHistoryHint =>
+      'Reference returns use published NAV dates, actual holdings and in-transit subscriptions in the account currency. Principal movements are excluded. Intervals spanning weekends are not split into daily cash income. Edits recalculate figures without creating income entries.';
+
+  @override
+  String get fundReferenceMissingPrices =>
+      'Some dates lack valid same-date prices for other securities. Complete account assets remain unknown; current prices never fill the gaps. Fund value and reference returns remain available.';
+
+  @override
+  String fundReferenceMissingSecurities(String securities) {
+    return 'Missing historical prices: $securities';
+  }
+
+  @override
+  String get fundReferenceUnknownProfitHint =>
+      'The first NAV period and intervals containing transfers or holding reconciliations have unknown returns. Incomplete costs also leave cumulative profit/loss unknown. Existing holdings continue cumulative profit/loss from the latest baseline. Reference returns do not mean cash was received.';
+
+  @override
+  String get fundReferenceSinglePoint =>
+      'Only one NAV observation is available. A trend is not drawn yet.';
+
+  @override
+  String fundReferenceShowAll(int count) {
+    return 'View all $count NAV dates';
+  }
+
+  @override
+  String get fundReferenceShowRecent => 'Show only the latest 20 NAV dates';
+
+  @override
+  String fundReferenceHistoryLimited(int limit) {
+    return 'Only the latest $limit NAV dates are shown.';
+  }
 
   @override
   String investAllocationPercent(double value) {

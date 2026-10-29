@@ -1,5 +1,26 @@
 # 组件清单（Component Registry）
 
+2026-10-29 历史依据精度：`investmentRevision` 在副本中按既有 SQLite 毫秒及本地表达
+规范锚点和普通交易的行时间，避免冷读的微秒/UTC 文本变化使投资依据失效；不修改账目对象
+或普通账户余额边界。来源/审计 JSON 保留原文；无时间碰撞的有效本地毫秒摘要不变。
+旧导入同毫秒多条核对时另摘要实际采用 ID，选择改变会失效，不伪造修复旧失效快照。
+
+2026-10-29 基金收益归属：`FundAccrualRule` 在确认中保存 `dealNavDate` 或兼容的
+`explicitStartDate`，默认省略旧规则字段。`supportsCmsDealNavAccrual` 严格限制已核实的
+HK/USD 基金 B 类；`hongKongFundDayEnd` 提供纯日期的香港日报末截点，不代表实际收市时刻。
+`fundSubscriptionEffectiveAt` 为所有投影、在途和界面状态的统一生效入口。
+`FundReferenceDay.profitFromDate` 保存前一公开净值日期，`subscriptionAdjustment` 只解释
+已包含的申购费用与结算差额。`FundReferenceHistorySection` 显示真实区间，不补周末或重复加减。
+`FundEntryPage` 新 CMS 确认默认成交净值规则，旧订单明确重核后才能切换；其他基金沿用旧规则。
+
+2026-10-28 基金诊断研究与参考历史：
+
+- `StockSecurity.type` / `isFund` / `isStock` 明确股票、基金与期权边界；基金份额使用独立 `fund` 身份。`StockMarket.label(fund: true)` 使用基金地区称谓，交易编辑保留品种并拒绝未经支持的融券/拆股。
+- `CmsFundQuoteAdapter` / `CmsFundHttpQuoteTransport` 固定匿名 POST 招商官方净值，只支持香港 USD 的 B 类 `HK0001039582`；20 身份、15 秒、512 KiB，最新摘要与完整历史一致性校验，保留 `approved: false` / `researchOnly: true`。沿用现有刷新、缓存与显式诊断构建门禁，见[基金研究](cms-fund-api-research.md)。
+- `FundNavPoint` / `FundNavHistory` 保留有界、精确文本、真实净值日期的公开序列；`MarketQuote.dateOnly` 与 `InvestmentPriceFact.dateOnly` 区分纯日期和时刻，`formatQuoteTime(dateOnly: true)` 不换设备时区或补午夜。`InvestmentQuoteDetails(dateOnly: true)` 显示“净值日期”。
+- `buildFundReferenceHistory` 是只读纯计算入口，按各净值日日末真实份额、现金和可用历史依据派生 `FundReferenceDay`；缺其他证券同日价不借今日价回填，首个基准或转移当期收益未知。Controller 公共读取 `fundReferenceHistoryFor` 不写流水或权威快照。
+- `FundReferenceHistorySection` 接收账户、证券和派生序列，复用标准指标与交互折线展示基金市值/完整账户历史及净值日明细；默认最近 20 点，可展开全量。公开历史只随设备行情缓存保存，账务修改后重新计算。
+
 2026-10-22 通用多币种主账户扩展：
 
 | 组件/函数 | 入口与约定 |
@@ -134,6 +155,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 |---|---|---|---|
 | `showNumberPadSheet` | Sheet 函数 | `sheets.dart` | **数字键盘弹窗**（四则算式 + 结果预览）；数字区支持设置中的标准（7 8 9 / 4 5 6 / 1 2 3）与电话（1 2 3 / 4 5 6 / 7 8 9）布局，默认标准；货币金额传 `currencyCode` 自动遵循 ISO minor unit，汇率输入才显式用 `maxFractionDigits:10`；`maxAmount` 的展示/比较也随币种精度，JPY 自动禁用小数点。触感偏好内部自取。**输金额一律用它**，不要弹系统 TextField、不要裸包 `showModalBottomSheet` |
 | `NumberPadSheet` | Widget | `entry_sheets.dart` | 上面 helper 的内部 widget（一般经 `showNumberPadSheet`） |
+
+允许负数的金额键盘（`allowNegative:true`）可首按减号直接录入负值，供负余额等字段复用；非负金额仍拒绝首位运算符，四则算式和币种精度保持一致。
 | `showCurrencyPickerSheet` | Sheet 函数 | `sheets.dart` | 可搜索的离线 ISO 4217 法定货币选择器（代码/中英文名/符号，支持常用/业务优先币种与排除项）；取消返回 `null` |
 | `evaluateAmountExpression` / `amountExpressionHasOperator` | 纯函数 | `calc_expression.dart` | 算式求值（不完整返回 null，结果已规整到分）/ 是否含运算符 |
 | `CurrencyCatalog` | 静态目录 | `currency_catalog.dart` | 离线 ISO 4217 法定货币定义、常用币种排序与中英文搜索；业务层不得另建货币清单 |
@@ -204,7 +227,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `InteractiveBarChart` | Widget | `chart_painters.dart` | 可交互柱状图；`values, xLabels, yLabels, tooltipOf`。交互与无障碍同上 |
 | `TrendLinePainter` / `BarChartPainter` | CustomPainter | `chart_painters.dart` | 上面两个控件的绘制实现。**自绘保留**：曾评估改用 `fl_chart`，实测其坐标轴刻度与既有内边距约定对不齐（出现重复刻度与刻度/线错位），故维持自绘；不要为「换库」而替换，除非同时解决刻度对齐 |
 | `BudgetRingPainter` | CustomPainter | `chart_painters.dart` | 预算进度圆环，**保持自研**：`SweepGradient` + `GradientRotation(-π/2)` 的接缝处理是规范硬要求，有像素级回归测试（`budget_ring_test.dart`）。不要换成通用进度环组件 |
-| `trendChartRect` / `barChartRect` / `chartNearestIndex` / `chartSlotIndex` / `drawChartTooltip` | 纯函数 | `chart_painters.dart` | 预算趋势组合图（`budget_trend_chart.dart`，自绘画布）仍在用的几何与命中计算；有 `chart_hit_test.dart` 覆盖 |
+| `trendChartRect` / `barChartRect` / `chartNearestIndex` / `chartSlotIndex` / `drawChartTooltip` | 纯函数 | `chart_painters.dart` | 预算趋势组合图（`budget_trend_chart.dart`，自绘画布）仍在用的几何与命中计算；气泡标题与内容按可用宽度及系统字号换行，圆点宽度单独预留，绘制限制在画布与气泡内。`chart_hit_test.dart` 覆盖命中及 360dp 英文大字号长提示的实际像素边界 |
 | `ChartTooltip` / `ChartTooltipLine` | 值类 | `chart_painters.dart` | 气泡数据模型 |
 
 ## 族 10 — 纯计算（领域逻辑，无 Flutter 依赖或仅叶子级）
@@ -262,7 +285,9 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 共享时区数据库：`timezone_database.dart` 的 `ensureTimezoneDatabase()` 共用既有完整 `latest_all.tzf.gz` 资产；提醒调度与美股报价源时间解析等待同一次初始化，失败允许重试，不修改设备时区、不联网。纽约源时间使用 IANA `America/New_York`，不固定减四/五小时，也不重复打包时区表。
 
-- 证券资产与历史：`investment_valuation.dart` 的 `valueInvestmentAccount` / `valueLedgerAccounts` / `accountCashAt` / `investmentRevision` / `investmentSnapshotAt` 是纯计算入口；`currency_math.dart` 的 `AccountAssetAmounts` 和 `ConvertedAccountBalances` 保留总资产/负债分解。`models/investment_valuation_snapshot.dart` 保存实际观察点依据，`InvestmentHistoryPage` 复用 `InteractiveTrendChart`。详见 [阶段 5](securities-stage05-implementation.md)。
+- 香港基金录入与结算：`fund_amount_math.dart` 的 `calculateFundPurchaseByAmount` 提供新申购参考份额与金额残差；`calculateFundOpeningByQuantity` / `FundHoldingAmountResult` 按已有实际份额、总成本及 NAV 计算市值和未实现盈亏。`calculateFundOpeningByUnrealized` / `FundOpeningAmountResult` 仅保留旧账目与算法兼容，新界面不提供报告浮盈输入，不借旧浮盈重推已存份额。`fund_workflow_math.dart` 的 `fundSubscriptionEffectiveAt` / `fundSubscriptionCashLegs` / `fundSubscriptionPendingValue` / `validateFundSubscriptions` 统一起算、资金腿、在途和校验。`models/fund_subscription.dart` 保存实际时刻与香港纯日期；`veri_fin_controller_funds.dart` 原子处理申购、确认、取消退款及持仓基准。共享 `FundOperationsButton`、`FundSubscriptionCard`、`fundSubscriptionStatusLabel` 和专用 `FundEntryPage` 位于 `pages/fund_entry_page.dart`，证券页/基金卡复用。详见[录入与结算](fund-amount-settlement.md)。
+- 基金资金核对与操作模式：`stock_cash_math.dart` 对基金资金腿沿用毫秒锚点和稳定 ID 边界，同刻实际退款先供款，原普通/股票/期权排序不变；Controller 保存锚点时记录同毫秒已包含资金事实。`FundEntryPage` 切换申请、确认、取消时保留各自草稿，取消页付款字段只读；`saveFundHoldingBaseline` 只在缺当前参考价时初始化后备价，历史核对不覆盖现价。
+- 证券资产与历史：`investment_valuation.dart` 的 `valueInvestmentAccount` / `valueLedgerAccounts` / `accountCashAt` / `investmentRevision` / `investmentSnapshotAt` 是纯计算入口，历史显式传 `at`，统一资产及占比包含基金在途款；`currency_math.dart` 的 `AccountAssetAmounts` 和 `ConvertedAccountBalances` 保留总资产/负债分解。`models/investment_valuation_snapshot.dart` 保存实际观察点依据，`InvestmentHistoryPage` 复用 `InteractiveTrendChart`。详见 [阶段 5](securities-stage05-implementation.md)。
 - 证券资产占比：`InvestmentAccountValuation.cashShare` / `holdingsShare` / `shortObligationShare` 与 `shareOfAssets(value)` 统一以本币种账户的正现金加多头市值为分母；分母为零、估值不完整或输入无效时返回 null。概览复用 `SummaryMetric.detail`，持仓卡复用 `DetailInfoRow`；空头义务独立标注且允许超过 100%，冻结不重复扣减。百分比经 l10n `investAllocationPercent` 按语言显示一位小数。
 
 - 证券展示组合：`app/investments/investment_widgets.dart` 的 `InvestmentSection` 复用 `VeriCard`，统一分组标题、内容伸展和内部 Material 墨水层；`InvestmentHint` 统一次级说明的图标、行距和主题颜色。`InvestmentInputField` 令标签独立占位、随字号换行，并为输入框保留可访问性名称；`investmentInputDecoration` 只提供实色底色，不添加浮动标签。`investmentOutlineButtonStyle` 对齐次要按钮与主按钮的圆角、间距和触控高度。均只负责展示，不访问 Controller。

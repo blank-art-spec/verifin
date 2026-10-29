@@ -27,7 +27,13 @@ void main() {
     await tester.pumpAndSettle();
     expect(client.calls, isEmpty);
     final check = find.byKey(const Key('workday_calendar_check_now'));
-    await tester.scrollUntilVisible(check, 150);
+    // 来源 SelectableText 也包含内部滚动，默认 Scrollable.single 会命中多项；
+    // 复用共享纵向列表定位，只滚动页面主列表，不改变原联网与撤销断言。
+    await tester.scrollUntilVisible(
+      check,
+      150,
+      scrollable: firstVerticalScrollable(),
+    );
     expect(tester.widget<OutlinedButton>(check).onPressed, isNull);
     final toggle = find.byKey(const Key('workday_calendar_auto_update'));
     await tester.ensureVisible(toggle);
@@ -86,14 +92,23 @@ void main() {
       findsOneWidget,
     );
     final pending = find.text(l10n.workdayCalendarPendingYears('2027'));
-    await tester.scrollUntilVisible(pending, 150);
+    // 窄屏下同样存在来源文本的内部滚动，显式限定页面纵向主列表以保持查找唯一。
+    await tester.scrollUntilVisible(
+      pending,
+      150,
+      scrollable: firstVerticalScrollable(),
+    );
     expect(pending, findsOneWidget);
     expect(find.text(l10n.workdayCalendarFailedYears('2026')), findsOneWidget);
     final check = find.byKey(const Key('workday_calendar_check_now'));
     await tester.ensureVisible(check);
     expect(tester.widget<OutlinedButton>(check).onPressed, isNotNull);
     final source = find.text(l10n.workdayCalendarSource);
-    await tester.scrollUntilVisible(source, 150);
+    await tester.scrollUntilVisible(
+      source,
+      150,
+      scrollable: firstVerticalScrollable(),
+    );
     expect(source, findsOneWidget);
     expect(tester.takeException(), isNull);
   });

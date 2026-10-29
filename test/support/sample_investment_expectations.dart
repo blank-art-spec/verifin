@@ -12,7 +12,8 @@ import 'package:verifin/app/veri_fin_controller.dart';
 ///
 /// 该检查由内存导入、导出后恢复和 SQLite 重读用例共用，保证三条读取路径面对
 /// 相同业务预期：总账户只聚合，各市场证券只在对应结算币种子账户中记仓位与资金；
-/// 两个 USD 子账户即使持有同一 GOOG，数量、成交成本及手填参考价也不互相合并。
+/// 两个 USD 子账户即使持有同一 GOOG，数量、成交成本及手填参考价也不互相合并；
+/// 第二 USD 子账户另持有按份额计价的招商美元货币基金，不能把它恢复为港股。
 void expectSampleInvestmentPortfolio(VeriFinController controller) {
   final originalBookId = controller.activeBook.id;
   try {
@@ -195,10 +196,11 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
   }
 }
 
-/// 核对第二个证券主账户的三币种层级、独立 GOOG 持仓及国电电力 A 股。
+/// 核对第二个证券主账户的三币种层级、独立 GOOG、美元货币基金及国电电力 A 股。
 ///
 /// [controller] 必须已选择投资账本。量价均为固定验收输入：第二个 USD 子账户
-/// 只持有五股 GOOG，不能借用第一个 USD 子账户的六股、成本或 110 手填价；
+/// 持有五股 GOOG 和十份招商美元货币基金，不能借用第一个 USD 子账户的六股、
+/// 成本或 110 手填价；基金使用固定 100 买价及后备净值，仅改变现金/持仓构成。
 /// CNY 子账户持有 600795，HKD 保留已启用但无资金、无持仓的空账户。
 /// 本方法只读取聚合及正式估值接口，不修改手填价、触发联网或另外生成入金。
 void _expectSecondBrokerSample(VeriFinController controller) {
@@ -255,8 +257,8 @@ void _expectSecondBrokerSample(VeriFinController controller) {
       fee: '1',
       referencePrice: '310',
       cost: 1501.0,
-      cash: 8499.0,
-      value: 1550.0,
+      cash: 7499.0,
+      value: 2550.0,
       unrealized: 49.0,
       netValue: 10049.0,
     ),
@@ -284,14 +286,30 @@ void _expectSecondBrokerSample(VeriFinController controller) {
     );
     final portfolio = controller.investmentFor(account.id)!;
     expect(portfolio.openingCash, item.value.openingCash);
-    final security = portfolio.securities.single;
+    final security = portfolio.securities.singleWhere(
+      (value) => value.id == item.value.securityId,
+    );
     expect(security.id, item.value.securityId);
     expect(security.name, item.value.name);
     expect(security.market, item.value.market);
     expect(security.currencyCode, item.key);
     expect(security.option, isNull);
-    expect(portfolio.manualPrices, {security.id: item.value.referencePrice});
-    final event = portfolio.events.single;
+    expect(security.isStock, isTrue);
+    expect(
+      portfolio.securities.map((value) => value.id),
+      unorderedEquals([
+        security.id,
+        if (item.key == 'USD') 'hk:fund:HK0001039582',
+      ]),
+    );
+    expect(portfolio.manualPrices, {
+      security.id: item.value.referencePrice,
+      if (item.key == 'USD') 'hk:fund:HK0001039582': '100',
+    });
+    expect(portfolio.events, hasLength(item.key == 'USD' ? 2 : 1));
+    final event = portfolio.events.singleWhere(
+      (value) => value.id == item.value.eventId,
+    );
     expect(event.id, item.value.eventId);
     expect(event.securityId, security.id);
     expect(event.kind, StockEventKind.buy);
@@ -302,7 +320,9 @@ void _expectSecondBrokerSample(VeriFinController controller) {
     expect(event.fee, item.value.fee);
     expect(event.note, contains('固定测试价格'));
     final projection = controller.investmentProjection(account.id)!;
-    final position = projection.positions.single;
+    final position = projection.positions.singleWhere(
+      (value) => value.securityId == security.id,
+    );
     expect(position.short, isFalse);
     expect(position.quantity.toString(), item.value.quantity);
     expect(position.cost?.toDouble(), item.value.cost);
@@ -317,6 +337,8 @@ void _expectSecondBrokerSample(VeriFinController controller) {
     expect(controller.accountAssetValue(account), item.value.netValue);
   }
 
+  _expectCmsFundSample(controller);
+
   final hkd = children.singleWhere((account) => account.currencyCode == 'HKD');
   final hkdPortfolio = controller.investmentFor(hkd.id)!;
   expect(hkdPortfolio.openingCash, '0');
@@ -329,6 +351,47 @@ void _expectSecondBrokerSample(VeriFinController controller) {
   final balances = controller.parentAccountBalances(parent);
   expect(balances.isComplete, isTrue);
   expect(balances.completeTotal, 90838);
+}
+
+/// 核对第二 USD 子账户中的基金身份、份额及稳定示例买入，禁止混用股票身份。
+///
+/// [controller] 已选择投资账本；样例的十份基金按固定 100 USD 买入并保留相同
+/// 手填后备净值，因此成本和市值均为 1,000 USD，现金只减少一次且未实现盈亏为零。
+/// 这里核对的是可恢复的本地测试事实，不把当前公开净值反写成历史成交或启用联网。
+void _expectCmsFundSample(VeriFinController controller) {
+  final portfolio = controller.investmentFor('acc_investment_2_usd')!;
+  final security = portfolio.securities.singleWhere(
+    (value) => value.id == 'hk:fund:HK0001039582',
+  );
+  expect(security.symbol, 'HK0001039582');
+  expect(security.name, '招商美元货币市场基金 B类');
+  expect(security.type, InvestmentSecurityType.fund);
+  expect(security.isFund, isTrue);
+  expect(security.isStock, isFalse);
+  expect(security.market, StockMarket.hk);
+  expect(security.currencyCode, 'USD');
+  expect(security.option, isNull);
+  final event = portfolio.events.singleWhere(
+    (value) => value.id == 'test_second_cms_fund_buy',
+  );
+  expect(event.securityId, security.id);
+  expect(event.kind, StockEventKind.buy);
+  expect(event.occurredAt, DateTime(2026, 10, 15, 10));
+  expect(event.sequence, 2);
+  expect(event.quantity, '10');
+  expect(event.price, '100');
+  expect(event.fee, '0');
+  expect(event.note, contains('固定测试价格'));
+  expect(event.note, contains('不是真实成交或历史净值'));
+  final position = controller
+      .investmentProjection(portfolio.accountId)!
+      .positions
+      .singleWhere((value) => value.securityId == security.id);
+  expect(position.short, isFalse);
+  expect(position.quantity.toString(), '10');
+  expect(position.cost?.toDouble(), 1000);
+  expect(portfolio.manualPrices[security.id], '100');
+  expect(portfolio.marketPriceIds, isEmpty);
 }
 
 /// 核对中远海能 A 股的稳定身份、两笔成交、剩余成本及原币资金。

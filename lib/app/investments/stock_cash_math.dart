@@ -5,15 +5,19 @@ import '../ledger_math.dart';
 import '../models.dart';
 import 'investment_decimal.dart';
 import 'stock_projection.dart';
+import 'fund_workflow_math.dart';
 
 /// 计算已启用证券账户现金；现金锚点只截断资金腿，不截断持仓重放。
 /// [anchor] 是最新用户核对余额；[entries] 可含全部账本，内部严格按账户和账本过滤。
+/// [at] 控制独立基金资金腿的实际生效时刻；历史调用显式传入，当前调用默认当前时刻。
 double investmentCashBalance({
   required InvestmentPortfolio portfolio,
   required Iterable<LedgerEntry> entries,
   BalanceAnchor? anchor,
   bool rejectUnfundedHistory = false,
+  DateTime? at,
 }) {
+  final fundCutoff = at ?? DateTime.now();
   final useAnchor =
       anchor != null &&
       anchor.effectiveAt.millisecondsSinceEpoch >=
@@ -46,7 +50,7 @@ double investmentCashBalance({
       timeline.add((date, '0:${entry.id}', movement));
     }
   }
-  final projection = projectStocks(portfolio);
+  final projection = projectStocks(portfolio, at: fundCutoff);
   for (final event in portfolio.events) {
     if (!useAnchor ||
         event.occurredAt.millisecondsSinceEpoch >
@@ -60,6 +64,23 @@ double investmentCashBalance({
         '1:${event.sequence.toString().padLeft(20, '0')}',
         projection.cashMovements[event.id]!,
       ));
+    }
+  }
+  for (final leg in fundSubscriptionCashLegs(portfolio, at: fundCutoff)) {
+    // 现金锚点在 SQLite 只保留毫秒，基金 JSON 可保留微秒；统一按毫秒比较，
+    // 同毫秒再以稳定腿 ID 判断是否已包含，防止重启后把已核对的微秒付款或退款重复计入。
+    if (!useAnchor ||
+        leg.occurredAt.millisecondsSinceEpoch >
+            boundary.millisecondsSinceEpoch ||
+        (leg.occurredAt.millisecondsSinceEpoch ==
+                boundary.millisecondsSinceEpoch &&
+            included != null &&
+            !included.contains(leg.id))) {
+      // 实际退款是已到账资金，同刻先于已有的普通/证券支出供款，避免由申购 ID 或证券品种
+      // 决定是否误报融资；负的申购付款仍排在末尾。只新增基金退款优先级，不合并同刻净额，
+      // 也不改变普通交易的原顺序或股票/期权按 sequence 逐笔检查现金不足的既有语义。
+      final priority = leg.amount.units >= BigInt.zero ? '-1' : '2';
+      timeline.add((leg.occurredAt, '$priority:${leg.id}', leg.amount));
     }
   }
   timeline.sort((a, b) {

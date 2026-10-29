@@ -24,6 +24,34 @@ mixin _InvestmentOps on _ControllerOps {
     return value == null ? null : projectStocks(value);
   }
 
+  /// 自动派生指定基金的净值日参考收益、基金市值及有完整价格依据的账户历史资产。
+  /// [accountId] 是当前账本真实币种账户，[securityId] 必须指向该账户已采用净值的基金。
+  /// 数据仅来自已校验的公开净值缓存与各日真实账务；缺价保持未知，不写收入或估值快照。
+  /// 网络关闭后可继续读取合格缓存；撤销研究来源或改回手填后不继续采用这份参考历史。
+  List<FundReferenceDay> fundReferenceHistoryFor(
+    String accountId,
+    String securityId,
+  ) {
+    final p = investmentFor(accountId);
+    if (p == null || !p.marketPriceIds.contains(securityId)) return const [];
+    final account = accounts
+        .where((a) => a.id == accountId && a.bookId == p.bookId)
+        .firstOrNull;
+    final security = p.securities
+        .where((s) => s.id == securityId && s.isFund)
+        .firstOrNull;
+    final history = investmentQuoteSync.fundNavHistoryFor(p, securityId);
+    if (account == null || security == null || history == null) return const [];
+    return buildFundReferenceHistory(
+      portfolio: p,
+      security: security,
+      history: history,
+      account: account,
+      entries: _entries,
+      anchors: _balanceAnchors,
+    );
+  }
+
   /// 返回当前账户原币资产分解；普通账户仍以现金/信用余额的正负拆分。
   AccountAssetAmounts accountAssetAmounts(Account account) {
     final p = _portfolioForAccount(account), cash = accountBalance(account);
@@ -63,6 +91,7 @@ mixin _InvestmentOps on _ControllerOps {
         at: snapshot.capturedAt,
         portfolio: past,
       ),
+      at: snapshot.capturedAt,
     );
   }
 
@@ -91,6 +120,7 @@ mixin _InvestmentOps on _ControllerOps {
             quotedAt: ref?.time ?? at,
             manual: ref == null,
             source: ref == null ? '' : q!.source,
+            dateOnly: ref != null && q!.dateOnly,
           );
         }
         final rate = exchangeRateFor(p.currencyCode, at);
@@ -164,7 +194,8 @@ mixin _InvestmentOps on _ControllerOps {
     return _saveInvestmentCandidates([..._investmentPortfolios, value]);
   });
 
-  /// 保存或编辑股票事件；[event.id] 稳定保证重试幂等，编辑后重放全部后续事件。
+  /// 保存或编辑股票/基金份额事件；[event.id] 稳定保证重试幂等，编辑后重放后续事件。
+  /// [security] 保留真实品种，基金只接受已实现的份额买卖、分红费用及同币种转移。
   /// [referencePrice] 是用户确认的手填参考价，不修改任何历史成交价。
   Future<bool> saveStockEvent({
     required String accountId,
@@ -175,7 +206,10 @@ mixin _InvestmentOps on _ControllerOps {
     final current = investmentFor(accountId);
     if (current == null ||
         security.option != null ||
-        event.kind.index >= StockEventKind.optionBuyOpen.index ||
+        event.kind.isOptionEvent ||
+        event.kind == StockEventKind.fundAcquire ||
+        event.kind == StockEventKind.fundHoldingBaseline ||
+        event.fundSubscriptionId != null ||
         event.securityId != security.id ||
         security.currencyCode != current.currencyCode) {
       return false;
@@ -183,6 +217,8 @@ mixin _InvestmentOps on _ControllerOps {
     final old = current.events.where((e) => e.id == event.id).firstOrNull;
     // 同一幂等 ID 只能编辑原证券，不能借股票入口替换已存在的期权事实。
     if (old?.batchId != null ||
+        old?.kind == StockEventKind.fundAcquire ||
+        old?.kind == StockEventKind.fundHoldingBaseline ||
         event.batchId != null ||
         (old != null && old.securityId != event.securityId)) {
       return false;
@@ -214,7 +250,10 @@ mixin _InvestmentOps on _ControllerOps {
       _runInvestmentCommand(() async {
         final current = investmentFor(accountId);
         final event = current?.events.where((e) => e.id == eventId).firstOrNull;
-        if (current == null || event == null || event.batchId != null) {
+        if (current == null ||
+            event == null ||
+            event.batchId != null ||
+            event.kind == StockEventKind.fundAcquire) {
           return false;
         }
         final next = current.copyWith(
@@ -337,14 +376,18 @@ mixin _InvestmentOps on _ControllerOps {
         .where((s) => s.id == securityId)
         .firstOrNull;
     if (security == null || security.option != null) return false;
-    // 历史转移会改变后续成本分配；先只接受位于两端现有记录之后的真实转移。
-    if ([
-      ...from.events,
-      ...to.events,
-    ].any((e) => e.occurredAt.isAfter(occurredAt))) {
+    // 历史转移会改变后续成本分配；仍只接受位于两端已生效记录之后的真实转移。
+    // 已确认但尚未起算的基金事件是未来计划，不应阻止当前股票或旧基金份额转移；
+    // 普通成交及已经起算的基金仍保持原有末尾校验，未来申购也不会提前增加可转份额。
+    final now = DateTime.now();
+    if ([...from.events, ...to.events].any(
+      (e) =>
+          e.occurredAt.isAfter(occurredAt) &&
+          !(e.kind == StockEventKind.fundAcquire && e.occurredAt.isAfter(now)),
+    )) {
       return false;
     }
-    final holding = projectStocks(from).positions
+    final holding = projectStocks(from, at: now).positions
         .where((p) => p.securityId == securityId && p.short == short)
         .firstOrNull;
     final q = InvestmentDecimal.parse(quantity);
@@ -416,10 +459,10 @@ mixin _InvestmentOps on _ControllerOps {
     final p = investmentFor(accountId);
     if (p == null ||
         security.option == null ||
-        underlying.option != null ||
+        !underlying.isStock ||
         security.option!.underlyingId != underlying.id ||
         event.securityId != security.id ||
-        event.kind.index < StockEventKind.optionBuyOpen.index ||
+        !event.kind.isOptionEvent ||
         event.batchId != null ||
         p.events.any(
           (e) => e.id == event.id && e.securityId != event.securityId,
@@ -622,7 +665,9 @@ void validateInvestmentPortfolios(
       throw const FormatException('投资账户关联不合法');
     }
     InvestmentDecimal.parse(p.openingCash).toDouble();
-    final projection = projectStocks(p);
+    validateFundSubscriptions(p);
+    // 保存/恢复同时验证未来已核准的基金起算事件；当前页面仍按真实当前时点隐藏未生效份额。
+    final projection = projectStocks(p, at: DateTime.utc(9999, 12, 31));
     final times = <int>{};
     for (final snapshot in p.valuationSnapshots) {
       CurrencyCatalog.require(snapshot.baseCurrencyCode);
@@ -640,11 +685,24 @@ void validateInvestmentPortfolios(
         final value = InvestmentDecimal.parse(fact.value.price);
         if (!p.securities.any((s) => s.id == fact.key) ||
             value.units < BigInt.zero ||
-            fact.value.quotedAt.isAfter(
-              snapshot.capturedAt.add(const Duration(minutes: 5)),
-            ) ||
+            (!fact.value.dateOnly &&
+                fact.value.quotedAt.isAfter(
+                  snapshot.capturedAt.add(const Duration(minutes: 5)),
+                )) ||
             (!fact.value.manual && fact.value.source.isEmpty)) {
           throw const FormatException('历史参考价依据不合法');
+        }
+        if (fact.value.dateOnly &&
+            (value.units <= BigInt.zero ||
+                fact.value.manual ||
+                !p.securities.firstWhere((s) => s.id == fact.key).isFund ||
+                p.securities.firstWhere((s) => s.id == fact.key).market !=
+                    StockMarket.hk ||
+                !isHongKongQuoteDateAtOrBefore(
+                  fact.value.quotedAt,
+                  snapshot.capturedAt,
+                ))) {
+          throw const FormatException('基金历史净值日期精度不合法');
         }
         value.toDouble();
       }

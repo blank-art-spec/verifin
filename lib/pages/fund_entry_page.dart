@@ -1,0 +1,1293 @@
+/// 基金金额申购、已有持仓与逐笔确认页面；草稿取消时不产生任何资金或持仓事实。
+library;
+
+import 'dart:async';
+
+import 'package:flutter/material.dart';
+
+import '../app/common_widgets.dart';
+import '../app/currency_catalog.dart';
+import '../app/currency_math.dart';
+import '../app/investments/fund_amount_math.dart';
+import '../app/investments/fund_workflow_math.dart';
+import '../app/investments/investment_decimal.dart';
+import '../app/investments/investment_widgets.dart';
+import '../app/investments/quote_format.dart';
+import '../app/models.dart';
+import '../app/veri_fin_scope.dart';
+import '../l10n/app_localizations.dart';
+import 'sheets.dart';
+
+/// 两个入口分别表达新申购与已经持有的资产；已有持仓不会伪装成一次新的现金买入。
+enum FundEntryMode { purchase, holdingBaseline }
+
+enum _FundFormAction { application, confirmation, cancellation }
+
+/// 基金收益规则的界面名称；模型只保存规则，不依赖 Flutter 或当前语言。
+extension FundAccrualRuleLabel on FundAccrualRule {
+  /// [l] 提供当前语言；成交净值基准与旧独立起算日必须明确区分。
+  String label(AppLocalizations l) => switch (this) {
+    FundAccrualRule.dealNavDate => l.fundAccrualDealNavDate,
+    FundAccrualRule.explicitStartDate => l.fundAccrualExplicitStartDate,
+  };
+}
+
+/// 证券页与基金卡共用的操作菜单，不在多个页面复制不同的基金录入流程。
+class FundOperationsButton extends StatelessWidget {
+  /// [accountId] 为当前真实币种账户；[securityId] 可限定为卡片中的已有基金。
+  /// [enabled] 由账户可选基金决定；[compact] 使持仓卡复用普通文字按钮密度。
+  const FundOperationsButton({
+    super.key,
+    required this.accountId,
+    this.securityId,
+    this.enabled = true,
+    this.compact = false,
+  });
+
+  final String accountId;
+  final String? securityId;
+  final bool enabled, compact;
+
+  /// [mode] 只决定新页面的草稿类型；导航本身不确认申购、不扣款、不增加份额。
+  void _open(BuildContext context, FundEntryMode mode) {
+    unawaited(
+      Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => FundEntryPage(
+            accountId: accountId,
+            mode: mode,
+            securityId: securityId,
+          ),
+        ),
+      ),
+    );
+  }
+
+  /// 使用共享锚点操作菜单，两个动作取消后均无副作用，完整标题随大字号换行。
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return VeriAnchoredMenuAnchor(
+      semanticLabel: l.fundOperations,
+      entries: [
+        VeriMenuItem(
+          id: 'fund-buy-by-amount',
+          title: l.fundBuyByAmount,
+          icon: Icons.add_shopping_cart_outlined,
+          onPressed: () => _open(context, FundEntryMode.purchase),
+        ),
+        VeriMenuItem(
+          id: 'fund-record-holding',
+          title: l.fundRecordHolding,
+          icon: Icons.inventory_2_outlined,
+          onPressed: () => _open(context, FundEntryMode.holdingBaseline),
+        ),
+      ],
+      builder: (context, open, active) => compact
+          ? TextButton(
+              onPressed: enabled ? open : null,
+              child: Text(l.fundOperations),
+            )
+          : OutlinedButton.icon(
+              style: investmentOutlineButtonStyle(context),
+              onPressed: enabled ? open : null,
+              icon: const Icon(Icons.account_balance_outlined),
+              label: Text(l.fundOperations),
+            ),
+    );
+  }
+}
+
+/// 按当前真实时刻显示逐笔申购状态，预计日期从不被解释为已经确认。
+/// [subscription] 是当前账户事实；[at] 可供稳定展示测试，省略时读取当前时刻。
+String fundSubscriptionStatusLabel(
+  FundSubscription subscription,
+  AppLocalizations l, {
+  DateTime? at,
+}) {
+  final now = at ?? DateTime.now();
+  final paid =
+      subscription.paidAt != null && !subscription.paidAt!.isAfter(now);
+  if (subscription.refundedAt != null &&
+      !subscription.refundedAt!.isAfter(now)) {
+    return l.fundStatusRefunded;
+  }
+  if (subscription.cancelledAt != null &&
+      !subscription.cancelledAt!.isAfter(now)) {
+    return paid ? l.fundStatusRefundPending : l.fundStatusCancelled;
+  }
+  final confirmation = subscription.confirmation;
+  if (confirmation != null) {
+    final effectiveAt = fundSubscriptionEffectiveAt(subscription);
+    return !paid || effectiveAt == null || effectiveAt.isAfter(now)
+        ? l.fundStatusScheduled
+        : l.fundStatusEffective;
+  }
+  return paid ? l.fundStatusPending : l.fundStatusUnpaid;
+}
+
+/// 一笔申购的统一摘要；点击只打开核对页面，不直接确认、取消或改变现金。
+class FundSubscriptionCard extends StatelessWidget {
+  /// [account]、[security] 与 [subscription] 必须由同一币种聚合提供，避免借用其他账户。
+  const FundSubscriptionCard({
+    super.key,
+    required this.account,
+    required this.security,
+    required this.subscription,
+  });
+
+  final Account account;
+  final StockSecurity security;
+  final FundSubscription subscription;
+
+  /// 以共享卡片列出实际金额和关键日期；状态与逐笔起算日分离，不显示虚构份额。
+  @override
+  Widget build(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    final confirmation = subscription.confirmation;
+    return VeriCard(
+      key: ValueKey('fund-subscription-${subscription.id}'),
+      onTap: () => Navigator.of(context).push<void>(
+        MaterialPageRoute(
+          builder: (_) => FundEntryPage(
+            accountId: account.id,
+            mode: FundEntryMode.purchase,
+            subscriptionId: subscription.id,
+          ),
+        ),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          Text(security.name, style: Theme.of(context).textTheme.titleMedium),
+          const SizedBox(height: 6),
+          Text(fundSubscriptionStatusLabel(subscription, l)),
+          DetailInfoRow(
+            inline: true,
+            label: l.fundCashAmount,
+            value: formatUserMoney(
+              InvestmentDecimal.parse(subscription.cashAmount).toDouble(),
+              account.currencyCode,
+            ),
+          ),
+          DetailInfoRow(
+            inline: true,
+            label: l.fundRequestedAt,
+            value: formatQuoteTime(context, subscription.requestedAt),
+          ),
+          if (subscription.paidAt != null)
+            DetailInfoRow(
+              inline: true,
+              label: l.fundPaidAt,
+              value: formatQuoteTime(context, subscription.paidAt!),
+            ),
+          if (subscription.expectedConfirmationDate != null &&
+              confirmation == null)
+            DetailInfoRow(
+              inline: true,
+              label: l.fundExpectedConfirmationDate,
+              value: formatQuoteTime(
+                context,
+                subscription.expectedConfirmationDate!,
+                dateOnly: true,
+              ),
+            ),
+          if (confirmation != null) ...[
+            DetailInfoRow(
+              inline: true,
+              label: l.fundAccrualRule,
+              value: confirmation.accrualRule.label(l),
+            ),
+            DetailInfoRow(
+              inline: true,
+              label: l.fundConfirmedAt,
+              value: formatQuoteTime(context, confirmation.confirmedAt),
+            ),
+            DetailInfoRow(
+              inline: true,
+              label: confirmation.accrualRule == FundAccrualRule.dealNavDate
+                  ? l.fundDealNavBasisDate
+                  : l.fundEarningStartDate,
+              value: formatQuoteTime(
+                context,
+                confirmation.accrualRule == FundAccrualRule.dealNavDate
+                    ? confirmation.navDate
+                    : confirmation.earningStartDate,
+                dateOnly: true,
+              ),
+            ),
+            DetailInfoRow(
+              inline: true,
+              label: l.investFundQuantity,
+              value: confirmation.quantity,
+            ),
+          ],
+        ],
+      ),
+    );
+  }
+}
+
+/// 基金两个金额入口及已有申购核对页；所有写入只经 Controller 公共原子命令。
+class FundEntryPage extends StatefulWidget {
+  /// [mode] 决定新草稿类型；[securityId] 限定已有基金；[subscriptionId] 打开一笔已有申购。
+  /// [baselineEvent] 只用于编辑持仓基准，不能把普通买卖事件改作零现金基准。
+  const FundEntryPage({
+    super.key,
+    required this.accountId,
+    required this.mode,
+    this.securityId,
+    this.subscriptionId,
+    this.baselineEvent,
+  });
+
+  final String accountId;
+  final FundEntryMode mode;
+  final String? securityId, subscriptionId;
+  final StockEvent? baselineEvent;
+
+  /// 页面独立持有草稿和核对勾选状态，离开页面时不保存。
+  @override
+  State<FundEntryPage> createState() => _FundEntryPageState();
+}
+
+class _FundEntryPageState extends State<FundEntryPage> {
+  final _fields = <String, TextEditingController>{};
+  bool _initialized = false,
+      _saving = false,
+      _paid = false,
+      _expected = false,
+      _reviewed = false,
+      _refundReceived = false;
+  String? _securityId, _error;
+  late String _bookId, _currency, _id;
+  late DateTime _requestedAt,
+      _paidAt,
+      _confirmedAt,
+      _cancelledAt,
+      _refundedAt,
+      _navDate,
+      _earningStartDate,
+      _expectedDate,
+      _baselineDate;
+  _FundFormAction _action = _FundFormAction.application;
+  FundAccrualRule _accrualRule = FundAccrualRule.explicitStartDate;
+  ({
+    String cashAmount,
+    String fee,
+    bool paid,
+    DateTime paidAt,
+    DateTime requestedAt,
+  })?
+  _applicationPaymentDraft;
+  String? _confirmationFeeDraft;
+
+  /// 仅在首次读取 Scope 时复制草稿；后续净值更新不能覆盖用户正在填写的金额。
+  /// 已有基准直接带入已保存份额，历史报告浮盈只留作原事件证据，不作为新表单输入。
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    if (_initialized) return;
+    _initialized = true;
+    final c = VeriFinScope.of(context);
+    _bookId = c.activeBook.id;
+    final account = c.accounts
+        .where((value) => value.id == widget.accountId)
+        .firstOrNull;
+    _currency = account?.currencyCode ?? 'USD';
+    final portfolio = c.investmentFor(widget.accountId);
+    final subscription = portfolio?.fundSubscriptions
+        .where((value) => value.id == widget.subscriptionId)
+        .firstOrNull;
+    final baseline = widget.baselineEvent;
+    final acquisition = portfolio?.events
+        .where(
+          (event) =>
+              event.kind == StockEventKind.fundAcquire &&
+              event.fundSubscriptionId == widget.subscriptionId,
+        )
+        .firstOrNull;
+    final now = DateTime.now();
+    final today = hongKongFundDate(now);
+    _id =
+        subscription?.id ??
+        baseline?.id ??
+        'fund-${now.microsecondsSinceEpoch}';
+    _securityId =
+        subscription?.securityId ?? baseline?.securityId ?? widget.securityId;
+    final selected = portfolio == null
+        ? null
+        : _securities(
+            portfolio,
+            AppLocalizations.of(context),
+          ).where((value) => value.id == _securityId).firstOrNull;
+    // 旧确认保留原规则；只有尚无确认事实的新申购默认采用已核实的基金规则。
+    _accrualRule =
+        subscription?.confirmation?.accrualRule ??
+        _defaultAccrualRule(selected);
+    _requestedAt = subscription?.requestedAt ?? now;
+    _paidAt = subscription?.paidAt ?? now;
+    _confirmedAt = subscription?.confirmation?.confirmedAt ?? now;
+    _navDate =
+        subscription?.confirmation?.navDate ?? baseline?.fundNavDate ?? today;
+    _earningStartDate = subscription?.confirmation?.earningStartDate ?? today;
+    _expectedDate = subscription?.expectedConfirmationDate ?? today;
+    // 核对的是此刻的总持仓；不能放回日初再叠加当天已有买入而造成重复份额。
+    _baselineDate = baseline?.occurredAt ?? now;
+    _cancelledAt = subscription?.cancelledAt ?? now;
+    _refundedAt = subscription?.refundedAt ?? now;
+    _paid = subscription?.paidAt != null;
+    _expected = subscription?.expectedConfirmationDate != null;
+    _refundReceived = subscription?.refundedAt != null;
+    if (subscription?.confirmation != null) {
+      _action = _FundFormAction.confirmation;
+    } else if (subscription?.cancelledAt != null) {
+      _action = _FundFormAction.cancellation;
+    }
+    for (final pair in {
+      'cashAmount': subscription?.cashAmount ?? '',
+      'fee': subscription?.fee ?? '0',
+      'cost': baseline?.carriedCost ?? '',
+      'nav': subscription?.confirmation?.nav ?? baseline?.price ?? '',
+      'confirmedQuantity':
+          baseline?.quantity ??
+          (acquisition?.quantityInferred == false
+              ? subscription?.confirmation?.quantity
+              : null) ??
+          '',
+      'refundAmount': subscription?.refundAmount ?? '',
+      'note': subscription?.note ?? baseline?.note ?? '',
+    }.entries) {
+      _fields[pair.key] = TextEditingController(text: pair.value);
+    }
+  }
+
+  /// 释放页面拥有的输入控制器，不触发保存或背景确认。
+  @override
+  void dispose() {
+    for (final value in _fields.values) {
+      value.dispose();
+    }
+    super.dispose();
+  }
+
+  /// [portfolio] 限定当前账户原有香港同币种基金；美元账户额外列出唯一已核对的 CMS B 类。
+  /// 这套录入流程使用香港日期，其他市场基金继续沿用原有手工交易入口。
+  List<StockSecurity> _securities(
+    InvestmentPortfolio portfolio,
+    AppLocalizations l,
+  ) {
+    final result = portfolio.securities
+        .where(
+          (security) =>
+              security.isFund &&
+              security.market == StockMarket.hk &&
+              security.currencyCode == _currency,
+        )
+        .toList();
+    if (_currency == 'USD' &&
+        !result.any((security) => security.id == 'hk:fund:HK0001039582')) {
+      result.add(
+        StockSecurity(
+          symbol: 'HK0001039582',
+          name: l.fundCmsUsdName,
+          market: StockMarket.hk,
+          currencyCode: 'USD',
+          type: InvestmentSecurityType.fund,
+        ),
+      );
+    }
+    return result;
+  }
+
+  /// [security] 只有准确匹配已核实的 CMS 美元 B 类才使用成交净值基准。
+  /// 其他香港基金保留独立起算日，不能将一只基金的规则推及全部香港基金。
+  FundAccrualRule _defaultAccrualRule(StockSecurity? security) =>
+      security != null && supportsCmsDealNavAccrual(security)
+      ? FundAccrualRule.dealNavDate
+      : FundAccrualRule.explicitStartDate;
+
+  /// 只改变本页规则草稿并撤销核对勾选；原独立起算日暂存，切回后仍可继续核对。
+  /// 成交净值规则直接使用净值日，保存时才将兼容字段同步，不能静默重写旧确认。
+  void _changeAccrualRule(FundAccrualRule rule) => setState(() {
+    _accrualRule = rule;
+    _reviewed = false;
+    _error = null;
+  });
+
+  /// [l] 提供当前语言；两项受控规则使用共享锚点选择器，选择不立即写入账户。
+  Widget _accrualRuleChoice(AppLocalizations l) =>
+      VeriAnchoredChoice<FundAccrualRule>(
+        key: const Key('fund-accrual-rule'),
+        values: const [
+          FundAccrualRule.dealNavDate,
+          FundAccrualRule.explicitStartDate,
+        ],
+        selected: _accrualRule,
+        semanticLabel: l.fundAccrualRule,
+        idOf: (rule) => 'fund-accrual-${rule.name}',
+        labelOf: (rule) => rule.label(l),
+        onSelected: _changeAccrualRule,
+        builder: (context, openMenu, active) => SettingsRow(
+          icon: Icons.date_range_outlined,
+          title: l.fundAccrualRule,
+          trailing: _accrualRule.label(l),
+          trailingMaxLines: null,
+          trailingIcon: Icons.chevron_right,
+          onTap: _saving ? null : openMenu,
+        ),
+      );
+
+  /// [key] 定位精确文本草稿；只有输入变更才撤销核对勾选，不修改权威记录。
+  void _changed(String key, String value) => setState(() {
+    _reviewed = false;
+    _error = null;
+  });
+
+  /// 切换至 [action] 时，用已保存的 [subscription] 展示该模式不会提交的付款事实。
+  /// 申请资金草稿与确认费用草稿分别暂存，返回原模式仍可继续编辑；取消页不能把未保存的付款冒充实际发生。
+  void _switchAction(_FundFormAction action, FundSubscription subscription) {
+    if (_saving || action == _action) return;
+    if (_action == _FundFormAction.application) {
+      _applicationPaymentDraft = (
+        cashAmount: _fields['cashAmount']!.text,
+        fee: _fields['fee']!.text,
+        paid: _paid,
+        paidAt: _paidAt,
+        requestedAt: _requestedAt,
+      );
+    } else if (_action == _FundFormAction.confirmation) {
+      _confirmationFeeDraft = _fields['fee']!.text;
+    }
+    setState(() {
+      _action = action;
+      _reviewed = false;
+      _error = null;
+      _fields['cashAmount']!.text = subscription.cashAmount;
+      _fields['fee']!.text = subscription.fee;
+      _requestedAt = subscription.requestedAt;
+      _paid = subscription.paidAt != null;
+      _paidAt = subscription.paidAt ?? DateTime.now();
+      if (action == _FundFormAction.application &&
+          _applicationPaymentDraft != null) {
+        final draft = _applicationPaymentDraft!;
+        _fields['cashAmount']!.text = draft.cashAmount;
+        _fields['fee']!.text = draft.fee;
+        _requestedAt = draft.requestedAt;
+        _paid = draft.paid;
+        _paidAt = draft.paidAt;
+      } else if (action == _FundFormAction.confirmation) {
+        // 费用属于确认页可提交的分配事实；保留本模式的修改，也允许首次接续申请页的费用草稿。
+        _fields['fee']!.text =
+            _confirmationFeeDraft ??
+            _applicationPaymentDraft?.fee ??
+            subscription.fee;
+      }
+    });
+  }
+
+  /// [securities] 是随账户变化的可选香港基金，因此使用共享动态单选弹窗；取消不预选基金。
+  Future<void> _chooseSecurity(List<StockSecurity> securities) async {
+    final selected = await showOptionSheet<String?>(
+      context: context,
+      title: AppLocalizations.of(context).fundChoose,
+      values: securities.map((value) => value.id).toList(),
+      selected: _securityId,
+      labelOf: (id) {
+        final security = securities.firstWhere((value) => value.id == id);
+        return '${security.name} · ${security.symbol}';
+      },
+    );
+    if (!mounted || selected == null) return;
+    setState(() {
+      _securityId = selected;
+      _accrualRule = _defaultAccrualRule(
+        securities.firstWhere((value) => value.id == selected),
+      );
+      _reviewed = false;
+      _error = null;
+    });
+  }
+
+  /// 金额使用共享数字键盘；[key]/[label] 标识草稿及本地化字段，净值和份额保留文本精度。
+  /// [money] 是非负原币现金、[readOnly] 禁止改写已发生的金额；盈亏由持仓份额和净值计算。
+  Widget _field(
+    String key,
+    String label, {
+    bool money = false,
+    bool readOnly = false,
+  }) {
+    return InvestmentInputField(
+      label: label,
+      child: TextField(
+        key: ValueKey('fund-$key'),
+        controller: _fields[key],
+        readOnly: readOnly || money,
+        onChanged: (value) => _changed(key, value),
+        onTap: !money || readOnly
+            ? null
+            : () async {
+                final value = await showNumberPadSheet(
+                  context,
+                  title: label,
+                  initialAmount: double.tryParse(_fields[key]!.text),
+                  currencyCode: _currency,
+                  allowZero: key != 'cashAmount',
+                );
+                if (!mounted || value == null) return;
+                _fields[key]!.text = value.toStringAsFixed(
+                  CurrencyCatalog.require(_currency).minorUnit,
+                );
+                _changed(key, _fields[key]!.text);
+              },
+        keyboardType: key == 'note'
+            ? TextInputType.text
+            : const TextInputType.numberWithOptions(
+                decimal: true,
+                signed: true,
+              ),
+        maxLines: key == 'note' ? 3 : 1,
+        decoration: investmentInputDecoration(context),
+      ),
+    );
+  }
+
+  /// [value] 是实际时刻或 UTC 日期载体；[dateOnly] 只选香港日历日期，否则保留真实时分。
+  /// [onSelected] 仅更新本页草稿，取消任何一个选择器都不改变字段。
+  Widget _dateField(
+    String label,
+    DateTime value,
+    ValueChanged<DateTime> onSelected, {
+    bool dateOnly = false,
+    bool enabled = true,
+  }) {
+    // 日期行在实色卡片内自带墨水承载层，防止背景装饰遮住点按反馈。
+    return Material(
+      type: MaterialType.transparency,
+      child: ListTile(
+        contentPadding: EdgeInsets.zero,
+        title: Text(label),
+        subtitle: Text(formatQuoteTime(context, value, dateOnly: dateOnly)),
+        trailing: enabled ? const Icon(Icons.calendar_today_outlined) : null,
+        onTap: !enabled
+            ? null
+            : () async {
+                final initial = dateOnly
+                    ? DateTime(value.year, value.month, value.day)
+                    : value.toLocal();
+                final day = await showEntryDatePicker(
+                  context: context,
+                  initialDateTime: initial,
+                );
+                if (!mounted || day == null) return;
+                DateTime selected;
+                if (dateOnly) {
+                  selected = DateTime.utc(day.year, day.month, day.day);
+                } else {
+                  final time = await showEntryTimePicker(
+                    context: context,
+                    initialDateTime: day,
+                  );
+                  if (!mounted || time == null) return;
+                  selected = time;
+                }
+                setState(() {
+                  onSelected(selected);
+                  _reviewed = false;
+                  _error = null;
+                });
+              },
+      ),
+    );
+  }
+
+  /// 按当前输入生成只读金额预览；已有持仓用必填实际份额计算市值与盈亏，新申购仍按金额估算。
+  /// 编辑中的空值/非法值是正常草稿，不弹全局错误，也不从旧报告浮盈反推份额。
+  FundAmountResult? _preview() {
+    try {
+      final quantity = _fields['confirmedQuantity']!.text.trim();
+      if (widget.mode == FundEntryMode.holdingBaseline) {
+        return calculateFundOpeningByQuantity(
+          cost: _fields['cost']!.text,
+          quantity: quantity,
+          nav: _fields['nav']!.text,
+          currencyCode: _currency,
+        );
+      }
+      return calculateFundPurchaseByAmount(
+        cashAmount: _fields['cashAmount']!.text,
+        nav: _fields['nav']!.text,
+        currencyCode: _currency,
+        fee: _fields['fee']!.text,
+        confirmedQuantity: quantity.isEmpty ? null : quantity,
+      );
+    } on FormatException {
+      // 用户尚未填齐金额或净值时不生成份额；保存操作会给出可见的本地化校验提示。
+      return null;
+    }
+  }
+
+  /// 仅使用此账户当前构建允许的缓存填入参考净值，不请求网络，也不自动确认个人申购。
+  Widget _cachedNav(
+    InvestmentPortfolio portfolio,
+    StockSecurity? security,
+    AppLocalizations l,
+  ) {
+    final c = VeriFinScope.of(context);
+    final quote = security == null
+        ? null
+        : c.investmentQuoteSync.quotesFor(
+            portfolio,
+            includeFundHistory: true,
+          )[security.id];
+    if (quote == null ||
+        quote.last == null ||
+        !quote.dateOnly ||
+        quote.lastAt == null) {
+      return const SizedBox.shrink();
+    }
+    return TextButton.icon(
+      onPressed: () => setState(() {
+        _fields['nav']!.text = quote.last!;
+        _navDate = quote.lastAt!;
+        _reviewed = false;
+      }),
+      icon: const Icon(Icons.history),
+      label: Text(l.fundReadCachedNav),
+    );
+  }
+
+  /// 展示 [result] 的原币金额；已有持仓直接显示份额、估算市值和自动盈亏，申购保留参考份额与差额。
+  /// 展示舍入不会反向改写现金或成本，已有持仓不再用浮盈或金额差额推测份额。
+  Widget _previewPanel(FundAmountResult? result, AppLocalizations l) {
+    if (result == null) {
+      return InvestmentHint(
+        widget.mode == FundEntryMode.holdingBaseline
+            ? l.fundHoldingNoPreview
+            : l.fundNoPreview,
+      );
+    }
+
+    /// [value] 按当前原币现金精度展示；预览永远不反向覆盖输入的扣款和成本。
+    String money(InvestmentDecimal value) =>
+        formatUserMoney(value.toDouble(), _currency);
+    if (result is FundHoldingAmountResult) {
+      return InvestmentSection(
+        title: l.investValuationBasis,
+        children: [
+          DetailInfoRow(
+            inline: true,
+            label: l.fundHoldingQuantity,
+            value: result.quantity.toString(),
+          ),
+          DetailInfoRow(
+            inline: true,
+            label: l.fundHoldingMarketValue,
+            value: money(result.marketValue),
+          ),
+          DetailInfoRow(
+            inline: true,
+            label: l.fundCalculatedUnrealized,
+            value: formatSignedUserMoney(
+              result.unrealized.toDouble(),
+              _currency,
+            ),
+          ),
+          InvestmentHint(l.fundHoldingCalculationHint),
+        ],
+      );
+    }
+    return InvestmentSection(
+      title: l.investValuationBasis,
+      children: [
+        if (result is FundPurchaseAmountResult)
+          DetailInfoRow(
+            inline: true,
+            label: l.fundNetAmount,
+            value: money(result.netAmount),
+          ),
+        DetailInfoRow(
+          inline: true,
+          label: l.fundEstimatedQuantity,
+          value: result.estimatedQuantity.toString(),
+        ),
+        DetailInfoRow(
+          inline: true,
+          label: l.fundUsedQuantity,
+          value: result.quantity.toString(),
+        ),
+        DetailInfoRow(
+          inline: true,
+          label: l.fundQuantityValue,
+          value: money(result.pricedAmount),
+        ),
+        DetailInfoRow(
+          inline: true,
+          label: l.fundAmountDifference,
+          value: formatSignedUserMoney(
+            result.roundingDifference.toDouble(),
+            _currency,
+          ),
+        ),
+        InvestmentHint(l.fundQuantityInferredHint),
+        if (result.roundingDifference.units != BigInt.zero)
+          InvestmentHint(l.fundMismatchHint),
+      ],
+    );
+  }
+
+  /// 提交前核对账本及基金身份，确认必须显式勾选；只有 Controller 保存成功才退出。
+  /// 新持仓基准采用实际份额且不写报告浮盈；旧基准依据未变才保留其原浮盈证据，份额未变保留推算标记。
+  Future<void> _save() async {
+    final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
+    if (_saving || c.activeBook.id != _bookId) return;
+    final p = c.investmentFor(widget.accountId);
+    if (p == null) return;
+    final security = _securities(
+      p,
+      l,
+    ).where((value) => value.id == _securityId).firstOrNull;
+    if (security == null) {
+      setState(() => _error = l.fundSaveValidation);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    var ok = false;
+    try {
+      if (widget.mode == FundEntryMode.holdingBaseline) {
+        final result = _preview();
+        if (result is! FundHoldingAmountResult || !_reviewed) {
+          throw const FormatException('已有持仓资料尚未核对');
+        }
+        final sequence =
+            widget.baselineEvent?.sequence ??
+            p.events.fold<int>(
+              0,
+              (value, event) =>
+                  event.sequence >= value ? event.sequence + 1 : value,
+            );
+        final previous = widget.baselineEvent;
+        String? reportedUnrealized;
+        var quantityInferred = false;
+        if (previous != null) {
+          final sameQuantity =
+              InvestmentDecimal.parse(
+                previous.quantity,
+              ).compareTo(result.quantity) ==
+              0;
+          // 旧份额未变不能仅因表单改名就冒充实际确认；新录入份额默认明确为实际持仓。
+          quantityInferred = sameQuantity && previous.quantityInferred;
+          if (sameQuantity &&
+              previous.carriedCost != null &&
+              InvestmentDecimal.parse(
+                    previous.carriedCost!,
+                  ).compareTo(result.cost) ==
+                  0 &&
+              InvestmentDecimal.parse(previous.price).compareTo(result.nav) ==
+                  0 &&
+              previous.occurredAt.isAtSameMomentAs(_baselineDate)) {
+            reportedUnrealized = previous.reportedUnrealized;
+          }
+        }
+        ok = await c.saveFundHoldingBaseline(
+          accountId: widget.accountId,
+          security: security,
+          event: StockEvent(
+            id: _id,
+            securityId: security.id,
+            kind: StockEventKind.fundHoldingBaseline,
+            occurredAt: _baselineDate,
+            sequence: sequence,
+            quantity: result.quantity.toString(),
+            price: result.navText,
+            carriedCost: result.cost.toString(),
+            reportedUnrealized: reportedUnrealized,
+            fundNavDate: _navDate,
+            quantityInferred: quantityInferred,
+            note: _fields['note']!.text.trim(),
+          ),
+          referencePrice: result.navText,
+        );
+      } else if (_action == _FundFormAction.application) {
+        // 未确认申请可缺少净值；这里的 1 仅用于复用金额/费用校验，不保存或显示为成交净值。
+        final values = calculateFundPurchaseByAmount(
+          cashAmount: _fields['cashAmount']!.text,
+          fee: _fields['fee']!.text,
+          nav: '1',
+          currencyCode: _currency,
+        );
+        ok = await c.saveFundSubscription(
+          accountId: widget.accountId,
+          security: security,
+          subscription: FundSubscription(
+            id: _id,
+            securityId: security.id,
+            requestedAt: _requestedAt,
+            cashAmount: values.cashAmount.toString(),
+            fee: values.fee.toString(),
+            paidAt: _paid ? _paidAt : null,
+            expectedConfirmationDate: _expected ? _expectedDate : null,
+            note: _fields['note']!.text.trim(),
+          ),
+        );
+      } else if (_action == _FundFormAction.confirmation) {
+        final result = _preview();
+        if (result is! FundPurchaseAmountResult ||
+            !_reviewed ||
+            widget.subscriptionId == null) {
+          throw const FormatException('申购确认资料尚未核对');
+        }
+        ok = await c.confirmFundSubscription(
+          accountId: widget.accountId,
+          subscriptionId: widget.subscriptionId!,
+          fee: result.fee.toString(),
+          quantityInferred: !result.quantityConfirmed,
+          confirmation: FundSubscriptionConfirmation(
+            confirmedAt: _confirmedAt,
+            navDate: _navDate,
+            earningStartDate: _accrualRule == FundAccrualRule.dealNavDate
+                ? _navDate
+                : _earningStartDate,
+            accrualRule: _accrualRule,
+            nav: result.navText,
+            quantity: result.quantity.toString(),
+          ),
+        );
+      } else {
+        if (widget.subscriptionId == null) {
+          throw const FormatException('没有可取消的申购申请');
+        }
+        ok = await c.cancelFundSubscription(
+          accountId: widget.accountId,
+          subscriptionId: widget.subscriptionId!,
+          cancelledAt: _cancelledAt,
+          refundedAt: _refundReceived ? _refundedAt : null,
+          refundAmount: _refundReceived
+              ? _fields['refundAmount']!.text.trim()
+              : null,
+        );
+      }
+    } on FormatException {
+      // 草稿不完整或精度非法时保留全部字段，使用统一本地化文案；持久化错误由 Controller 记录。
+    }
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() {
+        _saving = false;
+        _error = l.fundSaveValidation;
+      });
+    }
+  }
+
+  /// 删除仅作用于未扣款申请或用户明确选择的持仓基准，失败保持当前页面和草稿。
+  Future<void> _delete() async {
+    final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
+    final baseline = widget.baselineEvent != null;
+    final confirmed = await showConfirmDialog(
+      context,
+      title: baseline ? l.investDelete : l.fundDeleteRequest,
+      message: baseline ? l.investDeleteHint : l.fundDeleteRequestHint,
+      destructive: true,
+    );
+    if (!mounted || !confirmed || c.activeBook.id != _bookId) return;
+    setState(() => _saving = true);
+    final ok = baseline
+        ? await c.deleteStockEvent(widget.accountId, widget.baselineEvent!.id)
+        : await c.deleteFundSubscription(
+            accountId: widget.accountId,
+            subscriptionId: widget.subscriptionId!,
+          );
+    if (!mounted) return;
+    if (ok) {
+      Navigator.of(context).pop();
+    } else {
+      setState(() {
+        _saving = false;
+        _error = l.investSaveError;
+      });
+    }
+  }
+
+  /// 构建标准证券表单；实际资金、确认日期与起算日期分组，所有保存均由用户主动点击。
+  @override
+  Widget build(BuildContext context) {
+    final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
+    final p = c.investmentFor(widget.accountId);
+    final account = c.accounts
+        .where((value) => value.id == widget.accountId)
+        .firstOrNull;
+    if (p == null || account == null || c.activeBook.id != _bookId) {
+      return Scaffold(
+        body: SafeArea(
+          child: VeriPage(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+              children: [
+                VeriHeader(title: l.fundOperations, showBack: true),
+                Text(l.investSaveError),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    final subscription = p.fundSubscriptions
+        .where((value) => value.id == widget.subscriptionId)
+        .firstOrNull;
+    if (widget.subscriptionId != null && subscription == null) {
+      return Scaffold(
+        body: SafeArea(
+          child: VeriPage(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+              children: [
+                VeriHeader(title: l.fundOperations, showBack: true),
+                Text(l.investSaveError),
+              ],
+            ),
+          ),
+        ),
+      );
+    }
+    final securities = _securities(p, l);
+    final selected = securities
+        .where((value) => value.id == _securityId)
+        .firstOrNull;
+    final baseline = widget.mode == FundEntryMode.holdingBaseline;
+    final cmsAccrualAvailable =
+        selected != null && supportsCmsDealNavAccrual(selected);
+    final locked = subscription?.paidAt != null;
+    final refundLocked = subscription?.refundedAt != null;
+    final applicationEditable =
+        subscription?.confirmation == null && subscription?.cancelledAt == null;
+    final preview = _preview();
+    return Scaffold(
+      body: SafeArea(
+        child: VeriPage(
+          child: ListView(
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+            children: [
+              VeriHeader(
+                title: baseline
+                    ? l.fundRecordHolding
+                    : subscription == null
+                    ? l.fundBuyByAmount
+                    : l.fundPendingTitle,
+                showBack: true,
+              ),
+              const SizedBox(height: 12),
+              InvestmentHint(
+                baseline ? l.fundOpeningHint : l.fundSubmissionHint,
+              ),
+              const SizedBox(height: 12),
+              if (securities.isEmpty) InvestmentHint(l.fundNoEligible),
+              InvestmentSection(
+                title: l.investSecurityDetails,
+                children: [
+                  if (securities.isNotEmpty)
+                    SettingsRow(
+                      icon: Icons.account_balance_outlined,
+                      title: l.fundChoose,
+                      trailing: selected?.name ?? l.fundChoose,
+                      trailingMaxLines: null,
+                      onTap:
+                          _saving ||
+                              widget.subscriptionId != null ||
+                              widget.baselineEvent != null
+                          ? null
+                          : () => _chooseSecurity(securities),
+                    ),
+                  if (selected != null)
+                    Text(
+                      '${selected.symbol} · ${selected.market.label(l, fund: true)}',
+                    ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (subscription != null) ...[
+                Text(
+                  fundSubscriptionStatusLabel(subscription, l),
+                  style: Theme.of(context).textTheme.titleSmall,
+                ),
+                Wrap(
+                  spacing: 6,
+                  runSpacing: 6,
+                  children: [
+                    if (applicationEditable)
+                      TextButton(
+                        onPressed: _saving
+                            ? null
+                            : () => _switchAction(
+                                _FundFormAction.application,
+                                subscription,
+                              ),
+                        child: Text(l.fundRecordPayment),
+                      ),
+                    if (subscription.paidAt != null &&
+                        subscription.cancelledAt == null)
+                      TextButton(
+                        onPressed: _saving
+                            ? null
+                            : () => _switchAction(
+                                _FundFormAction.confirmation,
+                                subscription,
+                              ),
+                        child: Text(
+                          subscription.confirmation == null
+                              ? l.fundConfirmSubscription
+                              : l.fundEditConfirmation,
+                        ),
+                      ),
+                    if (subscription.confirmation == null)
+                      TextButton(
+                        onPressed: _saving
+                            ? null
+                            : () => _switchAction(
+                                _FundFormAction.cancellation,
+                                subscription,
+                              ),
+                        child: Text(l.fundCancelSubscription),
+                      ),
+                  ],
+                ),
+              ],
+              InvestmentSection(
+                title: baseline ? l.fundRecordHolding : l.fundBuyByAmount,
+                children: [
+                  if (baseline) ...[
+                    _field('cost', l.fundHoldingCost, money: true),
+                    _field('confirmedQuantity', l.fundHoldingQuantity),
+                    if (widget.baselineEvent?.quantityInferred == true)
+                      InvestmentHint(l.fundLegacyInferredQuantityHint),
+                    _dateField(
+                      l.fundBaselineDate,
+                      _baselineDate,
+                      (value) => _baselineDate = value,
+                    ),
+                    InvestmentHint(l.fundCashNotDeducted),
+                  ] else ...[
+                    _field(
+                      'cashAmount',
+                      l.fundCashAmount,
+                      money: true,
+                      readOnly:
+                          locked ||
+                          !applicationEditable ||
+                          _action != _FundFormAction.application,
+                    ),
+                    _field(
+                      'fee',
+                      l.fundRequestFee,
+                      money: true,
+                      readOnly:
+                          _action == _FundFormAction.cancellation ||
+                          (!applicationEditable &&
+                              _action != _FundFormAction.confirmation),
+                    ),
+                    if (locked) InvestmentHint(l.fundPaidAmountLocked),
+                    _dateField(
+                      l.fundRequestedAt,
+                      _requestedAt,
+                      (value) => _requestedAt = value,
+                      enabled:
+                          applicationEditable &&
+                          _action == _FundFormAction.application,
+                    ),
+                    CompactSwitchRow(
+                      icon: Icons.payments_outlined,
+                      title: Text(l.fundAlreadyPaid),
+                      value: _paid,
+                      // 取消/确认只提交各自事实，不能编辑一个不会随该操作保存的付款草稿。
+                      onChanged:
+                          locked ||
+                              !applicationEditable ||
+                              _action != _FundFormAction.application
+                          ? null
+                          : (value) => setState(() => _paid = value),
+                    ),
+                    if (_paid)
+                      _dateField(
+                        l.fundPaidAt,
+                        _paidAt,
+                        (value) => _paidAt = value,
+                        enabled:
+                            applicationEditable &&
+                            !locked &&
+                            _action == _FundFormAction.application,
+                      ),
+                    if (_action == _FundFormAction.application) ...[
+                      CompactSwitchRow(
+                        icon: Icons.event_outlined,
+                        title: Text(l.fundHasExpectedConfirmationDate),
+                        value: _expected,
+                        onChanged: (value) => setState(() => _expected = value),
+                      ),
+                      if (_expected)
+                        _dateField(
+                          l.fundExpectedConfirmationDate,
+                          _expectedDate,
+                          (value) => _expectedDate = value,
+                          dateOnly: true,
+                        ),
+                    ],
+                  ],
+                  if (_action != _FundFormAction.cancellation || baseline) ...[
+                    _field(
+                      'nav',
+                      baseline
+                          ? l.fundHoldingNav
+                          : _action == _FundFormAction.confirmation
+                          ? l.fundConfirmedNav
+                          : l.fundEstimatedNav,
+                    ),
+                    _cachedNav(p, selected, l),
+                    if (baseline ||
+                        _action == _FundFormAction.confirmation) ...[
+                      _dateField(
+                        l.fundNavDate,
+                        _navDate,
+                        (value) => _navDate = value,
+                        dateOnly: true,
+                      ),
+                      if (!baseline)
+                        _field(
+                          'confirmedQuantity',
+                          l.fundConfirmedQuantityOptional,
+                        ),
+                    ],
+                  ],
+                  if (!baseline && _action == _FundFormAction.confirmation) ...[
+                    if (cmsAccrualAvailable) _accrualRuleChoice(l),
+                    InvestmentHint(
+                      _accrualRule == FundAccrualRule.dealNavDate
+                          ? l.fundDealNavDateHint
+                          : l.fundConfirmationHint,
+                    ),
+                    if (cmsAccrualAvailable &&
+                        _accrualRule == FundAccrualRule.explicitStartDate)
+                      InvestmentHint(l.fundLegacyAccrualHint),
+                    _dateField(
+                      l.fundConfirmedAt,
+                      _confirmedAt,
+                      (value) => _confirmedAt = value,
+                    ),
+                    if (_accrualRule == FundAccrualRule.explicitStartDate)
+                      _dateField(
+                        l.fundEarningStartDate,
+                        _earningStartDate,
+                        (value) => _earningStartDate = value,
+                        dateOnly: true,
+                      )
+                    else
+                      DetailInfoRow(
+                        inline: true,
+                        label: l.fundDealNavBasisDate,
+                        value: formatQuoteTime(
+                          context,
+                          _navDate,
+                          dateOnly: true,
+                        ),
+                      ),
+                  ],
+                  if (!baseline && _action == _FundFormAction.cancellation) ...[
+                    InvestmentHint(l.fundCancelHint),
+                    _dateField(
+                      l.fundCancelledAt,
+                      _cancelledAt,
+                      (value) => _cancelledAt = value,
+                    ),
+                    if (subscription?.paidAt != null) ...[
+                      CompactSwitchRow(
+                        icon: Icons.account_balance_wallet_outlined,
+                        title: Text(l.fundRefundReceived),
+                        value: _refundReceived,
+                        onChanged: refundLocked
+                            ? null
+                            : (value) =>
+                                  setState(() => _refundReceived = value),
+                      ),
+                      if (_refundReceived) ...[
+                        _field(
+                          'refundAmount',
+                          l.fundRefundAmount,
+                          money: true,
+                          readOnly: refundLocked,
+                        ),
+                        _dateField(
+                          l.fundRefundedAt,
+                          _refundedAt,
+                          (value) => _refundedAt = value,
+                          enabled: !refundLocked,
+                        ),
+                      ],
+                    ],
+                  ],
+                  if (baseline || _action == _FundFormAction.application)
+                    _field('note', l.investNote),
+                  if (!baseline) InvestmentHint(l.fundScheduleHint),
+                ],
+              ),
+              const SizedBox(height: 12),
+              if (baseline || _action != _FundFormAction.cancellation)
+                _previewPanel(preview, l),
+              if (baseline || _action == _FundFormAction.confirmation)
+                // 页面背景由 VeriPage 绘制；本层只为勾选行提供可见的交互反馈。
+                Material(
+                  type: MaterialType.transparency,
+                  child: CheckboxListTile(
+                    key: const Key('fund-reviewed'),
+                    contentPadding: EdgeInsets.zero,
+                    value: _reviewed,
+                    title: Text(
+                      baseline ? l.fundHoldingCheck : l.fundConfirmationCheck,
+                    ),
+                    onChanged: _saving
+                        ? null
+                        : (value) => setState(() => _reviewed = value ?? false),
+                  ),
+                ),
+              if (_error != null)
+                Padding(
+                  padding: const EdgeInsets.symmetric(vertical: 12),
+                  child: Text(
+                    _error!,
+                    style: TextStyle(
+                      color: Theme.of(context).colorScheme.error,
+                    ),
+                  ),
+                ),
+              FilledButton(
+                key: const Key('fund-save'),
+                onPressed: _saving || securities.isEmpty ? null : _save,
+                child: Text(
+                  _saving
+                      ? l.commonProcessing
+                      : baseline
+                      ? l.investSave
+                      : _action == _FundFormAction.application
+                      ? l.fundSaveRequest
+                      : _action == _FundFormAction.confirmation
+                      ? l.fundConfirmSubscription
+                      : l.fundSaveCancellation,
+                ),
+              ),
+              if (widget.baselineEvent != null ||
+                  (subscription != null &&
+                      subscription.paidAt == null &&
+                      subscription.confirmation == null))
+                TextButton(
+                  onPressed: _saving ? null : _delete,
+                  child: Text(baseline ? l.investDelete : l.fundDeleteRequest),
+                ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}

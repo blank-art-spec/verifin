@@ -167,7 +167,7 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
             child: ValueListenableBuilder<QuoteSyncState>(
               valueListenable: sync.state,
               builder: (context, state, child) {
-                final quotes = sync.quotesFor(p);
+                final quotes = sync.quotesFor(p, includeFundHistory: true);
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                   children: [
@@ -242,7 +242,17 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                       ),
                     ],
                     for (final s in p.securities.where(
-                      (s) => held.contains(s.id),
+                      (s) =>
+                          held.contains(s.id) ||
+                          (s.isFund &&
+                              (p.openingHoldings.any(
+                                    (h) => h.securityId == s.id,
+                                  ) ||
+                                  p.fundSubscriptions.any(
+                                    (subscription) =>
+                                        subscription.securityId == s.id,
+                                  ) ||
+                                  p.events.any((e) => e.securityId == s.id))),
                     )) ...[
                       const SizedBox(height: 12),
                       VeriCard(
@@ -259,6 +269,7 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                               s.symbol,
                               style: Theme.of(context).textTheme.bodySmall,
                             ),
+                            if (s.isFund) Text(s.market.label(l, fund: true)),
                             const SizedBox(height: 8),
                             // 卡片已有实色表面，直接绘制文字和开关，避免 ListTile 墨水被卡片遮住。
                             Row(
@@ -297,7 +308,7 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                                 '${q.source} · ${formatUserSecurityPrice(q.reference(MarketQuoteRequest(s), sync.clock())!.price, p.currencyCode)}',
                               ),
                               Text(
-                                '${l.marketQuoteTime}: ${formatQuoteTime(context, q.reference(MarketQuoteRequest(s), sync.clock())!.time, includeSeconds: true)}',
+                                '${q.dateOnly ? l.marketNavDate : l.marketQuoteTime}: ${formatQuoteTime(context, q.reference(MarketQuoteRequest(s), sync.clock())!.time, includeSeconds: true, dateOnly: q.dateOnly)}',
                               ),
                               Text(
                                 '${l.investFetchedAt}: ${formatQuoteTime(context, q.fetchedAt, includeSeconds: true)}',

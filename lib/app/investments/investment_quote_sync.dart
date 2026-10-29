@@ -11,6 +11,7 @@ import '../logging/app_logger.dart';
 import '../models/investment.dart';
 import 'market_quote.dart';
 import 'stock_projection.dart';
+import 'fund_workflow_math.dart';
 
 enum QuoteSyncStatus {
   idle,
@@ -337,7 +338,8 @@ class InvestmentQuoteSync {
   /// 账户、事件、恢复或初始化后核对上下文；不匹配缓存不能复活到新账目。
   /// 此调用发生在账目通知内，不回调 onPricesChanged，避免通知递归。
   void reconcile(Iterable<InvestmentPortfolio> values) {
-    final next = {for (final p in values) _owner(p): _digest(p)};
+    final portfolios = {for (final p in values) _owner(p): p};
+    final next = portfolios.map((owner, p) => MapEntry(owner, _digest(p)));
     final altered = !mapEquals(next, _contexts);
     // 空账本冷启动时上下文仍为空，但设备缓存可能留有已删除账户的旧行。
     final hasOrphans = _cache.entries.any(
@@ -350,10 +352,19 @@ class InvestmentQuoteSync {
     _contexts
       ..clear()
       ..addAll(next);
-    _cache.removeWhere((key, row) {
-      final owner = key.substring(0, key.lastIndexOf('|'));
-      return next[owner] != row.digest;
-    });
+    for (final entry in _cache.entries.toList()) {
+      final owner = entry.key.substring(0, entry.key.lastIndexOf('|'));
+      if (next[owner] == entry.value.digest) continue;
+      final portfolio = portfolios[owner];
+      // 基金公开净值历史不包含账务，买卖或清仓后仍可按新真实份额重算。
+      // 只重绑同一账户、仍存在且来源/品种/币种均合格的身份；股票保留原失效规则。
+      if (portfolio != null &&
+          _canReuseFundHistory(portfolio, entry.value.quote)) {
+        _cache[entry.key] = (digest: next[owner]!, quote: entry.value.quote);
+      } else {
+        _cache.remove(entry.key);
+      }
+    }
     _accounts.removeWhere((owner, _) => !next.containsKey(owner));
     _generation++;
     _timer?.cancel();
@@ -453,12 +464,21 @@ class InvestmentQuoteSync {
   }
 
   /// 返回该账户已验证的缓存；关闭联网不会抹除已有参考价，也不会接受撤销准入来源。
-  Map<String, MarketQuote> quotesFor(InvestmentPortfolio p) {
+  /// [includeFundHistory] 供行情和参考历史页读取已清仓基金的公开观察，不让零持仓进入资产。
+  Map<String, MarketQuote> quotesFor(
+    InvestmentPortfolio p, {
+    bool includeFundHistory = false,
+  }) {
     final result = <String, MarketQuote>{},
         owner = _owner(p),
         digest = _digest(p);
-    final held = projectStocks(p).positions.map((p) => p.securityId).toSet();
-    for (final s in p.securities.where((s) => held.contains(s.id))) {
+    final held = projectStocks(
+      p,
+      at: clock(),
+    ).positions.map((p) => p.securityId).toSet();
+    for (final s in p.securities.where(
+      (s) => held.contains(s.id) || (includeFundHistory && s.isFund),
+    )) {
       final request = MarketQuoteRequest(s),
           adapter = client.adapterFor(MarketQuoteRequest(s));
       final row = _cache['$owner|${s.id}'];
@@ -475,7 +495,80 @@ class InvestmentQuoteSync {
     return Map.unmodifiable(result);
   }
 
-  /// 返回 [portfolio] 当前持有且已准入来源明确支持的公开请求，按来源各取最多20项。
+  /// 读取同一账户、同一基金身份的合格公开净值历史，清仓后也可生成既往参考收益。
+  /// [p] 必须是当前账务上下文，[securityId] 是基金稳定身份；撤销来源、删账户或清缓存失效。
+  FundNavHistory? fundNavHistoryFor(InvestmentPortfolio p, String securityId) =>
+      quotesFor(p, includeFundHistory: true)[securityId]?.navHistory;
+
+  /// 判断 [quote] 的纯公开历史能否在 [portfolio] 的新账务修订继续使用。
+  /// 不继承旧持仓或收益，只保留仍被当前构建来源接受的同一基金日期/价格资料。
+  bool _canReuseFundHistory(InvestmentPortfolio portfolio, MarketQuote quote) {
+    if (quote.navHistory == null || quote.currency != portfolio.currencyCode) {
+      return false;
+    }
+    final security = portfolio.securities
+        .where(
+          (s) =>
+              s.id == quote.securityId &&
+              s.isFund &&
+              s.option == null &&
+              s.currencyCode == portfolio.currencyCode,
+        )
+        .firstOrNull;
+    if (security == null) return false;
+    final request = MarketQuoteRequest(security);
+    final adapter = client.adapterFor(request);
+    return adapter != null &&
+        quote.source == adapter.capability.id &&
+        quote.reference(request, clock()) != null;
+  }
+
+  /// 判断已采用的清仓基金是否还缺覆盖最后业务日的公开历史。
+  /// [portfolio]/[security] 仅用于本地需求判定；覆盖后不继续为空持仓自动联网。
+  /// 尚未起算的有效申请也可获取首次净值，避免必须先有报价才能选择采用的循环依赖。
+  /// 清仓后的补查才要求已采用；完全没有份额或申请事实时不额外查询。
+  bool _needsFundHistory(
+    InvestmentPortfolio portfolio,
+    StockSecurity security,
+  ) {
+    if (!security.isFund) return false;
+    final now = clock();
+    final subscriptions = portfolio.fundSubscriptions.where(
+      (s) => s.securityId == security.id && !s.requestedAt.isAfter(now),
+    );
+    if (subscriptions.any(
+      (s) =>
+          s.cancelledAt == null &&
+          (s.confirmation == null ||
+              fundSubscriptionEffectiveAt(s)!.isAfter(now)),
+    )) {
+      // 待确认和已确认待起算仍可查看公开净值，但不会据此自动确认个人申购或增加份额。
+      return true;
+    }
+    if (!portfolio.marketPriceIds.contains(security.id)) return false;
+    final relevantTimes = [
+      if (!portfolio.openedAt.isAfter(now) &&
+          portfolio.openingHoldings.any((h) => h.securityId == security.id))
+        portfolio.openedAt,
+      for (final event in portfolio.events)
+        if (event.securityId == security.id && !event.occurredAt.isAfter(now))
+          event.occurredAt,
+      for (final leg in fundSubscriptionCashLegs(
+        portfolio,
+        at: now,
+        securityId: security.id,
+      ))
+        leg.occurredAt,
+    ];
+    if (relevantTimes.isEmpty) return false;
+    final latest = relevantTimes.reduce((a, b) => a.isAfter(b) ? a : b);
+    final hk = latest.toUtc().add(const Duration(hours: 8));
+    final requiredDate = DateTime.utc(hk.year, hk.month, hk.day);
+    final history = fundNavHistoryFor(portfolio, security.id);
+    return history == null || history.points.last.date.isBefore(requiredDate);
+  }
+
+  /// 返回当前持有或尚需补齐清仓历史、且来源明确支持的公开请求，每来源最多20项。
   /// 所有账户信息只用于本地选择，实际传给适配器的对象仍仅含公开证券身份。
   Map<MarketQuoteAdapter, List<MarketQuoteRequest>> _requestGroups(
     InvestmentPortfolio portfolio,
@@ -483,9 +576,11 @@ class InvestmentQuoteSync {
     final groups = <MarketQuoteAdapter, List<MarketQuoteRequest>>{};
     final held = projectStocks(
       portfolio,
+      at: clock(),
     ).positions.map((position) => position.securityId).toSet();
     for (final security in portfolio.securities.where(
-      (security) => held.contains(security.id),
+      (security) =>
+          held.contains(security.id) || _needsFundHistory(portfolio, security),
     )) {
       final request = MarketQuoteRequest(security);
       final adapter = client.adapterFor(request);

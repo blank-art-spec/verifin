@@ -85,9 +85,10 @@ int? chartSlotIndex(Offset position, Rect chartRect, int count) {
   return ((position.dx - chartRect.left) / gap).floor().clamp(0, count - 1);
 }
 
-/// 在 [anchor] 附近绘制数据气泡,自动上下翻转并夹紧在画布内。
-/// 气泡固定使用深色底和浅色文字,保证在浅色、深色和图片背景上都可读。
-/// [textScaler] 是系统字号缩放:画布文字不经过 Theme,必须由调用方显式传入。
+/// 在 [canvas] 的 [size] 画布内、[anchor] 附近绘制 [tooltip]，自动上下翻转并夹紧。
+/// 标题和各行按可用宽度换行，彩色圆点占用的宽度单独扣除，不能只移动超宽气泡的位置。
+/// 气泡固定使用深色底和浅色文字；[textScaler] 保留系统字号，不通过缩小字体躲避溢出。
+/// 极端内容高于画布时限制气泡高度并裁剪绘制，完整文案仍由交互组件的语义和点明细提供。
 void drawChartTooltip(
   Canvas canvas,
   Size size,
@@ -97,6 +98,16 @@ void drawChartTooltip(
 }) {
   const padding = 8.0;
   const dotSize = 6.0;
+  const edge = 2.0;
+  if (!size.width.isFinite ||
+      !size.height.isFinite ||
+      size.width <= (edge + padding) * 2 ||
+      size.height <= (edge + padding) * 2) {
+    // 尚未获得有效布局尺寸时不绘制气泡，避免负宽度、无穷值或超小画布产生越界。
+    return;
+  }
+  final maximumBubbleWidth = size.width - edge * 2;
+  final maximumContentWidth = maximumBubbleWidth - padding * 2;
   final titlePainter = TextPainter(
     text: TextSpan(
       text: tooltip.title,
@@ -108,7 +119,7 @@ void drawChartTooltip(
     ),
     textDirection: TextDirection.ltr,
     textScaler: textScaler,
-  )..layout();
+  )..layout(maxWidth: maximumContentWidth);
   final linePainters = <(ChartTooltipLine, TextPainter)>[
     for (final line in tooltip.lines)
       (
@@ -124,7 +135,12 @@ void drawChartTooltip(
           ),
           textDirection: TextDirection.ltr,
           textScaler: textScaler,
-        )..layout(),
+        )..layout(
+          maxWidth: math.max(
+            0.0,
+            maximumContentWidth - (line.color == null ? 0 : dotSize + 5),
+          ),
+        ),
       ),
   ];
 
@@ -135,13 +151,15 @@ void drawChartTooltip(
     contentWidth = math.max(contentWidth, lineWidth);
     contentHeight += painter.height + 3;
   }
-  final bubbleWidth = contentWidth + padding * 2;
-  final bubbleHeight = contentHeight + padding * 2;
+  final bubbleWidth = math.min(contentWidth + padding * 2, maximumBubbleWidth);
+  final bubbleHeight = math.min(
+    contentHeight + padding * 2,
+    size.height - edge * 2,
+  );
 
   // 气泡整体夹紧在画布矩形内:先按锚点摆位,再分别夹紧左右与上下。
   // 上方的夹紧必须取 max(边界),否则气泡高于画布时 top 会变成负值、画出画布。
   final canvasRect = Offset.zero & size;
-  const edge = 2.0;
   var left = anchor.dx - bubbleWidth / 2;
   left = left.clamp(
     canvasRect.left + edge,
@@ -160,8 +178,11 @@ void drawChartTooltip(
     Rect.fromLTWH(left, top, bubbleWidth, bubbleHeight),
     const Radius.circular(7),
   );
-  // 固定深色底:浅色、深色与图片背景上都要可读,不随主题切换。
-  canvas.drawRRect(bubble, Paint()..color = veriInk.withValues(alpha: 0.92));
+  // 先限制画布边界，再把文字限制在气泡内；超长提示不能绘到邻接卡片或导航区域。
+  canvas.save();
+  canvas.clipRect(canvasRect);
+  // 固定不透明深色底：遵循全局实色表面约定，浅色、深色与图片背景上都要可读。
+  canvas.drawRRect(bubble, Paint()..color = veriInk);
   canvas.drawRRect(
     bubble,
     Paint()
@@ -170,6 +191,8 @@ void drawChartTooltip(
       ..strokeWidth = 1,
   );
 
+  canvas.save();
+  canvas.clipRRect(bubble);
   var dy = top + padding;
   titlePainter.paint(canvas, Offset(left + padding, dy));
   dy += titlePainter.height + 3;
@@ -185,6 +208,12 @@ void drawChartTooltip(
     }
     painter.paint(canvas, Offset(dx, dy));
     dy += painter.height + 3;
+  }
+  canvas.restore();
+  canvas.restore();
+  titlePainter.dispose();
+  for (final (_, painter) in linePainters) {
+    painter.dispose();
   }
 }
 

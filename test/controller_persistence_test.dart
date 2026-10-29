@@ -3,6 +3,9 @@ import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
+import 'package:verifin/app/calendar_days.dart';
+import 'package:verifin/app/investments/fund_reference_history.dart';
+import 'package:verifin/app/investments/market_quote.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/auto_capture/capture_parser.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
@@ -11,6 +14,7 @@ import 'package:verifin/data/ledger_repository.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
 import 'support/sample_investment_expectations.dart';
+import 'support/investment_fixture.dart';
 
 void main() {
   setUpAll(sqfliteFfiInit);
@@ -43,6 +47,493 @@ void main() {
     note: '',
     occurredAt: DateTime(2026, 5, int.parse(id)),
   );
+
+  test('v15 已扣款待确认申购在 SQLite 冷读、预览和完整恢复后保留且不生成持仓或收入', () async {
+    final repo = await openRepo();
+    final store = LocalKeyValueStore();
+    var controller = await VeriFinController.create(store, repository: repo);
+    var controllerAlive = true;
+    try {
+      final account = investmentAccountFixture(
+        id: 'backup-pending-fund',
+        bookId: controller.activeBook.id,
+      );
+      const fund = StockSecurity(
+        symbol: 'HK0001039582',
+        name: '备份待确认基金示例',
+        market: StockMarket.hk,
+        currencyCode: 'USD',
+        type: InvestmentSecurityType.fund,
+      );
+      controller.addAccount(account);
+      await controller.waitForPendingWrites();
+      expect(
+        await controller.enableInvestment(
+          accountId: account.id,
+          openingCash: '5000',
+          openedAt: DateTime.utc(2026, 10, 1),
+          securities: [fund],
+          manualPrices: {fund.id: '109.8290'},
+        ),
+        isTrue,
+      );
+      final pending = FundSubscription(
+        id: 'backup-paid-fund-subscription',
+        securityId: fund.id,
+        requestedAt: DateTime.utc(2026, 10, 25, 2),
+        cashAmount: '1401.31',
+        paidAt: DateTime.utc(2026, 10, 25, 2, 5),
+        expectedConfirmationDate: DateTime.utc(2026, 10, 26),
+        note: '固定备份夹具：预计日不表示券商已经确认份额',
+      );
+      // 仓储注入完整合法聚合，只用于独立验证持久化契约，不依赖申购页面或其命令签名。
+      final source = controller
+          .investmentFor(account.id)!
+          .copyWith(fundSubscriptions: [pending]);
+      await repo.saveInvestmentPortfolios([source]);
+      controller.dispose();
+      controllerAlive = false;
+      controller = await VeriFinController.create(store, repository: repo);
+      controllerAlive = true;
+      var loaded = controller.investmentFor(account.id)!;
+      expect(loaded.toJson(), source.toJson());
+      expect(loaded.fundSubscriptions.single.toJson(), pending.toJson());
+      expect(loaded.fundSubscriptions.single.confirmation, isNull);
+      expect(loaded.events, isEmpty);
+      expect(controller.investmentProjection(account.id)!.positions, isEmpty);
+      expect(controller.entries, isEmpty);
+
+      final raw = controller.exportDataJson();
+      expect((jsonDecode(raw) as Map)['version'], 15);
+      final beforePreview = loaded.toJson();
+      controller.importDataJson(raw, dryRun: true);
+      await controller.waitForPendingWrites();
+      expect(controller.investmentFor(account.id)!.toJson(), beforePreview);
+      expect(
+        (await repo.loadInvestmentPortfolios()).single.toJson(),
+        beforePreview,
+      );
+
+      controller.resetAllData();
+      await controller.waitForPendingWrites();
+      expect(await repo.loadInvestmentPortfolios(), isEmpty);
+      controller.importDataJson(raw);
+      await controller.waitForPendingWrites();
+      loaded = controller.investmentFor(account.id)!;
+      expect(loaded.toJson(), source.toJson());
+      expect(loaded.fundSubscriptions.single.cashAmount, '1401.31');
+      expect(
+        loaded.fundSubscriptions.single.paidAt,
+        DateTime.utc(2026, 10, 25, 2, 5),
+      );
+      expect(
+        loaded.fundSubscriptions.single.expectedConfirmationDate,
+        DateTime.utc(2026, 10, 26),
+      );
+      expect(loaded.fundSubscriptions.single.confirmation, isNull);
+      expect(loaded.events, isEmpty);
+      expect(controller.entries, isEmpty);
+
+      controller.dispose();
+      controllerAlive = false;
+      controller = await VeriFinController.create(store, repository: repo);
+      controllerAlive = true;
+      expect(controller.investmentFor(account.id)!.toJson(), source.toJson());
+      expect(controller.investmentProjection(account.id)!.positions, isEmpty);
+      expect(controller.entries, isEmpty);
+    } finally {
+      // 创建新控制器失败时不再释放已经结束的旧实例，避免掩盖真正的初始化失败。
+      if (controllerAlive) controller.dispose();
+    }
+  });
+
+  test('成交净值收益规则经实际确认、SQLite 冷读及 v15 恢复保留逐区间收益，旧 v14 不改起算', () async {
+    final repo = await openRepo();
+    final store = LocalKeyValueStore();
+    var controller = await VeriFinController.create(store, repository: repo);
+    var controllerAlive = true;
+    try {
+      final account = investmentAccountFixture(
+        id: 'deal-nav-fund',
+        bookId: controller.activeBook.id,
+      );
+      const fund = StockSecurity(
+        symbol: 'HK0001039582',
+        name: '成交净值归属持久化夹具',
+        market: StockMarket.hk,
+        currencyCode: 'USD',
+        type: InvestmentSecurityType.fund,
+      );
+      controller.addAccount(account);
+      await controller.waitForPendingWrites();
+      expect(
+        await controller.enableInvestment(
+          accountId: account.id,
+          openingCash: '5000',
+          openedAt: DateTime.utc(2026, 10, 1),
+        ),
+        isTrue,
+      );
+      final order = FundSubscription(
+        id: 'deal-nav-order',
+        securityId: fund.id,
+        requestedAt: DateTime.utc(2026, 10, 23, 1),
+        paidAt: DateTime.utc(2026, 10, 23, 2),
+        cashAmount: '1000',
+      );
+      expect(
+        await controller.saveFundSubscription(
+          accountId: account.id,
+          security: fund,
+          subscription: order,
+        ),
+        isTrue,
+      );
+      expect(
+        await controller.confirmFundSubscription(
+          accountId: account.id,
+          subscriptionId: order.id,
+          confirmation: FundSubscriptionConfirmation(
+            confirmedAt: DateTime.utc(2026, 10, 26, 2),
+            navDate: DateTime.utc(2026, 10, 23),
+            earningStartDate: DateTime.utc(2026, 10, 23),
+            nav: '100',
+            quantity: '10',
+            accrualRule: FundAccrualRule.dealNavDate,
+          ),
+        ),
+        isTrue,
+      );
+      final source = controller.investmentFor(account.id)!.toJson();
+
+      /// 验证每次冷读/恢复后的私人事实与净值区间结果，没有把晚到回执日当收益日。
+      void expectReconciled() {
+        final portfolio = controller.investmentFor(account.id)!;
+        expect(portfolio.toJson(), source);
+        expect(
+          portfolio.fundSubscriptions.single.confirmation!.accrualRule,
+          FundAccrualRule.dealNavDate,
+        );
+        expect(
+          portfolio.events.single.occurredAt,
+          hongKongFundDayEnd(DateTime.utc(2026, 10, 23)),
+        );
+        final days = buildFundReferenceHistory(
+          portfolio: portfolio,
+          security: fund,
+          history: FundNavHistory([
+            FundNavPoint(date: DateTime.utc(2026, 10, 22), price: '99'),
+            FundNavPoint(date: DateTime.utc(2026, 10, 23), price: '100'),
+            FundNavPoint(date: DateTime.utc(2026, 10, 26), price: '102'),
+            FundNavPoint(date: DateTime.utc(2026, 10, 27), price: '103'),
+          ]),
+          account: account,
+          entries: controller.entries,
+          anchors: const [],
+        );
+        expect(days.map((day) => day.dailyProfit?.toString()), [
+          null,
+          '0',
+          '20',
+          '10',
+        ]);
+        expect(days.last.cumulativeProfit?.toString(), '30');
+        expect(controller.accountBalance(account), 4000);
+        expect(controller.entries, isEmpty);
+      }
+
+      controller.dispose();
+      controllerAlive = false;
+      controller = await VeriFinController.create(store, repository: repo);
+      controllerAlive = true;
+      expectReconciled();
+      final raw = controller.exportDataJson();
+      expect((jsonDecode(raw) as Map)['version'], 15);
+      controller.importDataJson(raw, dryRun: true);
+      expectReconciled();
+      controller.resetAllData();
+      await controller.waitForPendingWrites();
+      controller.importDataJson(raw);
+      await controller.waitForPendingWrites();
+      expectReconciled();
+      controller.dispose();
+      controllerAlive = false;
+      controller = await VeriFinController.create(store, repository: repo);
+      controllerAlive = true;
+      expectReconciled();
+
+      // 构造真实旧 v14 字段形状及对应事件时刻，不能删掉规则后仍沿用新日末事件。
+      final legacyRoot = jsonDecode(raw) as Map<String, Object?>;
+      legacyRoot['version'] = 14;
+      final legacyData = legacyRoot['data']! as Map<String, Object?>;
+      final legacyPortfolio =
+          (legacyData['investmentPortfolios']! as List<Object?>).single!
+              as Map<String, Object?>;
+      final legacyOrder =
+          (legacyPortfolio['fundSubscriptions']! as List<Object?>).single!
+              as Map<String, Object?>;
+      final confirmation = legacyOrder['confirmation']! as Map<String, Object?>;
+      confirmation.remove('accrualRule');
+      confirmation['earningStartDate'] = '2026-10-26';
+      final legacyEvent =
+          (legacyPortfolio['events']! as List<Object?>).single!
+              as Map<String, Object?>;
+      legacyEvent['occurredAt'] = hongKongFundDayStart(
+        DateTime.utc(2026, 10, 26),
+      ).toIso8601String();
+      controller.importDataJson(jsonEncode(legacyRoot));
+      await controller.waitForPendingWrites();
+      final legacy = controller.investmentFor(account.id)!;
+      expect(
+        legacy.fundSubscriptions.single.confirmation!.accrualRule,
+        FundAccrualRule.explicitStartDate,
+      );
+      expect(
+        legacy.events.single.occurredAt,
+        hongKongFundDayStart(DateTime.utc(2026, 10, 26)),
+      );
+      expect(controller.entries, isEmpty);
+    } finally {
+      if (controllerAlive) controller.dispose();
+    }
+  });
+
+  for (final paymentMicros in [800, 900]) {
+    final anchorMicros = paymentMicros == 800 ? 900 : 800;
+    test(
+      '基金付款/退款 $paymentMicros 微秒与锚点 $anchorMicros 微秒同毫秒，SQLite 冷启及恢复不重复计款',
+      () async {
+        final repo = await openRepo();
+        final store = LocalKeyValueStore();
+        var controller = await VeriFinController.create(
+          store,
+          repository: repo,
+        );
+        var controllerAlive = true;
+        try {
+          final account = investmentAccountFixture(
+            id: 'fund-anchor-micros-$paymentMicros',
+            bookId: controller.activeBook.id,
+          );
+          const fund = StockSecurity(
+            symbol: 'HK0001039582',
+            name: '毫秒现金核对隔离基金',
+            market: StockMarket.hk,
+            currencyCode: 'USD',
+            type: InvestmentSecurityType.fund,
+          );
+          final relative = addCalendarDays(
+            hongKongFundDate(DateTime.now()),
+            -2,
+          );
+          final paidAt = DateTime.utc(
+            relative.year,
+            relative.month,
+            relative.day,
+            1,
+            0,
+            0,
+            0,
+            paymentMicros,
+          );
+          final paymentAnchorAt = DateTime.utc(
+            relative.year,
+            relative.month,
+            relative.day,
+            1,
+            0,
+            0,
+            0,
+            anchorMicros,
+          );
+          final refundedAt = DateTime.utc(
+            relative.year,
+            relative.month,
+            relative.day,
+            3,
+            0,
+            0,
+            0,
+            paymentMicros,
+          );
+          final refundAnchorAt = DateTime.utc(
+            relative.year,
+            relative.month,
+            relative.day,
+            3,
+            0,
+            0,
+            0,
+            anchorMicros,
+          );
+          final requestedAt = DateTime.utc(
+            relative.year,
+            relative.month,
+            relative.day,
+          );
+          final cancelledAt = DateTime.utc(
+            relative.year,
+            relative.month,
+            relative.day,
+            2,
+          );
+          // 下一个毫秒的已知事实仍须在校准后正常重放，不能被“同毫秒全含”误吞。
+          final nextPaymentAt = DateTime.fromMillisecondsSinceEpoch(
+            paidAt.millisecondsSinceEpoch + 1,
+            isUtc: true,
+          );
+          final nextRefundAt = DateTime.fromMillisecondsSinceEpoch(
+            refundedAt.millisecondsSinceEpoch + 1,
+            isUtc: true,
+          );
+          controller.addAccount(account);
+          await controller.waitForPendingWrites();
+          expect(
+            await controller.enableInvestment(
+              accountId: account.id,
+              openingCash: '5000',
+              openedAt: requestedAt.subtract(const Duration(hours: 1)),
+            ),
+            isTrue,
+          );
+          for (final order in [
+            FundSubscription(
+              id: 'same-ms',
+              securityId: fund.id,
+              requestedAt: requestedAt,
+              paidAt: paidAt,
+              cashAmount: '1000',
+            ),
+            FundSubscription(
+              id: 'next-ms',
+              securityId: fund.id,
+              requestedAt: requestedAt,
+              paidAt: nextPaymentAt,
+              cashAmount: '200',
+            ),
+          ]) {
+            expect(
+              await controller.saveFundSubscription(
+                accountId: account.id,
+                security: fund,
+                subscription: order,
+              ),
+              isTrue,
+            );
+          }
+          expect(controller.accountBalance(account), 3800);
+          expect(
+            await controller.saveBalanceAnchor(
+              account: account,
+              effectiveAt: paymentAnchorAt,
+              balance: 4000,
+            ),
+            isTrue,
+          );
+          expect(controller.accountBalance(account), 3800);
+          final paymentAnchor = controller.latestBalanceAnchor(account.id)!;
+          final includedPayments = controller
+              .investmentFor(account.id)!
+              .anchorIncludedIds[paymentAnchor.id]!;
+          expect(includedPayments, contains('fund:same-ms:payment'));
+          expect(includedPayments, isNot(contains('fund:next-ms:payment')));
+
+          controller.dispose();
+          controllerAlive = false;
+          controller = await VeriFinController.create(store, repository: repo);
+          controllerAlive = true;
+          // 真实 SQLite 将锚点截为毫秒，但基金聚合 JSON 仍保留原付款微秒。
+          expect(
+            controller.latestBalanceAnchor(account.id)!.effectiveAt.microsecond,
+            0,
+          );
+          expect(
+            controller
+                .investmentFor(account.id)!
+                .fundSubscriptions
+                .firstWhere((order) => order.id == 'same-ms')
+                .paidAt,
+            paidAt,
+          );
+          expect(controller.accountBalance(account), 3800);
+
+          for (final refund in [
+            ('same-ms', refundedAt, '900'),
+            ('next-ms', nextRefundAt, '200'),
+          ]) {
+            expect(
+              await controller.cancelFundSubscription(
+                accountId: account.id,
+                subscriptionId: refund.$1,
+                cancelledAt: cancelledAt,
+                refundedAt: refund.$2,
+                refundAmount: refund.$3,
+              ),
+              isTrue,
+            );
+          }
+          expect(controller.accountBalance(account), 4900);
+          expect(
+            await controller.saveBalanceAnchor(
+              account: account,
+              effectiveAt: refundAnchorAt,
+              balance: 4700,
+            ),
+            isTrue,
+          );
+          expect(controller.accountBalance(account), 4900);
+          final refundAnchor = controller.latestBalanceAnchor(account.id)!;
+          final includedRefunds = controller
+              .investmentFor(account.id)!
+              .anchorIncludedIds[refundAnchor.id]!;
+          expect(includedRefunds, contains('fund:same-ms:refund'));
+          expect(includedRefunds, isNot(contains('fund:next-ms:refund')));
+
+          controller.dispose();
+          controllerAlive = false;
+          controller = await VeriFinController.create(store, repository: repo);
+          controllerAlive = true;
+          expect(
+            controller.latestBalanceAnchor(account.id)!.effectiveAt.microsecond,
+            0,
+          );
+          expect(
+            controller
+                .investmentFor(account.id)!
+                .fundSubscriptions
+                .firstWhere((order) => order.id == 'same-ms')
+                .refundedAt,
+            refundedAt,
+          );
+          expect(controller.accountBalance(account), 4900);
+          expect(controller.accountAssetValue(account), 4900);
+          expect(controller.entries, isEmpty);
+
+          final source = controller.investmentFor(account.id)!.toJson();
+          final raw = controller.exportDataJson();
+          expect((jsonDecode(raw) as Map)['version'], 15);
+          controller.resetAllData();
+          await controller.waitForPendingWrites();
+          expect(await repo.loadInvestmentPortfolios(), isEmpty);
+          controller.importDataJson(raw);
+          await controller.waitForPendingWrites();
+          expect(controller.investmentFor(account.id)!.toJson(), source);
+          expect(controller.accountBalance(account), 4900);
+          controller.dispose();
+          controllerAlive = false;
+          controller = await VeriFinController.create(store, repository: repo);
+          controllerAlive = true;
+          expect(controller.investmentFor(account.id)!.toJson(), source);
+          expect(controller.accountBalance(account), 4900);
+          expect(controller.accountAssetValue(account), 4900);
+          expect(await repo.loadEntries(), isEmpty);
+        } finally {
+          // 冷启动若失败，不再次释放已经结束的实例，避免掩盖实际数据库恢复异常。
+          if (controllerAlive) controller.dispose();
+        }
+      },
+    );
+  }
 
   test('SQLite 跨账本复核事务失败不移动事件，重试与重启保持目标账本', () async {
     final repo = await openRepo();

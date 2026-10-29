@@ -437,9 +437,13 @@ class _NumberPadSheetState extends State<NumberPadSheet> {
     return fixed.replaceFirst(RegExp(r'\.?0+$'), '');
   }
 
-  /// 追加一个运算符：不能以运算符开头；末尾已是运算符则替换；末尾的 `.` 先去掉。
+  /// 将 [op] 追加为算式运算符；允许负数的金额字段可以首按减号作为负号，便于直接录入浮亏。
+  /// 普通非负字段仍不能以运算符开头；末尾已有运算符则替换，末尾小数点先去掉。
   void _appendOperator(String op) {
     if (_input.isEmpty) {
+      if (widget.allowNegative && op == '-') {
+        _input = '-';
+      }
       return;
     }
     var next = _input;
