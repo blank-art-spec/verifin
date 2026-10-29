@@ -3998,7 +3998,7 @@
   "fundHoldingQuantity": "实际持有份额（必填）",
   "fundHoldingMarketValue": "按填写净值估算的市值",
   "fundCalculatedUnrealized": "自动计算的未实现盈亏",
-  "fundHoldingCalculationHint": "未实现盈亏 = 实际份额 × 当前填写净值 − 总成本。净值变化后重新计算，不另记收入流水。",
+  "fundHoldingCalculationHint": "基准盈亏 = 实际份额 × 对应净值 − 总成本，不另记收入。已有的当前参考价继续保留，可在参考行情中更新。",
   "fundHoldingNoPreview": "填写总成本、实际份额和对应净值后，自动显示市值与未实现盈亏。",
   "fundHoldingCheck": "已核对实际份额、总成本、净值及各日期",
   "fundLegacyInferredQuantityHint": "这些旧份额曾由金额反推。请与券商持仓核对；份额数值未改时会保留原推算标记。",

@@ -153,9 +153,19 @@ void main() {
     addTearDown(controller.dispose);
     await controller.setWorkdayCalendarAutoUpdate(true);
     await controller.syncWorkdayCalendar(now: DateTime(2026, 10, 21));
-    final account = controller.accounts.first.copyWith(
+    // 新账本按产品约定不预置账户；本用例显式建立隔离账户，不能从空列表取 first。
+    // 保留下载缓存、原生快照与删除后的全部断言，避免借生产种子数据掩盖夹具缺失。
+    final account = Account(
       id: 'calendar-account',
+      bookId: controller.activeBook.id,
       name: '日历测试账户',
+      type: AccountType.cash,
+      groupId: null,
+      initialBalance: 0,
+      iconCode: 'cash',
+      note: '',
+      includeInAssets: true,
+      hidden: false,
     );
     controller.addAccount(account);
     await controller.waitForPendingWrites();

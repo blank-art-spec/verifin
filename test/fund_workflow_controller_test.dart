@@ -663,6 +663,166 @@ void main() {
     expect(restored.quantity, '12.77');
   });
 
+  for (final fundInSource in [true, false]) {
+    test('未来基金起算在${fundInSource ? '转出' : '转入'}账户时不阻止已有股票转移', () async {
+      expect(
+        await controller.saveStockEvent(
+          accountId: account.id,
+          security: avgoFixture,
+          referencePrice: '50',
+          event: StockEvent(
+            id: 'stock-before-fund',
+            securityId: avgoFixture.id,
+            kind: StockEventKind.buy,
+            occurredAt: clock.at(-12),
+            sequence: 0,
+            quantity: '10',
+            price: '50',
+          ),
+        ),
+        isTrue,
+      );
+      final target = investmentAccountFixture(id: 'fund-transfer-target');
+      controller.addAccount(target);
+      await controller.waitForPendingWrites();
+      expect(
+        await controller.enableInvestment(
+          accountId: target.id,
+          openingCash: '5000',
+          openedAt: clock.at(-30),
+        ),
+        isTrue,
+      );
+      final fundOwner = fundInSource ? account : target;
+      final order = clock.order(paidAt: clock.at(-8));
+      expect(
+        await controller.saveFundSubscription(
+          accountId: fundOwner.id,
+          security: _fund,
+          subscription: order,
+        ),
+        isTrue,
+      );
+      expect(
+        await controller.confirmFundSubscription(
+          accountId: fundOwner.id,
+          subscriptionId: order.id,
+          confirmation: clock.confirmation(earningDay: 2),
+        ),
+        isTrue,
+      );
+      expect(
+        await controller.transferStock(
+          fromAccountId: account.id,
+          toAccountId: target.id,
+          securityId: avgoFixture.id,
+          quantity: '1',
+          short: false,
+          occurredAt: clock.at(-1),
+          batchId: 'stock-with-scheduled-fund',
+        ),
+        isTrue,
+      );
+      final fromHolding = controller
+          .investmentProjection(account.id)!
+          .positions
+          .singleWhere((p) => p.securityId == avgoFixture.id);
+      final toHolding = controller
+          .investmentProjection(target.id)!
+          .positions
+          .singleWhere((p) => p.securityId == avgoFixture.id);
+      expect(fromHolding.quantity.toString(), '9');
+      expect(fromHolding.cost.toString(), '450');
+      expect(toHolding.quantity.toString(), '1');
+      expect(toHolding.cost.toString(), '50');
+      expect(
+        controller.accountBalance(account) + controller.accountBalance(target),
+        8500,
+      );
+      expect(
+        controller
+            .investmentProjection(fundOwner.id)!
+            .positions
+            .where((p) => p.securityId == _fund.id),
+        isEmpty,
+        reason: '允许转移旧股票不能让未来基金份额提前成为可用持仓',
+      );
+      final before = jsonEncode([
+        for (final id in [account.id, target.id])
+          controller.investmentFor(id)!.toJson(),
+      ]);
+      expect(
+        await controller.transferStock(
+          fromAccountId: account.id,
+          toAccountId: target.id,
+          securityId: avgoFixture.id,
+          quantity: '10',
+          short: false,
+          occurredAt: clock.at(-1),
+          batchId: 'over-transfer',
+        ),
+        isFalse,
+      );
+      expect(
+        jsonEncode([
+          for (final id in [account.id, target.id])
+            controller.investmentFor(id)!.toJson(),
+        ]),
+        before,
+      );
+    });
+  }
+
+  test('编辑或补录基金基准不会把当前参考价倒退成历史净值', () async {
+    final baseline = clock.baseline(day: -7, quantity: '10', cost: '1000');
+    expect(
+      await controller.saveFundHoldingBaseline(
+        accountId: account.id,
+        security: _fund,
+        event: baseline,
+        referencePrice: '100',
+      ),
+      isTrue,
+    );
+    expect(
+      await controller.setStockReferencePrice(account.id, _fund.id, '120'),
+      isTrue,
+    );
+    final edited = StockEvent.fromJson({
+      ...baseline.toJson(),
+      'note': '仅补充旧核对备注',
+    });
+    expect(
+      await controller.saveFundHoldingBaseline(
+        accountId: account.id,
+        security: _fund,
+        event: edited,
+        referencePrice: '100',
+      ),
+      isTrue,
+    );
+    expect(current().manualPrices[_fund.id], '120');
+    expect(valueInvestmentAccount(current(), 5000).longValue, 1200);
+    expect(
+      await controller.saveFundHoldingBaseline(
+        accountId: account.id,
+        security: _fund,
+        event: clock.baseline(
+          id: 'earlier',
+          day: -8,
+          quantity: '8',
+          cost: '800',
+          nav: '90',
+        ),
+        referencePrice: '90',
+      ),
+      isTrue,
+    );
+    expect(current().manualPrices[_fund.id], '120');
+    expect(valueInvestmentAccount(current(), 5000).longValue, 1200);
+    expect(controller.accountBalance(account), 5000);
+  });
+
   test('旧版报告浮盈反推的基准仍可恢复，证据字段不被当作固定收益或收入', () async {
     final reference = calculateFundOpeningByUnrealized(
       cost: '1401.31',

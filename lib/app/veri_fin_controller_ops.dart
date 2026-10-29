@@ -2301,9 +2301,16 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
                   'stock:${e.id}',
               for (final leg in fundSubscriptionCashLegs(
                 portfolio,
-                at: effectiveAt,
+                // 锚点在 SQLite 只保留毫秒；同毫秒已知事实全部视为校准已包含，
+                // 与普通流水/证券事件一致，但不扩展到下个毫秒的付款或退款。
+                at: DateTime.fromMillisecondsSinceEpoch(
+                  effectiveAt.millisecondsSinceEpoch,
+                  isUtc: true,
+                ).add(const Duration(microseconds: 999)),
               ))
-                if (leg.occurredAt.isAtSameMomentAs(effectiveAt)) leg.id,
+                if (leg.occurredAt.millisecondsSinceEpoch ==
+                    effectiveAt.millisecondsSinceEpoch)
+                  leg.id,
             ],
           },
         ),

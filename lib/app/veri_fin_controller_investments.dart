@@ -376,14 +376,18 @@ mixin _InvestmentOps on _ControllerOps {
         .where((s) => s.id == securityId)
         .firstOrNull;
     if (security == null || security.option != null) return false;
-    // 历史转移会改变后续成本分配；先只接受位于两端现有记录之后的真实转移。
-    if ([
-      ...from.events,
-      ...to.events,
-    ].any((e) => e.occurredAt.isAfter(occurredAt))) {
+    // 历史转移会改变后续成本分配；仍只接受位于两端已生效记录之后的真实转移。
+    // 已确认但尚未起算的基金事件是未来计划，不应阻止当前股票或旧基金份额转移；
+    // 普通成交及已经起算的基金仍保持原有末尾校验，未来申购也不会提前增加可转份额。
+    final now = DateTime.now();
+    if ([...from.events, ...to.events].any(
+      (e) =>
+          e.occurredAt.isAfter(occurredAt) &&
+          !(e.kind == StockEventKind.fundAcquire && e.occurredAt.isAfter(now)),
+    )) {
       return false;
     }
-    final holding = projectStocks(from).positions
+    final holding = projectStocks(from, at: now).positions
         .where((p) => p.securityId == securityId && p.short == short)
         .firstOrNull;
     final q = InvestmentDecimal.parse(quantity);

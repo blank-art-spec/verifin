@@ -7295,7 +7295,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fundHoldingCalculationHint =>
-      '未实现盈亏 = 实际份额 × 当前填写净值 − 总成本。净值变化后重新计算，不另记收入流水。';
+      '基准盈亏 = 实际份额 × 对应净值 − 总成本，不另记收入。已有的当前参考价继续保留，可在参考行情中更新。';
 
   @override
   String get fundHoldingNoPreview => '填写总成本、实际份额和对应净值后，自动显示市值与未实现盈亏。';

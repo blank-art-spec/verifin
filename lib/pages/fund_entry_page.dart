@@ -252,6 +252,15 @@ class _FundEntryPageState extends State<FundEntryPage> {
       _expectedDate,
       _baselineDate;
   _FundFormAction _action = _FundFormAction.application;
+  ({
+    String cashAmount,
+    String fee,
+    bool paid,
+    DateTime paidAt,
+    DateTime requestedAt,
+  })?
+  _applicationPaymentDraft;
+  String? _confirmationFeeDraft;
 
   /// 仅在首次读取 Scope 时复制草稿；后续净值更新不能覆盖用户正在填写的金额。
   /// 已有基准直接带入已保存份额，历史报告浮盈只留作原事件证据，不作为新表单输入。
@@ -366,6 +375,48 @@ class _FundEntryPageState extends State<FundEntryPage> {
     _reviewed = false;
     _error = null;
   });
+
+  /// 切换至 [action] 时，用已保存的 [subscription] 展示该模式不会提交的付款事实。
+  /// 申请资金草稿与确认费用草稿分别暂存，返回原模式仍可继续编辑；取消页不能把未保存的付款冒充实际发生。
+  void _switchAction(_FundFormAction action, FundSubscription subscription) {
+    if (_saving || action == _action) return;
+    if (_action == _FundFormAction.application) {
+      _applicationPaymentDraft = (
+        cashAmount: _fields['cashAmount']!.text,
+        fee: _fields['fee']!.text,
+        paid: _paid,
+        paidAt: _paidAt,
+        requestedAt: _requestedAt,
+      );
+    } else if (_action == _FundFormAction.confirmation) {
+      _confirmationFeeDraft = _fields['fee']!.text;
+    }
+    setState(() {
+      _action = action;
+      _reviewed = false;
+      _error = null;
+      _fields['cashAmount']!.text = subscription.cashAmount;
+      _fields['fee']!.text = subscription.fee;
+      _requestedAt = subscription.requestedAt;
+      _paid = subscription.paidAt != null;
+      _paidAt = subscription.paidAt ?? DateTime.now();
+      if (action == _FundFormAction.application &&
+          _applicationPaymentDraft != null) {
+        final draft = _applicationPaymentDraft!;
+        _fields['cashAmount']!.text = draft.cashAmount;
+        _fields['fee']!.text = draft.fee;
+        _requestedAt = draft.requestedAt;
+        _paid = draft.paid;
+        _paidAt = draft.paidAt;
+      } else if (action == _FundFormAction.confirmation) {
+        // 费用属于确认页可提交的分配事实；保留本模式的修改，也允许首次接续申请页的费用草稿。
+        _fields['fee']!.text =
+            _confirmationFeeDraft ??
+            _applicationPaymentDraft?.fee ??
+            subscription.fee;
+      }
+    });
+  }
 
   /// [securities] 是随账户变化的可选香港基金，因此使用共享动态单选弹窗；取消不预选基金。
   Future<void> _chooseSecurity(List<StockSecurity> securities) async {
@@ -895,10 +946,10 @@ class _FundEntryPageState extends State<FundEntryPage> {
                       TextButton(
                         onPressed: _saving
                             ? null
-                            : () => setState(() {
-                                _action = _FundFormAction.application;
-                                _reviewed = false;
-                              }),
+                            : () => _switchAction(
+                                _FundFormAction.application,
+                                subscription,
+                              ),
                         child: Text(l.fundRecordPayment),
                       ),
                     if (subscription.paidAt != null &&
@@ -906,10 +957,10 @@ class _FundEntryPageState extends State<FundEntryPage> {
                       TextButton(
                         onPressed: _saving
                             ? null
-                            : () => setState(() {
-                                _action = _FundFormAction.confirmation;
-                                _reviewed = false;
-                              }),
+                            : () => _switchAction(
+                                _FundFormAction.confirmation,
+                                subscription,
+                              ),
                         child: Text(
                           subscription.confirmation == null
                               ? l.fundConfirmSubscription
@@ -920,10 +971,10 @@ class _FundEntryPageState extends State<FundEntryPage> {
                       TextButton(
                         onPressed: _saving
                             ? null
-                            : () => setState(() {
-                                _action = _FundFormAction.cancellation;
-                                _reviewed = false;
-                              }),
+                            : () => _switchAction(
+                                _FundFormAction.cancellation,
+                                subscription,
+                              ),
                         child: Text(l.fundCancelSubscription),
                       ),
                   ],
@@ -948,7 +999,10 @@ class _FundEntryPageState extends State<FundEntryPage> {
                       'cashAmount',
                       l.fundCashAmount,
                       money: true,
-                      readOnly: locked || !applicationEditable,
+                      readOnly:
+                          locked ||
+                          !applicationEditable ||
+                          _action != _FundFormAction.application,
                     ),
                     _field(
                       'fee',
@@ -972,7 +1026,11 @@ class _FundEntryPageState extends State<FundEntryPage> {
                       icon: Icons.payments_outlined,
                       title: Text(l.fundAlreadyPaid),
                       value: _paid,
-                      onChanged: locked || !applicationEditable
+                      // 取消/确认只提交各自事实，不能编辑一个不会随该操作保存的付款草稿。
+                      onChanged:
+                          locked ||
+                              !applicationEditable ||
+                              _action != _FundFormAction.application
                           ? null
                           : (value) => setState(() => _paid = value),
                     ),
@@ -981,7 +1039,10 @@ class _FundEntryPageState extends State<FundEntryPage> {
                         l.fundPaidAt,
                         _paidAt,
                         (value) => _paidAt = value,
-                        enabled: applicationEditable && !locked,
+                        enabled:
+                            applicationEditable &&
+                            !locked &&
+                            _action == _FundFormAction.application,
                       ),
                     if (_action == _FundFormAction.application) ...[
                       CompactSwitchRow(

@@ -67,12 +67,20 @@ double investmentCashBalance({
     }
   }
   for (final leg in fundSubscriptionCashLegs(portfolio, at: fundCutoff)) {
+    // 现金锚点在 SQLite 只保留毫秒，基金 JSON 可保留微秒；统一按毫秒比较，
+    // 同毫秒再以稳定腿 ID 判断是否已包含，防止重启后把已核对的微秒付款或退款重复计入。
     if (!useAnchor ||
-        leg.occurredAt.isAfter(boundary) ||
-        (leg.occurredAt.isAtSameMomentAs(boundary) &&
+        leg.occurredAt.millisecondsSinceEpoch >
+            boundary.millisecondsSinceEpoch ||
+        (leg.occurredAt.millisecondsSinceEpoch ==
+                boundary.millisecondsSinceEpoch &&
             included != null &&
             !included.contains(leg.id))) {
-      timeline.add((leg.occurredAt, '2:${leg.id}', leg.amount));
+      // 实际退款是已到账资金，同刻先于已有的普通/证券支出供款，避免由申购 ID 或证券品种
+      // 决定是否误报融资；负的申购付款仍排在末尾。只新增基金退款优先级，不合并同刻净额，
+      // 也不改变普通交易的原顺序或股票/期权按 sequence 逐笔检查现金不足的既有语义。
+      final priority = leg.amount.units >= BigInt.zero ? '-1' : '2';
+      timeline.add((leg.occurredAt, '$priority:${leg.id}', leg.amount));
     }
   }
   timeline.sort((a, b) {

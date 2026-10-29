@@ -2832,7 +2832,7 @@
   "fundHoldingQuantity": "Actual units held (required)",
   "fundHoldingMarketValue": "Market value at entered NAV",
   "fundCalculatedUnrealized": "Calculated unrealized profit/loss",
-  "fundHoldingCalculationHint": "Unrealized profit/loss = actual units × entered NAV − total cost. It is recalculated when NAV changes and creates no income entry.",
+  "fundHoldingCalculationHint": "Baseline profit/loss = actual units × corresponding NAV − total cost. No income entry is created. Any existing current reference price is retained and can be updated in Reference quotes.",
   "fundHoldingNoPreview": "Enter total cost, actual units and the matching NAV to calculate market value and unrealized profit/loss.",
   "fundHoldingCheck": "I checked actual units, total cost, NAV and all dates",
   "fundLegacyInferredQuantityHint": "These legacy units were inferred from an amount. Check the broker holding; unchanged units retain their original inferred status.",

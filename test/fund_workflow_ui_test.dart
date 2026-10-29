@@ -389,6 +389,97 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  testWidgets('未付款申请切到取消时金额和付款状态只读，取消不制造实际扣款', (tester) async {
+    final ready = await _ready();
+    final c = ready.controller;
+    expect(
+      await c.saveFundSubscription(
+        accountId: ready.account.id,
+        security: _fund,
+        subscription: FundSubscription(
+          id: 'ui-unpaid-cancel',
+          securityId: _fund.id,
+          requestedAt: DateTime.now().subtract(const Duration(hours: 1)),
+          cashAmount: '1401.31',
+        ),
+      ),
+      isTrue,
+    );
+    await _pumpEntry(
+      tester,
+      c,
+      FundEntryPage(
+        accountId: ready.account.id,
+        mode: FundEntryMode.purchase,
+        subscriptionId: 'ui-unpaid-cancel',
+      ),
+    );
+    final l = AppLocalizations.of(tester.element(find.byType(FundEntryPage)));
+    // 先留下一份未保存付款草稿；切取消必须展示原事实，而不是暗中丢掉一份看似已发生的扣款。
+    await _money(tester, 'cashAmount', '1405');
+    await _money(tester, 'fee', '1.20');
+    await _reveal(tester, find.text(l.fundAlreadyPaid));
+    await tester.tap(find.text(l.fundAlreadyPaid));
+    await tester.pumpAndSettle();
+    final cancel = find.widgetWithText(TextButton, l.fundCancelSubscription);
+    await _reveal(tester, cancel);
+    await tester.tap(cancel);
+    await tester.pumpAndSettle();
+
+    final amount = find.byKey(const ValueKey('fund-cashAmount'));
+    await _reveal(tester, amount);
+    expect(tester.widget<TextField>(amount).readOnly, isTrue);
+    expect(tester.widget<TextField>(amount).onTap, isNull);
+    expect(tester.widget<TextField>(amount).controller!.text, '1401.31');
+    final fee = find.byKey(const ValueKey('fund-fee'));
+    await _reveal(tester, fee);
+    expect(tester.widget<TextField>(fee).readOnly, isTrue);
+    expect(tester.widget<TextField>(fee).onTap, isNull);
+    expect(tester.widget<TextField>(fee).controller!.text, '0');
+    final paid = find.ancestor(
+      of: find.text(l.fundAlreadyPaid),
+      matching: find.byType(CompactSwitchRow),
+    );
+    await _reveal(tester, paid);
+    expect(tester.widget<CompactSwitchRow>(paid).value, isFalse);
+    expect(tester.widget<CompactSwitchRow>(paid).onChanged, isNull);
+    expect(find.text(l.fundPaidAt), findsNothing);
+    await tester.tap(find.text(l.fundAlreadyPaid));
+    await tester.pumpAndSettle();
+    expect(tester.widget<CompactSwitchRow>(paid).value, isFalse);
+
+    // 返回申请仍能继续原草稿，再切取消则再次显示已保存事实；模式切换不会误记账或无故清空草稿。
+    final application = find.widgetWithText(TextButton, l.fundRecordPayment);
+    await _reveal(tester, application);
+    await tester.tap(application);
+    await tester.pumpAndSettle();
+    await _reveal(tester, amount);
+    expect(tester.widget<TextField>(amount).controller!.text, '1405.00');
+    await _reveal(tester, fee);
+    expect(tester.widget<TextField>(fee).controller!.text, '1.20');
+    await _reveal(tester, paid);
+    expect(tester.widget<CompactSwitchRow>(paid).value, isTrue);
+    await _reveal(tester, cancel);
+    await tester.tap(cancel);
+    await tester.pumpAndSettle();
+
+    final save = find.byKey(const Key('fund-save'));
+    await _reveal(tester, save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    final subscription = c
+        .investmentFor(ready.account.id)!
+        .fundSubscriptions
+        .single;
+    expect(subscription.cancelledAt, isNotNull);
+    expect(subscription.paidAt, isNull);
+    expect(subscription.cashAmount, '1401.31');
+    expect(c.accountBalance(ready.account), 10000);
+    expect(c.investmentProjection(ready.account.id)!.positions, isEmpty);
+    expect(c.entries, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
   testWidgets('待确认申请保留独立日期和真实扣款限制，确认必须再次核对', (tester) async {
     final ready = await _ready();
     final c = ready.controller;

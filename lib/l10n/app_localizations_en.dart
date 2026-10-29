@@ -7568,7 +7568,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fundHoldingCalculationHint =>
-      'Unrealized profit/loss = actual units × entered NAV − total cost. It is recalculated when NAV changes and creates no income entry.';
+      'Baseline profit/loss = actual units × corresponding NAV − total cost. No income entry is created. Any existing current reference price is retained and can be updated in Reference quotes.';
 
   @override
   String get fundHoldingNoPreview =>
