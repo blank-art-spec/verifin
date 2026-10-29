@@ -207,6 +207,83 @@ void main() {
     }
   });
 
+  test('v15 非默认成交净值收益规则及日末事件在 JSON 和 SQLite 四向映射保留', () async {
+    const fund = StockSecurity(
+      symbol: 'HK0001039582',
+      name: '收益规则映射夹具',
+      market: StockMarket.hk,
+      currencyCode: 'USD',
+      type: InvestmentSecurityType.fund,
+    );
+    final date = DateTime.utc(2026, 10, 23);
+    final confirmation = FundSubscriptionConfirmation(
+      confirmedAt: DateTime.utc(2026, 10, 26, 2),
+      navDate: date,
+      earningStartDate: date,
+      nav: '109.8290',
+      quantity: '12.759',
+      accrualRule: FundAccrualRule.dealNavDate,
+    );
+    final source = InvestmentPortfolio(
+      accountId: 'rule-roundtrip',
+      bookId: defaultLedgerBookId,
+      currencyCode: 'USD',
+      openedAt: DateTime.utc(2026, 10, 1),
+      openingCash: '5000',
+      securities: [fund],
+      fundSubscriptions: [
+        FundSubscription(
+          id: 'rule-order',
+          securityId: fund.id,
+          requestedAt: DateTime.utc(2026, 10, 23, 1),
+          paidAt: DateTime.utc(2026, 10, 23, 2),
+          cashAmount: '1401.31',
+          confirmation: confirmation,
+        ),
+      ],
+      events: [
+        StockEvent(
+          id: 'rule-acquire',
+          securityId: fund.id,
+          kind: StockEventKind.fundAcquire,
+          occurredAt: hongKongFundDayEnd(date),
+          sequence: 1,
+          quantity: confirmation.quantity,
+          price: confirmation.nav,
+          carriedCost: '1401.31',
+          fundSubscriptionId: 'rule-order',
+          fundNavDate: date,
+        ),
+      ],
+    );
+    final json = source.toJson();
+    final decoded = InvestmentPortfolio.fromJson(
+      Map<String, Object?>.from(jsonDecode(jsonEncode(json)) as Map),
+    );
+    expect(decoded.toJson(), json);
+    expect(
+      decoded.fundSubscriptions.single.confirmation!.toJson()['accrualRule'],
+      'dealNavDate',
+    );
+    final db = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    try {
+      final repository = SqliteLedgerRepository(db);
+      await repository.saveInvestmentPortfolios([decoded]);
+      final loaded = (await repository.loadInvestmentPortfolios()).single;
+      expect(loaded.toJson(), json);
+      expect(loaded.events.single.occurredAt, hongKongFundDayEnd(date));
+      expect(
+        loaded.fundSubscriptions.single.confirmation!.accrualRule,
+        FundAccrualRule.dealNavDate,
+      );
+    } finally {
+      await db.close();
+    }
+  });
+
   test('基金类型、精确份额和日期型净值依据 JSON/SQLite 四向映射完整保留', () async {
     const fund = StockSecurity(
       symbol: 'HK0001039582',

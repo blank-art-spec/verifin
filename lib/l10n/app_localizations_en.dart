@@ -7452,6 +7452,28 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fundEarningStartDate => 'Return start date (Hong Kong date)';
 
   @override
+  String get fundAccrualRule => 'Return attribution rule';
+
+  @override
+  String get fundAccrualDealNavDate => 'Actual dealing NAV date';
+
+  @override
+  String get fundAccrualExplicitStartDate =>
+      'Separate start date (original rule)';
+
+  @override
+  String get fundDealNavBasisDate =>
+      'Dealing NAV baseline date (Hong Kong date)';
+
+  @override
+  String get fundDealNavDateHint =>
+      'CMS USD Money Market Fund Class B establishes the holding baseline on the actual dealing NAV date. Later NAV changes belong to their published intervals; a delayed confirmation notice does not defer returns. The dealing date establishes the baseline only; fees and dealing differences are shown separately. Hong Kong day-end is a daily reporting boundary, not an actual execution time. Enter the actual dealing NAV and date, not the latest available NAV.';
+
+  @override
+  String get fundLegacyAccrualHint =>
+      'This record retains its separate start date. After checking actual dealing NAV, units and dates, you may switch to the dealing NAV date rule and review again. The saved record stays unchanged until you save.';
+
+  @override
   String get fundConfirmationCheck =>
       'I checked broker units, NAV, amount differences and dates';
 
@@ -7502,7 +7524,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get fundStatusPending => 'Paid; awaiting confirmation';
 
   @override
-  String get fundStatusScheduled => 'Confirmed; awaiting return start';
+  String get fundStatusScheduled => 'Confirmed; not yet effective';
 
   @override
   String get fundStatusEffective => 'Confirmed and effective';
@@ -7601,7 +7623,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fundScheduleHint =>
-      'An expected date never confirms a trade automatically. Enter actual payment, confirmation and refund times only after they occur. The return start date is separate; delayed display does not mean a later start date.';
+      'An expected date never confirms a trade automatically. Enter actual payment, confirmation and refund times only after they occur. Returns follow the rule saved with the record; delayed display does not mean a later start.';
 
   @override
   String get fundSaveValidation =>
@@ -7623,6 +7645,18 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fundReferenceDailyProfit => 'NAV-period reference return';
+
+  @override
+  String get fundReferenceProfitIntervalLabel => 'Return interval';
+
+  @override
+  String fundReferenceProfitInterval(String start, String end) {
+    return '$start to $end';
+  }
+
+  @override
+  String get fundReferenceSubscriptionAdjustment =>
+      'Of which: subscription fees and settlement adjustments';
 
   @override
   String get fundReferenceCumulativeProfit =>

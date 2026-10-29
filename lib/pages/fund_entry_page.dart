@@ -9,6 +9,7 @@ import '../app/common_widgets.dart';
 import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
 import '../app/investments/fund_amount_math.dart';
+import '../app/investments/fund_workflow_math.dart';
 import '../app/investments/investment_decimal.dart';
 import '../app/investments/investment_widgets.dart';
 import '../app/investments/quote_format.dart';
@@ -21,6 +22,15 @@ import 'sheets.dart';
 enum FundEntryMode { purchase, holdingBaseline }
 
 enum _FundFormAction { application, confirmation, cancellation }
+
+/// 基金收益规则的界面名称；模型只保存规则，不依赖 Flutter 或当前语言。
+extension FundAccrualRuleLabel on FundAccrualRule {
+  /// [l] 提供当前语言；成交净值基准与旧独立起算日必须明确区分。
+  String label(AppLocalizations l) => switch (this) {
+    FundAccrualRule.dealNavDate => l.fundAccrualDealNavDate,
+    FundAccrualRule.explicitStartDate => l.fundAccrualExplicitStartDate,
+  };
+}
 
 /// 证券页与基金卡共用的操作菜单，不在多个页面复制不同的基金录入流程。
 class FundOperationsButton extends StatelessWidget {
@@ -108,8 +118,8 @@ String fundSubscriptionStatusLabel(
   }
   final confirmation = subscription.confirmation;
   if (confirmation != null) {
-    return !paid ||
-            hongKongFundDayStart(confirmation.earningStartDate).isAfter(now)
+    final effectiveAt = fundSubscriptionEffectiveAt(subscription);
+    return !paid || effectiveAt == null || effectiveAt.isAfter(now)
         ? l.fundStatusScheduled
         : l.fundStatusEffective;
   }
@@ -185,15 +195,24 @@ class FundSubscriptionCard extends StatelessWidget {
           if (confirmation != null) ...[
             DetailInfoRow(
               inline: true,
+              label: l.fundAccrualRule,
+              value: confirmation.accrualRule.label(l),
+            ),
+            DetailInfoRow(
+              inline: true,
               label: l.fundConfirmedAt,
               value: formatQuoteTime(context, confirmation.confirmedAt),
             ),
             DetailInfoRow(
               inline: true,
-              label: l.fundEarningStartDate,
+              label: confirmation.accrualRule == FundAccrualRule.dealNavDate
+                  ? l.fundDealNavBasisDate
+                  : l.fundEarningStartDate,
               value: formatQuoteTime(
                 context,
-                confirmation.earningStartDate,
+                confirmation.accrualRule == FundAccrualRule.dealNavDate
+                    ? confirmation.navDate
+                    : confirmation.earningStartDate,
                 dateOnly: true,
               ),
             ),
@@ -252,6 +271,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
       _expectedDate,
       _baselineDate;
   _FundFormAction _action = _FundFormAction.application;
+  FundAccrualRule _accrualRule = FundAccrualRule.explicitStartDate;
   ({
     String cashAmount,
     String fee,
@@ -295,6 +315,16 @@ class _FundEntryPageState extends State<FundEntryPage> {
         'fund-${now.microsecondsSinceEpoch}';
     _securityId =
         subscription?.securityId ?? baseline?.securityId ?? widget.securityId;
+    final selected = portfolio == null
+        ? null
+        : _securities(
+            portfolio,
+            AppLocalizations.of(context),
+          ).where((value) => value.id == _securityId).firstOrNull;
+    // 旧确认保留原规则；只有尚无确认事实的新申购默认采用已核实的基金规则。
+    _accrualRule =
+        subscription?.confirmation?.accrualRule ??
+        _defaultAccrualRule(selected);
     _requestedAt = subscription?.requestedAt ?? now;
     _paidAt = subscription?.paidAt ?? now;
     _confirmedAt = subscription?.confirmation?.confirmedAt ?? now;
@@ -370,6 +400,44 @@ class _FundEntryPageState extends State<FundEntryPage> {
     return result;
   }
 
+  /// [security] 只有准确匹配已核实的 CMS 美元 B 类才使用成交净值基准。
+  /// 其他香港基金保留独立起算日，不能将一只基金的规则推及全部香港基金。
+  FundAccrualRule _defaultAccrualRule(StockSecurity? security) =>
+      security != null && supportsCmsDealNavAccrual(security)
+      ? FundAccrualRule.dealNavDate
+      : FundAccrualRule.explicitStartDate;
+
+  /// 只改变本页规则草稿并撤销核对勾选；原独立起算日暂存，切回后仍可继续核对。
+  /// 成交净值规则直接使用净值日，保存时才将兼容字段同步，不能静默重写旧确认。
+  void _changeAccrualRule(FundAccrualRule rule) => setState(() {
+    _accrualRule = rule;
+    _reviewed = false;
+    _error = null;
+  });
+
+  /// [l] 提供当前语言；两项受控规则使用共享锚点选择器，选择不立即写入账户。
+  Widget _accrualRuleChoice(AppLocalizations l) =>
+      VeriAnchoredChoice<FundAccrualRule>(
+        key: const Key('fund-accrual-rule'),
+        values: const [
+          FundAccrualRule.dealNavDate,
+          FundAccrualRule.explicitStartDate,
+        ],
+        selected: _accrualRule,
+        semanticLabel: l.fundAccrualRule,
+        idOf: (rule) => 'fund-accrual-${rule.name}',
+        labelOf: (rule) => rule.label(l),
+        onSelected: _changeAccrualRule,
+        builder: (context, openMenu, active) => SettingsRow(
+          icon: Icons.date_range_outlined,
+          title: l.fundAccrualRule,
+          trailing: _accrualRule.label(l),
+          trailingMaxLines: null,
+          trailingIcon: Icons.chevron_right,
+          onTap: _saving ? null : openMenu,
+        ),
+      );
+
   /// [key] 定位精确文本草稿；只有输入变更才撤销核对勾选，不修改权威记录。
   void _changed(String key, String value) => setState(() {
     _reviewed = false;
@@ -433,6 +501,9 @@ class _FundEntryPageState extends State<FundEntryPage> {
     if (!mounted || selected == null) return;
     setState(() {
       _securityId = selected;
+      _accrualRule = _defaultAccrualRule(
+        securities.firstWhere((value) => value.id == selected),
+      );
       _reviewed = false;
       _error = null;
     });
@@ -777,7 +848,10 @@ class _FundEntryPageState extends State<FundEntryPage> {
           confirmation: FundSubscriptionConfirmation(
             confirmedAt: _confirmedAt,
             navDate: _navDate,
-            earningStartDate: _earningStartDate,
+            earningStartDate: _accrualRule == FundAccrualRule.dealNavDate
+                ? _navDate
+                : _earningStartDate,
+            accrualRule: _accrualRule,
             nav: result.navText,
             quantity: result.quantity.toString(),
           ),
@@ -885,6 +959,8 @@ class _FundEntryPageState extends State<FundEntryPage> {
         .where((value) => value.id == _securityId)
         .firstOrNull;
     final baseline = widget.mode == FundEntryMode.holdingBaseline;
+    final cmsAccrualAvailable =
+        selected != null && supportsCmsDealNavAccrual(selected);
     final locked = subscription?.paidAt != null;
     final refundLocked = subscription?.refundedAt != null;
     final applicationEditable =
@@ -1086,18 +1162,37 @@ class _FundEntryPageState extends State<FundEntryPage> {
                     ],
                   ],
                   if (!baseline && _action == _FundFormAction.confirmation) ...[
-                    InvestmentHint(l.fundConfirmationHint),
+                    if (cmsAccrualAvailable) _accrualRuleChoice(l),
+                    InvestmentHint(
+                      _accrualRule == FundAccrualRule.dealNavDate
+                          ? l.fundDealNavDateHint
+                          : l.fundConfirmationHint,
+                    ),
+                    if (cmsAccrualAvailable &&
+                        _accrualRule == FundAccrualRule.explicitStartDate)
+                      InvestmentHint(l.fundLegacyAccrualHint),
                     _dateField(
                       l.fundConfirmedAt,
                       _confirmedAt,
                       (value) => _confirmedAt = value,
                     ),
-                    _dateField(
-                      l.fundEarningStartDate,
-                      _earningStartDate,
-                      (value) => _earningStartDate = value,
-                      dateOnly: true,
-                    ),
+                    if (_accrualRule == FundAccrualRule.explicitStartDate)
+                      _dateField(
+                        l.fundEarningStartDate,
+                        _earningStartDate,
+                        (value) => _earningStartDate = value,
+                        dateOnly: true,
+                      )
+                    else
+                      DetailInfoRow(
+                        inline: true,
+                        label: l.fundDealNavBasisDate,
+                        value: formatQuoteTime(
+                          context,
+                          _navDate,
+                          dateOnly: true,
+                        ),
+                      ),
                   ],
                   if (!baseline && _action == _FundFormAction.cancellation) ...[
                     InvestmentHint(l.fundCancelHint),

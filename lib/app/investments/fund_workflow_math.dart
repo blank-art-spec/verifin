@@ -5,9 +5,23 @@ import '../currency_catalog.dart';
 import '../models/fund_subscription.dart';
 import '../models/investment.dart';
 import 'investment_decimal.dart';
+import 'stock_projection.dart' show compareStockEvents;
 
 export '../models/fund_subscription.dart'
-    show hongKongFundDate, hongKongFundDayStart, isCanonicalFundDate;
+    show
+        hongKongFundDate,
+        hongKongFundDayStart,
+        hongKongFundDayEnd,
+        isCanonicalFundDate;
+
+/// 判断 [security] 是否为已核实成交净值归属规则的招商美元货币基金 B 类。
+/// 同时核对真实品种、市场、币种及 ISIN，不按名称、相似代码或其他类别扩大规则覆盖。
+bool supportsCmsDealNavAccrual(StockSecurity security) =>
+    security.isFund &&
+    security.option == null &&
+    security.market == StockMarket.hk &&
+    security.currencyCode == 'USD' &&
+    security.symbol == 'HK0001039582';
 
 /// 一笔已经实际发生的基金资金腿；用于现金重放、历史收益与同刻现金核对去重。
 class FundCashLeg {
@@ -25,12 +39,20 @@ class FundCashLeg {
 }
 
 /// 返回申购 [subscription] 的持仓经济生效时刻；未付款或未确认时返回 null。
-/// 收益起算日是香港民用日，不是日内成交时间；同日付款时取实际付款时刻，
-/// 防止下午扣款的份额被回填至当日零点。确认回执可以晚到，不把回执日冒充起算日。
+/// 旧规则按独立收益起算日日初、且不早于付款时刻生效，原有记录保持原形状及口径。
+/// 成交净值规则按实际净值日日末形成日级持仓基准，其后净值变化归各公布区间；确认回执
+/// 晚到不改变经济日期。日日末是日报边界而非实际收市钟点；不支持获份额后才付款的应付款模型。
 DateTime? fundSubscriptionEffectiveAt(FundSubscription subscription) {
   final confirmation = subscription.confirmation;
   final paidAt = subscription.paidAt;
   if (confirmation == null || paidAt == null) return null;
+  if (confirmation.accrualRule == FundAccrualRule.dealNavDate) {
+    final end = hongKongFundDayEnd(confirmation.navDate);
+    if (paidAt.isAfter(end)) {
+      throw const FormatException('成交净值日规则暂不支持扣款晚于成交净值日，请核对实际成交记录');
+    }
+    return end;
+  }
   final start = hongKongFundDayStart(confirmation.earningStartDate);
   return start.isBefore(paidAt) ? paidAt.toUtc() : start;
 }
@@ -105,7 +127,7 @@ InvestmentDecimal fundSubscriptionPendingValue(
 
 /// 完整校验 [portfolio] 的基金阶段事实和唯一持仓事件；失败抛出中文 FormatException。
 /// 本流程只支持同币种香港基金，避免把香港日历强加于美国或内地基金。实际时刻必须有先后依据，
-/// 预计日期只作提示；净值日、收益起算日保留独立香港纯日期，不硬编码 T+1/T+2。
+/// 预计日期只作提示；旧规则保留独立起算日，新规则只允许已核实基金并以成交净值日为基准。
 /// 每笔确认必须关联唯一零现金 fundAcquire，总成本保留实际总扣款，不能用舍入后的量价替代。
 /// 该函数不读取当前时间、不重放持仓、不修改数据；Controller 可在原子保存或备份恢复前调用。
 void validateFundSubscriptions(InvestmentPortfolio portfolio) {
@@ -178,6 +200,14 @@ void validateFundSubscriptions(InvestmentPortfolio portfolio) {
     }
     _requireCalendarDay(confirmation.navDate, '确认净值日');
     _requireCalendarDay(confirmation.earningStartDate, '收益起算日');
+    if (confirmation.accrualRule == FundAccrualRule.dealNavDate) {
+      if (!supportsCmsDealNavAccrual(securities[subscription.securityId]!) ||
+          confirmation.earningStartDate != confirmation.navDate) {
+        throw const FormatException('成交净值日规则只支持已核实的招商美元基金 B 类，兼容起算日须等于成交净值日');
+      }
+      // 不能用 max(付款日, 净值日) 悄悄推迟权益，否则仍会把多日收益集中到付款日。
+      fundSubscriptionEffectiveAt(subscription);
+    }
     if (confirmation.navDate.isBefore(requestedDay) ||
         confirmation.navDate.isAfter(
           hongKongFundDate(confirmation.confirmedAt),
@@ -265,6 +295,18 @@ void validateFundSubscriptions(InvestmentPortfolio portfolio) {
         navDate != confirmation.navDate ||
         event.reportedUnrealized != null) {
       throw const FormatException('基金申购确认事件与原申请的份额、净值、总成本或起算时刻不一致');
+    }
+    // 日级净值无法证明同一净值日内的真实核对是否已经包含该申购。
+    // 使用与持仓重放相同的稳定顺序，连日末同刻但核对序号在先的边界也要拒绝，避免重复加份额。
+    if (confirmation.accrualRule == FundAccrualRule.dealNavDate &&
+        portfolio.events.any(
+          (baseline) =>
+              baseline.securityId == subscription.securityId &&
+              baseline.kind == StockEventKind.fundHoldingBaseline &&
+              hongKongFundDate(baseline.occurredAt) == confirmation.navDate &&
+              compareStockEvents(baseline, event) < 0,
+        )) {
+      throw const FormatException('成交净值日内已有持仓核对基准，无法确认是否已包含该申购，请先核对记录');
     }
   }
   for (final subscription in subscriptions.values) {

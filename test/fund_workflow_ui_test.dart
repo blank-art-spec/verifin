@@ -3,11 +3,15 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/calendar_days.dart';
 import 'package:verifin/app/common_widgets.dart';
 import 'package:verifin/app/currency_math.dart';
+import 'package:verifin/app/investments/fund_reference_history.dart';
+import 'package:verifin/app/investments/investment_decimal.dart';
+import 'package:verifin/app/investments/quote_format.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/l10n/app_localizations.dart';
 import 'package:verifin/pages/fund_entry_page.dart';
+import 'package:verifin/pages/fund_reference_history_section.dart';
 import 'package:verifin/pages/investment_page.dart';
 
 import 'support/investment_fixture.dart';
@@ -141,6 +145,62 @@ Future<void> _saveReviewedHolding(WidgetTester tester) async {
   final save = find.byKey(const Key('fund-save'));
   await _reveal(tester, save);
   await tester.tap(save);
+  await tester.pumpAndSettle();
+}
+
+/// 用正式锚点菜单选择 [rule]；选择只更新草稿，保存前仍须用户重新核对。
+Future<void> _chooseAccrualRule(
+  WidgetTester tester,
+  FundAccrualRule rule,
+) async {
+  final choice = find.byKey(const Key('fund-accrual-rule'));
+  await _reveal(tester, choice);
+  await tester.tap(
+    find.descendant(of: choice, matching: find.byType(SettingsRow)),
+  );
+  await tester.pumpAndSettle();
+  await tester.tap(
+    find.byKey(ValueKey('veri_menu_item_fund-accrual-${rule.name}')),
+  );
+  await tester.pumpAndSettle();
+}
+
+/// 保存一笔已付、尚未确认的 [security] 申购，并进入真实确认表单。
+/// [id] 用于隔离订单，测试不读取公开行情，也不把估计日期当作自动成交事实。
+Future<void> _openPaidConfirmation(
+  WidgetTester tester,
+  VeriFinController controller,
+  Account account, {
+  required String id,
+  StockSecurity security = _fund,
+}) async {
+  final today = hongKongFundDate(DateTime.now());
+  expect(
+    await controller.saveFundSubscription(
+      accountId: account.id,
+      security: security,
+      subscription: FundSubscription(
+        id: id,
+        securityId: security.id,
+        requestedAt: hongKongFundDayStart(_shiftFundDate(today, -3)),
+        paidAt: hongKongFundDayStart(_shiftFundDate(today, -2)),
+        cashAmount: '1000',
+      ),
+    ),
+    isTrue,
+  );
+  await _pumpEntry(
+    tester,
+    controller,
+    FundEntryPage(
+      accountId: account.id,
+      mode: FundEntryMode.purchase,
+      subscriptionId: id,
+    ),
+  );
+  final l = AppLocalizations.of(tester.element(find.byType(FundEntryPage)));
+  await _reveal(tester, find.text(l.fundConfirmSubscription));
+  await tester.tap(find.text(l.fundConfirmSubscription));
   await tester.pumpAndSettle();
 }
 
@@ -546,6 +606,8 @@ void main() {
     expect(tester.widget<ListTile>(requestedDate).onTap, isNull);
     await _money(tester, 'fee', '1.31');
     await _decimal(tester, 'nav', '109.8290');
+    // 主动选择原独立起算规则后，原有三个日期的输入与取消行为仍须完整可用。
+    await _chooseAccrualRule(tester, FundAccrualRule.explicitStartDate);
     // 三个日期分别打开各自选择器；取消选择不提前确认、不改真实扣款。
     for (final label in [
       l.fundNavDate,
@@ -580,6 +642,10 @@ void main() {
     await tester.pumpAndSettle();
     final portfolio = c.investmentFor(ready.account.id)!;
     expect(portfolio.fundSubscriptions.single.confirmation, isNotNull);
+    expect(
+      portfolio.fundSubscriptions.single.confirmation!.accrualRule,
+      FundAccrualRule.explicitStartDate,
+    );
     expect(portfolio.fundSubscriptions.single.paidAt, paid);
     expect(portfolio.fundSubscriptions.single.fee, '1.31');
     expect(
@@ -591,6 +657,303 @@ void main() {
     expect(c.accountBalance(ready.account), closeTo(8598.69, 0.000001));
     expect(c.entries, isEmpty);
     expect(find.byType(FundEntryPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('CMS 新确认默认按成交净值日归属，独立起算日不作为第二个门槛', (tester) async {
+    final ready = await _ready();
+    final c = ready.controller;
+    await _openPaidConfirmation(
+      tester,
+      c,
+      ready.account,
+      id: 'ui-cms-new-rule',
+    );
+    final l = AppLocalizations.of(tester.element(find.byType(FundEntryPage)));
+    final choice = find.byKey(const Key('fund-accrual-rule'));
+    await _reveal(tester, choice);
+    expect(
+      tester.widget<VeriAnchoredChoice<FundAccrualRule>>(choice).selected,
+      FundAccrualRule.dealNavDate,
+    );
+    expect(find.text(l.fundEarningStartDate), findsNothing);
+    await _reveal(tester, find.text(l.fundDealNavDateHint));
+    expect(find.text(l.fundDealNavDateHint), findsOneWidget);
+    await _reveal(tester, find.text(l.fundDealNavBasisDate));
+    expect(find.text(l.fundDealNavBasisDate), findsOneWidget);
+    await _decimal(tester, 'nav', '100');
+    await _decimal(tester, 'confirmedQuantity', '10');
+    await _saveReviewedHolding(tester);
+    final portfolio = c.investmentFor(ready.account.id)!;
+    final confirmation = portfolio.fundSubscriptions.single.confirmation!;
+    expect(confirmation.accrualRule, FundAccrualRule.dealNavDate);
+    expect(confirmation.earningStartDate, confirmation.navDate);
+    expect(portfolio.events.single.quantityInferred, isFalse);
+    expect(c.accountBalance(ready.account), 9000);
+    expect(c.entries, isEmpty);
+    expect(find.byType(FundEntryPage), findsNothing);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('账户入口未指定基金时须先选择，CMS 申请再确认仍默认成交净值规则', (tester) async {
+    final ready = await _ready();
+    final c = ready.controller;
+    await _pumpEntry(
+      tester,
+      c,
+      FundEntryPage(accountId: ready.account.id, mode: FundEntryMode.purchase),
+    );
+    var l = AppLocalizations.of(tester.element(find.byType(FundEntryPage)));
+    final choose = find.byWidgetPredicate(
+      (widget) => widget is SettingsRow && widget.title == l.fundChoose,
+    );
+    await _reveal(tester, choose);
+    expect(tester.widget<SettingsRow>(choose).trailing, l.fundChoose);
+    await tester.tap(choose);
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('${l.fundCmsUsdName} · ${_fund.symbol}'));
+    await tester.pumpAndSettle();
+    await _money(tester, 'cashAmount', '1000');
+    await _reveal(tester, find.text(l.fundAlreadyPaid));
+    await tester.tap(find.text(l.fundAlreadyPaid));
+    await tester.pumpAndSettle();
+    final save = find.byKey(const Key('fund-save'));
+    await _reveal(tester, save);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    final request = c.investmentFor(ready.account.id)!.fundSubscriptions.single;
+    expect(request.securityId, _fund.id);
+    expect(request.confirmation, isNull);
+
+    await _pumpEntry(
+      tester,
+      c,
+      FundEntryPage(
+        accountId: ready.account.id,
+        mode: FundEntryMode.purchase,
+        subscriptionId: request.id,
+      ),
+    );
+    l = AppLocalizations.of(tester.element(find.byType(FundEntryPage)));
+    await _reveal(tester, find.text(l.fundConfirmSubscription));
+    await tester.tap(find.text(l.fundConfirmSubscription));
+    await tester.pumpAndSettle();
+    final rule = find.byKey(const Key('fund-accrual-rule'));
+    await _reveal(tester, rule);
+    expect(
+      tester.widget<VeriAnchoredChoice<FundAccrualRule>>(rule).selected,
+      FundAccrualRule.dealNavDate,
+    );
+    expect(find.text(l.fundEarningStartDate), findsNothing);
+    await _decimal(tester, 'nav', '100');
+    await _decimal(tester, 'confirmedQuantity', '10');
+    await _saveReviewedHolding(tester);
+    expect(
+      c
+          .investmentFor(ready.account.id)!
+          .fundSubscriptions
+          .single
+          .confirmation!
+          .accrualRule,
+      FundAccrualRule.dealNavDate,
+    );
+    expect(c.accountBalance(ready.account), 9000);
+    expect(c.entries, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('CMS 旧确认保留独立起算日，明确切换后重核且不再次扣款', (tester) async {
+    final ready = await _ready();
+    final c = ready.controller;
+    final today = hongKongFundDate(DateTime.now());
+    final navDate = _shiftFundDate(today, -3);
+    final legacyStart = _shiftFundDate(today, 1);
+    const id = 'ui-cms-legacy-rule';
+    expect(
+      await c.saveFundSubscription(
+        accountId: ready.account.id,
+        security: _fund,
+        subscription: FundSubscription(
+          id: id,
+          securityId: _fund.id,
+          requestedAt: hongKongFundDayStart(_shiftFundDate(today, -6)),
+          paidAt: hongKongFundDayStart(_shiftFundDate(today, -5)),
+          cashAmount: '1000',
+        ),
+      ),
+      isTrue,
+    );
+    expect(
+      await c.confirmFundSubscription(
+        accountId: ready.account.id,
+        subscriptionId: id,
+        confirmation: FundSubscriptionConfirmation(
+          confirmedAt: hongKongFundDayStart(_shiftFundDate(today, -1)),
+          navDate: navDate,
+          earningStartDate: legacyStart,
+          nav: '100',
+          quantity: '10',
+        ),
+      ),
+      isTrue,
+    );
+    final before = c.investmentFor(ready.account.id)!;
+    await _pumpEntry(
+      tester,
+      c,
+      FundEntryPage(
+        accountId: ready.account.id,
+        mode: FundEntryMode.purchase,
+        subscriptionId: id,
+      ),
+    );
+    final l = AppLocalizations.of(tester.element(find.byType(FundEntryPage)));
+    final choice = find.byKey(const Key('fund-accrual-rule'));
+    await _reveal(tester, choice);
+    expect(
+      tester.widget<VeriAnchoredChoice<FundAccrualRule>>(choice).selected,
+      FundAccrualRule.explicitStartDate,
+    );
+    await _reveal(tester, find.text(l.fundLegacyAccrualHint));
+    expect(find.text(l.fundLegacyAccrualHint), findsOneWidget);
+    await _reveal(tester, find.text(l.fundEarningStartDate));
+    expect(find.text(l.fundEarningStartDate), findsOneWidget);
+    expect(c.investmentFor(ready.account.id)!.toJson(), before.toJson());
+
+    // 已勾选后改变规则必须撤销勾选，防止对照旧日期的核对状态被沿用到新口径。
+    final reviewed = find.byKey(const Key('fund-reviewed'));
+    await _reveal(tester, reviewed);
+    await tester.tap(reviewed);
+    await tester.pumpAndSettle();
+    await _chooseAccrualRule(tester, FundAccrualRule.dealNavDate);
+    await _reveal(tester, reviewed);
+    expect(tester.widget<CheckboxListTile>(reviewed).value, isFalse);
+    expect(find.text(l.fundEarningStartDate), findsNothing);
+    expect(
+      c
+          .investmentFor(ready.account.id)!
+          .fundSubscriptions
+          .single
+          .confirmation!
+          .earningStartDate,
+      legacyStart,
+    );
+    await _saveReviewedHolding(tester);
+    final after = c.investmentFor(ready.account.id)!;
+    expect(after.events.single.id, before.events.single.id);
+    expect(
+      after.events.single.occurredAt.isBefore(before.events.single.occurredAt),
+      isTrue,
+    );
+    expect(after.fundSubscriptions.single.confirmation!.navDate, navDate);
+    expect(
+      after.fundSubscriptions.single.confirmation!.earningStartDate,
+      navDate,
+    );
+    expect(
+      after.fundSubscriptions.single.confirmation!.accrualRule,
+      FundAccrualRule.dealNavDate,
+    );
+    expect(c.accountBalance(ready.account), 9000);
+    expect(c.entries, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('其他香港美元基金保留原独立起算日，不套用 CMS B 类规则', (tester) async {
+    final ready = await _ready();
+    final c = ready.controller;
+    const other = StockSecurity(
+      symbol: 'HK0001039574',
+      name: '其他香港美元基金测试标的',
+      market: StockMarket.hk,
+      currencyCode: 'USD',
+      type: InvestmentSecurityType.fund,
+    );
+    await _openPaidConfirmation(
+      tester,
+      c,
+      ready.account,
+      id: 'ui-other-fund-rule',
+      security: other,
+    );
+    final l = AppLocalizations.of(tester.element(find.byType(FundEntryPage)));
+    expect(find.byKey(const Key('fund-accrual-rule')), findsNothing);
+    expect(find.text(l.fundEarningStartDate), findsOneWidget);
+    expect(find.text(l.fundDealNavDateHint), findsNothing);
+    await _decimal(tester, 'nav', '100');
+    await _decimal(tester, 'confirmedQuantity', '10');
+    await _saveReviewedHolding(tester);
+    final confirmation = c
+        .investmentFor(ready.account.id)!
+        .fundSubscriptions
+        .single
+        .confirmation!;
+    expect(confirmation.accrualRule, FundAccrualRule.explicitStartDate);
+    expect(c.accountBalance(ready.account), 9000);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('基金历史展示真实净值区间及已包含的申购费用，不把周末区间称为单日', (tester) async {
+    final ready = await _ready();
+    final first = DateTime.utc(2026, 10, 23);
+    final next = DateTime.utc(2026, 10, 26);
+    await _pumpEntry(
+      tester,
+      ready.controller,
+      Scaffold(
+        body: ListView(
+          padding: const EdgeInsets.all(16),
+          children: [
+            FundReferenceHistorySection(
+              account: ready.account,
+              security: _fund,
+              points: [
+                FundReferenceDay(
+                  date: first,
+                  nav: InvestmentDecimal.parse('100'),
+                  quantity: InvestmentDecimal.parse('10'),
+                  marketValue: InvestmentDecimal.parse('1000'),
+                  dailyProfit: null,
+                  cumulativeProfit: InvestmentDecimal.zero,
+                  cash: 9000,
+                  accountAssets: 10000,
+                  accountLiabilities: 0,
+                  accountNetValue: 10000,
+                  missingSecurityIds: const {},
+                ),
+                FundReferenceDay(
+                  date: next,
+                  profitFromDate: first,
+                  nav: InvestmentDecimal.parse('101'),
+                  quantity: InvestmentDecimal.parse('11'),
+                  marketValue: InvestmentDecimal.parse('1111'),
+                  dailyProfit: InvestmentDecimal.parse('9'),
+                  subscriptionAdjustment: InvestmentDecimal.parse('-1'),
+                  cumulativeProfit: InvestmentDecimal.parse('9'),
+                  cash: 8898,
+                  accountAssets: 10009,
+                  accountLiabilities: 0,
+                  accountNetValue: 10009,
+                  missingSecurityIds: const {},
+                ),
+              ],
+            ),
+          ],
+        ),
+      ),
+      size: const Size(360, 740),
+    );
+    final context = tester.element(find.byType(FundReferenceHistorySection));
+    final l = AppLocalizations.of(context);
+    final interval = l.fundReferenceProfitInterval(
+      formatQuoteTime(context, first, dateOnly: true),
+      formatQuoteTime(context, next, dateOnly: true),
+    );
+    await _reveal(tester, find.text(l.fundReferenceProfitIntervalLabel).first);
+    expect(find.text(interval), findsWidgets);
+    await _reveal(tester, find.text(l.fundReferenceSubscriptionAdjustment));
+    expect(find.text(l.fundReferenceSubscriptionAdjustment), findsOneWidget);
+    expect(find.text(l.fundReferenceDailyProfit), findsWidgets);
     expect(tester.takeException(), isNull);
   });
 }

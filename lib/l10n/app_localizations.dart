@@ -13058,6 +13058,42 @@ abstract class AppLocalizations {
   /// **'收益起算日（香港日期）'**
   String get fundEarningStartDate;
 
+  /// No description provided for @fundAccrualRule.
+  ///
+  /// In zh, this message translates to:
+  /// **'收益归属规则'**
+  String get fundAccrualRule;
+
+  /// No description provided for @fundAccrualDealNavDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'按实际成交净值日'**
+  String get fundAccrualDealNavDate;
+
+  /// No description provided for @fundAccrualExplicitStartDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'按独立起算日（原口径）'**
+  String get fundAccrualExplicitStartDate;
+
+  /// No description provided for @fundDealNavBasisDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'成交净值基准日（香港日期）'**
+  String get fundDealNavBasisDate;
+
+  /// No description provided for @fundDealNavDateHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'招商美元货币市场基金 B 类以实际成交净值日形成持仓基准，之后的净值变化归入对应公布区间；确认通知晚到不会推迟收益归属。成交日仅形成基准，费用与成交差额另行列示。香港日日末仅用于日级记录，不代表实际成交时刻。请填写实际成交净值及日期，不用最新净值替代。'**
+  String get fundDealNavDateHint;
+
+  /// No description provided for @fundLegacyAccrualHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'此记录沿用独立起算日。核对实际成交净值、份额及日期后，可切换为成交净值日口径并重新勾选核对；未保存前不会改动旧记录。'**
+  String get fundLegacyAccrualHint;
+
   /// No description provided for @fundConfirmationCheck.
   ///
   /// In zh, this message translates to:
@@ -13145,7 +13181,7 @@ abstract class AppLocalizations {
   /// No description provided for @fundStatusScheduled.
   ///
   /// In zh, this message translates to:
-  /// **'已确认，待收益起算'**
+  /// **'已确认，待生效'**
   String get fundStatusScheduled;
 
   /// No description provided for @fundStatusEffective.
@@ -13325,7 +13361,7 @@ abstract class AppLocalizations {
   /// No description provided for @fundScheduleHint.
   ///
   /// In zh, this message translates to:
-  /// **'预计确认日不会自动确认成交。实际扣款、确认和退款按已经发生的时间填写；收益起算日可单独指定，不能把收益晚显示误当成晚起算。'**
+  /// **'预计确认日不会自动确认成交。实际扣款、确认和退款按已经发生的时间填写；收益按记录采用的归属规则计算，不能把收益晚显示误当成晚起算。'**
   String get fundScheduleHint;
 
   /// No description provided for @fundSaveValidation.
@@ -13361,8 +13397,26 @@ abstract class AppLocalizations {
   /// No description provided for @fundReferenceDailyProfit.
   ///
   /// In zh, this message translates to:
-  /// **'净值日参考收益'**
+  /// **'净值区间参考盈亏'**
   String get fundReferenceDailyProfit;
+
+  /// No description provided for @fundReferenceProfitIntervalLabel.
+  ///
+  /// In zh, this message translates to:
+  /// **'收益所属区间'**
+  String get fundReferenceProfitIntervalLabel;
+
+  /// No description provided for @fundReferenceProfitInterval.
+  ///
+  /// In zh, this message translates to:
+  /// **'{start} 至 {end}'**
+  String fundReferenceProfitInterval(String start, String end);
+
+  /// No description provided for @fundReferenceSubscriptionAdjustment.
+  ///
+  /// In zh, this message translates to:
+  /// **'其中：申购费用与结算差额'**
+  String get fundReferenceSubscriptionAdjustment;
 
   /// No description provided for @fundReferenceCumulativeProfit.
   ///

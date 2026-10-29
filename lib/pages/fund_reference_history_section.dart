@@ -59,6 +59,17 @@ class _FundReferenceHistorySectionState
       ? l.investUnknown
       : formatSignedUserMoney(value.toDouble(), widget.account.currencyCode);
 
+  /// [point] 的起点来自上一实际公布净值日；缺少起点时保持 null，不能猜成前一自然日。
+  /// 起止日期均经应用语言格式化，跨周末的收益因此明确显示为一个完整观察区间。
+  String? _profitInterval(BuildContext context, FundReferenceDay point) {
+    final start = point.profitFromDate;
+    if (start == null) return null;
+    return AppLocalizations.of(context).fundReferenceProfitInterval(
+      formatQuoteTime(context, start, dateOnly: true),
+      formatQuoteTime(context, point.date, dateOnly: true),
+    );
+  }
+
   /// [value] 是可为空的完整账户金额；基金自身已知不代表股票历史价格也完整。
   String _accountMoney(double? value, AppLocalizations l) =>
       value == null ? l.investUnknown : _money(value);
@@ -124,6 +135,7 @@ class _FundReferenceHistorySectionState
               semanticsLabel: label,
               tooltipOf: (index) {
                 final point = points[index];
+                final interval = _profitInterval(context, point);
                 return ChartTooltip(
                   title: formatQuoteTime(context, point.date, dateOnly: true),
                   lines: [
@@ -134,6 +146,8 @@ class _FundReferenceHistorySectionState
                             : point.marketValue.toDouble(),
                       ),
                     ),
+                    if (!accountNet && interval != null)
+                      ChartTooltipLine(text: interval),
                     ChartTooltipLine(
                       text: accountNet
                           ? '${l.fundReferenceCash}: ${_money(point.cash)}'
@@ -152,6 +166,8 @@ class _FundReferenceHistorySectionState
   /// 展示 [point] 的完整原币依据；空值保持未知，缺价证券明确列出，长金额自然换行。
   Widget _day(BuildContext context, FundReferenceDay point) {
     final l = AppLocalizations.of(context);
+    final interval = _profitInterval(context, point);
+    final adjustment = point.subscriptionAdjustment;
     return Padding(
       padding: const EdgeInsets.symmetric(vertical: 12),
       child: Column(
@@ -185,6 +201,12 @@ class _FundReferenceHistorySectionState
               label: l.fundPendingValue,
               value: _money(point.pendingSubscriptionValue.toDouble()),
             ),
+          if (interval != null)
+            DetailInfoRow(
+              inline: true,
+              label: l.fundReferenceProfitIntervalLabel,
+              value: interval,
+            ),
           DetailInfoRow(
             inline: true,
             label: l.fundReferenceDailyProfit,
@@ -195,6 +217,17 @@ class _FundReferenceHistorySectionState
               point.dailyProfit?.toDouble() ?? 0,
             ),
           ),
+          if (adjustment != null && adjustment.units != BigInt.zero)
+            DetailInfoRow(
+              inline: true,
+              label: l.fundReferenceSubscriptionAdjustment,
+              value: _profit(adjustment, l),
+              valueColor: accountBalanceColor(
+                context,
+                widget.account,
+                adjustment.toDouble(),
+              ),
+            ),
           DetailInfoRow(
             inline: true,
             label: l.fundReferenceCumulativeProfit,
@@ -315,6 +348,12 @@ class _FundReferenceHistorySectionState
               allowValueWrap: true,
             ),
           ),
+          if (_profitInterval(context, latest) case final String interval)
+            DetailInfoRow(
+              inline: true,
+              label: l.fundReferenceProfitIntervalLabel,
+              value: interval,
+            ),
           if (points.length == 1)
             InvestmentHint(l.fundReferenceSinglePoint)
           else ...[

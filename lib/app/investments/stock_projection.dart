@@ -154,7 +154,8 @@ StockProjection projectStocks(InvestmentPortfolio portfolio, {DateTime? at}) {
     if ((kind == StockEventKind.fundAcquire ||
             kind == StockEventKind.fundHoldingBaseline) &&
         event.occurredAt.isAfter(fundCutoff)) {
-      // 已确认但未到逐笔收益起算日的资金仍是待生效资产；现金扣款由独立申购事实表达。
+      // 未到已保存规则的日级生效截点时仍是待生效资产；新成交净值规则以净值日末为基准，
+      // 旧规则沿用独立起算日日初。实际现金扣款始终由独立申购事实表达，不随回执重复扣款。
       cash[event.id] = InvestmentDecimal.zero;
       continue;
     }

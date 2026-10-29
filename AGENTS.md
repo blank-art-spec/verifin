@@ -24,8 +24,8 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 - `docs/dev/known-limitations.md`：已接受技术债及触发整改的阈值。
 - `docs/dev/securities-trading-plan.md`、`docs/dev/securities-trading-acceptance.md`：证券交易、期权与参考行情的待实施方案、任务分阶段及手动验收操作；首个测试标的是博通 AVGO 股票及其认购/认沽（B01–B08），保留三地全面验收 A01–A23。股票阶段见 `docs/dev/securities-stage02-implementation.md`，期权开平仓、保证金与结算见 `docs/dev/securities-stage03-implementation.md`，参考行情机制与来源门禁见 `docs/dev/securities-stage04-implementation.md`，资产分解、历史依据与 JSON v12 恢复见 `docs/dev/securities-stage05-implementation.md`；其余提案不得当作已实现功能或已完成的行情覆盖承诺。
 - `docs/dev/ai-tools.md`：AI 账目查询工具的注册和维护约定。
-- `docs/dev/cms-fund-api-research.md`：招商美元货币市场基金 B 类的匿名官方净值接口、Android 直连证据、诊断刷新与自动参考收益/历史资产口径；仅覆盖 `HK0001039582` / USD，不代表全部香港基金或正式来源准入。真实基金类型与净值日期精度自 JSON v13 保存，当前完整备份为 v14 / SQLite v28；公开净值历史仅留设备缓存，不生成收入流水或自动权威快照。
-- `docs/dev/fund-amount-settlement.md`：基金按金额买入、已有持仓两个入口；新申购按金额估算份额，已有持仓按实际份额、总成本及净值自动算未实现盈亏，旧报告浮盈仅作兼容、编辑沿用已存份额。记录申请/实际扣款/确认/收益起算的独立时点、净在途资产、逐笔起算与实际核对时刻基准；推算份额不得冒充券商确认，净值收益不叠加万份或年化收益，JSON v14 继续读取 v1–v13 旧备份。
+- `docs/dev/cms-fund-api-research.md`：招商美元货币市场基金 B 类的匿名官方净值接口、Android 直连证据、诊断刷新与自动参考收益/历史资产口径；仅覆盖 `HK0001039582` / USD，不代表全部香港基金或正式来源准入。真实基金类型与净值日期精度自 JSON v13 保存，当前完整备份为 v15 / SQLite v28；公开净值历史仅留设备缓存，不生成收入流水或自动权威快照。
+- `docs/dev/fund-amount-settlement.md`：基金按金额买入、已有持仓两个入口；新申购按金额估算份额，已有持仓按实际份额、总成本及净值自动算未实现盈亏，旧报告浮盈仅作兼容、编辑沿用已存份额。记录申请/实际扣款/确认/收益起算的独立时点、净在途资产、逐笔起算与实际核对时刻基准；推算份额不得冒充券商确认，新 CMS 确认按成交净值日归属、旧记录显式重核，净值收益不叠加万份或年化收益，JSON v15 继续读取 v1–v14 旧备份。
 - `docs/dev/category-budget-override-design.md`：分类默认预算与单期覆盖的职责、Issue #28 兼容方案和验收范围。
 - `docs/dev/multi-currency-design.md`：多币种基础设计；2026-10-18 的当前父子账户、参考折算、联网汇率和统一还款口径见 `docs/dev/credit-hierarchy-currency.md`，覆盖旧文档的全部统计冻结约定。原币及账户实际金额保持不变；统计优先明确参考额，否则用最新汇率。
 - `docs/dev/refund-design.md`、`docs/dev/auto-capture-plan.md`、`docs/dev/i18n-verification.md`、`docs/automation.md`：对应领域的设计与验收资料。`refund-design.md` 含历史方案，退款当前行为以源码、测试和 `docs/dev/known-limitations.md` 为准。

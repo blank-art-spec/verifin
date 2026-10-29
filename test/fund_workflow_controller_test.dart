@@ -333,6 +333,74 @@ void main() {
     expect(await repository.loadEntries(), isEmpty);
   });
 
+  for (final sameDay in [true, false]) {
+    test('重核成交净值规则不跨${sameDay ? '同日' : '后续'}持仓基准改变已包含份额', () async {
+      final order = clock.order(paidAt: clock.at(-8));
+      expect(await save(order), isTrue);
+      expect(
+        await controller.confirmFundSubscription(
+          accountId: account.id,
+          subscriptionId: order.id,
+          confirmation: clock.confirmation(earningDay: sameDay ? -7 : -4),
+        ),
+        isTrue,
+      );
+      expect(
+        await controller.saveFundHoldingBaseline(
+          accountId: account.id,
+          security: _fund,
+          event: clock.baseline(day: sameDay ? -7 : -6),
+          referencePrice: '100',
+        ),
+        isTrue,
+      );
+      final quantity = projectStocks(
+        current(),
+      ).positions.single.quantity.toString();
+      await expectAtomicRejection(
+        () => controller.confirmFundSubscription(
+          accountId: account.id,
+          subscriptionId: order.id,
+          confirmation: clock.confirmation(
+            earningDay: -7,
+            accrualRule: FundAccrualRule.dealNavDate,
+          ),
+        ),
+      );
+      expect(
+        projectStocks(current()).positions.single.quantity.toString(),
+        quantity,
+      );
+      expect(controller.accountBalance(account), 4000);
+    });
+  }
+
+  test('成交净值日内新增有歧义的持仓基准被原子拒绝，不重复增加申购份额', () async {
+    final order = clock.order(paidAt: clock.at(-8));
+    expect(await save(order), isTrue);
+    expect(
+      await controller.confirmFundSubscription(
+        accountId: account.id,
+        subscriptionId: order.id,
+        confirmation: clock.confirmation(
+          earningDay: -7,
+          accrualRule: FundAccrualRule.dealNavDate,
+        ),
+      ),
+      isTrue,
+    );
+    await expectAtomicRejection(
+      () => controller.saveFundHoldingBaseline(
+        accountId: account.id,
+        security: _fund,
+        event: clock.baseline(day: -7),
+        referencePrice: '100',
+      ),
+    );
+    expect(projectStocks(current()).positions.single.quantity.toString(), '10');
+    expect(current().events, hasLength(1));
+  });
+
   test('重复确认沿用一条事件，确认后的实际总扣款和现金始终不变', () async {
     final order = clock.order(cash: '1401.31', paidAt: clock.at(-8));
     expect(await save(order), isTrue);
@@ -1277,18 +1345,21 @@ class _FundClock {
 
   /// 构造券商确认事实；[confirmedDay] 是回执时刻，[navDay] 与 [earningDay] 为独立纯日期。
   /// [nav]、[quantity] 故意允许独立指定，测试不借量价乘积覆盖券商实际扣款。
+  /// [accrualRule] 缺省保持既有夹具口径，新成交净值规则由相应用例明确指定。
   FundSubscriptionConfirmation confirmation({
     int confirmedDay = -5,
     int navDay = -7,
     int earningDay = -6,
     String nav = '100',
     String quantity = '10',
+    FundAccrualRule accrualRule = FundAccrualRule.explicitStartDate,
   }) => FundSubscriptionConfirmation(
     confirmedAt: at(confirmedDay),
     navDate: date(navDay),
     earningStartDate: date(earningDay),
     nav: nav,
     quantity: quantity,
+    accrualRule: accrualRule,
   );
 
   /// 构造当前持仓基准；[day] 控制生效日，[quantity] 是用户提供的实际份额，[cost] 是实际成本。

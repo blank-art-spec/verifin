@@ -1,21 +1,35 @@
 /// 基金申购的阶段事实；申请、付款、确认和收益起算各自独立，不根据预计日期伪造确认。
 library;
 
+/// 一笔确认采用的收益归属规则；必须随事实保存，不能由最新行情或证券名称反推。
+enum FundAccrualRule {
+  /// 旧版或尚无专属规则的基金：按用户明确填写的香港收益起算日日初生效。
+  explicitStartDate,
+
+  /// 已核实的招商美元货币基金 B 类：以实际成交净值日形成基准，享有其后净值变化。
+  /// 日级历史统一使用香港日日末截点，不表示已经获知基金真实市场收市钟点。
+  dealNavDate,
+}
+
 /// 已由券商确认的单位净值与份额；确认回执时刻不等于净值日或收益起算日。
 class FundSubscriptionConfirmation {
   /// [confirmedAt] 是收到或录入确认回执的真实时刻，可以晚于已经发生的经济生效日。
   /// [navDate]、[earningStartDate] 是香港年月日的 UTC 零点载体，没有日内报价含义。
   /// [nav] 为确认净值原始十进制文本，[quantity] 为确认份额；总成本由所属申购的实际扣款决定。
+  /// [accrualRule] 缺省沿用旧起算日规则，避免读取旧备份时静默改变持仓和历史依据。
+  /// 成交净值日规则只使用 [navDate]，此时 [earningStartDate] 须与之相同以保留旧字段兼容。
   const FundSubscriptionConfirmation({
     required this.confirmedAt,
     required this.navDate,
     required this.earningStartDate,
     required this.nav,
     required this.quantity,
+    this.accrualRule = FundAccrualRule.explicitStartDate,
   });
 
   final DateTime confirmedAt, navDate, earningStartDate;
   final String nav, quantity;
+  final FundAccrualRule accrualRule;
 
   /// 保存已确认事实；真实时刻统一存 UTC，纯日期只保存年月日，不混淆设备时区。
   Map<String, Object?> toJson() => {
@@ -24,6 +38,8 @@ class FundSubscriptionConfirmation {
     'earningStartDate': fundCalendarDateToJson(earningStartDate),
     'nav': nav,
     'quantity': quantity,
+    if (accrualRule != FundAccrualRule.explicitStartDate)
+      'accrualRule': accrualRule.name,
   };
 
   /// 从 SQLite 聚合或备份读取确认；[json] 字段类型错误、假日期或无效时刻直接拒绝。
@@ -34,6 +50,7 @@ class FundSubscriptionConfirmation {
         earningStartDate: fundCalendarDateFromJson(json['earningStartDate']),
         nav: _requiredString(json, 'nav'),
         quantity: _requiredString(json, 'quantity'),
+        accrualRule: _accrualRuleFromJson(json['accrualRule']),
       );
 }
 
@@ -184,6 +201,24 @@ DateTime hongKongFundDayStart(DateTime date) {
     throw const FormatException('基金日期必须使用 UTC 纯日期');
   }
   return DateTime.utc(date.year, date.month, date.day, -8);
+}
+
+/// 返回香港民用日 [date] 最后一个微秒的 UTC 截点；输入必须为规范纯日期载体。
+/// 这是日级持仓及净值历史的统一边界，并非基金实际估值时刻，不用于推断日内交易权益。
+DateTime hongKongFundDayEnd(DateTime date) {
+  if (!isCanonicalFundDate(date)) {
+    throw const FormatException('基金日期必须使用 UTC 纯日期');
+  }
+  return DateTime.utc(date.year, date.month, date.day, 15, 59, 59, 999, 999);
+}
+
+/// 严格读取确认中的收益规则 [value]；缺失或 null 表示旧规则，其他未知/非文本值不回退。
+FundAccrualRule _accrualRuleFromJson(Object? value) {
+  if (value == null) return FundAccrualRule.explicitStartDate;
+  for (final rule in FundAccrualRule.values) {
+    if (value == rule.name) return rule;
+  }
+  throw const FormatException('基金确认的收益归属规则无效');
 }
 
 /// 将纯日期 [date] 保存为 YYYY-MM-DD；这是机器存储格式，不供界面直接拼接展示。

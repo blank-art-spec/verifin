@@ -4,6 +4,8 @@ import 'dart:io';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:verifin/app/calendar_days.dart';
+import 'package:verifin/app/investments/fund_reference_history.dart';
+import 'package:verifin/app/investments/market_quote.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/auto_capture/capture_parser.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
@@ -46,7 +48,7 @@ void main() {
     occurredAt: DateTime(2026, 5, int.parse(id)),
   );
 
-  test('v14 已扣款待确认申购在 SQLite 冷读、预览和完整恢复后保留且不生成持仓或收入', () async {
+  test('v15 已扣款待确认申购在 SQLite 冷读、预览和完整恢复后保留且不生成持仓或收入', () async {
     final repo = await openRepo();
     final store = LocalKeyValueStore();
     var controller = await VeriFinController.create(store, repository: repo);
@@ -102,7 +104,7 @@ void main() {
       expect(controller.entries, isEmpty);
 
       final raw = controller.exportDataJson();
-      expect((jsonDecode(raw) as Map)['version'], 14);
+      expect((jsonDecode(raw) as Map)['version'], 15);
       final beforePreview = loaded.toJson();
       controller.importDataJson(raw, dryRun: true);
       await controller.waitForPendingWrites();
@@ -141,6 +143,157 @@ void main() {
       expect(controller.entries, isEmpty);
     } finally {
       // 创建新控制器失败时不再释放已经结束的旧实例，避免掩盖真正的初始化失败。
+      if (controllerAlive) controller.dispose();
+    }
+  });
+
+  test('成交净值收益规则经实际确认、SQLite 冷读及 v15 恢复保留逐区间收益，旧 v14 不改起算', () async {
+    final repo = await openRepo();
+    final store = LocalKeyValueStore();
+    var controller = await VeriFinController.create(store, repository: repo);
+    var controllerAlive = true;
+    try {
+      final account = investmentAccountFixture(
+        id: 'deal-nav-fund',
+        bookId: controller.activeBook.id,
+      );
+      const fund = StockSecurity(
+        symbol: 'HK0001039582',
+        name: '成交净值归属持久化夹具',
+        market: StockMarket.hk,
+        currencyCode: 'USD',
+        type: InvestmentSecurityType.fund,
+      );
+      controller.addAccount(account);
+      await controller.waitForPendingWrites();
+      expect(
+        await controller.enableInvestment(
+          accountId: account.id,
+          openingCash: '5000',
+          openedAt: DateTime.utc(2026, 10, 1),
+        ),
+        isTrue,
+      );
+      final order = FundSubscription(
+        id: 'deal-nav-order',
+        securityId: fund.id,
+        requestedAt: DateTime.utc(2026, 10, 23, 1),
+        paidAt: DateTime.utc(2026, 10, 23, 2),
+        cashAmount: '1000',
+      );
+      expect(
+        await controller.saveFundSubscription(
+          accountId: account.id,
+          security: fund,
+          subscription: order,
+        ),
+        isTrue,
+      );
+      expect(
+        await controller.confirmFundSubscription(
+          accountId: account.id,
+          subscriptionId: order.id,
+          confirmation: FundSubscriptionConfirmation(
+            confirmedAt: DateTime.utc(2026, 10, 26, 2),
+            navDate: DateTime.utc(2026, 10, 23),
+            earningStartDate: DateTime.utc(2026, 10, 23),
+            nav: '100',
+            quantity: '10',
+            accrualRule: FundAccrualRule.dealNavDate,
+          ),
+        ),
+        isTrue,
+      );
+      final source = controller.investmentFor(account.id)!.toJson();
+
+      /// 验证每次冷读/恢复后的私人事实与净值区间结果，没有把晚到回执日当收益日。
+      void expectReconciled() {
+        final portfolio = controller.investmentFor(account.id)!;
+        expect(portfolio.toJson(), source);
+        expect(
+          portfolio.fundSubscriptions.single.confirmation!.accrualRule,
+          FundAccrualRule.dealNavDate,
+        );
+        expect(
+          portfolio.events.single.occurredAt,
+          hongKongFundDayEnd(DateTime.utc(2026, 10, 23)),
+        );
+        final days = buildFundReferenceHistory(
+          portfolio: portfolio,
+          security: fund,
+          history: FundNavHistory([
+            FundNavPoint(date: DateTime.utc(2026, 10, 22), price: '99'),
+            FundNavPoint(date: DateTime.utc(2026, 10, 23), price: '100'),
+            FundNavPoint(date: DateTime.utc(2026, 10, 26), price: '102'),
+            FundNavPoint(date: DateTime.utc(2026, 10, 27), price: '103'),
+          ]),
+          account: account,
+          entries: controller.entries,
+          anchors: const [],
+        );
+        expect(days.map((day) => day.dailyProfit?.toString()), [
+          null,
+          '0',
+          '20',
+          '10',
+        ]);
+        expect(days.last.cumulativeProfit?.toString(), '30');
+        expect(controller.accountBalance(account), 4000);
+        expect(controller.entries, isEmpty);
+      }
+
+      controller.dispose();
+      controllerAlive = false;
+      controller = await VeriFinController.create(store, repository: repo);
+      controllerAlive = true;
+      expectReconciled();
+      final raw = controller.exportDataJson();
+      expect((jsonDecode(raw) as Map)['version'], 15);
+      controller.importDataJson(raw, dryRun: true);
+      expectReconciled();
+      controller.resetAllData();
+      await controller.waitForPendingWrites();
+      controller.importDataJson(raw);
+      await controller.waitForPendingWrites();
+      expectReconciled();
+      controller.dispose();
+      controllerAlive = false;
+      controller = await VeriFinController.create(store, repository: repo);
+      controllerAlive = true;
+      expectReconciled();
+
+      // 构造真实旧 v14 字段形状及对应事件时刻，不能删掉规则后仍沿用新日末事件。
+      final legacyRoot = jsonDecode(raw) as Map<String, Object?>;
+      legacyRoot['version'] = 14;
+      final legacyData = legacyRoot['data']! as Map<String, Object?>;
+      final legacyPortfolio =
+          (legacyData['investmentPortfolios']! as List<Object?>).single!
+              as Map<String, Object?>;
+      final legacyOrder =
+          (legacyPortfolio['fundSubscriptions']! as List<Object?>).single!
+              as Map<String, Object?>;
+      final confirmation = legacyOrder['confirmation']! as Map<String, Object?>;
+      confirmation.remove('accrualRule');
+      confirmation['earningStartDate'] = '2026-10-26';
+      final legacyEvent =
+          (legacyPortfolio['events']! as List<Object?>).single!
+              as Map<String, Object?>;
+      legacyEvent['occurredAt'] = hongKongFundDayStart(
+        DateTime.utc(2026, 10, 26),
+      ).toIso8601String();
+      controller.importDataJson(jsonEncode(legacyRoot));
+      await controller.waitForPendingWrites();
+      final legacy = controller.investmentFor(account.id)!;
+      expect(
+        legacy.fundSubscriptions.single.confirmation!.accrualRule,
+        FundAccrualRule.explicitStartDate,
+      );
+      expect(
+        legacy.events.single.occurredAt,
+        hongKongFundDayStart(DateTime.utc(2026, 10, 26)),
+      );
+      expect(controller.entries, isEmpty);
+    } finally {
       if (controllerAlive) controller.dispose();
     }
   });
@@ -358,7 +511,7 @@ void main() {
 
           final source = controller.investmentFor(account.id)!.toJson();
           final raw = controller.exportDataJson();
-          expect((jsonDecode(raw) as Map)['version'], 14);
+          expect((jsonDecode(raw) as Map)['version'], 15);
           controller.resetAllData();
           await controller.waitForPendingWrites();
           expect(await repo.loadInvestmentPortfolios(), isEmpty);

@@ -7954,11 +7954,11 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     notifyListeners();
   }
 
-  /// 导出完整 JSON v14 用户数据，保留基金按金额录入及待确认份额，不导出临时行情缓存或凭证。
+  /// 导出完整 JSON v15 用户数据，保留基金确认的收益归属规则，不导出临时行情缓存或凭证。
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 14,
+      'version': 15,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'investmentPortfolios': _investmentPortfolios
@@ -8052,7 +8052,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 14) {
+    if (version < 1 || version > 15) {
       throw FormatException('不支持的备份版本：$version');
     }
 

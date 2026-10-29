@@ -1,5 +1,13 @@
 # 组件清单（Component Registry）
 
+2026-10-29 基金收益归属：`FundAccrualRule` 在确认中保存 `dealNavDate` 或兼容的
+`explicitStartDate`，默认省略旧规则字段。`supportsCmsDealNavAccrual` 严格限制已核实的
+HK/USD 基金 B 类；`hongKongFundDayEnd` 提供纯日期的香港日报末截点，不代表实际收市时刻。
+`fundSubscriptionEffectiveAt` 为所有投影、在途和界面状态的统一生效入口。
+`FundReferenceDay.profitFromDate` 保存前一公开净值日期，`subscriptionAdjustment` 只解释
+已包含的申购费用与结算差额。`FundReferenceHistorySection` 显示真实区间，不补周末或重复加减。
+`FundEntryPage` 新 CMS 确认默认成交净值规则，旧订单明确重核后才能切换；其他基金沿用旧规则。
+
 2026-10-28 基金诊断研究与参考历史：
 
 - `StockSecurity.type` / `isFund` / `isStock` 明确股票、基金与期权边界；基金份额使用独立 `fund` 身份。`StockMarket.label(fund: true)` 使用基金地区称谓，交易编辑保留品种并拒绝未经支持的融券/拆股。

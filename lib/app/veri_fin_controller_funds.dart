@@ -92,7 +92,8 @@ mixin _FundOps on _InvestmentOps {
 
   /// 用券商实际确认的 [confirmation] 核准指定 [subscriptionId]，不把公开最新净值当确认回执。
   /// [fee] 可补正实际扣款中包含的申购费用；总扣款不变。份额和净值可核对重填，稳定确认事件
-  /// 只保留一条，现金腿始终为零；若收益起算在未来，份额到实际生效时刻才参与当前估值。
+  /// 只保留一条，现金腿始终为零。旧规则保留逐笔起算日；成交净值规则在该净值日日末形成
+  /// 日级持仓基准，回执晚到时按成交日期回算，不把此前净值变化集中计入通知日。
   /// [quantityInferred] 标识仍采用金额反推的份额；保存、编辑和备份不能把估算冒充券商回执。
   Future<bool> confirmFundSubscription({
     required String accountId,
@@ -137,6 +138,18 @@ mixin _FundOps on _InvestmentOps {
       fundNavDate: confirmation.navDate,
       quantityInferred: quantityInferred,
     );
+    // 重核可以调整经济日期，但不能跨已保存的持仓基准改变一笔申购是否已被基准覆盖，
+    // 否则可能在现金不变时把份额/成本再次叠加或抹去；须先核对基准包含范围。
+    if (existing != null &&
+        portfolio.events.any(
+          (baseline) =>
+              baseline.securityId == security.id &&
+              baseline.kind == StockEventKind.fundHoldingBaseline &&
+              (compareStockEvents(existing, baseline) < 0) !=
+                  (compareStockEvents(event, baseline) < 0),
+        )) {
+      throw const FormatException('重核成交日期不能跨越已有持仓核对基准，请先核对该基准包含的申购');
+    }
     if (portfolio.events.any(
       (value) => value.id == event.id && value != existing,
     )) {

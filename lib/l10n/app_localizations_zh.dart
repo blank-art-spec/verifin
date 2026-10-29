@@ -7184,6 +7184,26 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fundEarningStartDate => '收益起算日（香港日期）';
 
   @override
+  String get fundAccrualRule => '收益归属规则';
+
+  @override
+  String get fundAccrualDealNavDate => '按实际成交净值日';
+
+  @override
+  String get fundAccrualExplicitStartDate => '按独立起算日（原口径）';
+
+  @override
+  String get fundDealNavBasisDate => '成交净值基准日（香港日期）';
+
+  @override
+  String get fundDealNavDateHint =>
+      '招商美元货币市场基金 B 类以实际成交净值日形成持仓基准，之后的净值变化归入对应公布区间；确认通知晚到不会推迟收益归属。成交日仅形成基准，费用与成交差额另行列示。香港日日末仅用于日级记录，不代表实际成交时刻。请填写实际成交净值及日期，不用最新净值替代。';
+
+  @override
+  String get fundLegacyAccrualHint =>
+      '此记录沿用独立起算日。核对实际成交净值、份额及日期后，可切换为成交净值日口径并重新勾选核对；未保存前不会改动旧记录。';
+
+  @override
   String get fundConfirmationCheck => '已核对券商份额、净值、金额差额及各日期';
 
   @override
@@ -7230,7 +7250,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fundStatusPending => '已扣款，待确认';
 
   @override
-  String get fundStatusScheduled => '已确认，待收益起算';
+  String get fundStatusScheduled => '已确认，待生效';
 
   @override
   String get fundStatusEffective => '已确认并生效';
@@ -7324,7 +7344,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get fundScheduleHint =>
-      '预计确认日不会自动确认成交。实际扣款、确认和退款按已经发生的时间填写；收益起算日可单独指定，不能把收益晚显示误当成晚起算。';
+      '预计确认日不会自动确认成交。实际扣款、确认和退款按已经发生的时间填写；收益按记录采用的归属规则计算，不能把收益晚显示误当成晚起算。';
 
   @override
   String get fundSaveValidation => '请核对金额、日期、净值、份额及确认状态；保存尚未完成。';
@@ -7343,7 +7363,18 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fundReferenceHistoryTitle => '基金参考历史';
 
   @override
-  String get fundReferenceDailyProfit => '净值日参考收益';
+  String get fundReferenceDailyProfit => '净值区间参考盈亏';
+
+  @override
+  String get fundReferenceProfitIntervalLabel => '收益所属区间';
+
+  @override
+  String fundReferenceProfitInterval(String start, String end) {
+    return '$start 至 $end';
+  }
+
+  @override
+  String get fundReferenceSubscriptionAdjustment => '其中：申购费用与结算差额';
 
   @override
   String get fundReferenceCumulativeProfit => '累计参考盈亏';

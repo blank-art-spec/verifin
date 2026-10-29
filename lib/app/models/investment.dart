@@ -361,7 +361,7 @@ class InvestmentPortfolio {
     fundSubscriptions: fundSubscriptions ?? this.fundSubscriptions,
   );
 
-  /// 完整用户投资数据进入 JSON v14；申购事实和历史依据保存，临时行情缓存不进入备份。
+  /// 完整用户投资数据进入 JSON v15；申购事实、收益规则和历史依据保存，临时行情缓存不进备份。
   Map<String, Object?> toJson() => {
     'accountId': accountId,
     'bookId': bookId,

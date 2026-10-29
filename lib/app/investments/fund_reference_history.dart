@@ -16,6 +16,9 @@ class FundReferenceDay {
   /// [dailyProfit] 是与上个可观察净值日之间、剔除买卖净投入并计入分红费用的收益；
   /// 首点或区间发生持仓转移时为 null，不能把多日区间冒充单个自然日收益。
   /// [cumulativeProfit] 按已实现、净分红费用和未实现合计，未知成本时为 null。
+  /// [profitFromDate] 为上一实际公布净值日，和 [date] 组成完整观察区间；首点无区间。
+  /// [subscriptionAdjustment] 是同一区间内申购费用、确认量价差及退款差额，已包含在
+  /// [dailyProfit] 中，只供分项说明，不能再次加减或冒充正常净值增长。
   /// [cash] 复用账户历史现金；其余账户金额只有全部持仓具有当日价格依据时才存在，
   /// 否则 [missingSecurityIds] 列出缺价持仓，基金自身的参考市值仍可独立显示。
   FundReferenceDay({
@@ -31,16 +34,20 @@ class FundReferenceDay {
     required this.accountNetValue,
     required Set<String> missingSecurityIds,
     InvestmentDecimal? pendingSubscriptionValue,
+    this.profitFromDate,
+    this.subscriptionAdjustment,
   }) : pendingSubscriptionValue =
            pendingSubscriptionValue ?? InvestmentDecimal.zero,
        missingSecurityIds = Set.unmodifiable(missingSecurityIds);
 
   final DateTime date;
+  final DateTime? profitFromDate;
   final InvestmentDecimal nav, quantity, marketValue;
 
   /// 已实际付款但尚未起算或待实际退款的本基金资产；不参与份额与净值乘积。
   final InvestmentDecimal pendingSubscriptionValue;
   final InvestmentDecimal? dailyProfit, cumulativeProfit;
+  final InvestmentDecimal? subscriptionAdjustment;
   final double cash;
   final double? accountAssets, accountLiabilities, accountNetValue;
   final Set<String> missingSecurityIds;
@@ -80,6 +87,10 @@ List<FundReferenceDay> buildFundReferenceHistory({
     throw const FormatException('基金参考历史的证券、账户或结算币种不一致');
   }
   final digits = CurrencyCatalog.require(portfolio.currencyCode).minorUnit;
+  final publishedNavs = {
+    for (final point in history.points)
+      point.date: InvestmentDecimal.parse(point.price),
+  };
   final result = <FundReferenceDay>[];
   DateTime? previousCutoff;
   InvestmentDecimal? previousCapitalValue;
@@ -108,7 +119,7 @@ List<FundReferenceDay> buildFundReferenceHistory({
             subscription.paidAt!.isBefore(firstBaseline.occurredAt),
       );
   for (final point in history.points) {
-    final cutoff = _hongKongDayEnd(point.date);
+    final cutoff = hongKongFundDayEnd(point.date);
     if (cutoff.isBefore(portfolio.openedAt)) continue;
     // 第一次录入已有持仓不等于此前持仓为零；没有更早事实时，不给开户日至基准日补造历史。
     if (!hasFactsBeforeBaseline && cutoff.isBefore(firstBaseline.occurredAt)) {
@@ -165,7 +176,8 @@ List<FundReferenceDay> buildFundReferenceHistory({
           movement = movement + leg.amount;
         }
       }
-      // 付款只是现金转在途，起算只是从在途转为份额，实际退款只是资产形式变换。
+      // 本金转为在途或确认份额不产生收益；已知费用和量价/退款差额仍计入净投资盈亏，
+      // 并由独立分项解释，不能将截位损益当作净值正常增长或再加一笔利息。
       dailyProfit = capitalValue - previousCapitalValue + movement;
     }
     final cost = position?.cost;
@@ -219,6 +231,17 @@ List<FundReferenceDay> buildFundReferenceHistory({
         quantity: quantity,
         marketValue: marketValue,
         pendingSubscriptionValue: pending,
+        profitFromDate: result.lastOrNull?.date,
+        subscriptionAdjustment: dailyProfit == null
+            ? null
+            : _intervalSubscriptionAdjustment(
+                past,
+                security,
+                previousCutoff!,
+                cutoff,
+                digits,
+                publishedNavs,
+              ),
         dailyProfit: dailyProfit,
         cumulativeProfit: cumulativeProfit,
         cash: cash,
@@ -234,10 +257,79 @@ List<FundReferenceDay> buildFundReferenceHistory({
   return List.unmodifiable(result);
 }
 
-/// 将 UTC 纯日期 [date] 换成香港当日最后一个微秒，边界不随设备时区变化。
-/// 这里构造日历字段，不使用二十四小时绝对时长表达日历日增减。
-DateTime _hongKongDayEnd(DateTime date) =>
-    DateTime.utc(date.year, date.month, date.day, 15, 59, 59, 999, 999);
+/// 计算本基金在观察区间 ([from], [to]] 内已计入净盈亏的申购费用和结算差额。
+/// [portfolio] 为历史截点聚合，[digits] 是账户现金精度；付款时列已知费用，确认时
+/// 列新增份额带来的合并持仓市值增量相对净申购额的差额，退款时列实退额相对净款的差额。
+/// [publishedNavs] 仅包含真实公开来源点；新规则在成交日有公开净值时据其区分发行价差，
+/// 缺失时仅列已知成交价与份额尾差，不补造该日净值，也不假装已经拆出未知的发行价差。
+/// 各阶段只计算一次，保留真实总成本；此分项不另写现金、收入或来源净值历史。
+InvestmentDecimal _intervalSubscriptionAdjustment(
+  InvestmentPortfolio portfolio,
+  StockSecurity security,
+  DateTime from,
+  DateTime to,
+  int digits,
+  Map<DateTime, InvestmentDecimal> publishedNavs,
+) {
+  var adjustment = InvestmentDecimal.zero;
+  for (final subscription in portfolio.fundSubscriptions) {
+    if (subscription.securityId != security.id) continue;
+    final paidAt = subscription.paidAt;
+    if (paidAt == null || paidAt.isAfter(to)) continue;
+    final cash = InvestmentDecimal.parse(subscription.cashAmount);
+    final fee = InvestmentDecimal.parse(subscription.fee);
+    final net = cash - fee;
+    if (paidAt.isAfter(from)) adjustment = adjustment - fee;
+    final refundedAt = subscription.refundedAt;
+    if (refundedAt != null &&
+        refundedAt.isAfter(from) &&
+        !refundedAt.isAfter(to)) {
+      adjustment =
+          adjustment +
+          InvestmentDecimal.parse(subscription.refundAmount!) -
+          net;
+    }
+    final effectiveAt = fundSubscriptionEffectiveAt(subscription);
+    if (effectiveAt != null &&
+        effectiveAt.isAfter(from) &&
+        !effectiveAt.isAfter(to)) {
+      final confirmation = subscription.confirmation!;
+      final acquisition = portfolio.events.firstWhere(
+        (event) =>
+            event.kind == StockEventKind.fundAcquire &&
+            event.fundSubscriptionId == subscription.id,
+      );
+      // 与完整市值一致，先按稳定事件顺序取新增前数量，再对合并市值舍入。
+      // 逐笔量价各自舍入后相加，在两笔半分等边界会凭空产生或漏掉一分结算差额。
+      final before =
+          _fundProjection(
+                portfolio.copyWith(
+                  events: [
+                    for (final event in portfolio.events)
+                      if (compareStockEvents(event, acquisition) < 0) event,
+                  ],
+                ),
+                security,
+                at: effectiveAt,
+              ).positions
+              .where((p) => p.securityId == security.id && !p.short)
+              .firstOrNull;
+      final oldQuantity = before?.quantity ?? InvestmentDecimal.zero;
+      final newQuantity =
+          oldQuantity + InvestmentDecimal.parse(confirmation.quantity);
+      final dealNav = confirmation.accrualRule == FundAccrualRule.dealNavDate
+          ? publishedNavs[confirmation.navDate] ??
+                InvestmentDecimal.parse(confirmation.nav)
+          : InvestmentDecimal.parse(confirmation.nav);
+      adjustment =
+          adjustment +
+          newQuantity.moneyProduct(dealNav, digits) -
+          oldQuantity.moneyProduct(dealNav, digits) -
+          net;
+    }
+  }
+  return adjustment;
+}
 
 /// 取得真实时刻 [instant] 在香港的日历日期；返回 UTC 日期载体供字段比较。
 /// 香港为固定 UTC+8；八小时是时区偏移，不是按绝对时长推算日历天数。
