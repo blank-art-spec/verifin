@@ -44,6 +44,10 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 内存仓储、插件 stub 和 ffi factory 用于测试，不能替代生产持久化。
 历史设计稿中的旧行为需要用当前源码复核；Web 预览已移除，历史记录不再代表支持范围。
 
+## 待实施的账本与账户交互
+
+[投资账本与证券账户交互开发方案](investment-ledger-interaction-plan.md)整理了账本类型、投资账本手动新增双页签、证券账户详情与基本信息整合，以及迁移/备份兼容。当前账本尚无类型字段；方案中的新模型、入口和页面调整均待实施，执行任务及验证见[配套清单](investment-ledger-interaction-acceptance.md)。
+
 ## 文档权威顺序
 
 判断「当前实现事实」时按以下顺序取信，冲突时前者覆盖后者：

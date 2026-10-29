@@ -6,6 +6,8 @@
 **当前状态：阶段 1–3 股票与期权离线账务已实现（见 [期权阶段记录](securities-stage03-implementation.md)）；2026-10-27 新增免账号、免 Key 的腾讯股票诊断研究适配器，正式发布来源仍未准入。** 该真实来源仅在 debug + diagnostic + 显式 `PUBLIC_QUOTE_RESEARCH=true` 时装配，沪深/香港股票本次真实样本为 600026/00700，美股仅 AVGO/GOOG；期权与 TEST 代码不查询。来源 `approved` 仍为 false，技术可达不代表正式许可，详见[公开股票诊断研究](public-quote-research.md)。股票投资聚合、精确计算、离线记账及手填估值见 [阶段 0–2 记录](securities-stage02-implementation.md)，其中的旧博通 Yahoo/Nasdaq 验证页和查询客户端现已移除；参考行情机制见 [阶段 4](securities-stage04-implementation.md)，资产分解、历史依据、小组件/只读查询与恢复见 [阶段 5](securities-stage05-implementation.md)。完整联网覆盖仍待逐项准入，不可据此宣称全部落地。
 后续实施以代码和测试为准，不能把本文列出的拟建入口当成已有功能。
 
+2026-10-30 账本和账户交互另见[投资账本与证券账户交互开发方案](investment-ledger-interaction-plan.md)及[开发任务与验收清单](investment-ledger-interaction-acceptance.md)。普通/投资账本类型、手动新增页签与证券账户基本信息整合尚待实施；该方案不扩展本文的行情来源覆盖。
+
 配套材料：[可执行验收操作](securities-trading-acceptance.md)、[当前父子账户与汇率](credit-hierarchy-currency.md)、[架构](architecture.md)、[组件](components.md)、[统一设计](../design-system.md)。
 
 ## 1. 已确认目标和范围

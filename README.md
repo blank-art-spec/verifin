@@ -172,6 +172,7 @@ lib/
 | [`docs/dev/components.md`](docs/dev/components.md) | 组件清单（写新组件前先查） |
 | [`docs/dev/tech-decisions.md`](docs/dev/tech-decisions.md) | 关键技术决策与选型理由 |
 | [`docs/dev/securities-trading-plan.md`](docs/dev/securities-trading-plan.md) | 证券交易与参考行情总体方案（股票/期权/历史依据已实现，生产自动行情待来源准入） |
+| [`docs/dev/investment-ledger-interaction-plan.md`](docs/dev/investment-ledger-interaction-plan.md) | 待实施：普通/投资账本类型、新增交易页签与证券账户详情整合；[开发任务与验收清单](docs/dev/investment-ledger-interaction-acceptance.md) |
 | [`docs/dev/public-quote-research.md`](docs/dev/public-quote-research.md) | 免账号公开股票的诊断研究接入、构建三条件、真实字段/时区依据与正式发布边界 |
 | [`docs/dev/securities-trading-acceptance.md`](docs/dev/securities-trading-acceptance.md) | 博通专项流程 B01–B08、证券全面验收 A01–A23 与金额基准（待开发后执行） |
 | [`docs/dev/known-limitations.md`](docs/dev/known-limitations.md) | 已知限制与技术债台账 |
