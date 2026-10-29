@@ -1,5 +1,10 @@
 # 组件清单（Component Registry）
 
+2026-10-29 历史依据精度：`investmentRevision` 在副本中按既有 SQLite 毫秒及本地表达
+规范锚点和普通交易的行时间，避免冷读的微秒/UTC 文本变化使投资依据失效；不修改账目对象
+或普通账户余额边界。来源/审计 JSON 保留原文；无时间碰撞的有效本地毫秒摘要不变。
+旧导入同毫秒多条核对时另摘要实际采用 ID，选择改变会失效，不伪造修复旧失效快照。
+
 2026-10-29 基金收益归属：`FundAccrualRule` 在确认中保存 `dealNavDate` 或兼容的
 `explicitStartDate`，默认省略旧规则字段。`supportsCmsDealNavAccrual` 严格限制已核实的
 HK/USD 基金 B 类；`hongKongFundDayEnd` 提供纯日期的香港日报末截点，不代表实际收市时刻。

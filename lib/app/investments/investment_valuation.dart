@@ -210,6 +210,10 @@ double accountCashAt({
 
 /// 对截止时点会影响现金/仓位/成本的事实做稳定摘要；不包含现价、缓存及快照自身。
 /// 历史补录、删除或改规格后旧快照失效；未来成交和日后改参考价不重写过去。
+/// [p] 为目标投资账户聚合，[entries]/[anchors] 可包含其他账本或账户，内部只保留
+/// 与该账户有关且不晚于真实截点 [at] 的事实；只生成校验文本，不修改原数据或已有快照。
+/// 普通交易及余额锚点的行时间按 SQLite 实际保存的毫秒/本地表达参与摘要，避免原始
+/// UTC/微秒文本在冷读后改变摘要；仅规范摘要副本，不修改账户余额的真实截点或原对象。
 String investmentRevision(
   InvestmentPortfolio p,
   Iterable<LedgerEntry> entries,
@@ -263,16 +267,18 @@ String investmentRevision(
           )
           .toList()
         ..sort((a, b) => a.id.compareTo(b.id));
-  final relatedAnchors =
-      anchors
-          .where(
-            (a) =>
-                a.accountId == p.accountId &&
-                a.bookId == p.bookId &&
-                !a.effectiveAt.isAfter(at),
-          )
-          .toList()
-        ..sort((a, b) => a.id.compareTo(b.id));
+  final relatedAnchors = anchors
+      .where(
+        (a) =>
+            a.accountId == p.accountId &&
+            a.bookId == p.bookId &&
+            !a.effectiveAt.isAfter(at),
+      )
+      .toList();
+  // 正常保存按毫秒复用锚点 ID；旧导入若有同毫秒多条记录，不能因规范时间副本而
+  // 隐藏实际选用余额的变化。先按历史现金入口的原顺序选择，再对摘要事实按 ID 排序。
+  final selectedCollisionAnchor = _collidingAnchorSelection(relatedAnchors);
+  relatedAnchors.sort((a, b) => a.id.compareTo(b.id));
   return sha256
       .convert(
         utf8.encode(
@@ -289,8 +295,9 @@ String investmentRevision(
                 .toList(),
             'securities': securities.map((v) => v.toJson()).toList(),
             'events': events.map((v) => v.toJson()).toList(),
-            'entries': relatedEntries.map((v) => v.toJson()).toList(),
-            'anchors': relatedAnchors.map((v) => v.toJson()).toList(),
+            'entries': relatedEntries.map(_entryRevisionFact).toList(),
+            'anchors': relatedAnchors.map(_anchorRevisionFact).toList(),
+            'selectedCollisionAnchor': ?selectedCollisionAnchor,
             'anchorIncludedIds': {
               for (final a in relatedAnchors) a.id: p.anchorIncludedIds[a.id],
             },
@@ -299,6 +306,47 @@ String investmentRevision(
       )
       .toString();
 }
+
+/// 为 [anchors] 中同毫秒多条核对记录保留历史现金入口实际采用的记录 ID。
+/// 无碰撞时返回 null，保持正常旧记录的摘要形状；碰撞可能来自旧导入，按与 accountCashAt
+/// 相同的原列表顺序和真实生效时刻排序。冷读后选择改变应使旧依据失效，不能伪装成同一余额。
+String? _collidingAnchorSelection(List<BalanceAnchor> anchors) {
+  final milliseconds = <int>{};
+  if (!anchors.any(
+    (a) => !milliseconds.add(a.effectiveAt.millisecondsSinceEpoch),
+  )) {
+    return null;
+  }
+  final ordered = [...anchors]
+    ..sort((a, b) => b.effectiveAt.compareTo(a.effectiveAt));
+  return ordered.first.id;
+}
+
+/// 将真实时刻 [instant] 表达为 SQLite 行读取得到的本地毫秒文本，仅供修订摘要使用。
+/// 不修改账目对象、普通账户的微秒先后判断或已有快照；已有效的本地毫秒旧文本原样保持。
+String _sqliteRevisionTime(DateTime instant) =>
+    DateTime.fromMillisecondsSinceEpoch(
+      instant.millisecondsSinceEpoch,
+    ).toIso8601String();
+
+/// 复制交易 [entry] 的修订依据，仅规范以整数毫秒保存的发生/银行记账/退款到账时间。
+/// 来源证据及修改审计本来以 JSON 原文保存，其微秒与时区文本不在这里改写；金额、分类、
+/// 账户和其他事实仍完整进入摘要，真实账务变更继续使旧依据失效。
+Map<String, Object?> _entryRevisionFact(LedgerEntry entry) => {
+  ...entry.toJson(),
+  'occurredAt': _sqliteRevisionTime(entry.occurredAt),
+  if (entry.postDate != null) 'postDate': _sqliteRevisionTime(entry.postDate!),
+  if (entry.settledAt != null)
+    'settledAt': _sqliteRevisionTime(entry.settledAt!),
+};
+
+/// 复制余额锚点 [anchor] 的摘要依据；两个行时间均使用数据库真实持久化精度。
+/// 锚点身份、余额和备注仍按原事实保存，不截断内存对象时刻，也不重算旧快照冒充核准。
+Map<String, Object?> _anchorRevisionFact(BalanceAnchor anchor) => {
+  ...anchor.toJson(),
+  'effectiveAt': _sqliteRevisionTime(anchor.effectiveAt),
+  'createdAt': _sqliteRevisionTime(anchor.createdAt),
+};
 
 /// 读取某一历史日最后保存的真实依据；无该日快照或账务修订不匹配时返回 null。
 InvestmentValuationSnapshot? investmentSnapshotAt(
