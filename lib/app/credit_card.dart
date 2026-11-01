@@ -141,8 +141,8 @@ class CreditCycleOverview {
 /// 聚合一个信用主体下的多币种子账户账期数据。
 ///
 /// [convertToCreditCurrency] 把任意币种金额换成信用主体币种；同币种也应返回原值。
-/// 支出净额使用已经冻结的账本本位币 [LedgerEntry.netBaseAmount]，因此不会因后来修改
-/// 汇率而改写历史消费。正式账单、余额和还款则按各自币种在对应日期换算。
+/// 本账期支出净额使用调用方提供的统计投影；已出账流水的明确参考折算额优先，
+/// 否则按 [now] 的汇率换算。正式账单保持银行实际金额，余额和还款保持账户原币。
 CreditCycleOverview buildCreditCycleOverview({
   required CreditAccount creditAccount,
   required Iterable<Account> accounts,
@@ -284,25 +284,55 @@ CreditCycleOverview buildCreditCycleOverview({
 
   var billedOutstanding = 0.0;
   final outstandingByDueDate = <DateTime, double?>{};
-  void addBilledOutstanding(
-    double amount,
-    String currencyCode,
-    DateTime amountDate,
-    DateTime dueDate,
-  ) {
+  void addConvertedBilledOutstanding(double? converted, DateTime dueDate) {
     final date = dateOnly(dueDate);
-    final converted = convertToCreditCurrency(amount, currencyCode, amountDate);
     if (converted == null) {
       missing = true;
       outstandingByDueDate[date] = null;
       return;
     }
-    billedOutstanding += converted;
+    final amount = normalizeCurrencyAmount(
+      converted,
+      creditAccount.currencyCode,
+    );
+    billedOutstanding = normalizeCurrencyAmount(
+      billedOutstanding + amount,
+      creditAccount.currencyCode,
+    );
     if (!outstandingByDueDate.containsKey(date)) {
-      outstandingByDueDate[date] = converted;
+      outstandingByDueDate[date] = amount;
     } else if (outstandingByDueDate[date] != null) {
-      outstandingByDueDate[date] = outstandingByDueDate[date]! + converted;
+      outstandingByDueDate[date] = normalizeCurrencyAmount(
+        outstandingByDueDate[date]! + amount,
+        creditAccount.currencyCode,
+      );
     }
+  }
+
+  void addBilledOutstanding(
+    double amount,
+    String currencyCode,
+    DateTime dueDate,
+  ) {
+    addConvertedBilledOutstanding(
+      convertToCreditCurrency(amount, currencyCode, now),
+      dueDate,
+    );
+  }
+
+  double? convertDebtEntry(
+    LedgerEntry entry,
+    double accountAmount,
+    String accountCurrencyCode,
+  ) {
+    if (accountCurrencyCode == creditAccount.currencyCode) {
+      return accountAmount;
+    }
+    final reference = entry.referenceBaseAmount;
+    if (entry.type != EntryType.transfer && reference != null) {
+      return convertToCreditCurrency(reference, baseCurrencyCode, now);
+    }
+    return convertToCreditCurrency(accountAmount, accountCurrencyCode, now);
   }
 
   for (final account in childAccounts) {
@@ -310,12 +340,45 @@ CreditCycleOverview buildCreditCycleOverview({
         in scheduled[account.id]?.amounts.entries ??
             <MapEntry<DateTime, double>>[]) {
       if (bill.value <= 0) continue;
-      addBilledOutstanding(
-        bill.value,
-        account.currencyCode,
-        bill.key,
-        creditDueDate(creditAccount, bill.key),
-      );
+      final dueDate = creditDueDate(creditAccount, bill.key);
+      if (account.currencyCode == creditAccount.currencyCode) {
+        addConvertedBilledOutstanding(bill.value, dueDate);
+        continue;
+      }
+      var converted = 0.0;
+      var complete = true;
+      for (final line in scheduled[account.id]!.linesByCycle[bill.key]!) {
+        if (line.remainingAmount <= 0 || line.netAmount <= 0) continue;
+        final original = convertDebtEntry(
+          line.entry,
+          line.amount,
+          account.currencyCode,
+        );
+        if (original == null) {
+          complete = false;
+          break;
+        }
+        var net = original;
+        for (final refund in line.refunds) {
+          final refunded = convertDebtEntry(
+            refund,
+            refund.accountAmount ?? refund.amount,
+            account.currencyCode,
+          );
+          if (refunded == null) {
+            complete = false;
+            break;
+          }
+          net -= refunded;
+        }
+        if (!complete) break;
+        // 先用原币确认仍欠哪笔消费，再按该笔剩余比例保留参考折算额。
+        // 完整退款或还款的消费不会留下汇率变动造成的折算尾差。
+        converted +=
+            net.clamp(0.0, double.infinity) *
+            (line.remainingAmount / line.netAmount);
+      }
+      addConvertedBilledOutstanding(complete ? converted : null, dueDate);
     }
   }
   for (final statement in statementList) {
@@ -326,7 +389,6 @@ CreditCycleOverview buildCreditCycleOverview({
     addBilledOutstanding(
       statement.outstandingAmount,
       statement.currencyCode,
-      statement.statementDate,
       statement.dueDate,
     );
   }
@@ -391,11 +453,31 @@ BillingStatement? _latestStatementForAccounts({
 }
 
 class _ScheduledCreditDebt {
-  const _ScheduledCreditDebt(this.amounts, this.repayments, this.refundIds);
+  const _ScheduledCreditDebt(
+    this.amounts,
+    this.repayments,
+    this.refundIds,
+    this.linesByCycle,
+  );
 
   final Map<DateTime, double> amounts;
   final Map<String, double> repayments;
   final Set<String> refundIds;
+  final Map<DateTime, List<_ScheduledCreditDebtLine>> linesByCycle;
+}
+
+/// 实际原币决定是否结清，逐笔保留参考额、退款和未偿本金供主体汇总换算。
+class _ScheduledCreditDebtLine {
+  _ScheduledCreditDebtLine(this.entry, this.amount) : remainingAmount = amount;
+
+  final LedgerEntry entry;
+  final double amount;
+  final List<LedgerEntry> refunds = [];
+  double refundedAmount = 0;
+  double remainingAmount;
+
+  double get netAmount =>
+      (amount - refundedAmount).clamp(0.0, double.infinity).toDouble();
 }
 
 /// 对没有正式账单覆盖的消费按配置账单日结转。只投影流水，不落库，
@@ -422,6 +504,8 @@ _ScheduledCreditDebt _scheduledCreditDebt({
   final amounts = <DateTime, double>{};
   final refundIds = <String>{};
   final cycleByExpense = <String, DateTime>{};
+  final linesByCycle = <DateTime, List<_ScheduledCreditDebtLine>>{};
+  final linesByExpense = <String, _ScheduledCreditDebtLine>{};
   bool isCurrencySettlement(LedgerEntry entry) {
     final source = internalAccountCurrencies[entry.accountId];
     final target = internalAccountCurrencies[entry.toAccountId];
@@ -470,7 +554,27 @@ _ScheduledCreditDebt _scheduledCreditDebt({
     final amount =
         (entry.accountAmount ?? entry.amount) + (settlement ? entry.fee : 0);
     amounts.update(cycle, (value) => value + amount, ifAbsent: () => amount);
+    final line = _ScheduledCreditDebtLine(entry, amount);
+    linesByCycle.putIfAbsent(cycle, () => []).add(line);
+    if (!settlement) linesByExpense[entry.id] = line;
   }
+  for (final lines in linesByCycle.values) {
+    lines.sort((a, b) {
+      final byDate = a.entry.occurredAt.compareTo(b.entry.occurredAt);
+      // 同一时刻的不同参考汇率不能因载入顺序改变还款后的折算结果。
+      return byDate != 0 ? byDate : a.entry.id.compareTo(b.entry.id);
+    });
+  }
+  void reduceLines(List<_ScheduledCreditDebtLine> lines, double amount) {
+    var remaining = amount;
+    for (final line in lines) {
+      if (remaining <= 0) break;
+      final reduced = remaining.clamp(0.0, line.remainingAmount).toDouble();
+      line.remainingAmount -= reduced;
+      remaining -= reduced;
+    }
+  }
+
   for (final refund in entryList) {
     final cycle = cycleByExpense[refund.refundOf];
     if (cycle == null ||
@@ -479,9 +583,17 @@ _ScheduledCreditDebt _scheduledCreditDebt({
         refund.settledAt!.isAfter(now)) {
       continue;
     }
-    amounts[cycle] = (amounts[cycle]! - (refund.accountAmount ?? refund.amount))
+    final amount = refund.accountAmount ?? refund.amount;
+    amounts[cycle] = (amounts[cycle]! - amount)
         .clamp(0.0, double.infinity)
         .toDouble();
+    final line = linesByExpense[refund.refundOf]!;
+    line.refunds.add(refund);
+    line.refundedAmount += amount;
+    final refunded = amount.clamp(0.0, line.remainingAmount).toDouble();
+    line.remainingAmount -= refunded;
+    // 账户实际退款因结算差额超过原消费时，超出的原币继续冲抵同一期债务。
+    reduceLines(linesByCycle[cycle]!, amount - refunded);
     refundIds.add(refund.id);
   }
   final allocated = <String, double>{};
@@ -520,6 +632,7 @@ _ScheduledCreditDebt _scheduledCreditDebt({
       if (cycle.isAfter(repaymentCycle) || remaining <= 0) continue;
       final paid = remaining.clamp(0.0, amounts[cycle]!).toDouble();
       amounts[cycle] = amounts[cycle]! - paid;
+      reduceLines(linesByCycle[cycle]!, paid);
       remaining -= paid;
       used.update(repayment.id, (value) => value + paid, ifAbsent: () => paid);
     }
@@ -530,7 +643,7 @@ _ScheduledCreditDebt _scheduledCreditDebt({
       account.currencyCode,
     );
   }
-  return _ScheduledCreditDebt(amounts, used, refundIds);
+  return _ScheduledCreditDebt(amounts, used, refundIds, linesByCycle);
 }
 
 /// 构造首页使用的当前未出账窗口，出账日当天开始下一期。
