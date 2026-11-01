@@ -1,0 +1,132 @@
+name: Device update APK
+
+on:
+  push:
+    branches:
+      - 'device-update/**'
+  workflow_dispatch:
+
+# 此流程仅生成设备覆盖更新用的 CI 制品，不创建标签或 GitHub Release。
+permissions:
+  contents: read
+
+jobs:
+  android:
+    name: Verify and build device update
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+
+      - name: Setup Java
+        uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: '17'
+
+      - name: Setup Flutter
+        uses: subosito/flutter-action@v2
+        with:
+          channel: stable
+          flutter-version: '3.47.2'
+          cache: true
+
+      - name: Install dependencies
+        run: flutter pub get
+
+      - name: Verify lossless timezone asset
+        run: dart scripts/prepare_timezone_asset.dart --check
+
+      - name: Check formatting
+        run: dart format --output=none --set-exit-if-changed .
+
+      - name: Analyze
+        run: flutter analyze
+
+      - name: Test
+        run: flutter test
+
+      - name: Verify release design flows
+        run: flutter test test/design_consistency_test.dart test/unified_design_preview_test.dart test/home_density_test.dart test/anchored_menu_test.dart test/material_stability_test.dart test/navigation_settings_test.dart --dart-define=UNIFIED_DESIGN_PREVIEW=true
+
+      - name: Build release APK (github flavor)
+        run: flutter build apk --release --target-platform android-arm64 --flavor github --dart-define=UNIFIED_DESIGN_PREVIEW=true
+
+      - name: Verify native libraries and timezone packaging
+        run: dart scripts/verify_android_package.dart build/app/outputs/flutter-apk/app-github-release.apk arm64-v8a --compressed
+
+      - name: Prepare APK and verification metadata
+        shell: bash
+        run: |
+          set -euo pipefail
+          python3 - <<'PY'
+          import hashlib
+          import json
+          import os
+          import pathlib
+          import re
+          import shutil
+          import subprocess
+
+          commit = subprocess.check_output(
+              ['git', 'rev-parse', 'HEAD'], text=True
+          ).strip()
+          if commit != os.environ['GITHUB_SHA']:
+              raise SystemExit('Checked-out commit does not match GITHUB_SHA')
+          version_match = re.search(
+              r'^version:\s*(\S+)\s*$',
+              pathlib.Path('pubspec.yaml').read_text(encoding='utf-8'),
+              re.MULTILINE,
+          )
+          if version_match is None:
+              raise SystemExit('Missing pubspec version')
+
+          output = pathlib.Path('device-update-artifacts')
+          output.mkdir()
+          apk = output / f'verifin-device-update-{commit[:7]}-arm64.apk'
+          shutil.copyfile(
+              'build/app/outputs/flutter-apk/app-github-release.apk', apk
+          )
+          apk_sha256 = hashlib.sha256(apk.read_bytes()).hexdigest()
+          metadata = {
+              'sourceCommit': commit,
+              'sourceRef': os.environ['GITHUB_REF'],
+              'repository': os.environ['GITHUB_REPOSITORY'],
+              'runUrl': (
+                  f"{os.environ['GITHUB_SERVER_URL']}/"
+                  f"{os.environ['GITHUB_REPOSITORY']}/actions/runs/"
+                  f"{os.environ['GITHUB_RUN_ID']}"
+              ),
+              'version': version_match.group(1),
+              'applicationId': 'top.talyra42.verifin',
+              'flavor': 'github',
+              'buildMode': 'release',
+              'targetPlatform': 'android-arm64',
+              'flutterVersion': '3.47.2',
+              'dartDefines': {'UNIFIED_DESIGN_PREVIEW': 'true'},
+              'apkFile': apk.name,
+              'apkSha256': apk_sha256,
+          }
+          info = output / 'build-info.json'
+          info.write_text(
+              json.dumps(metadata, ensure_ascii=False, indent=2) + '\n',
+              encoding='utf-8',
+          )
+          checksums = ''.join(
+              f'{hashlib.sha256(path.read_bytes()).hexdigest()}  {path.name}\n'
+              for path in (apk, info)
+          )
+          (output / 'SHA256SUMS').write_text(checksums, encoding='ascii')
+          print(checksums, end='')
+          PY
+
+      - name: Upload device update APK
+        uses: actions/upload-artifact@v4
+        with:
+          name: verifin-device-update-apk
+          path: device-update-artifacts/*
+          if-no-files-found: error
+          retention-days: 14
