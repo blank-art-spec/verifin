@@ -134,3 +134,16 @@ GitHub release APK 仍使用 `--target-platform android-arm64`，不重新启用
 - 清理测试应用前先列出并核对 package。只卸载确认为本任务测试用途的
   `top.talyra42.verifin.graphicsdiagnostic`；**不得卸载 `top.talyra42.verifin` 或清数据**。
   如果测试应用里已有用户新录入的数据，先明确处理方式再删除。
+
+## 仅更新指定设备的 CI 安装包
+
+用户明确要求覆盖更新真机、无需创建公开版本时，可使用
+`.github/workflows/device-update.yml`：推送包含目标修复的 `device-update/**`
+构建分支后运行门禁与同签名 ARM64 release 构建，仅上传
+`verifin-device-update-apk` 制品，不创建标签或 GitHub Release。
+手动触发入口须工作流先存在于默认分支；分支首次验证使用 push 触发。
+
+设备更新仍沿用项目稳定签名，包名必须与已装应用相同，versionCode 高于当前版本。
+构建制品附完整源码提交、参数、版本及 SHA-256；下载后核验来源、完整性、包名和
+签名，再用保留数据的覆盖安装。安装前导出最新完整备份并保存原 APK，安装后重新
+导出对照所有原有账目和设置；不得卸载正式应用、清除数据或以导入备份替代原位升级。
