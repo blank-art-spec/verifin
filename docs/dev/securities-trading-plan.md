@@ -6,7 +6,7 @@
 **当前状态：阶段 1–3 股票与期权离线账务已实现（见 [期权阶段记录](securities-stage03-implementation.md)）；2026-10-27 新增免账号、免 Key 的腾讯股票诊断研究适配器，正式发布来源仍未准入。** 该真实来源仅在 debug + diagnostic + 显式 `PUBLIC_QUOTE_RESEARCH=true` 时装配，沪深/香港股票本次真实样本为 600026/00700，美股仅 AVGO/GOOG；期权与 TEST 代码不查询。来源 `approved` 仍为 false，技术可达不代表正式许可，详见[公开股票诊断研究](public-quote-research.md)。股票投资聚合、精确计算、离线记账及手填估值见 [阶段 0–2 记录](securities-stage02-implementation.md)，其中的旧博通 Yahoo/Nasdaq 验证页和查询客户端现已移除；参考行情机制见 [阶段 4](securities-stage04-implementation.md)，资产分解、历史依据、小组件/只读查询与恢复见 [阶段 5](securities-stage05-implementation.md)。完整联网覆盖仍待逐项准入，不可据此宣称全部落地。
 后续实施以代码和测试为准，不能把本文列出的拟建入口当成已有功能。
 
-2026-10-30 账本和账户交互另见[投资账本与证券账户交互开发方案](investment-ledger-interaction-plan.md)及[开发任务与验收清单](investment-ledger-interaction-acceptance.md)。普通/投资账本类型、手动新增页签与证券账户基本信息整合尚待实施；该方案不扩展本文的行情来源覆盖。
+2026-11-02 账本类型、手动新增页签及证券账户资料整合的代码已实现，实际接口和验证进度见[实施记录](investment-ledger-interaction-implementation.md)；[原方案](investment-ledger-interaction-plan.md)保留设计依据，[开发任务与验收清单](investment-ledger-interaction-acceptance.md)按实际执行更新。该调整不扩展本文的行情来源覆盖。
 
 配套材料：[可执行验收操作](securities-trading-acceptance.md)、[当前父子账户与汇率](credit-hierarchy-currency.md)、[架构](architecture.md)、[组件](components.md)、[统一设计](../design-system.md)。
 
@@ -210,7 +210,7 @@ QuoteObservation 保存证券身份、来源、原始标识映射、币种、报
 
 ## 8. 模型、存储和原子提交
 
-下列名称是初始完整方案提案。当前股票/期权采用 v28 投资聚合，设备行情缓存及历史依据载荷见阶段 4–5；不能把下表尚未采用的多表拆分当作已经建表。
+下列名称是初始完整方案提案。当前股票/期权仍采用 v28 引入的投资聚合，SQLite 当前已为 v29（新增账本类型）；设备行情缓存及历史依据载荷见阶段 4–5，不能把下表尚未采用的多表拆分当作已经建表。
 
 | 模型/表 | 权威内容及约束 |
 | --- | --- |
@@ -228,7 +228,7 @@ QuoteObservation 保存证券身份、来源、原始标识映射、币种、报
 
 新增 saveInvestmentAggregate：把证券定义/期初/成交/资金腿/交割/保证金等相关集合在同一事务保存；事务成功后才替换 Controller 内存。写入串行化、失败不阻塞后续写，保证仓储行快照同步。删除/恢复/初始化仍扩展 replaceAllLedgerData 的整替边界。不能先 saveEvents 再 saveCashMovements 而留下半笔交易。
 
-当前股票实现已升 SQLite v28，采用单账户投资聚合表（见阶段 0–2 记录）；下表多张投资表是未来细分提案。后续新增表须再次提高 schemaVersion、更新 _schemaCurrent、追加 _migrations，禁止修改 v28 及更早历史。四向映射 toJson/fromJson/toRow/fromRow 均覆盖精度、可空字段及非法枚举，未知事件类型不能静默退回“买入”。
+股票阶段在 SQLite v28 引入单账户投资聚合表（见阶段 0–2 记录），当前为含账本类型的 v29，见[交互实施记录](investment-ledger-interaction-implementation.md)；上表多张投资表仍是未来细分提案。后续新增表须再次提高 schemaVersion、更新 _schemaCurrent、追加 _migrations，禁止修改已发布的历史迁移。四向映射 toJson/fromJson/toRow/fromRow 均覆盖精度、可空字段及非法枚举，未知事件类型不能静默退回“买入”。
 
 报价缓存独立轻量保存，不与账务编辑争用长事务；缓存失败不伪装为持久保存成功，明确“本次报价未缓存”。交易保存失败必须可见、完整回滚。
 
@@ -244,10 +244,11 @@ QuoteObservation 保存证券身份、来源、原始标识映射、币种、报
 
 ## 10. 备份、恢复与安全退路
 
-当前完整备份 JSON v12，包含期权事实、历史价格/汇率依据与覆盖选择；保留 BackupService 的 ZIP/加密信封兼容。以下范围以阶段 3–5 的当前实现记录为准。
+当前完整备份 JSON v16、SQLite v29，继续读取 v1–v15；包含账本类型 `bookType`、股票/期权/基金事实、基金逐笔结算及收益规则、历史价格/汇率依据与覆盖选择，保留 BackupService 的 ZIP/加密信封兼容。账本类型缺字段时恢复为普通，见[本轮交互实施记录](investment-ledger-interaction-implementation.md)。投资领域范围同时参考阶段 3–5 与[基金录入与结算](fund-amount-settlement.md)。
 
 | 数据 | 进完整备份 | 恢复/初始化语义 |
 | --- | --- | --- |
+| 账本类型 `bookType` | 是 | 缺字段的历史账本为普通，不按名称或持仓推断；初始化默认普通 |
 | 证券身份/期权规格、启用关系、期初、事件、资金腿、保证金、证据、审计 | 是 | 原子恢复；初始化删除全部；不得留半个交割批次 |
 | 用户手填参考价、持续覆盖选择 | 是 | 原样恢复，不能被启动网络请求覆盖 |
 | 已保存历史估值快照及其价格/汇率依据 | 是 | 明确快照版本与完整性；能核对净值，不冒充逐笔行情档案 |

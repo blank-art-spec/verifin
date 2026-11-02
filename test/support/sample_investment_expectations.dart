@@ -19,6 +19,7 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
   try {
     // 日常账本仍使用原样例汇率；投资账本自己的测试汇率不能覆盖它。
     controller.switchLedgerBook(defaultLedgerBookId);
+    expect(controller.activeBook.bookType, LedgerBookType.normal);
     expect(controller.exchangeRates, hasLength(1));
     expect(controller.exchangeRates.single.currencyCode, 'USD');
     expect(controller.exchangeRates.single.rateToBase, 7.2);
@@ -31,6 +32,7 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
 
     controller.switchLedgerBook('book_investment');
     expect(controller.activeBook.id, 'book_investment');
+    expect(controller.activeBook.bookType, LedgerBookType.investment);
     expect(controller.activeBook.baseCurrencyCode, 'CNY');
     final parent = controller.accountParents.singleWhere(
       (parent) => parent.id == 'parent_investment',

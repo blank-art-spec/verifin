@@ -5619,7 +5619,14 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     return true;
   }
 
-  void addLedgerBook(String name, {String? baseCurrencyCode}) {
+  /// 保留历史同步调用的创建语义，供既有内部调用和测试兼容。
+  /// 新页面应使用可等待的 [createLedgerBook]，避免持久化失败时提前离页。
+  /// [name] 为名称，[baseCurrencyCode] 为本位币，[bookType] 仅决定默认录入入口。
+  void addLedgerBook(
+    String name, {
+    String? baseCurrencyCode,
+    LedgerBookType bookType = LedgerBookType.normal,
+  }) {
     final trimmedName = name.trim();
     if (trimmedName.isEmpty) {
       return;
@@ -5635,6 +5642,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       isDefault: false,
       baseCurrencyCode: code,
       currencySetupStatus: CurrencySetupStatus.confirmed,
+      bookType: bookType,
     );
     _ledgerBooks.add(book);
     _activeBookId = book.id;
@@ -5642,6 +5650,71 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     _store.write(_activeBookKey, _activeBookId);
     notifyListeners();
   }
+
+  /// 可靠创建账本：先保存候选账本，成功后再提交内存并尝试切换当前账本。
+  /// [name] 和 [baseCurrencyCode] 沿用现有校验；[bookType] 默认普通。
+  /// 返回 false 表示账本未创建。若账本已创建但设备指针保存失败则返回 true，
+  /// 保留当前账本，调用方可通过 activeBook 是否变化显示部分成功提示，避免重试建重。
+  Future<bool> createLedgerBook(
+    String name, {
+    String? baseCurrencyCode,
+    LedgerBookType bookType = LedgerBookType.normal,
+  }) => _enqueueCaptureMutation(() async {
+    final trimmedName = name.trim();
+    final code = (baseCurrencyCode ?? activeBook.baseCurrencyCode)
+        .toUpperCase();
+    if (trimmedName.isEmpty || !CurrencyCatalog.isSupported(code)) return false;
+    final book = LedgerBook(
+      id: _generateId('book'),
+      name: trimmedName,
+      createdAt: DateTime.now(),
+      isDefault: false,
+      baseCurrencyCode: code,
+      currencySetupStatus: CurrencySetupStatus.confirmed,
+      bookType: bookType,
+    );
+    final nextBooks = [..._ledgerBooks, book];
+    try {
+      await _repository.saveBooks(nextBooks);
+    } catch (error, stackTrace) {
+      _handlePersistError(error, stackTrace);
+      return false;
+    }
+    _ledgerBooks
+      ..clear()
+      ..addAll(nextBooks);
+    try {
+      await _store.writeAndFlush(_activeBookKey, book.id);
+      _activeBookId = book.id;
+    } catch (error, stackTrace) {
+      // 账本已经落库，指针失败只影响进入哪本账本，不能删除成功创建的账本。
+      _handlePersistError(error, stackTrace);
+    }
+    notifyListeners();
+    return true;
+  });
+
+  /// 显式修改 [bookId] 对应账本的 [bookType]，不改账户、交易、币种或投资聚合。
+  /// 保存失败返回 false，内存与原数据库类型均保持原值；相同类型直接成功。
+  Future<bool> changeLedgerBookType(String bookId, LedgerBookType bookType) =>
+      _enqueueCaptureMutation(() async {
+        final index = _ledgerBooks.indexWhere((book) => book.id == bookId);
+        if (index < 0) return false;
+        if (_ledgerBooks[index].bookType == bookType) return true;
+        final nextBooks = List<LedgerBook>.of(_ledgerBooks)
+          ..[index] = _ledgerBooks[index].copyWith(bookType: bookType);
+        try {
+          await _repository.saveBooks(nextBooks);
+        } catch (error, stackTrace) {
+          _handlePersistError(error, stackTrace);
+          return false;
+        }
+        _ledgerBooks
+          ..clear()
+          ..addAll(nextBooks);
+        notifyListeners();
+        return true;
+      });
 
   void renameLedgerBook(String bookId, String name) {
     final trimmedName = name.trim();
@@ -7958,7 +8031,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 15,
+      'version': 16,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'investmentPortfolios': _investmentPortfolios
@@ -8052,7 +8125,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 15) {
+    if (version < 1 || version > 16) {
       throw FormatException('不支持的备份版本：$version');
     }
 

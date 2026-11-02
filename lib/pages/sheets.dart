@@ -60,12 +60,13 @@ Future<DateTime?> showEntryTimePicker({
   );
 }
 
-/// 统一的底部弹层外壳：实色表面 + 顶部圆角 + 内置拖拽把手。
+/// 统一底部弹层外壳；[enableDrag] 控制下拉关闭，异步提交表单可关闭以防绕过返回保护。
 Future<T?> _showVeriModalSheet<T>({
   required BuildContext context,
   required WidgetBuilder builder,
   bool? showDragHandle,
   bool isScrollControlled = false,
+  bool enableDrag = true,
   Color? backgroundColor,
   ShapeBorder? shape,
 }) => showModalBottomSheet<T>(
@@ -73,6 +74,7 @@ Future<T?> _showVeriModalSheet<T>({
   // 拖拽把手在内容内部渲染（见下方 Column），与弹层表面成一体。
   showDragHandle: false,
   isScrollControlled: isScrollControlled,
+  enableDrag: enableDrag,
   backgroundColor: backgroundColor,
   shape: shape,
   builder: (context) => Material(
@@ -616,39 +618,64 @@ class _CurrencyPickerSheetState extends State<_CurrencyPickerSheet> {
   }
 }
 
-/// 新建账本表单，同时收集名称与本位币。
-Future<({String name, String currencyCode})?> showLedgerBookEditorSheet({
+/// 新建账本表单，同时收集名称、本位币和录入类型。
+/// [initialCurrencyCode] 为初始本位币；[onSave] 可等待 Controller 保存，
+/// 返回 false 时保留草稿和弹层，未提供时仅返回草稿供旧调用方使用。
+Future<({String name, String currencyCode, LedgerBookType bookType})?>
+showLedgerBookEditorSheet({
   required BuildContext context,
   required String initialCurrencyCode,
+  Future<bool> Function(
+    ({String name, String currencyCode, LedgerBookType bookType}) draft,
+  )?
+  onSave,
 }) {
-  return _showVeriModalSheet<({String name, String currencyCode})>(
+  return _showVeriModalSheet<
+    ({String name, String currencyCode, LedgerBookType bookType})
+  >(
     context: context,
-    showDragHandle: true,
+    // 下拉关闭会绕过 PopScope；异步提交表单改用返回或遮罩取消。
+    showDragHandle: false,
+    enableDrag: false,
     isScrollControlled: true,
-    builder: (context) =>
-        _LedgerBookEditorSheet(initialCurrencyCode: initialCurrencyCode),
+    builder: (context) => _LedgerBookEditorSheet(
+      initialCurrencyCode: initialCurrencyCode,
+      onSave: onSave,
+    ),
   );
 }
 
 class _LedgerBookEditorSheet extends StatefulWidget {
-  const _LedgerBookEditorSheet({required this.initialCurrencyCode});
+  const _LedgerBookEditorSheet({
+    required this.initialCurrencyCode,
+    this.onSave,
+  });
 
   final String initialCurrencyCode;
+  final Future<bool> Function(
+    ({String name, String currencyCode, LedgerBookType bookType}) draft,
+  )?
+  onSave;
 
   @override
+  /// 创建独立草稿状态，退出弹层时未提交输入自然丢弃。
   State<_LedgerBookEditorSheet> createState() => _LedgerBookEditorSheetState();
 }
 
 class _LedgerBookEditorSheetState extends State<_LedgerBookEditorSheet> {
   final TextEditingController _nameController = TextEditingController();
   late String _currencyCode = widget.initialCurrencyCode;
+  LedgerBookType _bookType = LedgerBookType.normal;
+  bool _saving = false;
 
+  /// 监听名称变化，以便在输入为空时禁用保存。
   @override
   void initState() {
     super.initState();
     _nameController.addListener(_handleChanged);
   }
 
+  /// 释放当前弹层拥有的名称控制器，不保留隐式跨会话草稿。
   @override
   void dispose() {
     _nameController
@@ -657,74 +684,111 @@ class _LedgerBookEditorSheetState extends State<_LedgerBookEditorSheet> {
     super.dispose();
   }
 
+  /// 名称编辑只刷新保存按钮，不提交任何账本资料。
   void _handleChanged() => setState(() {});
+
+  /// 提交本地草稿；保存失败仍保留全部输入，避免关闭弹层后无法重试。
+  Future<void> _save() async {
+    if (_saving || _nameController.text.trim().isEmpty) return;
+    final draft = (
+      name: _nameController.text.trim(),
+      currencyCode: _currencyCode,
+      bookType: _bookType,
+    );
+    final save = widget.onSave;
+    if (save != null) {
+      setState(() => _saving = true);
+      final saved = await save(draft);
+      if (!mounted) return;
+      setState(() => _saving = false);
+      if (!saved) return;
+    }
+    if (!mounted) return;
+    Navigator.of(context).pop(draft);
+  }
 
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
     final currency = CurrencyCatalog.require(_currencyCode);
-    return SafeArea(
-      child: Padding(
-        padding: EdgeInsets.fromLTRB(
-          14,
-          14,
-          14,
-          16 + MediaQuery.viewInsetsOf(context).bottom,
-        ),
-        child: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: <Widget>[
-            Text(
-              l10n.bookAdd,
-              style: Theme.of(
-                context,
-              ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+    return PopScope(
+      canPop: !_saving,
+      child: SafeArea(
+        child: SingleChildScrollView(
+          child: Padding(
+            padding: EdgeInsets.fromLTRB(
+              14,
+              14,
+              14,
+              16 + MediaQuery.viewInsetsOf(context).bottom,
             ),
-            const SizedBox(height: 12),
-            TextField(
-              key: const Key('ledger_book_name_field'),
-              controller: _nameController,
-              autofocus: true,
-              decoration: InputDecoration(labelText: l10n.bookNameLabel),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: <Widget>[
+                Text(
+                  l10n.bookAdd,
+                  style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                    fontWeight: FontWeight.w800,
+                  ),
+                ),
+                const SizedBox(height: 12),
+                TextField(
+                  key: const Key('ledger_book_name_field'),
+                  controller: _nameController,
+                  enabled: !_saving,
+                  autofocus: true,
+                  decoration: InputDecoration(labelText: l10n.bookNameLabel),
+                ),
+                const SizedBox(height: 10),
+                _LedgerBookTypeField(
+                  value: _bookType,
+                  onChanged: _saving
+                      ? null
+                      : (value) => setState(() => _bookType = value),
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  l10n.ledgerBookTypeHelp,
+                  style: Theme.of(context).textTheme.bodySmall,
+                ),
+                const SizedBox(height: 10),
+                SelectField(
+                  label: l10n.ledgerBaseCurrency,
+                  value:
+                      '${currency.code} · ${currency.nameForLocale(Localizations.localeOf(context).toLanguageTag())}',
+                  icon: Icons.currency_exchange,
+                  onTap: _saving ? null : _pickCurrency,
+                ),
+                const SizedBox(height: 6),
+                Text(
+                  l10n.ledgerBaseCurrencyDesc,
+                  style: Theme.of(context).textTheme.bodySmall?.copyWith(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.55),
+                  ),
+                ),
+                const SizedBox(height: 14),
+                SizedBox(
+                  width: double.infinity,
+                  child: FilledButton(
+                    key: const Key('ledger_book_save_button'),
+                    onPressed: _saving || _nameController.text.trim().isEmpty
+                        ? null
+                        : _save,
+                    child: Text(l10n.commonConfirm),
+                  ),
+                ),
+              ],
             ),
-            const SizedBox(height: 10),
-            SelectField(
-              label: l10n.ledgerBaseCurrency,
-              value:
-                  '${currency.code} · ${currency.nameForLocale(Localizations.localeOf(context).toLanguageTag())}',
-              icon: Icons.currency_exchange,
-              onTap: _pickCurrency,
-            ),
-            const SizedBox(height: 6),
-            Text(
-              l10n.ledgerBaseCurrencyDesc,
-              style: Theme.of(context).textTheme.bodySmall?.copyWith(
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.55),
-              ),
-            ),
-            const SizedBox(height: 14),
-            SizedBox(
-              width: double.infinity,
-              child: FilledButton(
-                key: const Key('ledger_book_save_button'),
-                onPressed: _nameController.text.trim().isEmpty
-                    ? null
-                    : () => Navigator.of(context).pop((
-                        name: _nameController.text.trim(),
-                        currencyCode: _currencyCode,
-                      )),
-                child: Text(l10n.commonConfirm),
-              ),
-            ),
-          ],
+          ),
         ),
       ),
     );
   }
 
+  /// 打开本位币选择器，只修改当前草稿；[mounted] 检查防止异步返回后访问失效页面。
   Future<void> _pickCurrency() async {
     final selected = await showCurrencyPickerSheet(
       context: context,
@@ -734,6 +798,121 @@ class _LedgerBookEditorSheetState extends State<_LedgerBookEditorSheet> {
     if (selected != null && mounted) {
       setState(() => _currencyCode = selected.code);
     }
+  }
+}
+
+/// 修改账本类型的统一编辑弹层。[initialType] 为已保存值，
+/// [onSave] 负责真正落库；保存失败保留选择，取消返回 null。
+Future<LedgerBookType?> showLedgerBookTypeEditorSheet({
+  required BuildContext context,
+  required LedgerBookType initialType,
+  required Future<bool> Function(LedgerBookType value) onSave,
+}) => _showVeriModalSheet<LedgerBookType>(
+  context: context,
+  showDragHandle: false,
+  enableDrag: false,
+  builder: (context) =>
+      _LedgerBookTypeEditorSheet(initialType: initialType, onSave: onSave),
+);
+
+class _LedgerBookTypeEditorSheet extends StatefulWidget {
+  const _LedgerBookTypeEditorSheet({
+    required this.initialType,
+    required this.onSave,
+  });
+  final LedgerBookType initialType;
+  final Future<bool> Function(LedgerBookType value) onSave;
+
+  @override
+  /// 每次编辑使用已保存类型作为草稿起点，不在选择时落库。
+  State<_LedgerBookTypeEditorSheet> createState() =>
+      _LedgerBookTypeEditorSheetState();
+}
+
+class _LedgerBookTypeEditorSheetState
+    extends State<_LedgerBookTypeEditorSheet> {
+  late LedgerBookType _value = widget.initialType;
+  bool _saving = false;
+
+  /// 等待类型落库，只有成功才关闭；父页面提供统一错误反馈。
+  Future<void> _save() async {
+    if (_saving) return;
+    setState(() => _saving = true);
+    final saved = await widget.onSave(_value);
+    if (!mounted) return;
+    setState(() => _saving = false);
+    if (saved) Navigator.of(context).pop(_value);
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return PopScope(
+      canPop: !_saving,
+      child: SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(16),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Text(
+                l10n.ledgerBookType,
+                style: Theme.of(context).textTheme.titleMedium,
+              ),
+              const SizedBox(height: 12),
+              _LedgerBookTypeField(
+                value: _value,
+                onChanged: _saving
+                    ? null
+                    : (value) => setState(() => _value = value),
+              ),
+              const SizedBox(height: 8),
+              Text(
+                l10n.ledgerBookTypeHelp,
+                style: Theme.of(context).textTheme.bodySmall,
+              ),
+              const SizedBox(height: 14),
+              SizedBox(
+                width: double.infinity,
+                child: FilledButton(
+                  key: const Key('ledger_book_type_save'),
+                  onPressed: _saving ? null : _save,
+                  child: Text(l10n.commonSave),
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
+  }
+}
+
+/// 两处账本编辑共用的短单选字段，只改变调用方草稿，不直接访问持久化。
+class _LedgerBookTypeField extends StatelessWidget {
+  const _LedgerBookTypeField({required this.value, required this.onChanged});
+  final LedgerBookType value;
+  final ValueChanged<LedgerBookType>? onChanged;
+
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    return VeriAnchoredChoice<LedgerBookType>(
+      values: LedgerBookType.values,
+      selected: value,
+      idOf: (value) => 'ledger_book_type_${value.name}',
+      labelOf: (value) => value.label(l10n),
+      semanticLabel: l10n.ledgerBookType,
+      onSelected: (value) => onChanged?.call(value),
+      builder: (context, openMenu, menuOpen) => SelectField(
+        key: const Key('ledger_book_type_field'),
+        label: l10n.ledgerBookType,
+        value: value.label(l10n),
+        icon: Icons.book_outlined,
+        onTap: onChanged == null ? null : openMenu,
+      ),
+    );
   }
 }
 

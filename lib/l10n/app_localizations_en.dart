@@ -7732,4 +7732,91 @@ class AppLocalizationsEn extends AppLocalizations {
 
     return '$valueString';
   }
+
+  @override
+  String get ledgerBookType => 'Ledger type';
+
+  @override
+  String get ledgerBookTypeNormal => 'General ledger';
+
+  @override
+  String get ledgerBookTypeInvestment => 'Investment ledger';
+
+  @override
+  String get ledgerBookTypeHelp =>
+      'Changes the default entry flow only. Existing accounts and transactions are kept.';
+
+  @override
+  String get ledgerBookCreatedSwitchFailed =>
+      'The ledger was created, but switching failed. Select it in the ledger list.';
+
+  @override
+  String get accountEditInformation => 'Edit details';
+
+  @override
+  String get accountFundingEntries => 'Cash movements';
+
+  @override
+  String get accountPropertyYes => 'Yes';
+
+  @override
+  String get accountPropertyNo => 'No';
+
+  @override
+  String get entryNewRecord => 'New record';
+
+  @override
+  String get entryModeGeneral => 'Bookkeeping';
+
+  @override
+  String get entryModeInvestment => 'Investment';
+
+  @override
+  String get entryInvestmentAccount => 'Securities account';
+
+  @override
+  String get entryInvestmentInstrument => 'Investment activity';
+
+  @override
+  String get entrySelectInvestmentAccount => 'Choose securities account';
+
+  @override
+  String get entryNoSecuritiesAccount =>
+      'This ledger has no available securities accounts.';
+
+  @override
+  String get entryCreateSecuritiesAccount => 'Create securities account';
+
+  @override
+  String get entryInitializeSecuritiesAccount => 'Set up an existing account';
+
+  @override
+  String get entrySavedCurrent =>
+      'This record is saved. Other drafts are still unsaved.';
+
+  @override
+  String get entrySavedReadOnly =>
+      'This record is saved. Switch to another draft to keep editing.';
+
+  @override
+  String get entryMultipleDraftsUnsaved =>
+      'There are several unsaved drafts. Save submits only the current record. Discard exits and removes all unsaved drafts.';
+
+  @override
+  String get entrySaveCurrent => 'Save current';
+
+  @override
+  String get entryDiscardAll => 'Discard all and exit';
+
+  @override
+  String get entryBookUnavailable =>
+      'The target ledger or account has changed. Go back and review it before retrying.';
+
+  @override
+  String get securitiesOpeningCashHint =>
+      'Enter verified cash, or 0 for a zero cash account';
+
+  @override
+  String get securitiesOpeningCashRequired =>
+      'Enter an opening cash amount of 0 or more';
 }

@@ -40,6 +40,49 @@ void main() {
     opened.add(db);
     return SqliteLedgerRepository(db);
   });
+
+  test('SQLite 证券开户中途失败回滚全部表，后续差分和重试仍正确', () async {
+    final db = await AppDatabase.open(
+      factory: databaseFactoryFfi,
+      path: inMemoryDatabasePath,
+    );
+    opened.add(db);
+    final repo = SqliteLedgerRepository(db);
+    final account = investmentAccountFixture();
+    final portfolio = portfolioFixture();
+    await repo.saveSecuritiesAccountAggregate(
+      creditAccounts: const [],
+      accounts: [account],
+      investmentPortfolios: [portfolio],
+    );
+    await db.db.execute(
+      "CREATE TRIGGER reject_securities_opening BEFORE INSERT ON investment_portfolios "
+      "BEGIN SELECT RAISE(ABORT, '证券开户失败测试'); END",
+    );
+    final newAccount = account.copyWith(name: '未保存的新名称');
+    final newPortfolio = portfolio.copyWith(
+      manualPrices: {avgoFixture.id: '88'},
+    );
+    await expectLater(
+      repo.saveSecuritiesAccountAggregate(
+        creditAccounts: const [],
+        accounts: [newAccount],
+        investmentPortfolios: [newPortfolio],
+      ),
+      throwsA(isA<DatabaseException>()),
+    );
+    // 不先读取重建基线，直接执行后续差分，才能发现错误更新的失败快照。
+    await db.db.execute('DROP TRIGGER reject_securities_opening');
+    expect((await db.db.query('accounts')).single['name'], account.name);
+    await repo.saveAccounts([newAccount]);
+    await repo.saveInvestmentPortfolios([newPortfolio]);
+    expect((await repo.loadAccounts()).single.name, newAccount.name);
+    expect(
+      (await repo.loadInvestmentPortfolios()).single.manualPrices[avgoFixture
+          .id],
+      '88',
+    );
+  });
 }
 
 LedgerEntry _entry(String id, DateTime occurredAt, {String note = ''}) {
@@ -157,6 +200,7 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
           name: '旅行账本',
           createdAt: DateTime(2026, 2, 1),
           isDefault: false,
+          bookType: LedgerBookType.investment,
         ),
       ];
       const accounts = <Account>[
@@ -506,6 +550,30 @@ void _runContract(String name, Future<LedgerRepository> Function() openRepo) {
         _jsonOf(await repo.loadAutoCaptureRules()),
         _jsonOf(const <AutoCaptureRule>[rule]),
       );
+    });
+
+    test('证券开户聚合同时保存主账户、币种账户与投资组合，读取与整替一致', () async {
+      final repo = await openRepo();
+      final account = investmentAccountFixture();
+      final portfolio = portfolioFixture();
+      await repo.saveSecuritiesAccountAggregate(
+        creditAccounts: const [],
+        accounts: [account],
+        investmentPortfolios: [portfolio],
+      );
+      expect(_jsonOf(await repo.loadAccounts()), _jsonOf([account]));
+      expect(
+        _jsonOf(await repo.loadInvestmentPortfolios()),
+        _jsonOf([portfolio]),
+      );
+      expect(await repo.loadCreditAccounts(), isEmpty);
+      await repo.saveSecuritiesAccountAggregate(
+        creditAccounts: const [],
+        accounts: const [],
+        investmentPortfolios: const [],
+      );
+      expect(await repo.loadAccounts(), isEmpty);
+      expect(await repo.loadInvestmentPortfolios(), isEmpty);
     });
 
     test('saveCreditAccountAggregate 同时覆盖信用主体与币种子账户', () async {

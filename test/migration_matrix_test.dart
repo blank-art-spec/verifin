@@ -204,6 +204,7 @@ void main() {
 
       final book = (await repo.loadBooks()).single;
       expect(book.name, '日常账本');
+      expect(book.bookType, LedgerBookType.normal);
       expect(book.baseCurrencyCode, 'CNY');
       expect(book.currencySetupStatus, CurrencySetupStatus.legacyUnconfirmed);
       expect((await repo.loadAccountGroups()).single.name, '资金');

@@ -4054,5 +4054,31 @@
         "optionalParameters": {"decimalDigits": 1}
       }
     }
-  }
+  },
+  "ledgerBookType": "账本类型",
+  "ledgerBookTypeNormal": "普通账本",
+  "ledgerBookTypeInvestment": "投资账本",
+  "ledgerBookTypeHelp": "仅改变新增记录的默认入口，已有账户和交易保留。",
+  "ledgerBookCreatedSwitchFailed": "账本已创建，但切换失败。请在账本列表中选择。",
+  "accountEditInformation": "编辑资料",
+  "accountFundingEntries": "资金流水",
+  "accountPropertyYes": "是",
+  "accountPropertyNo": "否",
+  "entryNewRecord": "新增记录",
+  "entryModeGeneral": "普通记账",
+  "entryModeInvestment": "投资交易",
+  "entryInvestmentAccount": "证券账户",
+  "entryInvestmentInstrument": "投资业务",
+  "entrySelectInvestmentAccount": "选择证券账户",
+  "entryNoSecuritiesAccount": "此账本尚无可用的证券账户。",
+  "entryCreateSecuritiesAccount": "新建证券账户",
+  "entryInitializeSecuritiesAccount": "初始化现有账户",
+  "entrySavedCurrent": "当前记录已保存，仍有其他草稿未保存。",
+  "entrySavedReadOnly": "此记录已保存。可切换到其他草稿继续编辑。",
+  "entryMultipleDraftsUnsaved": "本页有多份未保存草稿。保存只提交当前记录，丢弃将退出并放弃全部未保存内容。",
+  "entrySaveCurrent": "保存当前",
+  "entryDiscardAll": "丢弃全部并退出",
+  "entryBookUnavailable": "目标账本或账户已变化，请返回处理后重试。",
+  "securitiesOpeningCashHint": "填写已核对的现金，零现金请填 0",
+  "securitiesOpeningCashRequired": "请填写不小于 0 的期初现金"
 }

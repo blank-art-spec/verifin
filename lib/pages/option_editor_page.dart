@@ -1,6 +1,8 @@
 /// 期权草稿与结算预览：只经 Controller 写入，联网行情不能填充真实成交或合约规格。
 library;
 
+import 'dart:convert';
+
 import 'package:flutter/material.dart';
 import '../app/calendar_days.dart';
 import '../app/common_widgets.dart';
@@ -11,6 +13,7 @@ import '../app/models.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
+import 'entry_editor_session.dart';
 
 /// 可取消的完整期权草稿；从持仓或既有投资记录进入时复用相同界面。
 class OptionEditorPage extends StatefulWidget {
@@ -22,12 +25,16 @@ class OptionEditorPage extends StatefulWidget {
     this.event,
     this.specificationOnly = false,
     this.initialShort = false,
+    this.editorSession,
   });
   final String accountId;
   final String? securityId;
   final StockEvent? event;
   final bool specificationOnly;
   final bool initialShort;
+
+  /// 非空时由双页签外壳管理保存和返回，本页仅提供同一套期权表单。
+  final EntryEditorSession? editorSession;
 
   /// 每个页面持有独立草稿，离页时销毁，不通过全局状态中转未确认输入。
   @override
@@ -51,6 +58,9 @@ class _OptionDraft {
 }
 
 class _OptionEditorPageState extends State<OptionEditorPage> {
+  final _exitController = EditorExitController();
+  String? _initialEditorSnapshot;
+  bool _submitted = false;
   final _fields = <String, TextEditingController>{};
   bool _loaded = false,
       _busy = false,
@@ -67,8 +77,33 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   OptionSettlement _settlement = OptionSettlement.unsupported;
   StockEventKind _kind = StockEventKind.optionBuyOpen;
   _OptionDraft? _draft;
+  String? _previewInputSnapshot;
   ({InvestmentPortfolio portfolio, StockProjection projection, double cash})?
   _preview;
+
+  /// 只比较用户可编辑事实，预览计算本身不视作一笔待保存修改。
+  String get _editorSnapshot => editorDraftSnapshot(
+    fields: _fields,
+    values: [
+      _selected,
+      _date.toIso8601String(),
+      _expiry.toIso8601String(),
+      _market.name,
+      _right.name,
+      _settlement.name,
+      _kind.name,
+      _short,
+      _confirmed,
+      _specConfirmed,
+      _uncovered,
+    ],
+  );
+
+  /// 初次装入合约后捕获基线；成功提交后不能再次新增相同事件。
+  bool get _editorDirty =>
+      !_submitted &&
+      _initialEditorSnapshot != null &&
+      _initialEditorSnapshot != _editorSnapshot;
 
   /// 从当前账户初始化一次；普通刷新不覆盖用户正在编辑的文本。
   @override
@@ -83,12 +118,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     _date = e?.occurredAt ?? DateTime.now();
     _expiry = addCalendarDays(_date, 30);
     _sequence =
-        e?.sequence ??
-        (p?.events.fold<int>(
-              0,
-              (n, e) => e.sequence >= n ? e.sequence + 1 : n,
-            ) ??
-            0);
+        e?.sequence ?? c.nextInvestmentEventSequenceFor(widget.accountId) ?? 0;
     _kind =
         e?.kind ??
         (widget.securityId == null
@@ -128,6 +158,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
         .where((s) => s.id == (e?.securityId ?? widget.securityId))
         .firstOrNull;
     if (selected != null) _loadContract(selected, p!);
+    _initialEditorSnapshot = _editorSnapshot;
   }
 
   /// 载入明确选择的合约；不从 AVGO 行情页猜乘数、到期日或交割股数。
@@ -162,6 +193,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   void _invalidate() {
     _draft = null;
     _preview = null;
+    _previewInputSnapshot = null;
     _error = null;
   }
 
@@ -252,9 +284,35 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     );
   }
 
-  /// 零副作用预览；完整重放后显示现金、冻结额和所有多空持仓，失败保留输入。
-  void _makePreview(InvestmentPortfolio p) {
-    final d = _readDraft(p), c = VeriFinScope.of(context);
+  /// 捕获实际影响预览的账户组合与现金，字符串只留当前编辑会话，不输出或持久化。
+  /// [portfolio] 必须来自当前账户；普通资金流水或现金核对改变余额也会要求重新预览。
+  String _previewSnapshot(InvestmentPortfolio portfolio) {
+    final controller = VeriFinScope.of(context);
+    final account = controller.accounts
+        .where((value) => value.id == widget.accountId)
+        .firstOrNull;
+    return jsonEncode({
+      'portfolio': portfolio.toJson(),
+      'cash': account == null ? null : controller.accountBalance(account),
+    });
+  }
+
+  /// 零副作用预览；按最新组合读取新事件序号，编辑已有事件仍保留其原序号。
+  /// 完整重放后显示现金和持仓；其他草稿提交后旧预览必须重新核对，不能自动确认。
+  void _makePreview() {
+    final c = VeriFinScope.of(context), p = c.investmentFor(widget.accountId);
+    final nextSequence =
+        widget.event?.sequence ??
+        c.nextInvestmentEventSequenceFor(widget.accountId);
+    if (c.activeBook.id != _bookId || p == null || nextSequence == null) {
+      setState(() {
+        _invalidate();
+        _error = AppLocalizations.of(context).optionValidationError;
+      });
+      return;
+    }
+    _sequence = nextSequence;
+    final d = _readDraft(p);
     final preview = c.previewOptionEvent(
       accountId: widget.accountId,
       security: d.security,
@@ -266,6 +324,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     setState(() {
       _preview = preview;
       _draft = preview == null ? null : d;
+      _previewInputSnapshot = preview == null ? null : _previewSnapshot(p);
       _error = preview == null
           ? AppLocalizations.of(context).optionValidationError
           : null;
@@ -273,11 +332,29 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   }
 
   /// 提交已预览的冻结事实；保存失败不退页，不宣称已落账。
-  Future<void> _save(InvestmentPortfolio p) async {
-    if (_busy) return;
+  Future<bool> _save(InvestmentPortfolio p) async {
+    if (_busy || _submitted) return false;
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
-    final d = widget.specificationOnly ? _readDraft(p) : _draft;
-    if (d == null) return;
+    final current = c.investmentFor(widget.accountId);
+    if (c.activeBook.id != _bookId ||
+        current == null ||
+        !c.accounts.any(
+          (account) =>
+              account.id == widget.accountId && account.bookId == _bookId,
+        )) {
+      setState(() => _error = l.optionValidationError);
+      return false;
+    }
+    if (!widget.specificationOnly &&
+        _previewInputSnapshot != _previewSnapshot(current)) {
+      setState(() {
+        _invalidate();
+        _error = l.optionValidationError;
+      });
+      return false;
+    }
+    final d = widget.specificationOnly ? _readDraft(current) : _draft;
+    if (d == null || c.activeBook.id != _bookId) return false;
     setState(() => _busy = true);
     final ok = widget.specificationOnly
         ? await c.saveOptionSpecification(widget.accountId, d.security)
@@ -289,15 +366,25 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
             referencePrice: d.price,
             underlyingReferencePrice: d.underlyingPrice,
           );
-    if (!mounted) return;
+    if (!mounted) return false;
     if (ok) {
-      Navigator.of(context).pop();
+      setState(() {
+        _busy = false;
+        _submitted = true;
+        _initialEditorSnapshot = _editorSnapshot;
+      });
     } else {
       setState(() {
         _busy = false;
         _error = l.optionValidationError;
       });
     }
+    return ok;
+  }
+
+  /// 原独立期权页保存后走受控返回，保留原预览及 Controller 二次校验流程。
+  Future<void> _saveAndExit(InvestmentPortfolio portfolio) async {
+    if (await _save(portfolio) && mounted) _exitController.exit();
   }
 
   /// 删除也重放全部后续交割；破坏后续持仓/资金的删除会被拒绝，不残留半笔。
@@ -314,7 +401,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     final ok = await c.deleteStockEvent(widget.accountId, widget.event!.id);
     if (!mounted) return;
     if (ok) {
-      Navigator.of(context).pop();
+      _exitController.exit();
     } else {
       setState(() {
         _busy = false;
@@ -330,9 +417,23 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
         l = AppLocalizations.of(context),
         p = c.investmentFor(widget.accountId);
     if (c.activeBook.id != _bookId || p == null) {
-      return Scaffold(
+      return EntryEditorSurface(
+        session: widget.editorSession,
+        isDirty: _editorDirty,
+        canSave: false,
+        onSave: () async => false,
+        exitController: _exitController,
+        isSaving: _busy,
         body: SafeArea(child: Center(child: Text(l.investSaveError))),
       );
+    }
+    if (!_busy &&
+        !_submitted &&
+        _previewInputSnapshot != null &&
+        _previewInputSnapshot != _previewSnapshot(p)) {
+      // Scope 更新可能来自另一份隐藏草稿或普通资金流水，旧预览不能继续作为确认。
+      _invalidate();
+      _error = l.optionValidationError;
     }
     final existing = p.securities.where((s) => s.option != null).toList();
     final settles = {
@@ -344,7 +445,14 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
         ? null
         : valueStocks(_preview!.portfolio, _preview!.projection).marketValue;
     final locked = _selected != null;
-    return Scaffold(
+    return EntryEditorSurface(
+      session: widget.editorSession,
+      isDirty: _editorDirty,
+      canSave:
+          !_busy && !_submitted && (widget.specificationOnly || _draft != null),
+      onSave: () => _save(p),
+      exitController: _exitController,
+      isSaving: _busy,
       body: SafeArea(
         child: VeriPage(
           child: Material(
@@ -352,12 +460,13 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
-                VeriHeader(
-                  title: widget.specificationOnly
-                      ? l.optionVerifySpec
-                      : l.optionTitle,
-                  showBack: true,
-                ),
+                if (widget.editorSession == null)
+                  VeriHeader(
+                    title: widget.specificationOnly
+                        ? l.optionVerifySpec
+                        : l.optionTitle,
+                    showBack: true,
+                  ),
                 const SizedBox(height: 12),
                 InvestmentHint(l.optionManualHint),
                 const SizedBox(height: 12),
@@ -654,7 +763,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                   const SizedBox(height: 12),
                   OutlinedButton(
                     style: investmentOutlineButtonStyle(context),
-                    onPressed: _busy ? null : () => _makePreview(p),
+                    onPressed: _busy ? null : _makePreview,
                     child: Text(l.optionPreview),
                   ),
                 ] else
@@ -708,13 +817,14 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                     ),
                   ),
                 const SizedBox(height: 12),
-                FilledButton(
-                  onPressed:
-                      _busy || (!widget.specificationOnly && _draft == null)
-                      ? null
-                      : () => _save(p),
-                  child: Text(_busy ? l.commonProcessing : l.investSave),
-                ),
+                if (widget.editorSession == null)
+                  FilledButton(
+                    onPressed:
+                        _busy || (!widget.specificationOnly && _draft == null)
+                        ? null
+                        : () => _saveAndExit(p),
+                    child: Text(_busy ? l.commonProcessing : l.investSave),
+                  ),
                 if (widget.event != null && !widget.specificationOnly)
                   TextButton(
                     onPressed: _busy ? null : _delete,

@@ -112,6 +112,14 @@ abstract interface class LedgerRepository {
     required List<Account> accounts,
   });
 
+  /// 原子保存证券开户所需的主账户、实际币种账户和投资组合。
+  /// 三个列表均表达各自表的最终内容；失败时三类数据和差分快照同时回滚。
+  Future<void> saveSecuritiesAccountAggregate({
+    required List<CreditAccount> creditAccounts,
+    required List<Account> accounts,
+    required List<InvestmentPortfolio> investmentPortfolios,
+  });
+
   Future<List<AccountGroup>> loadAccountGroups();
   Future<void> saveAccountGroups(List<AccountGroup> groups);
 
@@ -467,6 +475,37 @@ class SqliteLedgerRepository implements LedgerRepository {
         _indexed(creditSnapshot, _creditAccountToRow),
       );
       _seedSnapshot('accounts', _indexed(accountSnapshot, _accountToRow));
+    });
+  }
+
+  /// 为新证券账户提交完整开户聚合；参数是三张表的完整候选集合。
+  /// 只在事务成功后更新行基线，避免一次失败影响后续重试与差分保存。
+  @override
+  Future<void> saveSecuritiesAccountAggregate({
+    required List<CreditAccount> creditAccounts,
+    required List<Account> accounts,
+    required List<InvestmentPortfolio> investmentPortfolios,
+  }) {
+    final parentRows = _indexed(
+      List<CreditAccount>.of(creditAccounts),
+      _creditAccountToRow,
+    ).toList();
+    final accountRows = _indexed(
+      List<Account>.of(accounts),
+      _accountToRow,
+    ).toList();
+    final portfolioRows = List<InvestmentPortfolio>.of(
+      investmentPortfolios,
+    ).map(_investmentPortfolioToRow).toList();
+    return _enqueueWrite(() async {
+      await _db.transaction((txn) async {
+        await _replaceInTxn(txn, 'credit_accounts', parentRows);
+        await _replaceInTxn(txn, 'accounts', accountRows);
+        await _replaceInTxn(txn, 'investment_portfolios', portfolioRows);
+      });
+      _seedSnapshot('credit_accounts', parentRows);
+      _seedSnapshot('accounts', accountRows);
+      _seedSnapshot('investment_portfolios', portfolioRows);
     });
   }
 
@@ -1806,6 +1845,7 @@ class SqliteLedgerRepository implements LedgerRepository {
         'is_default': b.isDefault ? 1 : 0,
         'base_currency_code': b.baseCurrencyCode,
         'currency_setup_status': b.currencySetupStatus.name,
+        'book_type': b.bookType.name,
         'sort_order': index,
       };
 
@@ -1814,6 +1854,7 @@ class SqliteLedgerRepository implements LedgerRepository {
     name: row['name'] as String,
     createdAt: DateTime.fromMillisecondsSinceEpoch(row['created_at'] as int),
     isDefault: (row['is_default'] as int) != 0,
+    bookType: LedgerBookType.fromStorage(row['book_type']),
     baseCurrencyCode:
         row['base_currency_code'] as String? ?? defaultCurrencyCode,
     currencySetupStatus: CurrencySetupStatus.fromStorage(

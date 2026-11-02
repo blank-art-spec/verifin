@@ -4,7 +4,9 @@
 
 执行规则以 [AGENTS.md](../../AGENTS.md) 为准；这里仅提供源码导航，不重复维护规则。
 
-股票阶段现已实现精确持仓、独立事件和手填估值，早期博通来源验证见 [阶段 0–2 历史记录](securities-stage02-implementation.md)。当前持久化为 SQLite v28 投资聚合及 JSON v15 完整备份，普通证券命令入口为 `veri_fin_controller_investments.dart`，基金逐笔结算入口为 `veri_fin_controller_funds.dart`。v13 增加真实基金品种与净值日期精度；v14 增加金额申购阶段、确认关联与已有持仓基准，v15 增加已确认的基金收益规则并继续兼容 v1–v14，旧股票/期权默认字段的 JSON 保持原形状。按金额申购与已有份额录入入口、实际扣款与净在途、逐笔收益起算及实际时刻基准见[基金金额与结算](fund-amount-settlement.md)。期权生命周期见 [阶段 3](securities-stage03-implementation.md)；参考行情机制及门禁见 [阶段 4](securities-stage04-implementation.md)，仅诊断包可显式装配的腾讯股票来源见 [公开股票研究](public-quote-research.md)，招商官方基金净值及参考历史见 [基金研究](cms-fund-api-research.md)。旧 Yahoo/Nasdaq 验证页、查询客户端和待核对来源配置已移除。资产分解、主动保存依据与恢复见 [阶段 5](securities-stage05-implementation.md)；未准入的生产自动行情仍待后续验证，见 [总体方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。
+2026-11-02：账本类型与证券账户交互见[当前实施记录](investment-ledger-interaction-implementation.md)。当前数据库为 SQLite v29、完整备份 JSON v16；新增 `LedgerBook.bookType`，旧数据库及旧备份缺字段默认普通。通用新增由 `pages/quick_entry.dart` 分流，投资账本使用 `TransactionEntryPage` 和领域表单共享的 `EntryEditorSession` / `EntryEditorSurface`；账户导航由 `account_navigation.dart` 集中，原子开户命令位于 `veri_fin_controller_securities_accounts.dart`。
+
+股票阶段现已实现精确持仓、独立事件和手填估值，早期博通来源验证见 [阶段 0–2 历史记录](securities-stage02-implementation.md)。当前持久化为 SQLite v29（投资聚合表沿用 v28）及 JSON v16 完整备份，普通证券命令入口为 `veri_fin_controller_investments.dart`，基金逐笔结算入口为 `veri_fin_controller_funds.dart`。v13 增加真实基金品种与净值日期精度；v14 增加金额申购阶段、确认关联与已有持仓基准，v15 增加已确认的基金收益规则并继续兼容 v1–v14，旧股票/期权默认字段的 JSON 保持原形状。按金额申购与已有份额录入入口、实际扣款与净在途、逐笔收益起算及实际时刻基准见[基金金额与结算](fund-amount-settlement.md)。期权生命周期见 [阶段 3](securities-stage03-implementation.md)；参考行情机制及门禁见 [阶段 4](securities-stage04-implementation.md)，仅诊断包可显式装配的腾讯股票来源见 [公开股票研究](public-quote-research.md)，招商官方基金净值及参考历史见 [基金研究](cms-fund-api-research.md)。旧 Yahoo/Nasdaq 验证页、查询客户端和待核对来源配置已移除。资产分解、主动保存依据与恢复见 [阶段 5](securities-stage05-implementation.md)；未准入的生产自动行情仍待后续验证，见 [总体方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。
 
 Veri Fin 仅交付 Android，权威账目在本机 SQLite，无账号或自有服务端。
 正式入口为 `lib/main.dart`；UI 通过 `VeriFinScope` 读取 `VeriFinController`，
@@ -44,9 +46,9 @@ Controller 经 repository 写库。`VeriFinController.create()` 是生产初始�
 内存仓储、插件 stub 和 ffi factory 用于测试，不能替代生产持久化。
 历史设计稿中的旧行为需要用当前源码复核；Web 预览已移除，历史记录不再代表支持范围。
 
-## 待实施的账本与账户交互
+## 账本与账户交互
 
-[投资账本与证券账户交互开发方案](investment-ledger-interaction-plan.md)整理了账本类型、投资账本手动新增双页签、证券账户详情与基本信息整合，以及迁移/备份兼容。当前账本尚无类型字段；方案中的新模型、入口和页面调整均待实施，执行任务及验证见[配套清单](investment-ledger-interaction-acceptance.md)。
+[开发方案](investment-ledger-interaction-plan.md)保留设计依据；账本类型、手动新增双页签、证券详情和原子开户已进入实现。当前接口、行为与尚待验证的项目见[实施记录](investment-ledger-interaction-implementation.md)，手动操作和完成标准见[配套清单](investment-ledger-interaction-acceptance.md)。
 
 ## 文档权威顺序
 

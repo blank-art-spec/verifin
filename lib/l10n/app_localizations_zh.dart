@@ -7448,4 +7448,83 @@ class AppLocalizationsZh extends AppLocalizations {
 
     return '$valueString';
   }
+
+  @override
+  String get ledgerBookType => '账本类型';
+
+  @override
+  String get ledgerBookTypeNormal => '普通账本';
+
+  @override
+  String get ledgerBookTypeInvestment => '投资账本';
+
+  @override
+  String get ledgerBookTypeHelp => '仅改变新增记录的默认入口，已有账户和交易保留。';
+
+  @override
+  String get ledgerBookCreatedSwitchFailed => '账本已创建，但切换失败。请在账本列表中选择。';
+
+  @override
+  String get accountEditInformation => '编辑资料';
+
+  @override
+  String get accountFundingEntries => '资金流水';
+
+  @override
+  String get accountPropertyYes => '是';
+
+  @override
+  String get accountPropertyNo => '否';
+
+  @override
+  String get entryNewRecord => '新增记录';
+
+  @override
+  String get entryModeGeneral => '普通记账';
+
+  @override
+  String get entryModeInvestment => '投资交易';
+
+  @override
+  String get entryInvestmentAccount => '证券账户';
+
+  @override
+  String get entryInvestmentInstrument => '投资业务';
+
+  @override
+  String get entrySelectInvestmentAccount => '选择证券账户';
+
+  @override
+  String get entryNoSecuritiesAccount => '此账本尚无可用的证券账户。';
+
+  @override
+  String get entryCreateSecuritiesAccount => '新建证券账户';
+
+  @override
+  String get entryInitializeSecuritiesAccount => '初始化现有账户';
+
+  @override
+  String get entrySavedCurrent => '当前记录已保存，仍有其他草稿未保存。';
+
+  @override
+  String get entrySavedReadOnly => '此记录已保存。可切换到其他草稿继续编辑。';
+
+  @override
+  String get entryMultipleDraftsUnsaved =>
+      '本页有多份未保存草稿。保存只提交当前记录，丢弃将退出并放弃全部未保存内容。';
+
+  @override
+  String get entrySaveCurrent => '保存当前';
+
+  @override
+  String get entryDiscardAll => '丢弃全部并退出';
+
+  @override
+  String get entryBookUnavailable => '目标账本或账户已变化，请返回处理后重试。';
+
+  @override
+  String get securitiesOpeningCashHint => '填写已核对的现金，零现金请填 0';
+
+  @override
+  String get securitiesOpeningCashRequired => '请填写不小于 0 的期初现金';
 }

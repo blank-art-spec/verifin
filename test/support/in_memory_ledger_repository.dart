@@ -124,6 +124,21 @@ class InMemoryLedgerRepository implements LedgerRepository {
     _accounts = List<Account>.of(accounts);
   }
 
+  /// 与生产开户事务保持同一原子契约；先复制全部候选，再一次更新内存集合。
+  @override
+  Future<void> saveSecuritiesAccountAggregate({
+    required List<CreditAccount> creditAccounts,
+    required List<Account> accounts,
+    required List<InvestmentPortfolio> investmentPortfolios,
+  }) async {
+    final parents = List<CreditAccount>.of(creditAccounts);
+    final children = List<Account>.of(accounts);
+    final portfolios = List<InvestmentPortfolio>.of(investmentPortfolios);
+    _creditAccounts = parents;
+    _accounts = children;
+    _investmentPortfolios = portfolios;
+  }
+
   @override
   Future<List<AccountGroup>> loadAccountGroups() async =>
       List<AccountGroup>.of(_groups);

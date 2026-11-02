@@ -17,8 +17,7 @@ import '../app/series_math.dart';
 import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
-import 'ai_entry_sheet.dart';
-import 'entry_detail_page.dart';
+import 'quick_entry.dart' as quick_entry;
 import 'pending_refunds_page.dart';
 import 'sheets.dart';
 import 'transaction_detail_page.dart';
@@ -972,39 +971,9 @@ class _TransactionsPageState extends State<TransactionsPage> {
     });
   }
 
-  /// 快捷记账：Shell 的 `_startQuickEntry` 是 `_VeriFinShellState` 私有方法，本页
-  /// 无法直接复用，这里用同一批公开件拼出同一条流程（设置里选「AI」走 AI 记账，
-  /// 否则先输金额再进记账页）。shell.dart 改动该流程时必须同步这里。
-  Future<void> _startQuickEntry(VeriFinController controller) async {
-    if (controller.fabActionMode == FabActionMode.ai) {
-      await startAiEntry(context);
-      return;
-    }
-    final defaultAccount = controller.accounts
-        .where((account) => account.id == controller.defaultAccountId)
-        .firstOrNull;
-    final amount = await showNumberPadSheet(
-      context,
-      title: AppLocalizations.of(context).quickEntry,
-      showTitle: false,
-      currencyCode:
-          defaultAccount?.currencyCode ??
-          controller.activeBook.baseCurrencyCode,
-    );
-    if (!mounted || amount == null || amount <= 0) {
-      return;
-    }
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (_) => EntryDetailPage(
-          initialAmount: amount,
-          // 未设默认账户时为 null，记账页回落到首个账户（沿用原行为）。
-          initialAccountId: controller.defaultAccountId,
-        ),
-      ),
-    );
-  }
-
+  /// 交易列表与首页共用手动/AI及账本类型判断；controller 参数保留现有调用签名。
+  Future<void> _startQuickEntry(VeriFinController controller) =>
+      quick_entry.startQuickEntry(context: context);
   Future<void> _batchDelete() async {
     final count = _selectedIds.length;
     final confirmed = await showConfirmDialog(

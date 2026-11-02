@@ -24,6 +24,7 @@ import '../l10n/app_localizations.dart';
 import 'assets_pages.dart';
 import 'attachments_editor.dart';
 import 'sheets.dart';
+import 'entry_editor_session.dart';
 
 class EntryDetailPage extends StatefulWidget {
   const EntryDetailPage({
@@ -34,6 +35,9 @@ class EntryDetailPage extends StatefulWidget {
     this.initialDraft,
     this.initialSourceRecords = const <EntrySourceRecord>[],
     this.captureEventId,
+    this.editorSession,
+    this.bookId,
+    this.clock,
   }) : draftEntry = null,
        draftExtraAccounts = null,
        draftExtraCategories = null,
@@ -58,9 +62,21 @@ class EntryDetailPage extends StatefulWidget {
        initialCreditAccountId = null,
        initialDraft = null,
        captureEventId = null,
+       editorSession = null,
+       bookId = null,
+       clock = null,
        initialSourceRecords = const <EntrySourceRecord>[];
 
   final double initialAmount;
+
+  /// 非空时只提供普通记账表单，保存和整体返回由双页签外壳管理。
+  final EntryEditorSession? editorSession;
+
+  /// 嵌入新增流程固定的目标账本；避免外部切换账本后把草稿提交到另一账本。
+  final String? bookId;
+
+  /// 默认录入时间的来源；生产留空使用当前时间，测试可注入确定时钟复现开户先后。
+  final DateTime Function()? clock;
   final String? initialAccountId;
   final String? initialCreditAccountId;
 
@@ -98,7 +114,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   // 「无账户」：只记金额、不计入任何账户余额（仅收支有效，转账必须选账户）。
   bool _noAccount = false;
   String? _toAccountId;
-  DateTime _occurredAt = DateTime.now();
+  late DateTime _occurredAt = _draftNow();
+  bool _occurredAtTouched = false;
   OccurredAtPrecision _occurredAtPrecision = OccurredAtPrecision.minute;
   double _fee = 0;
   String? _currencyCode;
@@ -159,6 +176,10 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       _draftFree && VeriFinScope.of(context).autoSuggestEnabled;
 
   bool get _isDraft => widget.draftEntry != null;
+
+  /// 取得尚未由用户确认的默认时间；只用于初始草稿及首次自动补账户的受限刷新。
+  /// 显式日期、外部草稿和已有输入不得借时钟刷新改写发生时间。
+  DateTime _draftNow() => widget.clock?.call() ?? DateTime.now();
 
   @override
   void initState() {
@@ -225,6 +246,11 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   /// 初始化金额与复核来源账本；来源只记录一次，不随目标账本选择变化。
   void didChangeDependencies() {
     super.didChangeDependencies();
+    if (widget.bookId != null &&
+        VeriFinScope.of(context).activeBook.id != widget.bookId) {
+      // 隐藏的双页签表单仍会收到 Scope 通知，不能将旧输入初始化成新账本数据。
+      return;
+    }
     if (widget.captureEventId != null) {
       _captureEventBookId ??= VeriFinScope.of(context).activeBook.id;
     }
@@ -252,8 +278,22 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
     final controller = VeriFinScope.of(context);
     final accounts = _availableAccounts(controller);
+    if (widget.editorSession != null &&
+        _initialEntryDraft != null &&
+        !_noAccount &&
+        _accountId.isNotEmpty &&
+        !accounts.any((account) => account.id == _accountId)) {
+      // 进入时存在的账户被删除后保留草稿，不重新解释为列表首账户。
+      return;
+    }
     if (accounts.isEmpty) {
       return;
+    }
+    final preserveCleanSession = widget.editorSession != null && !_isDirty;
+    if (preserveCleanSession && _draftFree && !_occurredAtTouched) {
+      // 空白普通草稿可能早于随后创建的证券账户；默认时间不是用户声明的历史事实。
+      // 只在首次自动补入账户时刷新，使随后录入的资金流水位于该账户期初之后。
+      _occurredAt = _draftNow();
     }
     _accountFallbackResolved = true;
     if (!accounts.any((account) => account.id == _accountId)) {
@@ -269,6 +309,11 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       forceAccount: true,
       forceBase: true,
     );
+    if (preserveCleanSession) {
+      // 新建首个证券账户后，隐藏普通表单的默认账户补齐不代表用户另写了一条交易。
+      _initialEntryDraft = _buildDraftEntry();
+      _initialAttachmentDataUrls = List<String>.of(_pendingAttachments);
+    }
   }
 
   @override
@@ -675,6 +720,14 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   @override
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
+    if (widget.bookId != null && controller.activeBook.id != widget.bookId) {
+      widget.editorSession?.update(
+        isDirty: _isDirty,
+        canSave: false,
+        onSave: _save,
+      );
+      return Center(child: Text(AppLocalizations.of(context).investSaveError));
+    }
     // 本页只能表达用户可选的类型：退款不在此选择（只能从「原支出 → 添加退款」创建），
     // 且没有退款分类。任何来路（自动识别、草稿）带进来的非可选类型都归一化回支出，
     // 否则下方分类列表为空、类型选择器也会选不中任何一段（issue #26）。
@@ -683,6 +736,20 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
     // 草稿模式下把临时账户（未落库，如导入将新建的）并入可选列表。
     final accounts = _availableAccounts(controller);
+    if (widget.editorSession != null &&
+        _initialEntryDraft != null &&
+        !_noAccount &&
+        _accountId.isNotEmpty &&
+        !accounts.any((account) => account.id == _accountId)) {
+      widget.editorSession?.update(
+        isDirty: _isDirty,
+        canSave: false,
+        onSave: _save,
+      );
+      return Center(
+        child: Text(AppLocalizations.of(context).entryBookUnavailable),
+      );
+    }
     final hasAccounts = accounts.isNotEmpty;
     // 转账必须落到具体账户，不允许「无账户」。
     if (_type == EntryType.transfer) {
@@ -695,6 +762,12 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       _accountId = accounts.first.id;
     }
     _normalizeTransferAccounts(accounts);
+    final selectedTransferTarget = _accountFor(accounts, _toAccountId);
+    final invalidTransferTarget =
+        widget.editorSession != null &&
+        _type == EntryType.transfer &&
+        _toAccountId != null &&
+        (selectedTransferTarget == null || _toAccountId == _accountId);
     final categories = _categoriesForType(controller, _type);
     if (!categories.any((category) => category.id == _categoryId)) {
       // 兜底而非 `categories.first`：某类型一个分类都没有时，宁可先留空（保存前
@@ -723,13 +796,15 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
         .where((parent) => parent.id == selectedAccount?.creditAccountId)
         .firstOrNull;
     // 大金额颜色跟随类型:支出红、收入青绿、转账保持蓝色。
-    final amountColor = switch (_type) {
-      EntryType.expense => veriSemantic(context, veriExpense),
-      EntryType.income => veriSemantic(context, veriIncome),
-      EntryType.transfer => veriSemantic(context, veriBlue),
-      // 退款不在此页手动选择，仅作穷尽兜底（正向流入用青绿）。
-      EntryType.refund => veriSemantic(context, veriIncome),
-    };
+    final amountColor = _amount == 0
+        ? Theme.of(context).colorScheme.onSurface
+        : switch (_type) {
+            EntryType.expense => veriSemantic(context, veriExpense),
+            EntryType.income => veriSemantic(context, veriIncome),
+            EntryType.transfer => veriSemantic(context, veriBlue),
+            // 退款不在此页手动选择，仅作穷尽兜底（正向流入用青绿）。
+            EntryType.refund => veriSemantic(context, veriIncome),
+          };
     // 用带单位的格式化：单币种账本按偏好隐藏单位，多币种账本必须能看出币种。
     final amountNumber = formatUserMoney(
       _amount,
@@ -737,37 +812,42 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     );
     // 符号与 formatSignedAmount 保持同一套写法（ASCII 正负号、无空格），
     // 否则这里会成为全应用唯一使用 U+2212 加空格的位置。
-    final amountText = switch (_type) {
-      EntryType.expense => '-$amountNumber',
-      EntryType.income => '+$amountNumber',
-      EntryType.transfer => amountNumber,
-      EntryType.refund => '+$amountNumber',
-    };
+    final amountText = _amount == 0
+        ? amountNumber
+        : switch (_type) {
+            EntryType.expense => '-$amountNumber',
+            EntryType.income => '+$amountNumber',
+            EntryType.transfer => amountNumber,
+            EntryType.refund => '+$amountNumber',
+          };
     _captureInitialSnapshot();
 
-    return UnsavedChangesGuard(
+    return EntryEditorSurface(
+      session: widget.editorSession,
       isDirty: _isDirty,
+      canSave: _canSave(accounts),
       onSave: _save,
       popResult: () => _savedResult,
       exitController: _exitController,
-      child: Scaffold(
-        bottomNavigationBar: _EntryBottomSaveBar(
-          enabled: _isDirty && _canSave(accounts),
-          reason: _canSave(accounts) ? null : _saveBlockReason(accounts),
-          onPressed: _saveAndExit,
-        ),
-        body: SafeArea(
-          child: Column(
-            children: <Widget>[
-              Expanded(
-                child: ListView(
-                  padding: const EdgeInsets.fromLTRB(
-                    veriUnifiedDesignPreview ? 16 : 14,
-                    8,
-                    veriUnifiedDesignPreview ? 16 : 14,
-                    20,
-                  ),
-                  children: <Widget>[
+      isSaving: _saving,
+      bottomNavigationBar: _EntryBottomSaveBar(
+        enabled: _isDirty && _canSave(accounts),
+        reason: _canSave(accounts) ? null : _saveBlockReason(accounts),
+        onPressed: _saveAndExit,
+      ),
+      body: SafeArea(
+        child: Column(
+          children: <Widget>[
+            Expanded(
+              child: ListView(
+                padding: const EdgeInsets.fromLTRB(
+                  veriUnifiedDesignPreview ? 16 : 14,
+                  8,
+                  veriUnifiedDesignPreview ? 16 : 14,
+                  20,
+                ),
+                children: <Widget>[
+                  if (widget.editorSession == null)
                     VeriHeader(
                       // 标题展示当前账本名（此前误为固定文案）。
                       title: controller.activeBook.name,
@@ -776,415 +856,411 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                       ).entryDetailSubtitle,
                       showBack: true,
                     ),
-                    if (widget.captureEventId != null) ...<Widget>[
-                      const SizedBox(height: 12),
-                      SelectField(
-                        key: const Key('capture_review_book'),
-                        label: AppLocalizations.of(context).ledgerLabel,
-                        value: controller.activeBook.name,
-                        icon: Icons.menu_book_outlined,
-                        onTap: _saving ? null : _pickCaptureBook,
-                      ),
-                    ],
-                    if (widget.initialDraft != null) ...<Widget>[
-                      const SizedBox(height: 12),
-                      _AiReviewBanner(draft: widget.initialDraft!),
-                    ],
+                  if (widget.captureEventId != null) ...<Widget>[
                     const SizedBox(height: 12),
-                    _EntryTypeSelector(
-                      key: const Key('entry_type_segmented_button'),
-                      selected: _type,
-                      onChanged: (type) {
-                        setState(() {
-                          _type = type;
-                          _typeTouched = true;
-                          // 同上：空列表时留空，不取 `.first` 以免抛异常白屏。
-                          final next = _categoriesForType(controller, _type);
-                          _categoryId = next.isEmpty ? '' : next.first.id;
-                          _normalizeTransferAccounts(accounts);
-                          if (_type == EntryType.transfer) {
-                            _currencyTouched = false;
-                            _creditParentId = null;
-                          }
-                          _refreshCurrencyAmounts(
-                            controller,
-                            accounts,
-                            forceAccount: true,
-                            forceToAccount: true,
-                            forceBase: true,
-                          );
-                        });
-                        // 用户改了类型后，在该类型内重新识别分类/标签/备注。
-                        _recomputeSuggestion();
-                      },
+                    SelectField(
+                      key: const Key('capture_review_book'),
+                      label: AppLocalizations.of(context).ledgerLabel,
+                      value: controller.activeBook.name,
+                      icon: Icons.menu_book_outlined,
+                      onTap: _saving ? null : _pickCaptureBook,
                     ),
-                    const SizedBox(height: 16),
-                    InkWell(
-                      key: const Key('detail_amount_button'),
-                      borderRadius: BorderRadius.circular(veriRadiusMd),
-                      onTap: _editAmount,
-                      child: Padding(
-                        padding: const EdgeInsets.symmetric(vertical: 8),
-                        child: Text(
-                          amountText,
-                          style: Theme.of(context).textTheme.displayLarge
-                              ?.copyWith(
-                                color: amountColor,
-                                fontWeight: FontWeight.w800,
-                              ),
-                        ),
-                      ),
-                    ),
+                  ],
+                  if (widget.initialDraft != null) ...<Widget>[
                     const SizedBox(height: 12),
-                    Text(
-                      AppLocalizations.of(context).commonCategory,
-                      style: Theme.of(context).textTheme.titleSmall?.copyWith(
-                        fontWeight: FontWeight.w800,
+                    _AiReviewBanner(draft: widget.initialDraft!),
+                  ],
+                  const SizedBox(height: 12),
+                  _EntryTypeSelector(
+                    key: const Key('entry_type_segmented_button'),
+                    selected: _type,
+                    onChanged: (type) {
+                      setState(() {
+                        _type = type;
+                        _typeTouched = true;
+                        // 同上：空列表时留空，不取 `.first` 以免抛异常白屏。
+                        final next = _categoriesForType(controller, _type);
+                        _categoryId = next.isEmpty ? '' : next.first.id;
+                        _normalizeTransferAccounts(accounts);
+                        if (_type == EntryType.transfer) {
+                          _currencyTouched = false;
+                          _creditParentId = null;
+                        }
+                        _refreshCurrencyAmounts(
+                          controller,
+                          accounts,
+                          forceAccount: true,
+                          forceToAccount: true,
+                          forceBase: true,
+                        );
+                      });
+                      // 用户改了类型后，在该类型内重新识别分类/标签/备注。
+                      _recomputeSuggestion();
+                    },
+                  ),
+                  const SizedBox(height: 16),
+                  InkWell(
+                    key: const Key('detail_amount_button'),
+                    borderRadius: BorderRadius.circular(veriRadiusMd),
+                    onTap: _editAmount,
+                    child: Padding(
+                      padding: const EdgeInsets.symmetric(vertical: 8),
+                      child: Text(
+                        amountText,
+                        style: Theme.of(context).textTheme.displayLarge
+                            ?.copyWith(
+                              color: amountColor,
+                              fontWeight: FontWeight.w800,
+                            ),
                       ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    AppLocalizations.of(context).commonCategory,
+                    style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 10),
+                  _EntryCategoryGrid(
+                    categories: _visibleTopChips(
+                      rootCategoriesForType,
+                      selectedTopId,
+                    ),
+                    selectedTopId: selectedTopId,
+                    selectedLabel: selectedCategory?.label,
+                    accent: amountColor,
+                    hasChildren: (category) => categories.any(
+                      (candidate) => candidate.parentId == category.id,
+                    ),
+                    onSelected: (category) {
+                      final hasKids = categories.any(
+                        (candidate) => candidate.parentId == category.id,
+                      );
+                      if (selectedTopId == category.id && hasKids) {
+                        unawaited(_showCategoryBranch(category, categories));
+                        return;
+                      }
+                      setState(() {
+                        _categoryId = category.id;
+                        _categoryTouched = true;
+                      });
+                      // 换了分类，按该分类的历史习惯重新预选账户。
+                      _applyCategoryAccountSuggestion(controller);
+                    },
+                    onOpenBranch: (category) =>
+                        unawaited(_showCategoryBranch(category, categories)),
+                    onOpenAll: () => unawaited(_showAllCategories()),
+                    allLabel: AppLocalizations.of(context).allLabel,
+                  ),
+                  const SizedBox(height: 18),
+                  if (hasAccounts && _type == EntryType.transfer) ...<Widget>[
+                    SelectField(
+                      key: const Key('account_dropdown'),
+                      label: AppLocalizations.of(context).transferOutAccount,
+                      // 未匹配时显示选择提示，不能把空 id 展示成首账户。
+                      value: _accountFor(accounts, _accountId) == null
+                          ? AppLocalizations.of(context).pleaseSelect
+                          : '${accountById(accounts, _accountId).name} (${formatUserMoney(controller.accountBalance(accountById(accounts, _accountId)), accountById(accounts, _accountId).currencyCode)})',
+                      icon: _accountFor(accounts, _accountId) == null
+                          ? Icons.call_made
+                          : null,
+                      leading: _accountFor(accounts, _accountId) == null
+                          ? null
+                          : AccountIconBox(
+                              iconCode: accountById(
+                                accounts,
+                                _accountId,
+                              ).iconCode,
+                              size: 26,
+                            ),
+                      onTap: () => _pickAccount(accounts),
                     ),
                     const SizedBox(height: 10),
-                    _EntryCategoryGrid(
-                      categories: _visibleTopChips(
-                        rootCategoriesForType,
-                        selectedTopId,
-                      ),
-                      selectedTopId: selectedTopId,
-                      selectedLabel: selectedCategory?.label,
-                      accent: amountColor,
-                      hasChildren: (category) => categories.any(
-                        (candidate) => candidate.parentId == category.id,
-                      ),
-                      onSelected: (category) {
-                        final hasKids = categories.any(
-                          (candidate) => candidate.parentId == category.id,
-                        );
-                        if (selectedTopId == category.id && hasKids) {
-                          unawaited(_showCategoryBranch(category, categories));
-                          return;
-                        }
-                        setState(() {
-                          _categoryId = category.id;
-                          _categoryTouched = true;
-                        });
-                        // 换了分类，按该分类的历史习惯重新预选账户。
-                        _applyCategoryAccountSuggestion(controller);
-                      },
-                      onOpenBranch: (category) =>
-                          unawaited(_showCategoryBranch(category, categories)),
-                      onOpenAll: () => unawaited(_showAllCategories()),
-                      allLabel: AppLocalizations.of(context).allLabel,
-                    ),
-                    const SizedBox(height: 18),
-                    if (hasAccounts && _type == EntryType.transfer) ...<Widget>[
-                      SelectField(
-                        key: const Key('account_dropdown'),
-                        label: AppLocalizations.of(context).transferOutAccount,
-                        // 未匹配时显示选择提示，不能把空 id 展示成首账户。
-                        value: _accountFor(accounts, _accountId) == null
-                            ? AppLocalizations.of(context).pleaseSelect
-                            : '${accountById(accounts, _accountId).name} (${formatUserMoney(controller.accountBalance(accountById(accounts, _accountId)), accountById(accounts, _accountId).currencyCode)})',
-                        icon: _accountFor(accounts, _accountId) == null
-                            ? Icons.call_made
-                            : null,
-                        leading: _accountFor(accounts, _accountId) == null
-                            ? null
-                            : AccountIconBox(
-                                iconCode: accountById(
-                                  accounts,
-                                  _accountId,
-                                ).iconCode,
-                                size: 26,
-                              ),
-                        onTap: () => _pickAccount(accounts),
-                      ),
-                      const SizedBox(height: 10),
-                      SelectField(
-                        key: const Key('to_account_dropdown'),
-                        label: AppLocalizations.of(context).transferInAccount,
-                        value: _toAccountId == null
-                            ? AppLocalizations.of(context).pleaseSelect
-                            : '${accountById(accounts, _toAccountId!).name} (${formatUserMoney(controller.accountBalance(accountById(accounts, _toAccountId!)), accountById(accounts, _toAccountId!).currencyCode)})',
-                        icon: _toAccountId == null ? Icons.call_received : null,
-                        leading: _toAccountId == null
-                            ? null
-                            : AccountIconBox(
-                                iconCode: accountById(
-                                  accounts,
-                                  _toAccountId!,
-                                ).iconCode,
-                                size: 26,
-                              ),
-                        onTap: accounts.length < 2
-                            ? null
-                            : () => _pickToAccount(accounts),
-                      ),
-                      const SizedBox(height: 10),
-                      SelectField(
-                        key: const Key('fee_field'),
-                        label: AppLocalizations.of(context).feeLabel,
-                        value: _fee > 0
-                            ? formatUserMoney(
-                                _fee,
-                                _currencyCode ??
-                                    controller.activeBook.baseCurrencyCode,
-                              )
-                            : AppLocalizations.of(context).feeNoneTapToFill,
-                        icon: Icons.paid_outlined,
-                        onTap: _editFee,
-                      ),
-                    ] else if (hasAccounts)
-                      SelectField(
-                        key: const Key('account_dropdown'),
-                        label: AppLocalizations.of(context).accountLabel,
-                        value: _noAccount
-                            ? AppLocalizations.of(context).noAccountLabel
-                            : creditParent?.name ??
-                                  '${accountById(accounts, _accountId).name} (${formatUserMoney(controller.accountBalance(accountById(accounts, _accountId)), accountById(accounts, _accountId).currencyCode)})',
-                        icon: _noAccount
-                            ? Icons.money_off_csred_outlined
-                            : null,
-                        leading: _noAccount
-                            ? null
-                            : AccountIconBox(
-                                iconCode: accountById(
-                                  accounts,
-                                  _accountId,
-                                ).iconCode,
-                                size: 26,
-                              ),
-                        onTap: () => _pickAccount(accounts),
-                      )
-                    else
-                      EmptyState(
-                        icon: Icons.account_balance_wallet_outlined,
-                        title: AppLocalizations.of(
-                          context,
-                        ).noUsableAccountTitle,
-                        description: AppLocalizations.of(
-                          context,
-                        ).noUsableAccountDesc,
-                        // 空状态只说原因不给出口，用户就会卡在「保存按钮永远灰」的死路上。
-                        action: FilledButton.tonalIcon(
-                          key: const Key('entry_add_account_action'),
-                          onPressed: () => Navigator.of(context).push(
-                            MaterialPageRoute<void>(
-                              builder: (_) => const AddAccountPage(),
+                    SelectField(
+                      key: const Key('to_account_dropdown'),
+                      label: AppLocalizations.of(context).transferInAccount,
+                      value: selectedTransferTarget == null
+                          ? AppLocalizations.of(context).pleaseSelect
+                          : '${selectedTransferTarget.name} (${formatUserMoney(controller.accountBalance(selectedTransferTarget), selectedTransferTarget.currencyCode)})',
+                      icon: selectedTransferTarget == null
+                          ? Icons.call_received
+                          : null,
+                      leading: selectedTransferTarget == null
+                          ? null
+                          : AccountIconBox(
+                              iconCode: selectedTransferTarget.iconCode,
+                              size: 26,
                             ),
-                          ),
-                          icon: const Icon(Icons.add, size: 18),
-                          label: Text(AppLocalizations.of(context).accountAdd),
-                        ),
-                      ),
-                    ..._buildCurrencyAmountFields(controller, accounts),
-                    const SizedBox(height: 14),
-                    TextField(
-                      key: const Key('entry_note_field'),
-                      controller: _noteController,
-                      maxLines: 1,
-                      decoration: InputDecoration(
-                        labelText: AppLocalizations.of(context).commonNote,
-                        hintText: AppLocalizations.of(context).noteHint,
-                        prefixIcon: const Icon(Icons.notes),
-                      ),
+                      onTap: accounts.length < 2
+                          ? null
+                          : () => _pickToAccount(accounts),
                     ),
-                    const SizedBox(height: 14),
-                    Text(
-                      AppLocalizations.of(context).entryMoreInfo,
-                      style: Theme.of(context).textTheme.labelMedium?.copyWith(
-                        color: Theme.of(
-                          context,
-                        ).colorScheme.onSurface.withValues(alpha: 0.48),
-                        fontWeight: FontWeight.w700,
-                      ),
-                    ),
-                    const SizedBox(height: 8),
-                    Wrap(
-                      key: const Key('entry_metadata_chips'),
-                      spacing: 7,
-                      runSpacing: 7,
-                      children: <Widget>[
-                        if (_type != EntryType.transfer &&
-                            creditParent != null &&
-                            selectedAccount != null)
-                          _EntryMetadataChip(
-                            chipKey: const Key('entry_posting_account'),
-                            icon: Icons.account_balance_wallet_outlined,
-                            label: Text(
-                              '${AppLocalizations.of(context).entryPostingAccount} · ${_creditParentId == null ? selectedAccount.currencyCode : AppLocalizations.of(context).entryPostingAutomatic(selectedAccount.currencyCode)}',
-                            ),
-                            selected: _creditParentId == null,
-                            onTap: () => _pickCreditPostingAccount(accounts),
-                          ),
-                        _EntryMetadataChip(
-                          chipKey: const Key('entry_metadata_date'),
-                          icon: Icons.calendar_today_outlined,
-                          label: Text(
-                            AppLocalizations.of(
-                              context,
-                            ).dateMonthDay(_occurredAt),
-                          ),
-                          onTap: _pickDate,
-                        ),
-                        _EntryMetadataChip(
-                          chipKey: const Key('entry_metadata_time'),
-                          icon: Icons.schedule_rounded,
-                          label: Text(
-                            _occurredAtPrecision == OccurredAtPrecision.date
-                                ? AppLocalizations.of(context).commonNoneShort
-                                : formatTime(_occurredAt),
-                          ),
-                          onTap: _pickTime,
-                        ),
-                        for (final group in VeriFinScope.of(context).tagGroups)
-                          _EntryMetadataChip(
-                            chipKey: Key('entry_metadata_tag_${group.id}'),
-                            icon: Icons.sell_outlined,
-                            label: Text(() {
-                              final selected = _tagIds
-                                  .map(VeriFinScope.of(context).tagById)
-                                  .whereType<Tag>()
-                                  .where((tag) => tag.groupId == group.id)
-                                  .map((tag) => tag.label)
-                                  .join('、');
-                              final name = tagGroupDisplayName(
-                                group,
-                                AppLocalizations.of(context),
-                              );
-                              return selected.isEmpty
-                                  ? name
-                                  : '$name  $selected';
-                            }()),
-                            selected: _tagIds.any(
-                              (id) =>
-                                  VeriFinScope.of(
-                                    context,
-                                  ).tagById(id)?.groupId ==
-                                  group.id,
-                            ),
-                            onTap: () => _pickTags(groupId: group.id),
-                          ),
-                        _EntryMetadataChip(
-                          chipKey: const Key('entry_metadata_templates'),
-                          icon: Icons.bookmark_outline,
-                          label: Text(
-                            AppLocalizations.of(context).tagTemplatesTitle,
-                          ),
-                          selected: false,
-                          onTap: () => _pickTags(templatesOnly: true),
-                        ),
-                        if (_type == EntryType.expense)
-                          _EntryMetadataChip(
-                            chipKey: const Key('entry_metadata_reimbursable'),
-                            icon: Icons.receipt_long_outlined,
-                            label: Text(
-                              AppLocalizations.of(context).badgeReimbursable,
-                            ),
-                            selected: _reimbursable,
-                            onTap: () =>
-                                setState(() => _reimbursable = !_reimbursable),
-                          ),
-                        if (!_isDraft)
-                          VeriAnchoredMenuAnchor(
-                            entries: <VeriMenuEntry>[
-                              VeriMenuItem(
-                                id: 'entry_attachment_camera',
-                                icon: Icons.photo_camera_outlined,
-                                title: AppLocalizations.of(
-                                  context,
-                                ).attachTakePhoto,
-                                enabled: attachmentPickingSupported,
-                                onPressed: () =>
-                                    unawaited(_addAttachment(fromCamera: true)),
-                              ),
-                              VeriMenuItem(
-                                id: 'entry_attachment_gallery',
-                                icon: Icons.photo_library_outlined,
-                                title: AppLocalizations.of(
-                                  context,
-                                ).attachFromGallery,
-                                enabled: attachmentPickingSupported,
-                                onPressed: () => unawaited(
-                                  _addAttachment(fromCamera: false),
-                                ),
-                              ),
-                            ],
-                            semanticLabel: AppLocalizations.of(
-                              context,
-                            ).attachTitle,
-                            builder: (context, openMenu, menuOpen) =>
-                                _EntryMetadataChip(
-                                  chipKey: const Key(
-                                    'entry_metadata_attachments',
-                                  ),
-                                  icon: Icons.add_photo_alternate_outlined,
-                                  label: Text(
-                                    _pendingAttachments.isEmpty
-                                        ? AppLocalizations.of(
-                                            context,
-                                          ).attachTitle
-                                        : AppLocalizations.of(
-                                            context,
-                                          ).entryAttachmentCount(
-                                            _pendingAttachments.length,
-                                          ),
-                                  ),
-                                  selected:
-                                      _pendingAttachments.isNotEmpty ||
-                                      menuOpen,
-                                  onTap: attachmentPickingSupported
-                                      ? openMenu
-                                      : null,
-                                ),
-                          ),
-                        _EntryMetadataChip(
-                          chipKey: const Key('entry_currency_button'),
-                          icon: Icons.currency_exchange_rounded,
-                          label: Text(
-                            _currencyCode ??
-                                controller.activeBook.baseCurrencyCode,
-                          ),
-                          selected:
-                              (_currencyCode ??
-                                  controller.activeBook.baseCurrencyCode) !=
-                              controller.activeBook.baseCurrencyCode,
-                          onTap: _type == EntryType.transfer
-                              ? null
-                              : _pickCurrency,
-                        ),
-                      ],
-                    ),
-                    // 标记待报销本身不产生任何资金变动，用户容易以为已经「报了」。
-                    if (_type == EntryType.expense && _reimbursable)
+                    if (invalidTransferTarget)
                       Padding(
                         padding: const EdgeInsets.only(top: 8),
                         child: Text(
-                          AppLocalizations.of(context).reimbursableHint,
-                          style: Theme.of(context).textTheme.labelSmall
+                          AppLocalizations.of(context).entryBookUnavailable,
+                          key: const Key('entry_transfer_target_invalid'),
+                          style: Theme.of(context).textTheme.bodySmall
                               ?.copyWith(
-                                color: Theme.of(
-                                  context,
-                                ).colorScheme.onSurface.withValues(alpha: 0.62),
+                                color: Theme.of(context).colorScheme.error,
                               ),
                         ),
                       ),
-                    if (!_isDraft &&
-                        _pendingAttachments.isNotEmpty) ...<Widget>[
-                      const SizedBox(height: 10),
-                      AttachmentsEditor(
-                        dataUrls: _pendingAttachments,
-                        onAddDataUrl: (dataUrl) =>
-                            setState(() => _pendingAttachments.add(dataUrl)),
-                        onRemoveIndex: (index) =>
-                            setState(() => _pendingAttachments.removeAt(index)),
-                        showHeader: false,
-                        showAddButton: false,
+                    const SizedBox(height: 10),
+                    SelectField(
+                      key: const Key('fee_field'),
+                      label: AppLocalizations.of(context).feeLabel,
+                      value: _fee > 0
+                          ? formatUserMoney(
+                              _fee,
+                              _currencyCode ??
+                                  controller.activeBook.baseCurrencyCode,
+                            )
+                          : AppLocalizations.of(context).feeNoneTapToFill,
+                      icon: Icons.paid_outlined,
+                      onTap: _editFee,
+                    ),
+                  ] else if (hasAccounts)
+                    SelectField(
+                      key: const Key('account_dropdown'),
+                      label: AppLocalizations.of(context).accountLabel,
+                      value: _noAccount
+                          ? AppLocalizations.of(context).noAccountLabel
+                          : creditParent?.name ??
+                                '${accountById(accounts, _accountId).name} (${formatUserMoney(controller.accountBalance(accountById(accounts, _accountId)), accountById(accounts, _accountId).currencyCode)})',
+                      icon: _noAccount ? Icons.money_off_csred_outlined : null,
+                      leading: _noAccount
+                          ? null
+                          : AccountIconBox(
+                              iconCode: accountById(
+                                accounts,
+                                _accountId,
+                              ).iconCode,
+                              size: 26,
+                            ),
+                      onTap: () => _pickAccount(accounts),
+                    )
+                  else
+                    EmptyState(
+                      icon: Icons.account_balance_wallet_outlined,
+                      title: AppLocalizations.of(context).noUsableAccountTitle,
+                      description: AppLocalizations.of(
+                        context,
+                      ).noUsableAccountDesc,
+                      // 空状态只说原因不给出口，用户就会卡在「保存按钮永远灰」的死路上。
+                      action: FilledButton.tonalIcon(
+                        key: const Key('entry_add_account_action'),
+                        onPressed: () => Navigator.of(context).push(
+                          MaterialPageRoute<void>(
+                            builder: (_) => const AddAccountPage(),
+                          ),
+                        ),
+                        icon: const Icon(Icons.add, size: 18),
+                        label: Text(AppLocalizations.of(context).accountAdd),
+                      ),
+                    ),
+                  ..._buildCurrencyAmountFields(controller, accounts),
+                  const SizedBox(height: 14),
+                  TextField(
+                    key: const Key('entry_note_field'),
+                    controller: _noteController,
+                    maxLines: 1,
+                    decoration: InputDecoration(
+                      labelText: AppLocalizations.of(context).commonNote,
+                      hintText: AppLocalizations.of(context).noteHint,
+                      prefixIcon: const Icon(Icons.notes),
+                    ),
+                  ),
+                  const SizedBox(height: 14),
+                  Text(
+                    AppLocalizations.of(context).entryMoreInfo,
+                    style: Theme.of(context).textTheme.labelMedium?.copyWith(
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.48),
+                      fontWeight: FontWeight.w700,
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Wrap(
+                    key: const Key('entry_metadata_chips'),
+                    spacing: 7,
+                    runSpacing: 7,
+                    children: <Widget>[
+                      if (_type != EntryType.transfer &&
+                          creditParent != null &&
+                          selectedAccount != null)
+                        _EntryMetadataChip(
+                          chipKey: const Key('entry_posting_account'),
+                          icon: Icons.account_balance_wallet_outlined,
+                          label: Text(
+                            '${AppLocalizations.of(context).entryPostingAccount} · ${_creditParentId == null ? selectedAccount.currencyCode : AppLocalizations.of(context).entryPostingAutomatic(selectedAccount.currencyCode)}',
+                          ),
+                          selected: _creditParentId == null,
+                          onTap: () => _pickCreditPostingAccount(accounts),
+                        ),
+                      _EntryMetadataChip(
+                        chipKey: const Key('entry_metadata_date'),
+                        icon: Icons.calendar_today_outlined,
+                        label: Text(
+                          AppLocalizations.of(
+                            context,
+                          ).dateMonthDay(_occurredAt),
+                        ),
+                        onTap: _pickDate,
+                      ),
+                      _EntryMetadataChip(
+                        chipKey: const Key('entry_metadata_time'),
+                        icon: Icons.schedule_rounded,
+                        label: Text(
+                          _occurredAtPrecision == OccurredAtPrecision.date
+                              ? AppLocalizations.of(context).commonNoneShort
+                              : formatTime(_occurredAt),
+                        ),
+                        onTap: _pickTime,
+                      ),
+                      for (final group in VeriFinScope.of(context).tagGroups)
+                        _EntryMetadataChip(
+                          chipKey: Key('entry_metadata_tag_${group.id}'),
+                          icon: Icons.sell_outlined,
+                          label: Text(() {
+                            final selected = _tagIds
+                                .map(VeriFinScope.of(context).tagById)
+                                .whereType<Tag>()
+                                .where((tag) => tag.groupId == group.id)
+                                .map((tag) => tag.label)
+                                .join('、');
+                            final name = tagGroupDisplayName(
+                              group,
+                              AppLocalizations.of(context),
+                            );
+                            return selected.isEmpty ? name : '$name  $selected';
+                          }()),
+                          selected: _tagIds.any(
+                            (id) =>
+                                VeriFinScope.of(context).tagById(id)?.groupId ==
+                                group.id,
+                          ),
+                          onTap: () => _pickTags(groupId: group.id),
+                        ),
+                      _EntryMetadataChip(
+                        chipKey: const Key('entry_metadata_templates'),
+                        icon: Icons.bookmark_outline,
+                        label: Text(
+                          AppLocalizations.of(context).tagTemplatesTitle,
+                        ),
+                        selected: false,
+                        onTap: () => _pickTags(templatesOnly: true),
+                      ),
+                      if (_type == EntryType.expense)
+                        _EntryMetadataChip(
+                          chipKey: const Key('entry_metadata_reimbursable'),
+                          icon: Icons.receipt_long_outlined,
+                          label: Text(
+                            AppLocalizations.of(context).badgeReimbursable,
+                          ),
+                          selected: _reimbursable,
+                          onTap: () =>
+                              setState(() => _reimbursable = !_reimbursable),
+                        ),
+                      if (!_isDraft)
+                        VeriAnchoredMenuAnchor(
+                          entries: <VeriMenuEntry>[
+                            VeriMenuItem(
+                              id: 'entry_attachment_camera',
+                              icon: Icons.photo_camera_outlined,
+                              title: AppLocalizations.of(
+                                context,
+                              ).attachTakePhoto,
+                              enabled: attachmentPickingSupported,
+                              onPressed: () =>
+                                  unawaited(_addAttachment(fromCamera: true)),
+                            ),
+                            VeriMenuItem(
+                              id: 'entry_attachment_gallery',
+                              icon: Icons.photo_library_outlined,
+                              title: AppLocalizations.of(
+                                context,
+                              ).attachFromGallery,
+                              enabled: attachmentPickingSupported,
+                              onPressed: () =>
+                                  unawaited(_addAttachment(fromCamera: false)),
+                            ),
+                          ],
+                          semanticLabel: AppLocalizations.of(
+                            context,
+                          ).attachTitle,
+                          builder: (context, openMenu, menuOpen) =>
+                              _EntryMetadataChip(
+                                chipKey: const Key(
+                                  'entry_metadata_attachments',
+                                ),
+                                icon: Icons.add_photo_alternate_outlined,
+                                label: Text(
+                                  _pendingAttachments.isEmpty
+                                      ? AppLocalizations.of(context).attachTitle
+                                      : AppLocalizations.of(
+                                          context,
+                                        ).entryAttachmentCount(
+                                          _pendingAttachments.length,
+                                        ),
+                                ),
+                                selected:
+                                    _pendingAttachments.isNotEmpty || menuOpen,
+                                onTap: attachmentPickingSupported
+                                    ? openMenu
+                                    : null,
+                              ),
+                        ),
+                      _EntryMetadataChip(
+                        chipKey: const Key('entry_currency_button'),
+                        icon: Icons.currency_exchange_rounded,
+                        label: Text(
+                          _currencyCode ??
+                              controller.activeBook.baseCurrencyCode,
+                        ),
+                        selected:
+                            (_currencyCode ??
+                                controller.activeBook.baseCurrencyCode) !=
+                            controller.activeBook.baseCurrencyCode,
+                        onTap: _type == EntryType.transfer
+                            ? null
+                            : _pickCurrency,
                       ),
                     ],
+                  ),
+                  // 标记待报销本身不产生任何资金变动，用户容易以为已经「报了」。
+                  if (_type == EntryType.expense && _reimbursable)
+                    Padding(
+                      padding: const EdgeInsets.only(top: 8),
+                      child: Text(
+                        AppLocalizations.of(context).reimbursableHint,
+                        style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                          color: Theme.of(
+                            context,
+                          ).colorScheme.onSurface.withValues(alpha: 0.62),
+                        ),
+                      ),
+                    ),
+                  if (!_isDraft && _pendingAttachments.isNotEmpty) ...<Widget>[
+                    const SizedBox(height: 10),
+                    AttachmentsEditor(
+                      dataUrls: _pendingAttachments,
+                      onAddDataUrl: (dataUrl) =>
+                          setState(() => _pendingAttachments.add(dataUrl)),
+                      onRemoveIndex: (index) =>
+                          setState(() => _pendingAttachments.removeAt(index)),
+                      showHeader: false,
+                      showAddButton: false,
+                    ),
                   ],
-                ),
+                ],
               ),
-            ],
-          ),
+            ),
+          ],
         ),
       ),
     );
@@ -1857,9 +1933,17 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
 
   /// 校验转入账户；[accounts] 仅含当前账本可见账户。
   /// 手工记账沿用原有快捷预选，采集复核缺候选时留空等待用户选择。
+  /// 双页签草稿一旦已有目标，即使目标失效也保留原引用，必须由用户明确重选。
   void _normalizeTransferAccounts(List<Account> accounts) {
     if (_type != EntryType.transfer) {
       _toAccountId = null;
+      return;
+    }
+    if (widget.editorSession != null &&
+        _toAccountId != null &&
+        (_toAccountId == _accountId ||
+            !accounts.any((account) => account.id == _toAccountId))) {
+      // 目标被删除或隐藏时，不能把 A→B 静默改成 A→另一个账户。
       return;
     }
     if (accounts.length < 2) {
@@ -1897,6 +1981,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
     return _toAccountId != null &&
         _toAccountId != _accountId &&
+        accounts.any((account) => account.id == _toAccountId) &&
         _accountAmount != null &&
         _accountAmount! > 0 &&
         _toAccountAmount != null &&
@@ -1911,7 +1996,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       if (accounts.length < 2 ||
           !accounts.any((account) => account.id == _accountId) ||
           _toAccountId == null ||
-          _toAccountId == _accountId) {
+          _toAccountId == _accountId ||
+          !accounts.any((account) => account.id == _toAccountId)) {
         return l10n.entrySaveReasonTransferAccount;
       }
       if (_accountAmount == null ||
@@ -1934,6 +2020,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     return null;
   }
 
+  /// 选择交易日；确认后标记用户已声明日期，即使仍选原值也不自动刷新默认时刻。
+  /// 取消不改日期及选择状态，确认后按既有规则重算参考换算。
   Future<void> _pickDate() async {
     final picked = await showEntryDatePicker(
       context: context,
@@ -1946,6 +2034,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
 
     setState(() {
       _occurredAt = picked;
+      _occurredAtTouched = true;
       _refreshCurrencyAmounts(
         VeriFinScope.of(context),
         _availableAccounts(VeriFinScope.of(context)),
@@ -1953,6 +2042,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     });
   }
 
+  /// 选择交易时分并标记显式时间，防止后续账户出现时改写用户已经确认的事实。
+  /// 取消不更新草稿；确认仍沿用分钟精度标记。
   Future<void> _pickTime() async {
     final picked = await showEntryTimePicker(
       context: context,
@@ -1965,6 +2056,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
 
     setState(() {
       _occurredAt = picked;
+      _occurredAtTouched = true;
       _occurredAtPrecision = OccurredAtPrecision.minute;
     });
   }
@@ -2007,7 +2099,10 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     final toAccountCode = _accountFor(accounts, _toAccountId)?.currencyCode;
     return LedgerEntry(
       id: _entryId,
-      bookId: original?.bookId ?? VeriFinScope.of(context).activeBook.id,
+      bookId:
+          original?.bookId ??
+          widget.bookId ??
+          VeriFinScope.of(context).activeBook.id,
       type: _type,
       amount: normalizeCurrencyAmount(_amount, code),
       currencyCode: code,
@@ -2080,7 +2175,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     }
     // Reaching a new-entry page means the user already entered or supplied a
     // draft amount; the not-yet-created entity itself is pending work.
-    if (!_isDraft) {
+    if (!_isDraft && widget.editorSession == null) {
       return true;
     }
     final initial = _initialEntryDraft;
@@ -2102,7 +2197,10 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   /// 采集复核同时传入固定的原事件账本，使跨账本交易与确认状态原子落库。
   /// 导入草稿只返回结果不落库，重复点击由 _saving 阻止。
   Future<bool> _save() async {
-    if (_saving) {
+    if (_saving ||
+        _saved ||
+        (widget.bookId != null &&
+            VeriFinScope.of(context).activeBook.id != widget.bookId)) {
       return false;
     }
     // 备注识别有 300ms 防抖：保存前必须落定，否则输入停顿不足时会把还没识别的
@@ -2127,9 +2225,11 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     final draft = _buildDraftEntry();
     // 草稿编辑模式：不落库，构造修改后的交易并回传给上层（如导入预览页）。
     if (_isDraft) {
-      _saving = true;
-      _savedResult = draft;
-      _saved = true;
+      setState(() {
+        _saving = false;
+        _savedResult = draft;
+        _saved = true;
+      });
       return true;
     }
     if (draft.accountId.isNotEmpty &&
@@ -2138,7 +2238,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
             .any((account) => account.id == draft.accountId)) {
       return false;
     }
-    _saving = true;
+    setState(() => _saving = true);
     final attachments = <Attachment>[
       for (var index = 0; index < _pendingAttachments.length; index++)
         Attachment(
@@ -2160,7 +2260,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       rememberRateEffectiveDate: _rememberRate ? draft.occurredAt : null,
     );
     if (!result.isSuccess) {
-      _saving = false;
+      if (mounted) setState(() => _saving = false);
       if (result is EntrySaveValidationFailure && mounted) {
         unawaited(
           VeriFeedbackHost.of(context).showMessage(
@@ -2172,8 +2272,13 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       }
       return false;
     }
-    _saved = true;
-    _savedResult = draft;
+    if (mounted) {
+      setState(() {
+        _saving = false;
+        _saved = true;
+        _savedResult = draft;
+      });
+    }
     return true;
   }
 }

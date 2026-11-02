@@ -43,10 +43,10 @@ class HiddenAccountsPage extends StatelessWidget {
                   accounts: _sortedAccounts(accounts),
                   balances: balances,
                   onAccountTap: (account) {
-                    Navigator.of(context).push<void>(
-                      MaterialPageRoute<void>(
-                        builder: (context) =>
-                            AccountDetailPage(account: account),
+                    unawaited(
+                      openAccountDetails(
+                        context: context,
+                        accountId: account.id,
                       ),
                     );
                   },

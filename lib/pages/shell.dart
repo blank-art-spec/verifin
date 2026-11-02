@@ -15,15 +15,13 @@ import '../app/platform_bridge.dart';
 import '../app/root_navigation.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
-import 'ai_entry_sheet.dart';
+import 'quick_entry.dart' as quick_entry;
 import 'app_lock_gate.dart';
 import 'assets_pages.dart';
 import 'capture_entry.dart';
-import 'entry_detail_page.dart';
 import 'home_page.dart';
 import 'profile_pages.dart';
 import 'reports_page.dart';
-import 'sheets.dart';
 
 class VeriFinShell extends StatefulWidget {
   const VeriFinShell({super.key});
@@ -498,50 +496,11 @@ class _VeriFinShellState extends State<VeriFinShell>
     );
   }
 
+  /// 保留首页手势入口，统一委托给共享流程，避免与交易列表的账本类型规则分叉。
   Future<void> _startQuickEntry(
     BuildContext context, {
     bool longPress = false,
-  }) async {
-    final controller = VeriFinScope.of(context);
-    // 「点击手动·长按 AI」模式按手势区分；纯手动/纯 AI 模式两种手势一致。
-    final useAi = switch (controller.fabActionMode) {
-      FabActionMode.manual => false,
-      FabActionMode.ai => true,
-      FabActionMode.manualTapAiLongPress => longPress,
-    };
-    if (useAi) {
-      await startAiEntry(context);
-      return;
-    }
-    final defaultAccount = controller.defaultAccountId == null
-        ? null
-        : controller.accounts
-              .where((account) => account.id == controller.defaultAccountId)
-              .firstOrNull;
-    final inputCurrencyCode =
-        defaultAccount?.currencyCode ?? controller.activeBook.baseCurrencyCode;
-    final amount = await showNumberPadSheet(
-      context,
-      title: AppLocalizations.of(context).quickEntry,
-      showTitle: false,
-      currencyCode: inputCurrencyCode,
-    );
-
-    if (!context.mounted || amount == null || amount <= 0) {
-      return;
-    }
-
-    await Navigator.of(context).push<void>(
-      MaterialPageRoute<void>(
-        builder: (context) => EntryDetailPage(
-          initialAmount: amount,
-          // 未设默认账户时为 null，记账页回落到首个账户（沿用原行为）。
-          initialAccountId: controller.defaultAccountId,
-        ),
-      ),
-    );
-  }
-
+  }) => quick_entry.startQuickEntry(context: context, longPress: longPress);
   Future<void> _openQuickEntryFromPlatform() async {
     if (!mounted) {
       return;
