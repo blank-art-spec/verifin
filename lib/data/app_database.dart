@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 28;
+  static const int schemaVersion = 29;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -84,7 +84,16 @@ class AppDatabase {
         26: _migrateToV26,
         27: _migrateToV27,
         28: _migrateToV28,
+        29: _migrateToV29,
       };
+
+  /// 升级到 v29：保存每本账本的录入类型；全部历史账本保持普通，
+  /// 不根据名称、投资账户或已有持仓自动判断其用途。[db] 是当前升级事务连接。
+  static Future<void> _migrateToV29(Database db) async {
+    await db.execute(
+      "ALTER TABLE ledger_books ADD COLUMN book_type TEXT NOT NULL DEFAULT 'normal'",
+    );
+  }
 
   /// 升级到 v28：每个币种账户保存一个投资聚合；旧账户不自动启用或改变余额。
   static Future<void> _migrateToV28(Database db) async {
@@ -1045,6 +1054,7 @@ class AppDatabase {
       is_default INTEGER NOT NULL,
       base_currency_code TEXT NOT NULL DEFAULT 'CNY',
       currency_setup_status TEXT NOT NULL DEFAULT 'legacyUnconfirmed',
+      book_type TEXT NOT NULL DEFAULT 'normal',
       sort_order INTEGER NOT NULL
     )
     ''',

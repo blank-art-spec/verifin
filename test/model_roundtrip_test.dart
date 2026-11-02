@@ -633,6 +633,7 @@ void main() {
     isDefault: true,
     baseCurrencyCode: 'GBP',
     currencySetupStatus: CurrencySetupStatus.legacyUnconfirmed,
+    bookType: LedgerBookType.investment,
   );
 
   const accountFull = Account(

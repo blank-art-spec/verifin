@@ -57,16 +57,35 @@ class LedgerBooksPage extends StatelessWidget {
     );
   }
 
+  /// 在现有新建弹层中等待保存；失败保留草稿，指针切换失败说明部分成功。
+  /// 用 [context] 打开统一账本草稿；等待落库后再关弹层，失败保留输入。
+  /// 账本已创建但当前账本指针保存失败时给出部分成功提示，避免重复创建。
   Future<void> _createBook(BuildContext context) async {
     final controller = VeriFinScope.of(context);
-    final draft = await showLedgerBookEditorSheet(
+    await showLedgerBookEditorSheet(
       context: context,
       initialCurrencyCode: controller.activeBook.baseCurrencyCode,
+      onSave: (draft) async {
+        final previousBookId = controller.activeBook.id;
+        final saved = await controller.createLedgerBook(
+          draft.name,
+          baseCurrencyCode: draft.currencyCode,
+          bookType: draft.bookType,
+        );
+        if (!context.mounted) return saved;
+        if (!saved || controller.activeBook.id == previousBookId) {
+          unawaited(
+            VeriFeedbackHost.of(context).showMessage(
+              message: saved
+                  ? AppLocalizations.of(context).ledgerBookCreatedSwitchFailed
+                  : AppLocalizations.of(context).saveFailed,
+              tone: saved ? VeriFeedbackTone.warning : VeriFeedbackTone.error,
+            ),
+          );
+        }
+        return saved;
+      },
     );
-    if (!context.mounted || draft == null) {
-      return;
-    }
-    controller.addLedgerBook(draft.name, baseCurrencyCode: draft.currencyCode);
   }
 }
 
@@ -129,7 +148,8 @@ class _LedgerBookRow extends StatelessWidget {
                     Text(
                       '${book.isDefault ? '${AppLocalizations.of(context).defaultBookLabel} · ' : ''}'
                       '${AppLocalizations.of(context).entriesCountFull(entryCount)}'
-                      '${controller.ledgerBooks.length > 1 ? ' · ${book.baseCurrencyCode}' : ''}',
+                      '${controller.ledgerBooks.length > 1 ? ' · ${book.baseCurrencyCode}' : ''}'
+                      ' · ${book.bookType.label(l10n)}',
                       style: Theme.of(context).textTheme.labelSmall?.copyWith(
                         color: Theme.of(
                           context,
@@ -151,6 +171,13 @@ class _LedgerBookRow extends StatelessWidget {
                     icon: Icons.drive_file_rename_outline,
                     title: l10n.commonRename,
                     onPressed: () async => _renameBook(context),
+                  ),
+                  VeriMenuItem(
+                    id: 'book_type',
+                    icon: Icons.book_outlined,
+                    title: l10n.ledgerBookType,
+                    subtitle: book.bookType.label(l10n),
+                    onPressed: () async => _editBookType(context),
                   ),
                   VeriMenuItem(
                     id: 'book_currency',
@@ -180,6 +207,26 @@ class _LedgerBookRow extends StatelessWidget {
           ),
         ),
       ),
+    );
+  }
+
+  /// 显式编辑本账本类型，保存只改变入口；失败保持弹层与原账本类型。
+  Future<void> _editBookType(BuildContext context) async {
+    final controller = VeriFinScope.of(context);
+    await showLedgerBookTypeEditorSheet(
+      context: context,
+      initialType: book.bookType,
+      onSave: (value) async {
+        final saved = await controller.changeLedgerBookType(book.id, value);
+        if (!context.mounted || saved) return saved;
+        unawaited(
+          VeriFeedbackHost.of(context).showMessage(
+            message: AppLocalizations.of(context).saveFailed,
+            tone: VeriFeedbackTone.error,
+          ),
+        );
+        return false;
+      },
     );
   }
 

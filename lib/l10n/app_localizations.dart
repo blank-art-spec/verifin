@@ -13525,6 +13525,162 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'{value}'**
   String investAllocationPercent(double value);
+
+  /// No description provided for @ledgerBookType.
+  ///
+  /// In zh, this message translates to:
+  /// **'账本类型'**
+  String get ledgerBookType;
+
+  /// No description provided for @ledgerBookTypeNormal.
+  ///
+  /// In zh, this message translates to:
+  /// **'普通账本'**
+  String get ledgerBookTypeNormal;
+
+  /// No description provided for @ledgerBookTypeInvestment.
+  ///
+  /// In zh, this message translates to:
+  /// **'投资账本'**
+  String get ledgerBookTypeInvestment;
+
+  /// No description provided for @ledgerBookTypeHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅改变新增记录的默认入口，已有账户和交易保留。'**
+  String get ledgerBookTypeHelp;
+
+  /// No description provided for @ledgerBookCreatedSwitchFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'账本已创建，但切换失败。请在账本列表中选择。'**
+  String get ledgerBookCreatedSwitchFailed;
+
+  /// No description provided for @accountEditInformation.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑资料'**
+  String get accountEditInformation;
+
+  /// No description provided for @accountFundingEntries.
+  ///
+  /// In zh, this message translates to:
+  /// **'资金流水'**
+  String get accountFundingEntries;
+
+  /// No description provided for @accountPropertyYes.
+  ///
+  /// In zh, this message translates to:
+  /// **'是'**
+  String get accountPropertyYes;
+
+  /// No description provided for @accountPropertyNo.
+  ///
+  /// In zh, this message translates to:
+  /// **'否'**
+  String get accountPropertyNo;
+
+  /// No description provided for @entryNewRecord.
+  ///
+  /// In zh, this message translates to:
+  /// **'新增记录'**
+  String get entryNewRecord;
+
+  /// No description provided for @entryModeGeneral.
+  ///
+  /// In zh, this message translates to:
+  /// **'普通记账'**
+  String get entryModeGeneral;
+
+  /// No description provided for @entryModeInvestment.
+  ///
+  /// In zh, this message translates to:
+  /// **'投资交易'**
+  String get entryModeInvestment;
+
+  /// No description provided for @entryInvestmentAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'证券账户'**
+  String get entryInvestmentAccount;
+
+  /// No description provided for @entryInvestmentInstrument.
+  ///
+  /// In zh, this message translates to:
+  /// **'投资业务'**
+  String get entryInvestmentInstrument;
+
+  /// No description provided for @entrySelectInvestmentAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'选择证券账户'**
+  String get entrySelectInvestmentAccount;
+
+  /// No description provided for @entryNoSecuritiesAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'此账本尚无可用的证券账户。'**
+  String get entryNoSecuritiesAccount;
+
+  /// No description provided for @entryCreateSecuritiesAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'新建证券账户'**
+  String get entryCreateSecuritiesAccount;
+
+  /// No description provided for @entryInitializeSecuritiesAccount.
+  ///
+  /// In zh, this message translates to:
+  /// **'初始化现有账户'**
+  String get entryInitializeSecuritiesAccount;
+
+  /// No description provided for @entrySavedCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前记录已保存，仍有其他草稿未保存。'**
+  String get entrySavedCurrent;
+
+  /// No description provided for @entrySavedReadOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'此记录已保存。可切换到其他草稿继续编辑。'**
+  String get entrySavedReadOnly;
+
+  /// No description provided for @entryMultipleDraftsUnsaved.
+  ///
+  /// In zh, this message translates to:
+  /// **'本页有多份未保存草稿。保存只提交当前记录，丢弃将退出并放弃全部未保存内容。'**
+  String get entryMultipleDraftsUnsaved;
+
+  /// No description provided for @entrySaveCurrent.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存当前'**
+  String get entrySaveCurrent;
+
+  /// No description provided for @entryDiscardAll.
+  ///
+  /// In zh, this message translates to:
+  /// **'丢弃全部并退出'**
+  String get entryDiscardAll;
+
+  /// No description provided for @entryBookUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'目标账本或账户已变化，请返回处理后重试。'**
+  String get entryBookUnavailable;
+
+  /// No description provided for @securitiesOpeningCashHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写已核对的现金，零现金请填 0'**
+  String get securitiesOpeningCashHint;
+
+  /// No description provided for @securitiesOpeningCashRequired.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写不小于 0 的期初现金'**
+  String get securitiesOpeningCashRequired;
 }
 
 class _AppLocalizationsDelegate

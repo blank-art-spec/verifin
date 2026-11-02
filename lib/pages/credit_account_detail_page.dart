@@ -6,7 +6,7 @@ import '../app/feedback.dart';
 import '../app/models.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
-import 'account_detail_page.dart';
+import 'account_navigation.dart';
 import 'credit_account_editor_page.dart';
 import 'credit_repayment_page.dart';
 import 'entry_detail_page.dart';
@@ -206,10 +206,9 @@ class _CreditAccountDetailPageState extends State<CreditAccountDetailPage> {
                               a.currencyCode,
                             ),
                           ),
-                          onTap: () => Navigator.of(context).push<void>(
-                            MaterialPageRoute(
-                              builder: (_) => AccountDetailPage(account: a),
-                            ),
+                          onTap: () => openAccountDetails(
+                            context: context,
+                            accountId: a.id,
                           ),
                         ),
                     ],

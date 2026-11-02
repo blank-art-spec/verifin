@@ -484,33 +484,29 @@ void main() {
       'icon_code': 'food',
       'sort_order': 0,
     });
-    await v1.close();
+    // 本用例仅创建分类等局部旧表，只验证 v1→v2；完整历史升级由迁移矩阵覆盖。
+    // 不能把缺少 ledger_books 的局部夹具当作完整旧库执行最新迁移。
+    await AppDatabase.migrations[2]!(v1);
+    final migrated = (await v1.query('categories')).single;
+    expect(migrated['id'], 'dining');
+    expect(migrated['parent_id'], isNull);
 
-    // 通过 AppDatabase.open（当前 schemaVersion）触发 _onUpgrade 迁移。
-    final db = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
-    final repo = SqliteLedgerRepository(db);
-    final migrated = await repo.loadCategories();
-    expect(migrated.single.id, 'dining');
-    expect(migrated.single.parentId, isNull);
-
-    // 迁移后可写入子分类并读回。
-    await repo.saveCategories(<Category>[
-      ...migrated,
-      const Category(
-        id: 'coffee',
-        label: '咖啡',
-        type: EntryType.expense,
-        iconCode: 'food',
-        parentId: 'dining',
-      ),
-    ]);
-    final withChild = await repo.loadCategories();
-    expect(withChild.map((c) => c.parentId).toList(), <String?>[
+    // 本段迁移后可存子分类；当前仓储完整映射另由往返测试验证。
+    await v1.insert('categories', <String, Object?>{
+      'id': 'coffee',
+      'label': '咖啡',
+      'type': 'expense',
+      'icon_code': 'food',
+      'parent_id': 'dining',
+      'sort_order': 1,
+    });
+    final withChild = await v1.query('categories', orderBy: 'sort_order ASC');
+    expect(withChild.map((row) => row['parent_id']).toList(), <String?>[
       null,
       'dining',
     ]);
 
-    await db.close();
+    await v1.close();
     await dir.delete(recursive: true);
   });
 
@@ -744,21 +740,18 @@ void main() {
         },
       ),
     );
+    // 局部 v3 夹具只验证附件迁移，不能要求它具备后续完整账本结构。
+    await AppDatabase.migrations[4]!(v3);
+    expect(await v3.query('attachments'), isEmpty);
+    await v3.insert('attachments', <String, Object?>{
+      'id': 'a',
+      'entry_id': 'e',
+      'data_url': 'data:image/jpeg;base64,X',
+      'sort_order': 0,
+    });
+    expect((await v3.query('attachments')).single['id'], 'a');
+
     await v3.close();
-
-    final db = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
-    final repo = SqliteLedgerRepository(db);
-    expect(await repo.loadAttachments(), isEmpty);
-    await repo.saveAttachments(<Attachment>[
-      const Attachment(
-        id: 'a',
-        entryId: 'e',
-        dataUrl: 'data:image/jpeg;base64,X',
-      ),
-    ]);
-    expect((await repo.loadAttachments()).single.id, 'a');
-
-    await db.close();
     await dir.delete(recursive: true);
   });
 
@@ -793,18 +786,22 @@ void main() {
       'note': '',
       'occurred_at': DateTime(2026, 1, 1).millisecondsSinceEpoch,
     });
+    // 本用例只验证 v2→v3 的新增列与表，完整历史链在 migration_matrix_test 覆盖。
+    await AppDatabase.migrations[3]!(v2);
+    final migrated = (await v2.query('entries')).single;
+    expect(migrated['id'], 'old');
+    expect(migrated['amount'], 5);
+    expect(migrated.containsKey('tag_ids'), isTrue);
+    expect(migrated['tag_ids'], isNull);
+    // 新标签表存在且可写，原交易没有被补造标签。
+    await v2.insert('tags', <String, Object?>{
+      'id': 't1',
+      'label': '标签',
+      'sort_order': 0,
+    });
+    expect((await v2.query('tags')).single['label'], '标签');
+
     await v2.close();
-
-    final db = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
-    final repo = SqliteLedgerRepository(db);
-    final migrated = await repo.loadEntries();
-    expect(migrated.single.id, 'old');
-    expect(migrated.single.tagIds, isEmpty);
-    // tags 表存在且可写。
-    await repo.saveTags(<Tag>[const Tag(id: 't1', label: '标签')]);
-    expect((await repo.loadTags()).single.label, '标签');
-
-    await db.close();
     await dir.delete(recursive: true);
   });
 

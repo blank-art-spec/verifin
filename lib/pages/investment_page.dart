@@ -20,6 +20,9 @@ import 'option_editor_page.dart';
 import 'market_quotes_page.dart';
 import 'investment_history_page.dart';
 import 'fund_entry_page.dart';
+import 'account_information_section.dart';
+import 'transaction_entry_page.dart';
+import 'entry_editor_session.dart';
 import '../app/investments/investment_valuation.dart';
 
 /// 将资产占比按当前语言显示为一位小数的百分比，不修改原始精度。
@@ -35,6 +38,19 @@ class InvestmentPage extends StatelessWidget {
   /// [accountId] 必须是真实账户 ID；账户被删除时显示空态，不回退其他账户。
   const InvestmentPage({super.key, required this.accountId});
   final String accountId;
+
+  /// 从证券账户内新增时固定本次目标账本并预填实际币种账户。
+  /// [account] 是当前已初始化投资组合的账户，不传聚合主账户或“无账户”。
+  Future<void> _newTrade(BuildContext context, Account account) async {
+    await Navigator.of(context).push<void>(
+      MaterialPageRoute<void>(
+        builder: (_) => TransactionEntryPage(
+          bookId: account.bookId,
+          initialAccountId: account.id,
+        ),
+      ),
+    );
+  }
 
   /// 根据 [event] 的业务类型显示量价、总额或拆股比例，避免把股息总额称为成交价。
   /// [currency] 是结算币种；[fund] 表示份额而非股数，数量和价格均保留原始精度。
@@ -170,10 +186,10 @@ class InvestmentPage extends StatelessWidget {
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [
               VeriHeader(
-                title: l.investTitle,
+                title: account.name,
                 subtitle: currencyUnitSubtitle(
                   l,
-                  account.name,
+                  c.parentForAccount(account)?.name ?? l.investTitle,
                   account.currencyCode,
                 ),
                 showBack: true,
@@ -360,7 +376,7 @@ class InvestmentPage extends StatelessWidget {
                   runSpacing: 6,
                   children: [
                     FilledButton.icon(
-                      onPressed: () => _edit(context),
+                      onPressed: () => _newTrade(context, account),
                       icon: const Icon(Icons.add),
                       label: Text(l.investNewTrade),
                     ),
@@ -531,7 +547,11 @@ class InvestmentPage extends StatelessWidget {
                 ],
               ],
               const SizedBox(height: 12),
+              AccountFundingSection(account: account),
+              const SizedBox(height: 12),
               InvestmentHint(l.investNoOptions),
+              const SizedBox(height: 12),
+              AccountInformationSection(account: account),
             ],
           ),
         ),
@@ -878,6 +898,7 @@ class StockEditorPage extends StatefulWidget {
     this.setup = false,
     this.transfer = false,
     this.initialShort = false,
+    this.editorSession,
   });
   final String accountId;
   final StockEvent? event;
@@ -885,12 +906,18 @@ class StockEditorPage extends StatefulWidget {
   final bool setup, transfer;
   final bool initialShort;
 
+  /// 非空时复用本表单内容，外层负责新增页签与全部草稿的退出。
+  final EntryEditorSession? editorSession;
+
   /// 为每份编辑草稿创建独立状态，字段不绑定 Controller 集合。
   @override
   State<StockEditorPage> createState() => _StockEditorPageState();
 }
 
 class _StockEditorPageState extends State<StockEditorPage> {
+  final _exitController = EditorExitController();
+  String? _initialEditorSnapshot;
+  bool _submitted = false;
   final _fields = <String, TextEditingController>{};
   StockMarket _market = StockMarket.us;
   InvestmentSecurityType _securityType = InvestmentSecurityType.stock;
@@ -903,6 +930,31 @@ class _StockEditorPageState extends State<StockEditorPage> {
       _financing = false,
       _short = false;
   String? _error, _target, _initialReference;
+
+  /// 以所有输入和业务选择比较草稿，不将加载默认值或保存错误误判为修改。
+  String get _editorSnapshot => editorDraftSnapshot(
+    fields: _fields,
+    values: [
+      _market.name,
+      _securityType.name,
+      _kind.name,
+      _date.toIso8601String(),
+      _financing,
+      _short,
+      _target,
+    ],
+  );
+
+  /// 已成功提交的同一记录保持只读，防止切换页签后再次新增。
+  bool get _editorDirty =>
+      !_submitted &&
+      _initialEditorSnapshot != null &&
+      _initialEditorSnapshot != _editorSnapshot;
+
+  /// 文本输入也刷新退出保护；切换页签只隐藏表单，不丢弃其控制器。
+  void _editorChanged() {
+    if (mounted) setState(() {});
+  }
 
   /// 延迟初始化到可读取 Scope 时；保留已有事件 ID/序号，重试不会重复成交。
   @override
@@ -937,12 +989,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
     _date = e?.occurredAt ?? DateTime.now();
     _id = e?.id ?? 'stock-${DateTime.now().microsecondsSinceEpoch}';
     _sequence =
-        e?.sequence ??
-        (p?.events.fold<int>(
-              0,
-              (v, e) => e.sequence >= v ? e.sequence + 1 : v,
-            ) ??
-            0);
+        e?.sequence ?? c.nextInvestmentEventSequenceFor(account.id) ?? 0;
     _financing = p?.allowFinancing ?? false;
     _initialReference = p?.manualPrices[security?.id];
     for (final pair in {
@@ -961,6 +1008,10 @@ class _StockEditorPageState extends State<StockEditorPage> {
       'note': e?.note ?? '',
     }.entries) {
       _fields[pair.key] = TextEditingController(text: pair.value);
+    }
+    _initialEditorSnapshot = _editorSnapshot;
+    for (final field in _fields.values) {
+      field.addListener(_editorChanged);
     }
   }
 
@@ -996,16 +1047,24 @@ class _StockEditorPageState extends State<StockEditorPage> {
   /// 提交前核对仍在同一账本；校验失败保留所有输入，保存中禁止重复点击。
   /// 已有基金的后备价数值未变时不重设价格依据，使买卖或编辑交易后仍可采用净值并重算历史。
   /// 用户确实改变后备价时才传入新值，由 Controller 切回手填；股票沿用既有保存语义。
-  Future<void> _save() async {
+  Future<bool> _save() async {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
-    if (_saving || c.activeBook.id != _bookId) return;
+    if (_saving || _submitted || c.activeBook.id != _bookId) return false;
+    final account = c.accounts
+        .where((a) => a.id == widget.accountId)
+        .firstOrNull;
+    if (account == null ||
+        account.bookId != _bookId ||
+        (!widget.setup && c.investmentFor(account.id) == null)) {
+      setState(() => _error = l.investSaveError);
+      return false;
+    }
     setState(() {
       _saving = true;
       _error = null;
     });
     var ok = false;
     try {
-      final account = c.accounts.firstWhere((a) => a.id == widget.accountId);
       final symbol = _fields['symbol']!.text.trim().toUpperCase();
       final security = StockSecurity(
         symbol: symbol,
@@ -1057,6 +1116,13 @@ class _StockEditorPageState extends State<StockEditorPage> {
         if (symbol.isEmpty || security.name.isEmpty || reference.isEmpty) {
           throw const FormatException('请补充证券及参考价格');
         }
+        // 其他隐藏草稿可能已保存并占用序号；新事件每次提交按最新组合重新读取，
+        // 已有事件编辑保持原顺序，失败重试也不能一直沿用冲突的旧序号。
+        final nextSequence =
+            widget.event?.sequence ??
+            c.nextInvestmentEventSequenceFor(account.id);
+        if (nextSequence == null) throw const FormatException('证券账户已失效');
+        _sequence = nextSequence;
         final event = StockEvent(
           id: _id,
           securityId: security.id,
@@ -1088,15 +1154,25 @@ class _StockEditorPageState extends State<StockEditorPage> {
     } on FormatException {
       // 输入错误由内联本地化提示反馈，草稿继续保留；持久化失败由 Controller 记录。
     }
-    if (!mounted) return;
+    if (!mounted) return false;
     if (ok) {
-      Navigator.of(context).pop();
+      setState(() {
+        _saving = false;
+        _submitted = true;
+        _initialEditorSnapshot = _editorSnapshot;
+      });
     } else {
       setState(() {
         _saving = false;
         _error = l.investSaveError;
       });
     }
+    return ok;
+  }
+
+  /// 原独立页面保存成功后通过同一个退出控制器返回；嵌入模式由宿主调用 _save。
+  Future<void> _saveAndExit() async {
+    if (await _save() && mounted) _exitController.exit();
   }
 
   /// 展示可取消的完整表单；市场/动作复用既有锚点选择器，日期时间沿用公共入口。
@@ -1105,12 +1181,19 @@ class _StockEditorPageState extends State<StockEditorPage> {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
     if (c.activeBook.id != _bookId ||
         !c.accounts.any((a) => a.id == widget.accountId)) {
-      return Scaffold(
+      return EntryEditorSurface(
+        session: widget.editorSession,
+        isDirty: _editorDirty,
+        canSave: false,
+        onSave: _save,
+        exitController: _exitController,
+        isSaving: _saving,
         body: SafeArea(
           child: VeriPage(
             child: Column(
               children: [
-                VeriHeader(title: l.investTitle, showBack: true),
+                if (widget.editorSession == null)
+                  VeriHeader(title: l.investTitle, showBack: true),
                 Padding(
                   padding: const EdgeInsets.all(16),
                   child: Text(l.investSaveError),
@@ -1132,7 +1215,13 @@ class _StockEditorPageState extends State<StockEditorPage> {
                       .currencyCode,
         )
         .toList();
-    return Scaffold(
+    return EntryEditorSurface(
+      session: widget.editorSession,
+      isDirty: _editorDirty,
+      canSave: !_saving && !_submitted,
+      onSave: _save,
+      exitController: _exitController,
+      isSaving: _saving,
       body: SafeArea(
         child: VeriPage(
           child: Material(
@@ -1140,16 +1229,17 @@ class _StockEditorPageState extends State<StockEditorPage> {
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
-                VeriHeader(
-                  title: widget.setup
-                      ? l.investEnableOpening
-                      : widget.transfer
-                      ? l.investTransfer
-                      : _securityType == InvestmentSecurityType.fund
-                      ? l.investFundNewTrade
-                      : l.investNewTrade,
-                  showBack: true,
-                ),
+                if (widget.editorSession == null)
+                  VeriHeader(
+                    title: widget.setup
+                        ? l.investEnableOpening
+                        : widget.transfer
+                        ? l.investTransfer
+                        : _securityType == InvestmentSecurityType.fund
+                        ? l.investFundNewTrade
+                        : l.investNewTrade,
+                    showBack: true,
+                  ),
                 const SizedBox(height: 12),
                 if (widget.setup) ...[
                   Text(l.investSetupHint),
@@ -1368,16 +1458,17 @@ class _StockEditorPageState extends State<StockEditorPage> {
                       ),
                     ),
                   ),
-                FilledButton(
-                  onPressed: _saving ? null : _save,
-                  child: _saving
-                      ? const SizedBox(
-                          width: 20,
-                          height: 20,
-                          child: CircularProgressIndicator(strokeWidth: 2),
-                        )
-                      : Text(l.investSave),
-                ),
+                if (widget.editorSession == null)
+                  FilledButton(
+                    onPressed: _saving ? null : _saveAndExit,
+                    child: _saving
+                        ? const SizedBox(
+                            width: 20,
+                            height: 20,
+                            child: CircularProgressIndicator(strokeWidth: 2),
+                          )
+                        : Text(l.investSave),
+                  ),
                 if (widget.event != null)
                   TextButton(
                     onPressed: _saving
@@ -1396,7 +1487,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
                             );
                             if (!context.mounted) return;
                             if (ok) {
-                              Navigator.of(context).pop();
+                              _exitController.exit();
                             } else {
                               setState(() => _error = l.investSaveError);
                             }

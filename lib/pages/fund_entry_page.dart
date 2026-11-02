@@ -17,6 +17,7 @@ import '../app/models.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
+import 'entry_editor_session.dart';
 
 /// 两个入口分别表达新申购与已经持有的资产；已有持仓不会伪装成一次新的现金买入。
 enum FundEntryMode { purchase, holdingBaseline }
@@ -239,6 +240,7 @@ class FundEntryPage extends StatefulWidget {
     this.securityId,
     this.subscriptionId,
     this.baselineEvent,
+    this.editorSession,
   });
 
   final String accountId;
@@ -246,12 +248,18 @@ class FundEntryPage extends StatefulWidget {
   final String? securityId, subscriptionId;
   final StockEvent? baselineEvent;
 
+  /// 非空时复用基金表单，新增页外壳负责统一保存区和全部草稿的返回。
+  final EntryEditorSession? editorSession;
+
   /// 页面独立持有草稿和核对勾选状态，离开页面时不保存。
   @override
   State<FundEntryPage> createState() => _FundEntryPageState();
 }
 
 class _FundEntryPageState extends State<FundEntryPage> {
+  final _exitController = EditorExitController();
+  String? _initialEditorSnapshot;
+  bool _submitted = false;
   final _fields = <String, TextEditingController>{};
   bool _initialized = false,
       _saving = false,
@@ -281,6 +289,41 @@ class _FundEntryPageState extends State<FundEntryPage> {
   })?
   _applicationPaymentDraft;
   String? _confirmationFeeDraft;
+
+  /// 比较完整用户输入与各阶段事实；切换模式保留的付款草稿也属于未保存内容。
+  String get _editorSnapshot => editorDraftSnapshot(
+    fields: _fields,
+    values: [
+      _securityId,
+      _paid,
+      _expected,
+      _reviewed,
+      _refundReceived,
+      _requestedAt.toIso8601String(),
+      _paidAt.toIso8601String(),
+      _confirmedAt.toIso8601String(),
+      _cancelledAt.toIso8601String(),
+      _refundedAt.toIso8601String(),
+      _navDate.toIso8601String(),
+      _earningStartDate.toIso8601String(),
+      _expectedDate.toIso8601String(),
+      _baselineDate.toIso8601String(),
+      _action.name,
+      _accrualRule.name,
+      _applicationPaymentDraft?.cashAmount,
+      _applicationPaymentDraft?.fee,
+      _applicationPaymentDraft?.paid,
+      _applicationPaymentDraft?.paidAt.toIso8601String(),
+      _applicationPaymentDraft?.requestedAt.toIso8601String(),
+      _confirmationFeeDraft,
+    ],
+  );
+
+  /// 初次加载后的用户改动才需要退出保护，保存成功后更新会话基线。
+  bool get _editorDirty =>
+      !_submitted &&
+      _initialEditorSnapshot != null &&
+      _initialEditorSnapshot != _editorSnapshot;
 
   /// 仅在首次读取 Scope 时复制草稿；后续净值更新不能覆盖用户正在填写的金额。
   /// 已有基准直接带入已保存份额，历史报告浮盈只留作原事件证据，不作为新表单输入。
@@ -360,6 +403,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
     }.entries) {
       _fields[pair.key] = TextEditingController(text: pair.value);
     }
+    _initialEditorSnapshot = _editorSnapshot;
   }
 
   /// 释放页面拥有的输入控制器，不触发保存或背景确认。
@@ -738,18 +782,24 @@ class _FundEntryPageState extends State<FundEntryPage> {
 
   /// 提交前核对账本及基金身份，确认必须显式勾选；只有 Controller 保存成功才退出。
   /// 新持仓基准采用实际份额且不写报告浮盈；旧基准依据未变才保留其原浮盈证据，份额未变保留推算标记。
-  Future<void> _save() async {
+  Future<bool> _save() async {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
-    if (_saving || c.activeBook.id != _bookId) return;
+    if (_saving || _submitted || c.activeBook.id != _bookId) return false;
     final p = c.investmentFor(widget.accountId);
-    if (p == null) return;
+    if (p == null ||
+        !c.accounts.any(
+          (account) =>
+              account.id == widget.accountId && account.bookId == _bookId,
+        )) {
+      return false;
+    }
     final security = _securities(
       p,
       l,
     ).where((value) => value.id == _securityId).firstOrNull;
     if (security == null) {
       setState(() => _error = l.fundSaveValidation);
-      return;
+      return false;
     }
     setState(() {
       _saving = true;
@@ -873,15 +923,25 @@ class _FundEntryPageState extends State<FundEntryPage> {
     } on FormatException {
       // 草稿不完整或精度非法时保留全部字段，使用统一本地化文案；持久化错误由 Controller 记录。
     }
-    if (!mounted) return;
+    if (!mounted) return false;
     if (ok) {
-      Navigator.of(context).pop();
+      setState(() {
+        _saving = false;
+        _submitted = true;
+        _initialEditorSnapshot = _editorSnapshot;
+      });
     } else {
       setState(() {
         _saving = false;
         _error = l.fundSaveValidation;
       });
     }
+    return ok;
+  }
+
+  /// 原独立基金页成功保存后受控退出；嵌入时宿主只调用返回成功标志的 _save。
+  Future<void> _saveAndExit() async {
+    if (await _save() && mounted) _exitController.exit();
   }
 
   /// 删除仅作用于未扣款申请或用户明确选择的持仓基准，失败保持当前页面和草稿。
@@ -904,7 +964,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
           );
     if (!mounted) return;
     if (ok) {
-      Navigator.of(context).pop();
+      _exitController.exit();
     } else {
       setState(() {
         _saving = false;
@@ -922,13 +982,20 @@ class _FundEntryPageState extends State<FundEntryPage> {
         .where((value) => value.id == widget.accountId)
         .firstOrNull;
     if (p == null || account == null || c.activeBook.id != _bookId) {
-      return Scaffold(
+      return EntryEditorSurface(
+        session: widget.editorSession,
+        isDirty: _editorDirty,
+        canSave: false,
+        onSave: _save,
+        exitController: _exitController,
+        isSaving: _saving,
         body: SafeArea(
           child: VeriPage(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
-                VeriHeader(title: l.fundOperations, showBack: true),
+                if (widget.editorSession == null)
+                  VeriHeader(title: l.fundOperations, showBack: true),
                 Text(l.investSaveError),
               ],
             ),
@@ -940,13 +1007,20 @@ class _FundEntryPageState extends State<FundEntryPage> {
         .where((value) => value.id == widget.subscriptionId)
         .firstOrNull;
     if (widget.subscriptionId != null && subscription == null) {
-      return Scaffold(
+      return EntryEditorSurface(
+        session: widget.editorSession,
+        isDirty: _editorDirty,
+        canSave: false,
+        onSave: _save,
+        exitController: _exitController,
+        isSaving: _saving,
         body: SafeArea(
           child: VeriPage(
             child: ListView(
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
               children: [
-                VeriHeader(title: l.fundOperations, showBack: true),
+                if (widget.editorSession == null)
+                  VeriHeader(title: l.fundOperations, showBack: true),
                 Text(l.investSaveError),
               ],
             ),
@@ -966,20 +1040,27 @@ class _FundEntryPageState extends State<FundEntryPage> {
     final applicationEditable =
         subscription?.confirmation == null && subscription?.cancelledAt == null;
     final preview = _preview();
-    return Scaffold(
+    return EntryEditorSurface(
+      session: widget.editorSession,
+      isDirty: _editorDirty,
+      canSave: !_saving && !_submitted && selected != null,
+      onSave: _save,
+      exitController: _exitController,
+      isSaving: _saving,
       body: SafeArea(
         child: VeriPage(
           child: ListView(
             padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
             children: [
-              VeriHeader(
-                title: baseline
-                    ? l.fundRecordHolding
-                    : subscription == null
-                    ? l.fundBuyByAmount
-                    : l.fundPendingTitle,
-                showBack: true,
-              ),
+              if (widget.editorSession == null)
+                VeriHeader(
+                  title: baseline
+                      ? l.fundRecordHolding
+                      : subscription == null
+                      ? l.fundBuyByAmount
+                      : l.fundPendingTitle,
+                  showBack: true,
+                ),
               const SizedBox(height: 12),
               InvestmentHint(
                 baseline ? l.fundOpeningHint : l.fundSubmissionHint,
@@ -1261,21 +1342,24 @@ class _FundEntryPageState extends State<FundEntryPage> {
                     ),
                   ),
                 ),
-              FilledButton(
-                key: const Key('fund-save'),
-                onPressed: _saving || securities.isEmpty ? null : _save,
-                child: Text(
-                  _saving
-                      ? l.commonProcessing
-                      : baseline
-                      ? l.investSave
-                      : _action == _FundFormAction.application
-                      ? l.fundSaveRequest
-                      : _action == _FundFormAction.confirmation
-                      ? l.fundConfirmSubscription
-                      : l.fundSaveCancellation,
+              if (widget.editorSession == null)
+                FilledButton(
+                  key: const Key('fund-save'),
+                  onPressed: _saving || securities.isEmpty
+                      ? null
+                      : _saveAndExit,
+                  child: Text(
+                    _saving
+                        ? l.commonProcessing
+                        : baseline
+                        ? l.investSave
+                        : _action == _FundFormAction.application
+                        ? l.fundSaveRequest
+                        : _action == _FundFormAction.confirmation
+                        ? l.fundConfirmSubscription
+                        : l.fundSaveCancellation,
+                  ),
                 ),
-              ),
               if (widget.baselineEvent != null ||
                   (subscription != null &&
                       subscription.paidAt == null &&

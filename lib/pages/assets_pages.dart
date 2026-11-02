@@ -23,8 +23,7 @@ import '../app/veri_fin_controller.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
-import 'account_detail_page.dart';
-import 'credit_account_detail_page.dart';
+import 'account_navigation.dart';
 import 'currency_rates_page.dart';
 
 part 'account_group_pages.dart';
@@ -472,12 +471,8 @@ class _AssetsPageState extends State<AssetsPage> {
               Padding(
                 padding: const EdgeInsets.only(bottom: 12),
                 child: VeriCard(
-                  onTap: () => Navigator.of(context).push<void>(
-                    MaterialPageRoute(
-                      builder: (_) =>
-                          CreditAccountDetailPage(parentId: parent.id),
-                    ),
-                  ),
+                  onTap: () =>
+                      openAccountDetails(context: context, parentId: parent.id),
                   child: Builder(
                     builder: (context) {
                       final children = controller
@@ -545,10 +540,10 @@ class _AssetsPageState extends State<AssetsPage> {
                         sectionId: section.id,
                       ),
                   onAccountTap: (account) {
-                    Navigator.of(context).push<void>(
-                      MaterialPageRoute<void>(
-                        builder: (context) =>
-                            AccountDetailPage(account: account),
+                    unawaited(
+                      openAccountDetails(
+                        context: context,
+                        accountId: account.id,
                       ),
                     );
                   },

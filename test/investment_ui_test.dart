@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/pages/investment_page.dart';
+import 'package:verifin/pages/transaction_entry_page.dart';
 import 'support/investment_fixture.dart';
 import 'support/test_harness.dart';
 
@@ -120,6 +121,7 @@ void main() {
     expect(tester.takeException(), isNull);
     await tester.tap(find.text('记录股票交易'));
     await tester.pumpAndSettle();
+    expect(find.byType(TransactionEntryPage), findsOneWidget);
     // 用户切换动作时只看到该动作的真实输入：股息填总额，拆股填比例。
     await tester.tap(find.text('买入'));
     await tester.pumpAndSettle();
@@ -147,22 +149,26 @@ void main() {
       '330',
     );
     // 超量买入也因现金不足拒绝，避免 UI 校验只检查数字格式。
-    final save = find.widgetWithText(FilledButton, '保存');
-    await tester.scrollUntilVisible(
-      save,
-      250,
-      scrollable: find
-          .descendant(
-            of: find.byType(StockEditorPage),
-            matching: find.byType(Scrollable),
-          )
-          .first,
-    );
+    // 证券账户的通用新增现在由双页签外壳提供固定保存区，不能在子表单里寻找旧按钮。
+    final save = find.byKey(const Key('transaction-save-current'));
+    expect(save.hitTestable(), findsOneWidget);
     await tester.tap(save);
     await tester.pumpAndSettle();
     expect(c.investmentFor(account.id)!.events, hasLength(1));
-    expect(find.textContaining('未保存：'), findsOneWidget);
+    final error = find.textContaining('未保存：');
+    final formScrollable = find
+        .descendant(
+          of: find.byType(StockEditorPage),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    await tester.scrollUntilVisible(error, 250, scrollable: formScrollable);
+    expect(error, findsOneWidget);
     expect(find.byType(StockEditorPage), findsOneWidget);
+    final quantity = find.byKey(const ValueKey('stock-quantity'));
+    await tester.scrollUntilVisible(quantity, -250, scrollable: formScrollable);
+    expect(tester.widget<TextField>(quantity).controller!.text, '999');
+    expect(tester.widget<FilledButton>(save).onPressed, isNotNull);
     expect(tester.takeException(), isNull);
   });
 }

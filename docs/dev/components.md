@@ -1,5 +1,20 @@
 # 组件清单（Component Registry）
 
+2026-11-02 账本类型与证券账户交互，行为及验证进度见[实施记录](investment-ledger-interaction-implementation.md)：
+
+| 组件或函数 | 位置与约定 |
+| --- | --- |
+| `LedgerBookType` / `LedgerBook.bookType` | `models/ledger_book.dart`；普通/投资类型独立于名称、账户与持仓，默认普通，随 SQLite v29 / JSON v16 保存 |
+| `createLedgerBook` / `changeLedgerBookType` | Controller 可靠创建/修改类型，等待落库后更新内存；账本已创建但设备指针失败时保留账本并明确提示 |
+| `startQuickEntry(context:, longPress:)` | `pages/quick_entry.dart`；首页、交易列表及 Android 通用快捷入口共用，先处理 AI 偏好，手动再按账本类型分流 |
+| `TransactionEntryPage` | `pages/transaction_entry_page.dart`；手动新建专用双页签，默认投资，目标账本固定；真实币种账户与股票/期权/基金操作各自保留会话 |
+| `EntryEditorSession` / `editorDraftSnapshot` | `pages/entry_editor_session.dart`；仅内存的草稿修改/保存协议与快照；保存当前、成功只读、防重，隐藏草稿也参与退出判断 |
+| `EntryEditorSurface` | 同文件；独立页面时提供 Scaffold 和 Guard，嵌入时只保留领域内容；保存中阻止输入、聚焦及退出，不复制业务保存逻辑 |
+| `openAccountDetails(context:, accountId:/parentId:)` | `pages/account_navigation.dart`；父账户汇总、已初始化证券详情、普通详情集中分流，两种 ID 只能传一种，失效引用不回退首账户 |
+| `AccountInformationSection` / `AccountFundingSection` | `pages/account_information_section.dart`；证券页只读资料及普通资金流水，编辑复用 `AccountDetailPage(editingOnly: true)`；资金腿不重复记普通流水 |
+| `createSecuritiesAccount` | `pages/securities_account_creation.dart` 为导航 helper；Controller 同名命令位于 `veri_fin_controller_securities_accounts.dart`，原子保存资料、必要主账户和明确期初组合 |
+| `saveSecuritiesAccountAggregate` | `LedgerRepository` 同步主账户、真实币种账户和投资组合的最终集合；SQLite 串行事务成功后才更新差分快照，内存实现遵守同一契约 |
+
 2026-10-29 历史依据精度：`investmentRevision` 在副本中按既有 SQLite 毫秒及本地表达
 规范锚点和普通交易的行时间，避免冷读的微秒/UTC 文本变化使投资依据失效；不修改账目对象
 或普通账户余额边界。来源/审计 JSON 保留原文；无时间碰撞的有效本地毫秒摘要不变。
@@ -207,11 +222,12 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `showConfirmDialog` | Dialog 函数 | `common_widgets.dart` | **统一确认框**；`destructive` 红色；返回 `bool`（取消/点外=false）。**禁止内联两按钮 `AlertDialog`** |
 | `showInfoDialog` | Dialog 函数 | `common_widgets.dart` | 统一只读说明框（标题、正文、单个“知道了”按钮）；新调用使用具名 `context:` |
 | `showUnsavedChangesDialog` / `EditorExitDecision` | Dialog 函数 / 枚举 | `common_widgets.dart` | 未保存修改的“保存 / 不保存 / 取消”三操作对话框；点遮罩或系统返回视为取消 |
-| `UnsavedChangesGuard` / `EditorExitController` | Widget / Controller | `common_widgets.dart` | 统一拦截编辑页 Header、系统与预测性返回；仅 `onSave` 成功后放行，未修改时不拦截；显式保存成功后用 `EditorExitController.exit()` 走同一受控退出路径，避免同帧旧 dirty 状态拦截程序化返回 |
+| `UnsavedChangesGuard` / `EditorExitController` | Widget / Controller | `common_widgets.dart` | 统一拦截 Header、系统与预测性返回；`canSave` 控制当前草稿能否保存，`message/saveLabel/discardLabel` 提供多草稿措辞，`hasRemainingChanges` 在保存成功后检查隐藏草稿并留页；`isSaving` 忙时禁止退出丢弃。显式保存后用 `EditorExitController.exit()` 走受控退出，避免同帧旧 dirty 状态拦截 |
 | `showTextInputDialog` | Dialog 函数 | `sheets.dart` | **统一文本输入**；`allowEmpty`、`keyboardType`；返回 trim 后 `String?` |
 | `showOptionSheet<T>` | Sheet 函数 | `sheets.dart` | 动态、较长或需 `sectionOf` 分区的通用单选底部弹窗；2–8 项静态受控单选优先用 `VeriAnchoredChoice<T>`；返回 `T?` |
 | `showVeriContentSheet<T>` | Sheet 函数 | `sheets.dart` | 自定义业务内容的统一底部弹层外壳，集中提供不透明表面、顶部圆角和拖拽把手；简单单选仍走 `showOptionSheet` |
-| `showLedgerBookEditorSheet` | Sheet 函数 | `sheets.dart` | 新建账本统一表单，同时收集名称与本位币，返回命名 record；取消返回 `null` |
+| `showLedgerBookEditorSheet` | Sheet 函数 | `sheets.dart` | 收集名称、本位币与类型，返回 `name/currencyCode/bookType` record；可等待 `onSave`，失败保留弹层及草稿，取消返回 `null` |
+| `showLedgerBookTypeEditorSheet` | Sheet 函数 | `sheets.dart` | 编辑账本类型，短单选只改草稿，显式保存等待 `onSave` 成功后退出；取消不落库，保存中禁止离页 |
 | `showLedgerBookPickerSheet` | Sheet 函数 | `sheets.dart` | 自动识别收支/转账复核和退款确认共用的动态账本选择器，复用 `showOptionSheet`；只返回选择，取消返回 `null`，调用方决定何时切换当前账本 |
 | `showRefundExpensePickerSheet` | Sheet 函数 | `sheets.dart` | 自动采集退款复核的原消费选择器；候选由 `captureRefundCandidates` 按目标账本筛选并排序，跨账本账户通过 `accountsForBook` 只读获取，列表复用 `TransactionTile`；返回所选 `LedgerEntry?`，取消返回 `null`，选择过程不写入交易 |
 | `confirmLegacyLedgerCurrency` | Sheet/Dialog 流程 | `sheets.dart` | 旧单币种账本的一次性确认/重解释流程：选币、展示影响数量、二次确认，并调用 Controller 原子迁移；取消或失败返回 `false` |
@@ -293,3 +309,5 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 - 证券展示组合：`app/investments/investment_widgets.dart` 的 `InvestmentSection` 复用 `VeriCard`，统一分组标题、内容伸展和内部 Material 墨水层；`InvestmentHint` 统一次级说明的图标、行距和主题颜色。`InvestmentInputField` 令标签独立占位、随字号换行，并为输入框保留可访问性名称；`investmentInputDecoration` 只提供实色底色，不添加浮动标签。`investmentOutlineButtonStyle` 对齐次要按钮与主按钮的圆角、间距和触控高度。均只负责展示，不访问 Controller。
 - 证券概览排版：同文件 `InvestmentMetricPair(first, second, filled)` 只排列两个 `SummaryMetric`。普通宽度等宽双列，内容宽度小于 300dp 或 13sp 文字缩放后超过 18dp 时改单列；`filled` 用实色画布色与统一圆角突出现金/持仓，false 用于次级资产与盈亏。内部 Row 保持标准指标 Expanded 关系合法，仅对这两个静态项测量等高；不读取或计算账务。
 - 持仓报价依据：同文件 `InvestmentQuoteDetails(source, quoteTime)` 接收公开来源名称及调用方已格式化的来源报价时间，仅在已采用的有效报价存在时展示。使用主题画布实色与 `veriRadiusSm`、装饰性云图标，来源为 `bodySmall`/w600，时间标签和内容为 `labelMedium`，复用 `marketQuoteTime` 本地化标签；长来源和时间完整换行，不设固定高度、不省略时区。持仓卡将其放在数量、成本、参考价、占比与盈亏之后、操作区之前；组件只负责排版，不访问 Controller、缓存或估值。
+
+- 投资草稿序号：Controller 公共只读 `nextInvestmentEventSequenceFor(accountId)` 复用既有 `_nextStockSequence`，返回当前账本真实证券账户的最新可用序号，账户失效返回 null。股票新事件保存时读取，期权预览时读取并冻结组合/现金依据；编辑旧事件仍保留原序号，不能在草稿初始化时长期占用序号。

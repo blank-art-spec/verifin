@@ -1,6 +1,8 @@
 # 证券三地双账户测试模板
 
-更新日期：2026-10-28。文件：[verifin-sample-backup.json](verifin-sample-backup.json)，格式 JSON v13。
+更新日期：2026-11-02。文件：[verifin-sample-backup.json](verifin-sample-backup.json)，格式 JSON v16。
+
+新版样例明确标记日常、旅行为普通账本，`book_investment` 为投资账本，因而该样例的手动新增会直接进入投资交易页签。历史 v1–v15 备份缺类型字段时一律恢复为普通，不能根据名称或证券持仓自动判定。类型及导航规则见[实施记录](investment-ledger-interaction-implementation.md)。
 
 ## 账户结构
 

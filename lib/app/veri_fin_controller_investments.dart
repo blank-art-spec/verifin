@@ -446,6 +446,14 @@ mixin _InvestmentOps on _ControllerOps {
     (value, e) => e.sequence >= value ? e.sequence + 1 : value,
   );
 
+  /// 读取当前账本 [accountId] 最新组合的下一事件序号，不分配或预占持久化状态。
+  /// 新建表单在保存/预览时读取，避免不同隐藏草稿复用初始化时的旧序号；
+  /// 已有事件编辑保留原序号。账户组合已失效时返回 null，保存命令仍会再次校验。
+  int? nextInvestmentEventSequenceFor(String accountId) {
+    final portfolio = investmentFor(accountId);
+    return portfolio == null ? null : _nextStockSequence(portfolio);
+  }
+
   /// 生成期权候选聚合；证券规格变更不能追溯篡改历史权利金或已结算交割腿。
   /// [underlying] 必须是同币种股票；[underlyingReferencePrice] 供实物交割后的股票估值。
   InvestmentPortfolio _optionCandidate({

@@ -544,7 +544,8 @@ void main() {
 
     // 清仓后仍从基金专属入口再次买入，不能退回默认股票类型；取消草稿不新增任何账目。
     final rebuy = find.byKey(ValueKey('fund-trade-${_fund.id}'));
-    await _reveal(tester, rebuy);
+    // 清仓移除了整张持仓卡，详情保留的滚动位置已在这个入口下方，须向上查找。
+    await _reveal(tester, rebuy, delta: -220);
     await tester.tap(rebuy);
     await tester.pumpAndSettle();
     final rebuyEditor = find.byType(StockEditorPage);

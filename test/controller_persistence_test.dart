@@ -104,7 +104,7 @@ void main() {
       expect(controller.entries, isEmpty);
 
       final raw = controller.exportDataJson();
-      expect((jsonDecode(raw) as Map)['version'], 15);
+      expect((jsonDecode(raw) as Map)['version'], 16);
       final beforePreview = loaded.toJson();
       controller.importDataJson(raw, dryRun: true);
       await controller.waitForPendingWrites();
@@ -248,7 +248,7 @@ void main() {
       controllerAlive = true;
       expectReconciled();
       final raw = controller.exportDataJson();
-      expect((jsonDecode(raw) as Map)['version'], 15);
+      expect((jsonDecode(raw) as Map)['version'], 16);
       controller.importDataJson(raw, dryRun: true);
       expectReconciled();
       controller.resetAllData();
@@ -511,7 +511,7 @@ void main() {
 
           final source = controller.investmentFor(account.id)!.toJson();
           final raw = controller.exportDataJson();
-          expect((jsonDecode(raw) as Map)['version'], 15);
+          expect((jsonDecode(raw) as Map)['version'], 16);
           controller.resetAllData();
           await controller.waitForPendingWrites();
           expect(await repo.loadInvestmentPortfolios(), isEmpty);

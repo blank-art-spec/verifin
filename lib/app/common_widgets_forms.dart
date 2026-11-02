@@ -421,15 +421,20 @@ class EditorExitController {
 /// 统一的未保存修改对话框。
 ///
 /// 点击遮罩或系统返回等价于 [EditorExitDecision.cancel]，不会隐式丢弃草稿。
+/// [canSave] 为 false 时不提供保存动作；[message] 与两个按钮标签可说明多草稿范围。
 Future<EditorExitDecision> showUnsavedChangesDialog({
   required BuildContext context,
+  bool canSave = true,
+  String? message,
+  String? saveLabel,
+  String? discardLabel,
 }) async {
   final l10n = AppLocalizations.of(context);
   final decision = await showDialog<EditorExitDecision>(
     context: context,
     builder: (dialogContext) => AlertDialog(
       title: Text(l10n.unsavedChangesTitle),
-      content: Text(l10n.unsavedChangesMessage),
+      content: Text(message ?? l10n.unsavedChangesMessage),
       actions: <Widget>[
         TextButton(
           onPressed: () =>
@@ -442,13 +447,14 @@ Future<EditorExitDecision> showUnsavedChangesDialog({
           style: TextButton.styleFrom(
             foregroundColor: veriSemantic(context, veriExpense),
           ),
-          child: Text(l10n.discardChanges),
+          child: Text(discardLabel ?? l10n.discardChanges),
         ),
-        FilledButton(
-          onPressed: () =>
-              Navigator.of(dialogContext).pop(EditorExitDecision.save),
-          child: Text(l10n.commonSave),
-        ),
+        if (canSave)
+          FilledButton(
+            onPressed: () =>
+                Navigator.of(dialogContext).pop(EditorExitDecision.save),
+            child: Text(saveLabel ?? l10n.commonSave),
+          ),
       ],
     ),
   );
@@ -468,6 +474,12 @@ class UnsavedChangesGuard extends StatefulWidget {
     this.onDiscard,
     this.popResult,
     this.exitController,
+    this.canSave = true,
+    this.message,
+    this.saveLabel,
+    this.discardLabel,
+    this.hasRemainingChanges,
+    this.isSaving = false,
   });
 
   final bool isDirty;
@@ -475,6 +487,18 @@ class UnsavedChangesGuard extends StatefulWidget {
   final VoidCallback? onDiscard;
   final Object? Function()? popResult;
   final EditorExitController? exitController;
+
+  /// 当前草稿能否保存；仅隐藏草稿有改动时关闭保存动作，仍允许明确丢弃。
+  final bool canSave;
+  final String? message;
+  final String? saveLabel;
+  final String? discardLabel;
+
+  /// 保存成功后实时检查其他草稿；返回 true 时留页，不将成功伪装成失败。
+  final bool Function()? hasRemainingChanges;
+
+  /// 事务进行中不得退出或选择丢弃，避免用户离页后后台写入仍成功。
+  final bool isSaving;
   final Widget child;
 
   @override
@@ -510,19 +534,28 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
     super.dispose();
   }
 
+  /// 处理一次被拦截的返回；保存进行中忽略返回，成功后再检查其他会话草稿。
   Future<void> _handleBlockedPop() async {
-    if (_handlingPop) {
+    if (_handlingPop || widget.isSaving) {
       return;
     }
     setState(() => _handlingPop = true);
     try {
-      final decision = await showUnsavedChangesDialog(context: context);
+      final decision = await showUnsavedChangesDialog(
+        context: context,
+        canSave: widget.canSave,
+        message: widget.message,
+        saveLabel: widget.saveLabel,
+        discardLabel: widget.discardLabel,
+      );
       if (!mounted) {
         return;
       }
       switch (decision) {
         case EditorExitDecision.save:
-          if (await widget.onSave() && mounted) {
+          if (await widget.onSave() &&
+              mounted &&
+              !(widget.hasRemainingChanges?.call() ?? false)) {
             _exitPage(null);
           }
           break;
@@ -554,7 +587,7 @@ class _UnsavedChangesGuardState extends State<UnsavedChangesGuard> {
   @override
   Widget build(BuildContext context) {
     return PopScope<Object?>(
-      canPop: !widget.isDirty || _allowNextPop,
+      canPop: !widget.isSaving && (!widget.isDirty || _allowNextPop),
       onPopInvokedWithResult: (didPop, _) {
         if (!didPop) {
           unawaited(_handleBlockedPop());

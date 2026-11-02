@@ -1,7 +1,11 @@
 part of 'assets_pages.dart';
 
 class AddAccountPage extends StatefulWidget {
-  const AddAccountPage({super.key});
+  /// [securities] 为证券专用创建入口；[bookId] 固定目标，保存前再次校验账本。
+  const AddAccountPage({super.key, this.securities = false, this.bookId});
+
+  final bool securities;
+  final String? bookId;
 
   @override
   State<AddAccountPage> createState() => _AddAccountPageState();
@@ -28,11 +32,16 @@ class _AddAccountPageState extends State<AddAccountPage> {
   // 为空表示创建新的信用主体；非空表示把本账户作为另一个币种子账户挂到已有主体。
   String? _creditAccountId;
   bool _saved = false;
+  bool _saving = false;
+  // 同一份表单重试使用同一 ID，避免重复点击创建多个账户。
+  final String _draftAccountId = DateTime.now().microsecondsSinceEpoch
+      .toString();
   final EditorExitController _exitController = EditorExitController();
 
   @override
   void initState() {
     super.initState();
+    if (widget.securities) _type = AccountType.investment;
     _nameController.addListener(_handleNameChanged);
     _balanceController.addListener(_handleDraftChanged);
     _cardLast4Controller.addListener(_handleDraftChanged);
@@ -73,187 +82,230 @@ class _AddAccountPageState extends State<AddAccountPage> {
 
     return UnsavedChangesGuard(
       isDirty: _isDirty,
+      isSaving: _saving,
       onSave: _save,
       exitController: _exitController,
       child: Scaffold(
         body: SafeArea(
           child: VeriPage(
-            child: Form(
-              key: _formKey,
-              child: ListView(
-                padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
-                children: <Widget>[
-                  VeriHeader(
-                    title: AppLocalizations.of(context).accountAdd,
-                    showBack: true,
-                    actions: <Widget>[
-                      SaveHeaderAction(
-                        onPressed: _isDirty ? _saveAndExit : null,
-                      ),
-                    ],
-                  ),
-                  const SizedBox(height: 10),
-                  VeriAnchoredChoice<AccountType>(
-                    key: const Key('add_account_type_choice'),
-                    values: AccountType.values,
-                    selected: _type,
-                    idOf: (value) => 'add_account_type_${value.name}',
-                    labelOf: (value) =>
-                        value.label(AppLocalizations.of(context)),
-                    subtitleOf: (value) =>
-                        value.capabilityHint(AppLocalizations.of(context)),
-                    onSelected: (value) => setState(() {
-                      // 类型变化后重新选择主体，避免把证券账户挂到银行或信用账户下。
-                      _type = value;
-                      _creditAccountId = null;
-                    }),
-                    semanticLabel: AppLocalizations.of(
-                      context,
-                    ).accountTypePickerTitle,
-                    builder: (context, openMenu, menuOpen) => SelectField(
-                      label: AppLocalizations.of(context).accountTypeLabel,
-                      value: _type.label(AppLocalizations.of(context)),
-                      icon: Icons.category_outlined,
-                      onTap: openMenu,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _nameController,
-                    decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context).accountNameLabel,
-                    ),
-                    validator: (value) {
-                      if (value == null || value.trim().isEmpty) {
-                        return AppLocalizations.of(context).accountNameRequired;
-                      }
-                      return null;
-                    },
-                  ),
-                  const SizedBox(height: 10),
-                  if (_type.supportsCardLast4) ...<Widget>[
-                    CardNumberFields(
-                      numberController: _cardNumberController,
-                      last4Controller: _cardLast4Controller,
-                      follows: _cardLast4Follows,
-                      onFollowsChanged: (value) =>
-                          setState(() => _cardLast4Follows = value),
-                    ),
-                    const SizedBox(height: 10),
-                  ],
-                  if (_type.supportsCurrencyChildren) ...<Widget>[
-                    if (creditAccounts.isNotEmpty) ...<Widget>[
-                      SelectField(
-                        key: const Key('add_account_credit_parent'),
-                        label: _type.supportsCredit
+            child: ExcludeFocus(
+              excluding: _saving,
+              child: IgnorePointer(
+                ignoring: _saving,
+                child: Form(
+                  key: _formKey,
+                  child: ListView(
+                    padding: const EdgeInsets.fromLTRB(14, 8, 14, 28),
+                    children: <Widget>[
+                      VeriHeader(
+                        title: widget.securities
                             ? AppLocalizations.of(
                                 context,
-                              ).creditAccountParentLabel
-                            : AppLocalizations.of(context).accountParentLabel,
-                        value: _creditAccountId == null
-                            ? _createParentLabel
-                            : creditAccounts
-                                      .where(
-                                        (item) => item.id == _creditAccountId,
-                                      )
-                                      .map((item) => item.name)
-                                      .firstOrNull ??
-                                  _createParentLabel,
-                        icon: Icons.account_balance_outlined,
-                        onTap: () => _pickCreditAccount(creditAccounts),
+                              ).entryCreateSecuritiesAccount
+                            : AppLocalizations.of(context).accountAdd,
+                        showBack: true,
+                        actions: <Widget>[
+                          SaveHeaderAction(
+                            onPressed: _isDirty && !_saving
+                                ? _saveAndExit
+                                : null,
+                          ),
+                        ],
                       ),
                       const SizedBox(height: 10),
+                      if (!widget.securities)
+                        VeriAnchoredChoice<AccountType>(
+                          key: const Key('add_account_type_choice'),
+                          values: AccountType.values,
+                          selected: _type,
+                          idOf: (value) => 'add_account_type_${value.name}',
+                          labelOf: (value) =>
+                              value.label(AppLocalizations.of(context)),
+                          subtitleOf: (value) => value.capabilityHint(
+                            AppLocalizations.of(context),
+                          ),
+                          onSelected: (value) => setState(() {
+                            // 类型变化后重新选择主体，避免把证券账户挂到银行或信用账户下。
+                            _type = value;
+                            _creditAccountId = null;
+                          }),
+                          semanticLabel: AppLocalizations.of(
+                            context,
+                          ).accountTypePickerTitle,
+                          builder: (context, openMenu, menuOpen) => SelectField(
+                            label: AppLocalizations.of(
+                              context,
+                            ).accountTypeLabel,
+                            value: _type.label(AppLocalizations.of(context)),
+                            icon: Icons.category_outlined,
+                            onTap: openMenu,
+                          ),
+                        ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _nameController,
+                        decoration: InputDecoration(
+                          labelText: AppLocalizations.of(
+                            context,
+                          ).accountNameLabel,
+                        ),
+                        validator: (value) {
+                          if (value == null || value.trim().isEmpty) {
+                            return AppLocalizations.of(
+                              context,
+                            ).accountNameRequired;
+                          }
+                          return null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      if (_type.supportsCardLast4) ...<Widget>[
+                        CardNumberFields(
+                          numberController: _cardNumberController,
+                          last4Controller: _cardLast4Controller,
+                          follows: _cardLast4Follows,
+                          onFollowsChanged: (value) =>
+                              setState(() => _cardLast4Follows = value),
+                        ),
+                        const SizedBox(height: 10),
+                      ],
+                      if (_type.supportsCurrencyChildren) ...<Widget>[
+                        if (creditAccounts.isNotEmpty) ...<Widget>[
+                          SelectField(
+                            key: const Key('add_account_credit_parent'),
+                            label: _type.supportsCredit
+                                ? AppLocalizations.of(
+                                    context,
+                                  ).creditAccountParentLabel
+                                : AppLocalizations.of(
+                                    context,
+                                  ).accountParentLabel,
+                            value: _creditAccountId == null
+                                ? _createParentLabel
+                                : creditAccounts
+                                          .where(
+                                            (item) =>
+                                                item.id == _creditAccountId,
+                                          )
+                                          .map((item) => item.name)
+                                          .firstOrNull ??
+                                      _createParentLabel,
+                            icon: Icons.account_balance_outlined,
+                            onTap: () => _pickCreditAccount(creditAccounts),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                        if (_type.supportsCredit &&
+                            _creditAccountId == null) ...<Widget>[
+                          SelectField(
+                            key: const Key('add_account_credit_limit'),
+                            label: AppLocalizations.of(
+                              context,
+                            ).creditLimitLabel,
+                            value: _creditLimit == null
+                                ? AppLocalizations.of(context).notSet
+                                : formatUserMoney(
+                                    _creditLimit!,
+                                    _currencyCode ?? defaultCurrencyCode,
+                                  ),
+                            icon: Icons.speed_outlined,
+                            onTap: _pickCreditLimit,
+                          ),
+                          const SizedBox(height: 10),
+                          SelectField(
+                            key: const Key('add_account_statement_day'),
+                            label: AppLocalizations.of(context).statementDay,
+                            value: _statementDay == null
+                                ? AppLocalizations.of(context).notSet
+                                : AppLocalizations.of(
+                                    context,
+                                  ).monthlyDayLabel(_statementDay!),
+                            icon: Icons.event_repeat_outlined,
+                            onTap: () => _pickBillingDay(isDue: false),
+                          ),
+                          const SizedBox(height: 10),
+                          SelectField(
+                            key: const Key('add_account_due_day'),
+                            label: AppLocalizations.of(context).dueDay,
+                            value: _dueDay == null
+                                ? AppLocalizations.of(context).notSet
+                                : AppLocalizations.of(
+                                    context,
+                                  ).monthlyDayLabel(_dueDay!),
+                            icon: Icons.event_available_outlined,
+                            onTap: () => _pickBillingDay(isDue: true),
+                          ),
+                          const SizedBox(height: 10),
+                        ],
+                      ],
+                      SelectField(
+                        key: const Key('account_currency_select_field'),
+                        label: AppLocalizations.of(context).commonCurrency,
+                        value:
+                            '${currency.code} · ${currency.nameForLocale(Localizations.localeOf(context).toLanguageTag())}',
+                        icon: Icons.currency_exchange,
+                        onTap: _pickCurrency,
+                      ),
+                      const SizedBox(height: 10),
+                      TextFormField(
+                        controller: _balanceController,
+                        keyboardType: const TextInputType.numberWithOptions(
+                          decimal: true,
+                          signed: true,
+                        ),
+                        decoration: InputDecoration(
+                          labelText: widget.securities
+                              ? AppLocalizations.of(context).investOpeningCash
+                              : AppLocalizations.of(
+                                  context,
+                                ).accountBalanceCurrencyLabel(currencyCode),
+                          hintText: widget.securities
+                              ? AppLocalizations.of(
+                                  context,
+                                ).securitiesOpeningCashHint
+                              : AppLocalizations.of(context).accountBalanceHint,
+                        ),
+                        validator: (value) {
+                          if (!widget.securities) return null;
+                          final cash = double.tryParse((value ?? '').trim());
+                          return cash == null || !cash.isFinite || cash < 0
+                              ? AppLocalizations.of(
+                                  context,
+                                ).securitiesOpeningCashRequired
+                              : null;
+                        },
+                      ),
+                      const SizedBox(height: 10),
+                      SelectField(
+                        key: const Key('account_icon_select_field'),
+                        label: AppLocalizations.of(context).accountIconLabel,
+                        value: iconLabelForCode(
+                          AppLocalizations.of(context),
+                          _iconCode,
+                        ),
+                        leading: AccountIconBox(iconCode: _iconCode, size: 28),
+                        onTap: _pickAccountIcon,
+                      ),
+                      const SizedBox(height: 10),
+                      TextField(
+                        controller: _noteController,
+                        maxLines: 1,
+                        decoration: InputDecoration(
+                          labelText: AppLocalizations.of(
+                            context,
+                          ).accountNoteLabel,
+                        ),
+                      ),
+                      const SizedBox(height: 10),
+                      SelectField(
+                        label: AppLocalizations.of(context).accountGroupLabel,
+                        value: _groupLabel(groups),
+                        icon: Icons.folder_outlined,
+                        onTap: () => _pickAccountGroup(groups),
+                      ),
                     ],
-                    if (_type.supportsCredit &&
-                        _creditAccountId == null) ...<Widget>[
-                      SelectField(
-                        key: const Key('add_account_credit_limit'),
-                        label: AppLocalizations.of(context).creditLimitLabel,
-                        value: _creditLimit == null
-                            ? AppLocalizations.of(context).notSet
-                            : formatUserMoney(
-                                _creditLimit!,
-                                _currencyCode ?? defaultCurrencyCode,
-                              ),
-                        icon: Icons.speed_outlined,
-                        onTap: _pickCreditLimit,
-                      ),
-                      const SizedBox(height: 10),
-                      SelectField(
-                        key: const Key('add_account_statement_day'),
-                        label: AppLocalizations.of(context).statementDay,
-                        value: _statementDay == null
-                            ? AppLocalizations.of(context).notSet
-                            : AppLocalizations.of(
-                                context,
-                              ).monthlyDayLabel(_statementDay!),
-                        icon: Icons.event_repeat_outlined,
-                        onTap: () => _pickBillingDay(isDue: false),
-                      ),
-                      const SizedBox(height: 10),
-                      SelectField(
-                        key: const Key('add_account_due_day'),
-                        label: AppLocalizations.of(context).dueDay,
-                        value: _dueDay == null
-                            ? AppLocalizations.of(context).notSet
-                            : AppLocalizations.of(
-                                context,
-                              ).monthlyDayLabel(_dueDay!),
-                        icon: Icons.event_available_outlined,
-                        onTap: () => _pickBillingDay(isDue: true),
-                      ),
-                      const SizedBox(height: 10),
-                    ],
-                  ],
-                  SelectField(
-                    key: const Key('account_currency_select_field'),
-                    label: AppLocalizations.of(context).commonCurrency,
-                    value:
-                        '${currency.code} · ${currency.nameForLocale(Localizations.localeOf(context).toLanguageTag())}',
-                    icon: Icons.currency_exchange,
-                    onTap: _pickCurrency,
                   ),
-                  const SizedBox(height: 10),
-                  TextFormField(
-                    controller: _balanceController,
-                    keyboardType: const TextInputType.numberWithOptions(
-                      decimal: true,
-                      signed: true,
-                    ),
-                    decoration: InputDecoration(
-                      labelText: AppLocalizations.of(
-                        context,
-                      ).accountBalanceCurrencyLabel(currencyCode),
-                      hintText: AppLocalizations.of(context).accountBalanceHint,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SelectField(
-                    key: const Key('account_icon_select_field'),
-                    label: AppLocalizations.of(context).accountIconLabel,
-                    value: iconLabelForCode(
-                      AppLocalizations.of(context),
-                      _iconCode,
-                    ),
-                    leading: AccountIconBox(iconCode: _iconCode, size: 28),
-                    onTap: _pickAccountIcon,
-                  ),
-                  const SizedBox(height: 10),
-                  TextField(
-                    controller: _noteController,
-                    maxLines: 1,
-                    decoration: InputDecoration(
-                      labelText: AppLocalizations.of(context).accountNoteLabel,
-                    ),
-                  ),
-                  const SizedBox(height: 10),
-                  SelectField(
-                    label: AppLocalizations.of(context).accountGroupLabel,
-                    value: _groupLabel(groups),
-                    icon: Icons.folder_outlined,
-                    onTap: () => _pickAccountGroup(groups),
-                  ),
-                ],
+                ),
               ),
             ),
           ),
@@ -376,7 +428,10 @@ class _AddAccountPageState extends State<AddAccountPage> {
     return !_saved &&
         (_nameController.text.trim().isNotEmpty ||
             balanceChanged ||
-            _type != AccountType.onlinePayment ||
+            _type !=
+                (widget.securities
+                    ? AccountType.investment
+                    : AccountType.onlinePayment) ||
             _iconCode != 'wallet' ||
             _groupId != 'ungrouped' ||
             _currencyCode !=
@@ -489,10 +544,20 @@ class _AddAccountPageState extends State<AddAccountPage> {
 
   /// 校验并原子提交新账户；银行、证券可创建主账户或加入已有主账户。
   Future<bool> _save() async {
+    if (_saving) return false;
     if (!_formKey.currentState!.validate()) {
       return false;
     }
     final controller = VeriFinScope.of(context);
+    if (widget.bookId != null && controller.activeBook.id != widget.bookId) {
+      unawaited(
+        VeriFeedbackHost.of(context).showMessage(
+          message: AppLocalizations.of(context).entryBookUnavailable,
+          tone: VeriFeedbackTone.warning,
+        ),
+      );
+      return false;
+    }
     final code = _currencyCode ?? controller.activeBook.baseCurrencyCode;
     if (_creditAccountId != null &&
         controller
@@ -506,35 +571,40 @@ class _AddAccountPageState extends State<AddAccountPage> {
       );
       return false;
     }
-    final saved = await controller.addAccountDraft(
-      Account(
-        id: DateTime.now().microsecondsSinceEpoch.toString(),
-        bookId: controller.activeBook.id,
-        name: _nameController.text.trim(),
-        type: _type,
-        groupId: _groupId,
-        initialBalance: double.tryParse(_balanceController.text.trim()) ?? 0,
-        currencyCode: _currencyCode ?? controller.activeBook.baseCurrencyCode,
-        iconCode: _iconCode,
-        note: _noteController.text.trim(),
-        includeInAssets: true,
-        hidden: false,
-        cardLast4: _type.supportsCardLast4
-            ? cardLast4Of(_cardLast4Controller.text)
-            : '',
-        cardNumber: _type.supportsCardLast4
-            ? _cardNumberController.text.trim()
-            : '',
-        cardLast4Follows: _type.supportsCardLast4 ? _cardLast4Follows : true,
-        creditLimit: _type.supportsCredit ? _creditLimit : null,
-        statementDay: _type.supportsCredit ? _statementDay : null,
-        dueDay: _type.supportsCredit ? _dueDay : null,
-        creditAccountId: _type.supportsCurrencyChildren
-            ? _creditAccountId
-            : null,
-      ),
+    final draft = Account(
+      id: _draftAccountId,
+      bookId: controller.activeBook.id,
+      name: _nameController.text.trim(),
+      type: _type,
+      groupId: _groupId,
+      initialBalance: double.tryParse(_balanceController.text.trim()) ?? 0,
+      currencyCode: _currencyCode ?? controller.activeBook.baseCurrencyCode,
+      iconCode: _iconCode,
+      note: _noteController.text.trim(),
+      includeInAssets: true,
+      hidden: false,
+      cardLast4: _type.supportsCardLast4
+          ? cardLast4Of(_cardLast4Controller.text)
+          : '',
+      cardNumber: _type.supportsCardLast4
+          ? _cardNumberController.text.trim()
+          : '',
+      cardLast4Follows: _type.supportsCardLast4 ? _cardLast4Follows : true,
+      creditLimit: _type.supportsCredit ? _creditLimit : null,
+      statementDay: _type.supportsCredit ? _statementDay : null,
+      dueDay: _type.supportsCredit ? _dueDay : null,
+      creditAccountId: _type.supportsCurrencyChildren ? _creditAccountId : null,
     );
+    FocusScope.of(context).unfocus();
+    setState(() => _saving = true);
+    final saved = widget.securities
+        ? await controller.createSecuritiesAccount(
+            account: draft,
+            openingCash: _balanceController.text.trim(),
+          )
+        : await controller.addAccountDraft(draft);
     if (!mounted) return saved;
+    setState(() => _saving = false);
     if (!saved) {
       unawaited(
         VeriFeedbackHost.of(context).showMessage(
