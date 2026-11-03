@@ -166,7 +166,8 @@ Invoke-Native { flutter test }
 # 提交、打标签、推送。工作区在脚本开头已强制干净，
 # 故 add -A 只会纳入版本号改动与格式化修正。
 Invoke-Native { git add -A }
-Invoke-Native { git commit -m "chore: release $tag" }
+# 发布提交同样使用中文前缀与摘要，版本标签保持原值。
+Invoke-Native { git commit -m "维护: 发布 $tag" }
 Invoke-Native { git tag $tag }
 Invoke-Native { git push origin main }
 Invoke-Native { git push origin $tag }

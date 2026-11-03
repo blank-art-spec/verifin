@@ -234,6 +234,11 @@ class _AccountRow extends StatelessWidget {
   final double balance;
   final VoidCallback? onTap;
 
+  /// 构建资产分区中的单个账户行。
+  ///
+  /// [context] 用于读取主题、语言和余额语义色；[account] 提供名称及图标，
+  /// [balance] 是该账户原币余额，[onTap] 由调用方指定点击后的导航操作。
+  /// 右侧余额采用标题大字号，与主账户卡片保持相同的金额层级。
   @override
   Widget build(BuildContext context) {
     return Material(
@@ -305,7 +310,8 @@ class _AccountRow extends StatelessWidget {
               const SizedBox(width: 10),
               Text(
                 formatUserMoney(balance, account.currencyCode),
-                style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                // 仅放大金额，名称和其他页面的全局字号保持现有层级。
+                style: Theme.of(context).textTheme.titleLarge?.copyWith(
                   color: accountBalanceColor(context, account, balance),
                   fontWeight: FontWeight.w800,
                 ),

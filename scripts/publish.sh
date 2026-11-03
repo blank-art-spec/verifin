@@ -109,7 +109,8 @@ flutter analyze
 flutter test
 
 git add -A
-git commit -m "chore: release $tag"
+# 发布提交同样使用中文前缀与摘要，版本标签保持原值。
+git commit -m "维护: 发布 $tag"
 git tag "$tag"
 git push origin main
 git push origin "$tag"
