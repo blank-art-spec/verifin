@@ -5,6 +5,8 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import '../app/common_widgets.dart';
 import '../app/investments/investment_widgets.dart';
+import '../app/investments/investment_security_autocomplete.dart';
+import '../app/investments/investment_security_suggestions.dart';
 import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
 import '../app/feedback.dart';
@@ -205,6 +207,7 @@ class InvestmentPage extends StatelessWidget {
                         ),
                       ),
                     ),
+                  // 尚未录入证券也是正常状态，保留行情入口，由目标页展示明确空态。
                   HeaderAction(
                     icon: Icons.cloud_outlined,
                     tooltip: l.marketTitle,
@@ -930,6 +933,48 @@ class _StockEditorPageState extends State<StockEditorPage> {
       _financing = false,
       _short = false;
   String? _error, _target, _initialReference;
+  List<StockSecurity> _onlineSecurities = const [];
+  String? _onlineQuery,
+      _searchMessage,
+      _searchInputSnapshot,
+      _autofilledReference;
+  String? _autofilledReferenceIdentity;
+  int _searchGeneration = 0, _suggestionOpenRequest = 0;
+  bool _searching = false, _lookupVisible = true;
+
+  /// 搜索只绑定代码输入、所选市场和品种；数量、真实成交价等编辑不改变搜索身份。
+  String get _securityLookupContext =>
+      '${_fields['symbol']?.text ?? ''}|${_market.name}|${_securityType.name}';
+
+  /// 后备价归属使用真实证券身份；代码首尾空白或字母大小写变化不代表另一证券。
+  String get _securityLookupIdentity =>
+      '${_market.name}:${_securityType.name}:${_fields['symbol']?.text.trim().toUpperCase() ?? ''}';
+
+  /// 身份改变时移除上一证券自动带入且未被用户改写的后备价。
+  /// 必须先清除自动标记，再清文本；clear 会同步触发所有原有草稿监听，避免递归清除。
+  /// 用户主动改填的价格与其余真实成交字段保持原样，等待用户自行核对新证券。
+  void _discardAutofilledReferenceIfIdentityChanged() {
+    if (_autofilledReferenceIdentity == null ||
+        _autofilledReferenceIdentity == _securityLookupIdentity) {
+      return;
+    }
+    final previous = _autofilledReference;
+    _autofilledReference = null;
+    _autofilledReferenceIdentity = null;
+    if (previous != null && _fields['reference']!.text == previous) {
+      _fields['reference']!.clear();
+    }
+  }
+
+  /// 输入或市场改变后废弃旧远端结果及未完成请求；不取消用户已填的任何草稿字段。
+  void _clearSecuritySearch() {
+    _searchGeneration++;
+    _onlineSecurities = const [];
+    _onlineQuery = null;
+    _searchMessage = null;
+    _searching = false;
+    _searchInputSnapshot = _securityLookupContext;
+  }
 
   /// 以所有输入和业务选择比较草稿，不将加载默认值或保存错误误判为修改。
   String get _editorSnapshot => editorDraftSnapshot(
@@ -953,6 +998,10 @@ class _StockEditorPageState extends State<StockEditorPage> {
 
   /// 文本输入也刷新退出保护；切换页签只隐藏表单，不丢弃其控制器。
   void _editorChanged() {
+    _discardAutofilledReferenceIfIdentityChanged();
+    if (_searchInputSnapshot != _securityLookupContext) {
+      _clearSecuritySearch();
+    }
     if (mounted) setState(() {});
   }
 
@@ -960,7 +1009,16 @@ class _StockEditorPageState extends State<StockEditorPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_initialized) return;
+    final visible = Visibility.of(context);
+    if (_initialized) {
+      if ((_lookupVisible && !visible) ||
+          VeriFinScope.of(context).activeBook.id != _bookId) {
+        _clearSecuritySearch();
+      }
+      _lookupVisible = visible;
+      return;
+    }
+    _lookupVisible = visible;
     _initialized = true;
     final c = VeriFinScope.of(context);
     _bookId = c.activeBook.id;
@@ -1010,6 +1068,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
       _fields[pair.key] = TextEditingController(text: pair.value);
     }
     _initialEditorSnapshot = _editorSnapshot;
+    _searchInputSnapshot = _securityLookupContext;
     for (final field in _fields.values) {
       field.addListener(_editorChanged);
     }
@@ -1018,6 +1077,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
   /// 释放输入资源，取消编辑不触发任何保存。
   @override
   void dispose() {
+    _searchGeneration++;
     for (final field in _fields.values) {
       field.dispose();
     }
@@ -1044,12 +1104,164 @@ class _StockEditorPageState extends State<StockEditorPage> {
     ),
   );
 
+  /// 构建代码字段及本地/用户主动查询的远端候选；其他账户只复用身份，不复制价格。
+  /// [context] 提供本地化和 Scope；已有事件、持仓上下文或转仓继续锁定证券身份。
+  Widget _symbolField(BuildContext context) {
+    final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
+    final account = c.accounts
+        .where((value) => value.id == widget.accountId)
+        .firstOrNull;
+    final readOnly =
+        widget.transfer || widget.event != null || widget.securityId != null;
+    final suggestions = account == null
+        ? const <InvestmentSecuritySuggestion>[]
+        : collectInvestmentSecuritySuggestions(
+            portfolios: c.accounts
+                .where((value) => value.currencyCode == account.currencyCode)
+                .map((value) => c.investmentFor(value.id))
+                .whereType<InvestmentPortfolio>(),
+            bookId: _bookId,
+            accountId: widget.accountId,
+            currencyCode: account.currencyCode,
+            market: _market,
+            type: _securityType,
+            remoteSecurities: _onlineSecurities,
+            remoteQuery: _onlineQuery,
+          );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InvestmentSecurityAutocomplete(
+          controller: _fields['symbol']!,
+          fieldKey: const ValueKey('stock-symbol'),
+          label: l.investSymbol,
+          suggestions: suggestions,
+          openRequest: _suggestionOpenRequest,
+          readOnly: readOnly || _saving,
+          onSelected: (suggestion) {
+            final security = suggestion.security;
+            setState(() {
+              _market = security.market;
+              _securityType = security.type;
+              _fields['name']!.text = security.name;
+              if (suggestion.referencePrice != null) {
+                _autofilledReference = suggestion.referencePrice;
+                _autofilledReferenceIdentity = _securityLookupIdentity;
+                _fields['reference']!.text = suggestion.referencePrice!;
+              } else {
+                // 改选其他证券时移除上一项自动带入的价格，保留用户自己改填的参考价。
+                if (_autofilledReference != null &&
+                    _fields['reference']!.text == _autofilledReference) {
+                  _fields['reference']!.clear();
+                }
+                _autofilledReference = null;
+                _autofilledReferenceIdentity = null;
+              }
+              _clearSecuritySearch();
+            });
+          },
+        ),
+        if (!readOnly && _securityType == InvestmentSecurityType.stock) ...[
+          OutlinedButton.icon(
+            key: const Key('stock-search-online'),
+            style: investmentOutlineButtonStyle(context),
+            onPressed:
+                _saving || _searching || _fields['symbol']!.text.trim().isEmpty
+                ? null
+                : _searchSecurity,
+            icon: const Icon(Icons.search),
+            label: Text(_searching ? l.commonProcessing : l.investSearchOnline),
+          ),
+          const SizedBox(height: 6),
+          InvestmentHint(l.investSearchOnlineConsent),
+          if (_searchMessage != null) ...[
+            const SizedBox(height: 8),
+            InvestmentHint(_searchMessage!),
+          ],
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  /// 仅在用户点击联网按钮时查询一次公开股票资料；每次按键不会触发请求。
+  /// 请求序号和原输入上下文共同拒绝旧结果，切页签、离页或换账本不抢焦点。
+  /// Controller 负责隐私友好日志，界面失败只反馈并保留全部原草稿。
+  Future<void> _searchSecurity() async {
+    if (_searching || _saving) return;
+    final c = VeriFinScope.of(context);
+    final account = c.accounts
+        .where((value) => value.id == widget.accountId)
+        .firstOrNull;
+    final query = _fields['symbol']!.text.trim();
+    if (account == null || query.isEmpty || c.activeBook.id != _bookId) return;
+    final generation = ++_searchGeneration;
+    final inputSnapshot = _securityLookupContext;
+    setState(() {
+      _searching = true;
+      _onlineSecurities = const [];
+      _onlineQuery = null;
+      _searchMessage = null;
+    });
+    try {
+      final securities = await c.searchInvestmentSecurities(
+        query,
+        market: _market,
+        currencyCode: account.currencyCode,
+      );
+      if (!mounted ||
+          generation != _searchGeneration ||
+          inputSnapshot != _securityLookupContext ||
+          c.activeBook.id != _bookId) {
+        return;
+      }
+      if (_saving ||
+          _submitted ||
+          !Visibility.of(context) ||
+          !(ModalRoute.of(context)?.isCurrent ?? true) ||
+          !c.accounts.any((value) => value.id == widget.accountId)) {
+        setState(_clearSecuritySearch);
+        return;
+      }
+      setState(() {
+        _searching = false;
+        _onlineSecurities = securities;
+        _onlineQuery = query;
+        if (securities.isNotEmpty) _suggestionOpenRequest++;
+        _searchMessage = securities.isEmpty
+            ? AppLocalizations.of(context).investSearchNoResults
+            : null;
+      });
+    } catch (_) {
+      // Controller 已记录不含搜索词的中文错误类型；这里保留草稿并给出可见反馈。
+      if (!mounted ||
+          generation != _searchGeneration ||
+          inputSnapshot != _securityLookupContext ||
+          c.activeBook.id != _bookId) {
+        return;
+      }
+      if (_saving ||
+          _submitted ||
+          !Visibility.of(context) ||
+          !(ModalRoute.of(context)?.isCurrent ?? true) ||
+          !c.accounts.any((value) => value.id == widget.accountId)) {
+        setState(_clearSecuritySearch);
+        return;
+      }
+      setState(() {
+        _searching = false;
+        _searchMessage = AppLocalizations.of(context).investSearchOnlineFailed;
+      });
+    }
+  }
+
   /// 提交前核对仍在同一账本；校验失败保留所有输入，保存中禁止重复点击。
   /// 已有基金的后备价数值未变时不重设价格依据，使买卖或编辑交易后仍可采用净值并重算历史。
   /// 用户确实改变后备价时才传入新值，由 Controller 切回手填；股票沿用既有保存语义。
   Future<bool> _save() async {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
     if (_saving || _submitted || c.activeBook.id != _bookId) return false;
+    _clearSecuritySearch();
     final account = c.accounts
         .where((a) => a.id == widget.accountId)
         .firstOrNull;
@@ -1291,7 +1503,11 @@ class _StockEditorPageState extends State<StockEditorPage> {
                         l,
                         fund: _securityType == InvestmentSecurityType.fund,
                       ),
-                      onSelected: (v) => setState(() => _market = v),
+                      onSelected: (v) => setState(() {
+                        _market = v;
+                        _discardAutofilledReferenceIfIdentityChanged();
+                        _clearSecuritySearch();
+                      }),
                       semanticLabel: l.investMarket,
                       builder: (context, open, active) => SettingsRow(
                         icon: Icons.public,
@@ -1310,14 +1526,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
                             : open,
                       ),
                     ),
-                    _field(
-                      'symbol',
-                      l.investSymbol,
-                      readOnly:
-                          widget.transfer ||
-                          widget.event != null ||
-                          widget.securityId != null,
-                    ),
+                    _symbolField(context),
                     _field('name', l.investName, readOnly: widget.transfer),
                   ],
                 ),

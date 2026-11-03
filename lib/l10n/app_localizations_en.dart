@@ -6973,6 +6973,38 @@ class AppLocalizationsEn extends AppLocalizations {
       'Not saved. Check numbers, currency, cash, opening date and subsequent holdings.';
 
   @override
+  String get marketNoSecurities =>
+      'No securities have been recorded yet, so there are no quote details to show. Record a securities trade or existing holdings to view them here.';
+
+  @override
+  String get marketSettings => 'Networking and refresh';
+
+  @override
+  String get marketHoldings => 'Holding reference quotes';
+
+  @override
+  String get marketEmptyHoldings =>
+      'No holding quotes to show yet. Record a securities trade or existing holdings to view quotes and choose valuation prices here.';
+
+  @override
+  String get marketReferencePrice => 'Current reference quote';
+
+  @override
+  String get investSearchOnline => 'Search securities online';
+
+  @override
+  String get investSearchOnlineConsent =>
+      'Click to send only your entered symbol or name to Tencent. The service can see your IP; account, holding and amount data are not sent. Results only complete the symbol and name. Review the name, market and instrument type.';
+
+  @override
+  String get investSearchOnlineFailed =>
+      'Security search failed. Try again later or enter details manually.';
+
+  @override
+  String get investSearchNoResults =>
+      'No matching securities found. You can enter the details manually.';
+
+  @override
   String get investDelete => 'Delete investment record';
 
   @override

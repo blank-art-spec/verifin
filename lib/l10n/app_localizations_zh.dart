@@ -6741,6 +6741,34 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investSaveError => '未保存：请核对数字、币种、现金、期初日期及后续持仓数量。';
 
   @override
+  String get marketNoSecurities => '尚未录入证券，暂无行情资料。录入证券交易或已有持仓后，可在这里查看。';
+
+  @override
+  String get marketSettings => '联网与刷新';
+
+  @override
+  String get marketHoldings => '持仓参考行情';
+
+  @override
+  String get marketEmptyHoldings => '暂无需要展示的持仓行情。记录证券交易或已有持仓后，可在这里查看报价并选择估值依据。';
+
+  @override
+  String get marketReferencePrice => '当前参考报价';
+
+  @override
+  String get investSearchOnline => '联网搜索证券';
+
+  @override
+  String get investSearchOnlineConsent =>
+      '点击后仅向腾讯发送输入的证券代码或名称，服务方可见 IP；不发送账户、持仓或金额。结果仅补全代码和名称，请核对证券名称、市场及品种。';
+
+  @override
+  String get investSearchOnlineFailed => '证券资料查询失败，请稍后重试或手动填写。';
+
+  @override
+  String get investSearchNoResults => '未找到匹配证券，可继续手动填写。';
+
+  @override
   String get investDelete => '删除此投资记录';
 
   @override

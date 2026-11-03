@@ -451,28 +451,34 @@ void main() {
     final card = find
         .ancestor(of: find.text(_fund.symbol), matching: find.byType(VeriCard))
         .first;
-    final navDate = find.descendant(
+    // 行情页将来源/净值日期与抓取时间分层展示，按实际组件字段核对，而非旧的冒号拼接文本。
+    final navDetails = find.descendant(
       of: card,
-      matching: find.textContaining('${l.marketNavDate}:'),
+      matching: find.byType(InvestmentQuoteDetails),
     );
     final fetched = find.descendant(
       of: card,
-      matching: find.textContaining('${l.investFetchedAt}:'),
+      matching: find.byWidgetPredicate(
+        (widget) =>
+            widget is DetailInfoRow && widget.label == l.investFetchedAt,
+      ),
     );
     await _reveal(tester, fetched);
-    expect(navDate, findsOneWidget);
-    final navText = tester.widget<Text>(navDate).data!;
+    expect(navDetails, findsOneWidget);
+    final nav = tester.widget<InvestmentQuoteDetails>(navDetails);
+    expect(nav.dateOnly, isTrue);
+    final navText = nav.quoteTime;
     expect(navText, contains('2026'));
     expect(navText, isNot(matches(RegExp(r'\d{1,2}:\d{2}'))));
     final context = tester.element(fetched);
     expect(
-      tester.widget<Text>(fetched).data,
+      tester.widget<DetailInfoRow>(fetched).value,
       contains(
         formatQuoteTime(context, adapter.fetchedAt, includeSeconds: true),
       ),
     );
     expect(
-      tester.widget<Text>(fetched).data,
+      tester.widget<DetailInfoRow>(fetched).value,
       matches(RegExp(r'\d{1,2}:\d{2}:\d{2}')),
     );
     expect(controller.investmentFor(account.id)!.valuationSnapshots, isEmpty);

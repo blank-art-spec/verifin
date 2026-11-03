@@ -12194,6 +12194,60 @@ abstract class AppLocalizations {
   /// **'未保存：请核对数字、币种、现金、期初日期及后续持仓数量。'**
   String get investSaveError;
 
+  /// No description provided for @marketNoSecurities.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未录入证券，暂无行情资料。录入证券交易或已有持仓后，可在这里查看。'**
+  String get marketNoSecurities;
+
+  /// No description provided for @marketSettings.
+  ///
+  /// In zh, this message translates to:
+  /// **'联网与刷新'**
+  String get marketSettings;
+
+  /// No description provided for @marketHoldings.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓参考行情'**
+  String get marketHoldings;
+
+  /// No description provided for @marketEmptyHoldings.
+  ///
+  /// In zh, this message translates to:
+  /// **'暂无需要展示的持仓行情。记录证券交易或已有持仓后，可在这里查看报价并选择估值依据。'**
+  String get marketEmptyHoldings;
+
+  /// No description provided for @marketReferencePrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前参考报价'**
+  String get marketReferencePrice;
+
+  /// No description provided for @investSearchOnline.
+  ///
+  /// In zh, this message translates to:
+  /// **'联网搜索证券'**
+  String get investSearchOnline;
+
+  /// No description provided for @investSearchOnlineConsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击后仅向腾讯发送输入的证券代码或名称，服务方可见 IP；不发送账户、持仓或金额。结果仅补全代码和名称，请核对证券名称、市场及品种。'**
+  String get investSearchOnlineConsent;
+
+  /// No description provided for @investSearchOnlineFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'证券资料查询失败，请稍后重试或手动填写。'**
+  String get investSearchOnlineFailed;
+
+  /// No description provided for @investSearchNoResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'未找到匹配证券，可继续手动填写。'**
+  String get investSearchNoResults;
+
   /// No description provided for @investDelete.
   ///
   /// In zh, this message translates to:

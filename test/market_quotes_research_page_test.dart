@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/common_widgets.dart';
 import 'package:verifin/app/feedback.dart';
 import 'package:verifin/app/investments/market_quote.dart';
+import 'package:verifin/app/investments/investment_widgets.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
@@ -219,7 +220,14 @@ void main() {
 
         await _reveal(tester, find.text(l.marketSourceResearch));
         expect(find.text(l.marketSourceResearch), findsOneWidget);
-        expect(find.text(researchFixtureSourceId), findsOneWidget);
+        // 来源核对组和持仓报价依据都可显示同一公开来源，精确核对配置组中的一项。
+        expect(
+          find.descendant(
+            of: find.byType(InvestmentSection),
+            matching: find.text(researchFixtureSourceId),
+          ),
+          findsOneWidget,
+        );
         // 来源分组只展示已装配项，不再出现已移除的旧验证来源。
         expect(find.text('Yahoo Finance'), findsNothing);
         expect(find.text('Nasdaq'), findsNothing);

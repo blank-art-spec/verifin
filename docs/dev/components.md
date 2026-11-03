@@ -1,5 +1,15 @@
 # 组件清单（Component Registry）
 
+2026-11-03 行情排版与证券代码候选，行为和验证边界见[实施记录](investment-ledger-interaction-implementation.md)：
+
+| 组件或函数 | 位置与约定 |
+| --- | --- |
+| `InvestmentSecurityAutocomplete` | `app/investments/investment_security_autocomplete.dart`；复用 `InvestmentInputField`，通过 `OverlayPortal` 管理安全区及键盘感知的候选浮层，调用方持有文本控制器，组件释放自己的焦点及滚动资源；实色、受输入宽度和可用高度限制的可滚动候选，代码及名称完整换行，保留手填及身份只读约束，支持主动展开及上下键/回车/Esc |
+| `InvestmentSecuritySuggestion` / `collectInvestmentSecuritySuggestions` / `matchInvestmentSecuritySuggestions` | `app/investments/investment_security_suggestions.dart`；按账本、币种、市场和品种收集本地身份，当前账户优先，市场/品种/忽略大小写的原代码去重；代码或名称包含匹配。后备参考价只能来自当前账户，期权不混入股票/基金候选 |
+| `searchInvestmentSecurities(query, {market, currencyCode})` | `app/veri_fin_controller.dart`；页面主动身份查询的公共入口，可经 `create(securitySearchClient:)` 注入测试客户端；只返回候选、不写账目或偏好，失败仅记录不含搜索词的错误类型，由页面反馈并保留草稿 |
+| `SecuritySearchClient` / `SecuritySearchResponse` / `SecuritySearchTransport` / `SecuritySearchTransportFactory` / `TencentSecuritySearchTransport` | `app/investments/security_search.dart`；主动检索公开身份的有界客户端及可注入传输，固定 HTTPS `smartbox.gtimg.cn/s3/`，只发送 `q` 和 `t=all`，市场/币种在本地筛选；总时限 10 秒、响应 64 KiB、最多 20 项，不重定向、不执行响应脚本、不查询价格或写账目。拒绝来源明确标为基金 `KJ`、指数 `ZS`、权证 `QZ` 的条目；`GP` 候选仍可能含 ETF、单位或认股权证，须核对名称与品种，不提供基金 NAV 或期权合约规格 |
+| `MarketQuotesPage` | `pages/market_quotes_page.dart`；已有组合时展示账户副标题、联网与刷新设置、来源状态、持仓参考行情分组，价格与时间复用标准明细行及 `InvestmentQuoteDetails`。`InvestmentPage` 在尚无证券时也保留行情入口；有效账户无组合时显示标题、返回及 `marketNoSecurities` 空态，不创建组合或联网；已有组合且证券资料为空使用同一文案，历史资料仍在但无可展示持仓时用原 `marketEmptyHoldings`；真实账户失效另显示失效原因 |
+
 2026-11-02 账本类型与证券账户交互，行为及验证进度见[实施记录](investment-ledger-interaction-implementation.md)：
 
 | 组件或函数 | 位置与约定 |
@@ -306,7 +316,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 - 证券资产与历史：`investment_valuation.dart` 的 `valueInvestmentAccount` / `valueLedgerAccounts` / `accountCashAt` / `investmentRevision` / `investmentSnapshotAt` 是纯计算入口，历史显式传 `at`，统一资产及占比包含基金在途款；`currency_math.dart` 的 `AccountAssetAmounts` 和 `ConvertedAccountBalances` 保留总资产/负债分解。`models/investment_valuation_snapshot.dart` 保存实际观察点依据，`InvestmentHistoryPage` 复用 `InteractiveTrendChart`。详见 [阶段 5](securities-stage05-implementation.md)。
 - 证券资产占比：`InvestmentAccountValuation.cashShare` / `holdingsShare` / `shortObligationShare` 与 `shareOfAssets(value)` 统一以本币种账户的正现金加多头市值为分母；分母为零、估值不完整或输入无效时返回 null。概览复用 `SummaryMetric.detail`，持仓卡复用 `DetailInfoRow`；空头义务独立标注且允许超过 100%，冻结不重复扣减。百分比经 l10n `investAllocationPercent` 按语言显示一位小数。
 
-- 证券展示组合：`app/investments/investment_widgets.dart` 的 `InvestmentSection` 复用 `VeriCard`，统一分组标题、内容伸展和内部 Material 墨水层；`InvestmentHint` 统一次级说明的图标、行距和主题颜色。`InvestmentInputField` 令标签独立占位、随字号换行，并为输入框保留可访问性名称；`investmentInputDecoration` 只提供实色底色，不添加浮动标签。`investmentOutlineButtonStyle` 对齐次要按钮与主按钮的圆角、间距和触控高度。均只负责展示，不访问 Controller。
+- 证券展示组合：`app/investments/investment_widgets.dart` 的 `InvestmentSection` 复用 `VeriCard`，统一分组标题、内容伸展和内部 Material 墨水层；`InvestmentHint` 统一次级说明的图标、行距和主题颜色，图标按当前字体、语言、文字宽度及系统字号测出的首行实际行高中居中，辅助粗体/行高/字间距偏好与正文一致，续行保持独立文字列，不加固定像素偏移。`InvestmentInputField` 令标签独立占位、随字号换行，并为输入框保留可访问性名称；`investmentInputDecoration` 只提供实色底色，不添加浮动标签。`investmentOutlineButtonStyle` 对齐次要按钮与主按钮的圆角、间距和触控高度。均只负责展示，不访问 Controller。
 - 证券概览排版：同文件 `InvestmentMetricPair(first, second, filled)` 只排列两个 `SummaryMetric`。普通宽度等宽双列，内容宽度小于 300dp 或 13sp 文字缩放后超过 18dp 时改单列；`filled` 用实色画布色与统一圆角突出现金/持仓，false 用于次级资产与盈亏。内部 Row 保持标准指标 Expanded 关系合法，仅对这两个静态项测量等高；不读取或计算账务。
 - 持仓报价依据：同文件 `InvestmentQuoteDetails(source, quoteTime)` 接收公开来源名称及调用方已格式化的来源报价时间，仅在已采用的有效报价存在时展示。使用主题画布实色与 `veriRadiusSm`、装饰性云图标，来源为 `bodySmall`/w600，时间标签和内容为 `labelMedium`，复用 `marketQuoteTime` 本地化标签；长来源和时间完整换行，不设固定高度、不省略时区。持仓卡将其放在数量、成本、参考价、占比与盈亏之后、操作区之前；组件只负责排版，不访问 Controller、缓存或估值。
 

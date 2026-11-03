@@ -78,9 +78,10 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
 
   /// 绑定当前展示账户；正式应用的自动请求由应用级会话统一管理。
   /// 未装配应用门卫的独立页面仍保留原有自动入口，供组件隔离验证。
+  /// 尚未录入证券时只展示空态，不调度无目标刷新；有历史证券的清仓基金仍沿用历史补齐规则。
   void _activate({bool force = false}) {
     final p = _controller!.investmentFor(widget.accountId);
-    if (!_interactive || p == null) {
+    if (!_interactive || p == null || p.securities.isEmpty) {
       _boundPortfolio = null;
       _sync!.setVisible(null);
       return;
@@ -102,9 +103,10 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
   /// 刷新前后核对同一聚合及账本；字段/持仓/恢复改变会使旧结果失效。
   /// [automatic] 仅由页面进入或定时器传 true，按钮保留默认 false，
   /// 因此手动点击无五分钟等待，也不会重置自动计时；请求中仍禁止重复点击。
+  /// 完全没有录入证券时不请求，也不将正常空态改成来源不可用错误。
   Future<void> _refresh({bool automatic = false}) async {
     final c = _controller!, p = c.investmentFor(widget.accountId);
-    if (!_interactive || p == null) {
+    if (!_interactive || p == null || p.securities.isEmpty) {
       _sync!.setVisible(null);
       return;
     }
@@ -145,18 +147,54 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
   }
 
   /// 明确区分来源准入、设备联网授权及每证券持续手填覆盖三个用户选择。
+  /// 没有证券资料时展示正常空态，只有账户失效才显示账户变更提示；均保留标题和返回。
+  /// 正常内容按设置、来源和持仓分组；长金额及时间通过标准明细行完整换行。
   @override
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context),
         p = c.investmentFor(widget.accountId),
+        account = c.accounts.where((a) => a.id == widget.accountId).firstOrNull,
         l = AppLocalizations.of(context);
-    if (p == null) {
+    if (p == null || account == null) {
       return Scaffold(
-        body: SafeArea(child: Center(child: Text(l.investSaveError))),
+        body: SafeArea(
+          child: VeriPage(
+            child: ListView(
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
+              children: [
+                VeriHeader(title: l.marketTitle, showBack: true),
+                const SizedBox(height: 12),
+                InvestmentSection(
+                  title: l.marketTitle,
+                  children: [
+                    InvestmentHint(
+                      account == null
+                          ? l.entryBookUnavailable
+                          : l.marketNoSecurities,
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        ),
       );
     }
     final sync = c.investmentQuoteSync;
     final held = projectStocks(p).positions.map((h) => h.securityId).toSet();
+    // 份额尚未生效的基金仍可核对净值；普通证券只列当前真实持仓，不展示空目录。
+    final securities = p.securities
+        .where(
+          (s) =>
+              held.contains(s.id) ||
+              (s.isFund &&
+                  (p.openingHoldings.any((h) => h.securityId == s.id) ||
+                      p.fundSubscriptions.any(
+                        (subscription) => subscription.securityId == s.id,
+                      ) ||
+                      p.events.any((e) => e.securityId == s.id))),
+        )
+        .toList();
     // 只展示当前构建实际装配的来源；已移除的研究候选不再形成空配置项。
     final sources = sync.client.adapters.map((adapter) => adapter.capability);
     return Scaffold(
@@ -171,16 +209,18 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                   children: [
-                    VeriHeader(title: l.marketTitle, showBack: true),
-                    const SizedBox(height: 12),
-                    InvestmentHint(
-                      sync.client.hasResearchSources
-                          ? l.marketResearchConsent
-                          : l.marketConsent,
-                    ),
-                    const SizedBox(height: 8),
-                    InvestmentSection(
+                    VeriHeader(
                       title: l.marketTitle,
+                      subtitle: currencyUnitSubtitle(
+                        l,
+                        account.name,
+                        account.currencyCode,
+                      ),
+                      showBack: true,
+                    ),
+                    const SizedBox(height: 12),
+                    InvestmentSection(
+                      title: l.marketSettings,
                       children: [
                         if (!sync.client.hasAvailableSources)
                           InvestmentHint(l.marketGatePending),
@@ -202,9 +242,17 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                               ? null
                               : (v) => _configure(state.enabled, v),
                         ),
+                        InvestmentHint(
+                          sync.client.hasResearchSources
+                              ? l.marketResearchConsent
+                              : l.marketConsent,
+                        ),
+                        const SizedBox(height: 8),
                         FilledButton(
                           onPressed:
-                              !state.enabled ||
+                              p.securities.isEmpty ||
+                                  !sync.client.hasAvailableSources ||
+                                  !state.enabled ||
                                   state.status == QuoteSyncStatus.loading
                               ? null
                               : _refresh,
@@ -213,12 +261,24 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                         const SizedBox(height: 8),
                         InvestmentHint(state.status.label(l)),
                         if (state.attemptedAt != null)
-                          Text(
-                            '${l.marketAttempt}: ${formatQuoteTime(context, state.attemptedAt!, includeSeconds: true)}',
+                          DetailInfoRow(
+                            inline: true,
+                            label: l.marketAttempt,
+                            value: formatQuoteTime(
+                              context,
+                              state.attemptedAt!,
+                              includeSeconds: true,
+                            ),
                           ),
                         if (state.automatic && state.cooldownUntil != null)
-                          Text(
-                            '${l.marketNextRefresh}: ${formatQuoteTime(context, state.cooldownUntil!, includeSeconds: true)}',
+                          DetailInfoRow(
+                            inline: true,
+                            label: l.marketNextRefresh,
+                            value: formatQuoteTime(
+                              context,
+                              state.cooldownUntil!,
+                              includeSeconds: true,
+                            ),
                           ),
                       ],
                     ),
@@ -241,19 +301,24 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                         ],
                       ),
                     ],
-                    for (final s in p.securities.where(
-                      (s) =>
-                          held.contains(s.id) ||
-                          (s.isFund &&
-                              (p.openingHoldings.any(
-                                    (h) => h.securityId == s.id,
-                                  ) ||
-                                  p.fundSubscriptions.any(
-                                    (subscription) =>
-                                        subscription.securityId == s.id,
-                                  ) ||
-                                  p.events.any((e) => e.securityId == s.id))),
-                    )) ...[
+                    const SizedBox(height: 20),
+                    Text(
+                      l.marketHoldings,
+                      style: Theme.of(context).textTheme.titleMedium?.copyWith(
+                        fontWeight: FontWeight.w800,
+                      ),
+                    ),
+                    if (securities.isEmpty) ...[
+                      const SizedBox(height: 12),
+                      VeriCard(
+                        child: InvestmentHint(
+                          p.securities.isEmpty
+                              ? l.marketNoSecurities
+                              : l.marketEmptyHoldings,
+                        ),
+                      ),
+                    ],
+                    for (final s in securities) ...[
                       const SizedBox(height: 12),
                       VeriCard(
                         child: Column(
@@ -304,14 +369,42 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                               ],
                             ),
                             if (quotes[s.id] case final q?) ...[
-                              Text(
-                                '${q.source} · ${formatUserSecurityPrice(q.reference(MarketQuoteRequest(s), sync.clock())!.price, p.currencyCode)}',
+                              DetailInfoRow(
+                                inline: true,
+                                label: l.marketReferencePrice,
+                                value: formatUserSecurityPrice(
+                                  q
+                                      .reference(
+                                        MarketQuoteRequest(s),
+                                        sync.clock(),
+                                      )!
+                                      .price,
+                                  p.currencyCode,
+                                ),
                               ),
-                              Text(
-                                '${q.dateOnly ? l.marketNavDate : l.marketQuoteTime}: ${formatQuoteTime(context, q.reference(MarketQuoteRequest(s), sync.clock())!.time, includeSeconds: true, dateOnly: q.dateOnly)}',
+                              InvestmentQuoteDetails(
+                                source: q.source,
+                                quoteTime: formatQuoteTime(
+                                  context,
+                                  q
+                                      .reference(
+                                        MarketQuoteRequest(s),
+                                        sync.clock(),
+                                      )!
+                                      .time,
+                                  includeSeconds: true,
+                                  dateOnly: q.dateOnly,
+                                ),
+                                dateOnly: q.dateOnly,
                               ),
-                              Text(
-                                '${l.investFetchedAt}: ${formatQuoteTime(context, q.fetchedAt, includeSeconds: true)}',
+                              DetailInfoRow(
+                                inline: true,
+                                label: l.investFetchedAt,
+                                value: formatQuoteTime(
+                                  context,
+                                  q.fetchedAt,
+                                  includeSeconds: true,
+                                ),
                               ),
                               Text(q.tradeState.label(l)),
                               if (q.delayMinutes != null)

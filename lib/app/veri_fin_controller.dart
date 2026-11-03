@@ -27,6 +27,7 @@ import 'investments/investment_decimal.dart';
 import 'investments/stock_projection.dart';
 import 'investments/stock_cash_math.dart';
 import 'investments/market_quote.dart';
+import 'investments/security_search.dart';
 import 'investments/investment_quote_sync.dart';
 import 'investments/investment_valuation.dart';
 import 'investments/fund_reference_history.dart';
@@ -200,13 +201,15 @@ class VeriFinController extends ChangeNotifier
         _AccountEntryReminderOps,
         _WorkdayCalendarOps,
         _CreditHierarchyOps {
-  /// 注入设备 KV、账目仓储及日历客户端；构造仅载入本地状态，联网须后续显式授权。
+  /// 注入设备 KV、账目仓储及网络客户端；构造仅载入本地状态，联网须后续显式操作。
+  /// [securitySearchClient] 仅检索公开证券身份，不参与报价估值或账务持久化。
   VeriFinController._(
     this._store,
     this._repository,
     this._workdayCalendarClient, {
     AppLogger? logger,
     MarketQuoteClient marketQuoteClient = const MarketQuoteClient(),
+    SecuritySearchClient? securitySearchClient,
     bool systemIsEnglish = false,
     // ignore: prefer_initializing_formals
   }) : _systemIsEnglish = systemIsEnglish,
@@ -214,7 +217,8 @@ class VeriFinController extends ChangeNotifier
        _logger = logger,
        // 私有字段保留公开注入参数名，避免把实现细节暴露给 create 调用者。
        // ignore: prefer_initializing_formals
-       _marketQuoteClient = marketQuoteClient {
+       _marketQuoteClient = marketQuoteClient,
+       _securitySearchClient = securitySearchClient ?? SecuritySearchClient() {
     _loadPreferences();
     themePreferenceListenable = ValueNotifier<ThemePreference>(
       _themePreference,
@@ -230,6 +234,7 @@ class VeriFinController extends ChangeNotifier
   /// 唯一的构造入口：同步载入偏好类 KV 数据后，从 SQLite 载入账目类数据
   /// （全新数据库首启动写入默认数据）。账目类数据只以 SQLite 为准。
   /// [workdayCalendarClient] 允许测试注入公开日历响应；创建阶段只读缓存，不自动联网。
+  /// [securitySearchClient] 允许测试注入证券身份响应；仅用户点击搜索时查询，不自动联网。
   static Future<VeriFinController> create(
     LocalKeyValueStore store, {
     required LedgerRepository repository,
@@ -237,6 +242,7 @@ class VeriFinController extends ChangeNotifier
     bool systemIsEnglish = false,
     HolidayCalendarClient workdayCalendarClient = const HolidayCalendarClient(),
     MarketQuoteClient marketQuoteClient = const MarketQuoteClient(),
+    SecuritySearchClient? securitySearchClient,
   }) async {
     final controller = VeriFinController._(
       store,
@@ -244,6 +250,7 @@ class VeriFinController extends ChangeNotifier
       workdayCalendarClient,
       logger: logger,
       marketQuoteClient: marketQuoteClient,
+      securitySearchClient: securitySearchClient,
       systemIsEnglish: systemIsEnglish,
     );
     await controller._loadFromRepository();
@@ -270,6 +277,30 @@ class VeriFinController extends ChangeNotifier
   final HolidayCalendarClient _workdayCalendarClient;
   @override
   final MarketQuoteClient _marketQuoteClient;
+  final SecuritySearchClient _securitySearchClient;
+
+  /// 显式查询 [query] 对应的公开股票资料，按 [market] 和 [currencyCode] 本地过滤。
+  /// 页面必须由用户点击触发；不传账户、账本或金额，不落库、不改变行情联网偏好。
+  /// 失败日志只记录错误类型，避免异常中的请求地址泄露搜索文字；调用方保留草稿并反馈。
+  Future<List<StockSecurity>> searchInvestmentSecurities(
+    String query, {
+    required StockMarket market,
+    required String currencyCode,
+  }) async {
+    try {
+      return await _securitySearchClient.search(
+        query,
+        market: market,
+        currencyCode: currencyCode,
+      );
+    } catch (error) {
+      _logger?.warning(
+        '证券资料查询失败，错误类型：${error.runtimeType}',
+        source: 'security-search',
+      );
+      rethrow;
+    }
+  }
 
   /// 软件日志入口，供「软件日志」页读取；未注入时为 null。
   AppLogger? get logger => _logger;

@@ -239,29 +239,89 @@ class InvestmentHint extends StatelessWidget {
   const InvestmentHint(this.text, {super.key});
   final String text;
 
-  /// 图标对齐首行，采用主题次级文字色，保留系统字号缩放。
+  /// 测量 [style] 在 [maxWidth] 内实际排出的首行高度，包含字体回退与行间距。
+  /// [context] 提供与正文一致的语言、文字方向及系统字号；[heightBehavior] 保持首尾行
+  /// 留白规则一致。只读取文字布局，不写入状态；测量完成后立即释放排版资源。
+  double _firstLineHeight(
+    BuildContext context,
+    TextStyle style,
+    double maxWidth,
+    TextHeightBehavior? heightBehavior,
+  ) {
+    final painter = TextPainter(
+      text: TextSpan(text: text, style: style),
+      textDirection: Directionality.of(context),
+      textScaler: MediaQuery.textScalerOf(context),
+      locale: Localizations.maybeLocaleOf(context),
+      textHeightBehavior: heightBehavior,
+      maxLines: 1,
+    );
+    try {
+      painter.layout(maxWidth: maxWidth);
+      final lines = painter.computeLineMetrics();
+      return lines.isEmpty ? painter.preferredLineHeight : lines.first.height;
+    } finally {
+      painter.dispose();
+    }
+  }
+
+  /// 图标在首行实际行高中居中，避免顶端对齐让图标高于中文字及大字号正文。
+  /// 正文仍独占右侧列，换行保持悬挂缩进；不将图标居中到整段说明，也不添加固定偏移。
+  /// 系统粗体及文字间距偏好同时用于测量与显示，保证辅助设置下仍能对齐。
   @override
-  Widget build(BuildContext context) => Padding(
-    padding: const EdgeInsets.symmetric(vertical: 8),
-    child: Row(
-      crossAxisAlignment: CrossAxisAlignment.start,
-      children: [
-        Icon(
-          Icons.info_outline,
-          size: 16,
-          color: Theme.of(context).colorScheme.onSurfaceVariant,
-        ),
-        const SizedBox(width: 8),
-        Expanded(
-          child: Text(
-            text,
-            style: Theme.of(context).textTheme.bodySmall?.copyWith(
-              color: Theme.of(context).colorScheme.onSurfaceVariant,
-              height: 1.5,
-            ),
+  Widget build(BuildContext context) {
+    const iconSize = 16.0, gap = 8.0;
+    final theme = Theme.of(context);
+    final inherited = DefaultTextStyle.of(context);
+    final style = inherited.style
+        .merge(theme.textTheme.bodySmall)
+        .copyWith(
+          color: theme.colorScheme.onSurfaceVariant,
+          fontWeight: MediaQuery.boldTextOf(context) ? FontWeight.bold : null,
+          height:
+              MediaQuery.maybeLineHeightScaleFactorOverrideOf(context) ?? 1.5,
+          letterSpacing: MediaQuery.maybeLetterSpacingOverrideOf(context),
+          wordSpacing: MediaQuery.maybeWordSpacingOverrideOf(context),
+        );
+    final heightBehavior =
+        inherited.textHeightBehavior ??
+        DefaultTextHeightBehavior.maybeOf(context);
+    return LayoutBuilder(
+      builder: (context, constraints) {
+        final firstLineHeight = _firstLineHeight(
+          context,
+          style,
+          (constraints.maxWidth - iconSize - gap).clamp(0.0, double.infinity),
+          heightBehavior,
+        );
+        return Padding(
+          padding: const EdgeInsets.symmetric(vertical: 8),
+          child: Row(
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              SizedBox(
+                width: iconSize,
+                height: firstLineHeight,
+                child: Center(
+                  child: Icon(
+                    Icons.info_outline,
+                    size: firstLineHeight.clamp(0.0, iconSize),
+                    color: theme.colorScheme.onSurfaceVariant,
+                  ),
+                ),
+              ),
+              const SizedBox(width: gap),
+              Expanded(
+                child: Text(
+                  text,
+                  style: style,
+                  textHeightBehavior: heightBehavior,
+                ),
+              ),
+            ],
           ),
-        ),
-      ],
-    ),
-  );
+        );
+      },
+    );
+  }
 }
