@@ -37,17 +37,20 @@ extension FundAccrualRuleLabel on FundAccrualRule {
 class FundOperationsButton extends StatelessWidget {
   /// [accountId] 为当前真实币种账户；[securityId] 可限定为卡片中的已有基金。
   /// [enabled] 由账户可选基金决定；[compact] 使持仓卡复用普通文字按钮密度。
+  /// [style] 可由概览操作区统一尺寸和对齐，默认沿用现有按钮样式。
   const FundOperationsButton({
     super.key,
     required this.accountId,
     this.securityId,
     this.enabled = true,
     this.compact = false,
+    this.style,
   });
 
   final String accountId;
   final String? securityId;
   final bool enabled, compact;
+  final ButtonStyle? style;
 
   /// [mode] 只决定新页面的草稿类型；导航本身不确认申购、不扣款、不增加份额。
   void _open(BuildContext context, FundEntryMode mode) {
@@ -86,11 +89,14 @@ class FundOperationsButton extends StatelessWidget {
       ],
       builder: (context, open, active) => compact
           ? TextButton(
+              style: style,
               onPressed: enabled ? open : null,
               child: Text(l.fundOperations),
             )
           : OutlinedButton.icon(
-              style: investmentOutlineButtonStyle(context),
+              style:
+                  style?.merge(investmentOutlineButtonStyle(context)) ??
+                  investmentOutlineButtonStyle(context),
               onPressed: enabled ? open : null,
               icon: const Icon(Icons.account_balance_outlined),
               label: Text(l.fundOperations),

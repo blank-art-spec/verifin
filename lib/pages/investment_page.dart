@@ -181,6 +181,29 @@ class InvestmentPage extends StatelessWidget {
     String money(double value) => formatUserMoney(value, account.currencyCode);
     final surfaceText = Theme.of(context).colorScheme.onSurface;
     final secondaryText = Theme.of(context).colorScheme.onSurfaceVariant;
+    const actionStyle = ButtonStyle(
+      alignment: AlignmentDirectional.centerStart,
+      visualDensity: VisualDensity.standard,
+      minimumSize: WidgetStatePropertyAll(Size(0, 48)),
+      padding: WidgetStatePropertyAll(
+        EdgeInsets.symmetric(horizontal: 12, vertical: 12),
+      ),
+      iconSize: WidgetStatePropertyAll(20),
+    );
+    final outlineActionStyle = actionStyle.merge(
+      investmentOutlineButtonStyle(context),
+    );
+    final unheldFunds =
+        portfolio?.securities
+            .where(
+              (security) =>
+                  security.isFund &&
+                  !projection!.positions.any(
+                    (position) => position.securityId == security.id,
+                  ),
+            )
+            .toList() ??
+        const <StockSecurity>[];
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
@@ -374,11 +397,12 @@ class InvestmentPage extends StatelessWidget {
                   ),
                 ),
                 const SizedBox(height: 10),
-                Wrap(
-                  spacing: 8,
-                  runSpacing: 6,
+                _InvestmentActions(
+                  key: const Key('investment-primary-actions'),
                   children: [
                     FilledButton.icon(
+                      key: const Key('investment-stock-action'),
+                      style: actionStyle,
                       onPressed: () => _newTrade(context, account),
                       icon: const Icon(Icons.add),
                       label: Text(l.investNewTrade),
@@ -386,32 +410,23 @@ class InvestmentPage extends StatelessWidget {
                     FundOperationsButton(
                       key: const Key('fund-operations'),
                       accountId: accountId,
+                      style: actionStyle,
                     ),
-                    for (final fund in portfolio.securities.where(
-                      (security) =>
-                          security.isFund &&
-                          !projection.positions.any(
-                            (position) => position.securityId == security.id,
-                          ),
-                    ))
-                      OutlinedButton(
-                        key: ValueKey('fund-trade-${fund.id}'),
-                        style: investmentOutlineButtonStyle(context),
-                        onPressed: () => _edit(context, securityId: fund.id),
-                        child: Text('${l.investFundNewTrade} · ${fund.symbol}'),
-                      ),
-                    OutlinedButton(
-                      style: investmentOutlineButtonStyle(context),
+                    OutlinedButton.icon(
+                      key: const Key('investment-option-action'),
+                      style: outlineActionStyle,
                       onPressed: () => Navigator.of(context).push<void>(
                         MaterialPageRoute(
                           builder: (_) =>
                               OptionEditorPage(accountId: accountId),
                         ),
                       ),
-                      child: Text(l.optionTitle),
+                      icon: const Icon(Icons.layers_outlined),
+                      label: Text(l.optionTitle),
                     ),
-                    OutlinedButton(
-                      style: investmentOutlineButtonStyle(context),
+                    OutlinedButton.icon(
+                      key: const Key('investment-cash-action'),
+                      style: outlineActionStyle,
                       onPressed: () async {
                         final value = await showTextInputDialog(
                           context: context,
@@ -441,10 +456,29 @@ class InvestmentPage extends StatelessWidget {
                           );
                         }
                       },
-                      child: Text(l.investCashCheck),
+                      icon: const Icon(Icons.account_balance_wallet_outlined),
+                      label: Text(l.investCashCheck),
                     ),
                   ],
                 ),
+                if (unheldFunds.isNotEmpty) ...[
+                  const SizedBox(height: 8),
+                  Wrap(
+                    spacing: 8,
+                    runSpacing: 8,
+                    children: [
+                      for (final fund in unheldFunds)
+                        OutlinedButton(
+                          key: ValueKey('fund-trade-${fund.id}'),
+                          style: investmentOutlineButtonStyle(context),
+                          onPressed: () => _edit(context, securityId: fund.id),
+                          child: Text(
+                            '${l.investFundNewTrade} · ${fund.symbol}',
+                          ),
+                        ),
+                    ],
+                  ),
+                ],
                 const SizedBox(height: 10),
                 InvestmentHint(
                   portfolio.marketPriceIds.isEmpty
@@ -561,6 +595,46 @@ class InvestmentPage extends StatelessWidget {
       ),
     );
   }
+}
+
+/// 证券页四个主操作保持按行排列的等宽双列，不受按钮文案或额外基金入口挤占。
+class _InvestmentActions extends StatelessWidget {
+  const _InvestmentActions({super.key, required this.children})
+    : assert(children.length == 4);
+
+  final List<Widget> children;
+
+  /// 每排随最长按钮自然增高；仅在图标和四个当前字号汉字也放不下时退为单列。
+  @override
+  Widget build(BuildContext context) => LayoutBuilder(
+    builder: (context, constraints) {
+      final fontSize = Theme.of(context).textTheme.labelLarge?.fontSize ?? 12;
+      final minimumWidth =
+          MediaQuery.textScalerOf(context).scale(fontSize) * 4 + 52;
+      final columns = constraints.maxWidth >= minimumWidth * 2 + 10 ? 2 : 1;
+      return Column(
+        crossAxisAlignment: CrossAxisAlignment.stretch,
+        children: [
+          for (var index = 0; index < children.length; index += columns) ...[
+            if (index > 0) const SizedBox(height: 10),
+            if (columns == 1)
+              children[index]
+            else
+              IntrinsicHeight(
+                child: Row(
+                  crossAxisAlignment: CrossAxisAlignment.stretch,
+                  children: [
+                    Expanded(child: children[index]),
+                    const SizedBox(width: 10),
+                    Expanded(child: children[index + 1]),
+                  ],
+                ),
+              ),
+          ],
+        ],
+      );
+    },
+  );
 }
 
 /// 一项持仓使用统一图标、金额格式和纯计算，不维护另一份可写数量。
