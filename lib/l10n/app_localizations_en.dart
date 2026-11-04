@@ -6965,6 +6965,13 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investOpeningCost => 'Opening total cost (blank if unknown)';
 
   @override
+  String get investOpeningUnitCost => 'Opening unit cost';
+
+  @override
+  String get investOpeningUnitCostHint =>
+      'Enter the average cost per share or unit. Total cost is calculated from the opening quantity; leave blank if unknown.';
+
+  @override
   String get investFinance =>
       'This account is confirmed to allow actual financing / negative cash';
 

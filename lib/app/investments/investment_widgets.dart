@@ -31,19 +31,26 @@ class InvestmentMetricPair extends StatelessWidget {
         color: Theme.of(context).scaffoldBackgroundColor,
         borderRadius: BorderRadius.circular(veriRadiusSm),
       ),
-      child: Padding(padding: const EdgeInsets.all(12), child: content),
+      child: Padding(padding: const EdgeInsets.all(10), child: content),
     );
   }
 
-  /// 普通手机宽度使用等宽双列，大字号或窄容器改为单列，避免强制缩小文字。
+  /// 普通手机及中等大字号保持等宽双列，只有每列连基本文字宽度都不足才改单列。
   /// [context] 提供主题与系统字号；双列仅对这两个静态指标测量固有高度，
   /// 让两块实色面板等高，不在整页列表上使用固有尺寸测量。
   @override
   Widget build(BuildContext context) => LayoutBuilder(
     builder: (context, constraints) {
-      final stacked =
-          constraints.maxWidth < 300 ||
-          MediaQuery.textScalerOf(context).scale(13) > 18;
+      // 为每列保留至少五个正文汉字的宽度（最低 96dp），再加面板内边距
+      // 和列间距。三组使用相同门槛，避免 360dp 手机或 1.5 倍字号整页竖排。
+      // 长金额仍按真实字号完整换行，不缩小字号或省略数字。
+      final labelSize = Theme.of(context).textTheme.bodySmall?.fontSize ?? 12;
+      final minimumTextWidth =
+          (MediaQuery.textScalerOf(context).scale(labelSize) * 5).clamp(
+            96.0,
+            double.infinity,
+          );
+      final stacked = constraints.maxWidth < minimumTextWidth * 2 + 52;
       final firstPanel = _panel(context, first);
       final secondPanel = _panel(context, second);
       if (stacked) {

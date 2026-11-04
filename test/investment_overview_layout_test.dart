@@ -175,6 +175,24 @@ void main() {
     (
       locale: const Locale('zh'),
       width: 360.0,
+      scale: 1.0,
+      brightness: Brightness.light,
+    ),
+    (
+      locale: const Locale('zh'),
+      width: 393.0,
+      scale: 1.5,
+      brightness: Brightness.light,
+    ),
+    (
+      locale: const Locale('zh'),
+      width: 320.0,
+      scale: 1.5,
+      brightness: Brightness.light,
+    ),
+    (
+      locale: const Locale('zh'),
+      width: 360.0,
       scale: 1.5,
       brightness: Brightness.dark,
     ),
@@ -189,6 +207,12 @@ void main() {
       width: 360.0,
       scale: 1.5,
       brightness: Brightness.light,
+    ),
+    (
+      locale: const Locale('zh'),
+      width: 320.0,
+      scale: 2.0,
+      brightness: Brightness.dark,
     ),
   ]) {
     testWidgets(
@@ -226,16 +250,21 @@ void main() {
           expect(metric, findsOneWidget);
           _expectCompleteMetric(tester, metric);
         }
-        final cashRect = tester.getRect(cash);
-        final holdingsRect = tester.getRect(holdings);
-        if (scenario.scale > 1.4) {
-          expect(holdingsRect.top, greaterThan(cashRect.bottom));
-          expect(holdingsRect.left, closeTo(cashRect.left, 1));
-          expect(holdingsRect.width, closeTo(cashRect.width, 1));
-        } else {
-          expect(holdingsRect.top, closeTo(cashRect.top, 1));
-          expect(holdingsRect.left, greaterThan(cashRect.right));
-          expect(holdingsRect.width, closeTo(cashRect.width, 1));
+        for (final pair in [
+          (cash, holdings),
+          (market, short),
+          (realized, unrealized),
+        ]) {
+          final firstRect = tester.getRect(pair.$1);
+          final secondRect = tester.getRect(pair.$2);
+          if (scenario.scale == 2) {
+            expect(secondRect.top, greaterThan(firstRect.bottom));
+            expect(secondRect.left, closeTo(firstRect.left, 1));
+          } else {
+            expect(secondRect.top, closeTo(firstRect.top, 1));
+            expect(secondRect.left, greaterThan(firstRect.right));
+          }
+          expect(secondRect.width, closeTo(firstRect.width, 1));
         }
         final cashPair = _pairFor(cash);
         final accountingPair = _pairFor(market);
@@ -323,7 +352,7 @@ void main() {
 
   testWidgets('指标组按实际可用宽度切换，默认指标保留原单行省略行为', (tester) async {
     final theme = buildVeriFinTheme(Brightness.light);
-    for (final width in [299.0, 300.0]) {
+    for (final width in [243.0, 244.0]) {
       await tester.pumpWidget(
         zhMaterialApp(
           theme: theme,
@@ -356,7 +385,7 @@ void main() {
       final second = _overviewMetric('多头持仓价值');
       _expectCompleteMetric(tester, first);
       _expectCompleteMetric(tester, second);
-      if (width < 300) {
+      if (width < 244) {
         expect(
           tester.getRect(second).top,
           greaterThan(tester.getRect(first).bottom),

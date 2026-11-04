@@ -323,7 +323,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 - 证券资产占比：`InvestmentAccountValuation.cashShare` / `holdingsShare` / `shortObligationShare` 与 `shareOfAssets(value)` 统一以本币种账户的正现金加多头市值为分母；分母为零、估值不完整或输入无效时返回 null。概览复用 `SummaryMetric.detail`，持仓卡复用 `DetailInfoRow`；空头义务独立标注且允许超过 100%，冻结不重复扣减。百分比经 l10n `investAllocationPercent` 按语言显示一位小数。
 
 - 证券展示组合：`app/investments/investment_widgets.dart` 的 `InvestmentSection` 复用 `VeriCard`，统一分组标题、内容伸展和内部 Material 墨水层；`InvestmentHint` 统一次级说明的图标、行距和主题颜色，图标按当前字体、语言、文字宽度及系统字号测出的首行实际行高中居中，辅助粗体/行高/字间距偏好与正文一致，续行保持独立文字列，不加固定像素偏移。`InvestmentInputField` 令标签独立占位、随字号换行，并为输入框保留可访问性名称；`investmentInputDecoration` 只提供实色底色，不添加浮动标签。`investmentOutlineButtonStyle` 对齐次要按钮与主按钮的圆角、间距和触控高度。均只负责展示，不访问 Controller。
-- 证券概览排版：同文件 `InvestmentMetricPair(first, second, filled)` 只排列两个 `SummaryMetric`。普通宽度等宽双列，内容宽度小于 300dp 或 13sp 文字缩放后超过 18dp 时改单列；`filled` 用实色画布色与统一圆角突出现金/持仓，false 用于次级资产与盈亏。内部 Row 保持标准指标 Expanded 关系合法，仅对这两个静态项测量等高；不读取或计算账务。
+- 证券概览排版：同文件 `InvestmentMetricPair(first, second, filled)` 只排列两个 `SummaryMetric`。普通手机及 1.5 倍字号保持等宽双列，每列预留五个当前正文字号汉字的宽度（最低 96dp）、两侧各 10dp 内边距及 12dp 列间距，空间不足才改单列；三组共用门槛。`filled` 用实色画布色与统一圆角突出现金/持仓，false 用于次级资产与盈亏。金额完整换行、不缩小字号，内部 Row 保持标准指标 Expanded 关系合法，仅对这两个静态项测量等高；不读取或计算账务。
 - 持仓报价依据：同文件 `InvestmentQuoteDetails(source, quoteTime)` 接收公开来源名称及调用方已格式化的来源报价时间，仅在已采用的有效报价存在时展示。使用主题画布实色与 `veriRadiusSm`、装饰性云图标，来源为 `bodySmall`/w600，时间标签和内容为 `labelMedium`，复用 `marketQuoteTime` 本地化标签；长来源和时间完整换行，不设固定高度、不省略时区。持仓卡将其放在数量、成本、参考价、占比与盈亏之后、操作区之前；组件只负责排版，不访问 Controller、缓存或估值。
 
 - 投资草稿序号：Controller 公共只读 `nextInvestmentEventSequenceFor(accountId)` 复用既有 `_nextStockSequence`，返回当前账本真实证券账户的最新可用序号，账户失效返回 null。股票新事件保存时读取，期权预览时读取并冻结组合/现金依据；编辑旧事件仍保留原序号，不能在草稿初始化时长期占用序号。

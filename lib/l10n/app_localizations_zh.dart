@@ -6735,6 +6735,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investOpeningCost => '期初总成本（留空表示未知）';
 
   @override
+  String get investOpeningUnitCost => '期初单位成本';
+
+  @override
+  String get investOpeningUnitCostHint => '填写每股／每份的平均成本，总成本按持仓数量自动计算；留空表示未知。';
+
+  @override
   String get investFinance => '已确认此账户允许真实融资 / 负现金';
 
   @override

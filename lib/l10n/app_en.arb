@@ -2650,6 +2650,8 @@
   "investOpeningCash": "Opening cash",
   "investOpeningQuantity": "Opening shares (optional)",
   "investOpeningCost": "Opening total cost (blank if unknown)",
+  "investOpeningUnitCost": "Opening unit cost",
+  "investOpeningUnitCostHint": "Enter the average cost per share or unit. Total cost is calculated from the opening quantity; leave blank if unknown.",
   "investFinance": "This account is confirmed to allow actual financing / negative cash",
   "investSaveError": "Not saved. Check numbers, currency, cash, opening date and subsequent holdings.",
   "marketNoSecurities": "No securities have been recorded yet, so there are no quote details to show. Record a securities trade or existing holdings to view them here.",

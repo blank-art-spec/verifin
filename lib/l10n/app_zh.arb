@@ -3816,6 +3816,8 @@
   "investOpeningCash": "期初现金",
   "investOpeningQuantity": "期初持仓数量（可留空）",
   "investOpeningCost": "期初总成本（留空表示未知）",
+  "investOpeningUnitCost": "期初单位成本",
+  "investOpeningUnitCostHint": "填写每股／每份的平均成本，总成本按持仓数量自动计算；留空表示未知。",
   "investFinance": "已确认此账户允许真实融资 / 负现金",
   "investSaveError": "未保存：请核对数字、币种、现金、期初日期及后续持仓数量。",
   "marketNoSecurities": "尚未录入证券，暂无行情资料。录入证券交易或已有持仓后，可在这里查看。",

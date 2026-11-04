@@ -12182,6 +12182,18 @@ abstract class AppLocalizations {
   /// **'期初总成本（留空表示未知）'**
   String get investOpeningCost;
 
+  /// No description provided for @investOpeningUnitCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初单位成本'**
+  String get investOpeningUnitCost;
+
+  /// No description provided for @investOpeningUnitCostHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写每股／每份的平均成本，总成本按持仓数量自动计算；留空表示未知。'**
+  String get investOpeningUnitCostHint;
+
   /// No description provided for @investFinance.
   ///
   /// In zh, this message translates to:

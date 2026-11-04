@@ -1293,6 +1293,22 @@ class _StockEditorPageState extends State<StockEditorPage> {
             (symbol.isEmpty || security.name.isEmpty || reference.isEmpty)) {
           throw const FormatException('期初资料不完整');
         }
+        String? openingTotalCost;
+        final unitCostText = _fields['cost']!.text.trim();
+        if (hasHolding && unitCostText.isNotEmpty) {
+          final units = InvestmentDecimal.parse(quantity);
+          final unitCost = InvestmentDecimal.parse(unitCostText);
+          if (units.units <= BigInt.zero || unitCost.units < BigInt.zero) {
+            throw const FormatException('期初数量或单位成本不合法');
+          }
+          // 表单录入每股/每份成本，持久化仍为总成本；量价相乘后只在现金精度舍入。
+          openingTotalCost = units
+              .moneyProduct(
+                unitCost,
+                CurrencyCatalog.require(account.currencyCode).minorUnit,
+              )
+              .toString();
+        }
         ok = await c.enableInvestment(
           accountId: account.id,
           openingCash: _fields['cash']!.text,
@@ -1304,9 +1320,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
                     securityId: security.id,
                     short: _short,
                     quantity: quantity,
-                    cost: _fields['cost']!.text.trim().isEmpty
-                        ? null
-                        : _fields['cost']!.text.trim(),
+                    cost: openingTotalCost,
                   ),
                 ]
               : [],
@@ -1554,7 +1568,11 @@ class _StockEditorPageState extends State<StockEditorPage> {
                         numeric: true,
                       ),
                     if (widget.setup) ...[
-                      _field('cost', l.investOpeningCost, numeric: true),
+                      _field('cost', l.investOpeningUnitCost, numeric: true),
+                      Text(
+                        l.investOpeningUnitCostHint,
+                        style: Theme.of(context).textTheme.bodySmall,
+                      ),
                       if (_securityType != InvestmentSecurityType.fund)
                         SwitchListTile(
                           contentPadding: EdgeInsets.zero,
