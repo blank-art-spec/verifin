@@ -1,4 +1,4 @@
-/// 招商资管香港美元货币基金的诊断净值来源；官网接口可用不等于取得发行使用许可。
+/// 招商资管香港指定美元货币基金的公开净值来源；由主应用工厂显式接入。
 library;
 
 import 'dart:async';
@@ -123,7 +123,7 @@ class CmsFundQuoteAdapter extends MarketQuoteAdapter {
   static const requestBody =
       '{"lang":"zh-CN","fundName":"CMS_USD_Money_Market_Fund"}';
 
-  /// 尚未确认对外应用展示授权，继续保留研究门禁，不能因匿名请求成功而自动批准。
+  /// 沿用 researchOnly 历史标记由主应用工厂接入，不因匿名请求成功而改写许可审核状态。
   @override
   QuoteSourceCapability get capability => const QuoteSourceCapability(
     sourceId,

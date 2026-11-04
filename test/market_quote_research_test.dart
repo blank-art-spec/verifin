@@ -1,7 +1,6 @@
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/investments/investment_quote_sync.dart';
 import 'package:verifin/app/investments/market_quote.dart';
-import 'package:verifin/app/investments/production_market_quotes.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 
@@ -32,41 +31,9 @@ MarketQuote _researchQuote(DateTime time) => MarketQuote(
   lastAt: time,
 );
 
-/// 注册研究构建矩阵、来源隔离及缓存降级检查；没有真实网络、设备或用户数据。
+/// 注册显式来源选择及缓存降级检查；历史 research 标记不代表只限诊断构建。
 void main() {
-  test('明确的 diagnostic 调试研究构建可用，普通测试入口保持空来源', () {
-    expect(
-      permitsQuoteResearch(
-        debugBuild: true,
-        flavor: 'diagnostic',
-        explicitlyEnabled: true,
-      ),
-      isTrue,
-    );
-    expect(buildProductionMarketQuoteClient().adapters, isEmpty);
-  });
-  for (final build in [
-    (label: '诊断 release', debug: false, flavor: 'diagnostic', enabled: true),
-    (label: '诊断未显式开启', debug: true, flavor: 'diagnostic', enabled: false),
-    (label: 'GitHub 调试', debug: true, flavor: 'github', enabled: true),
-    (label: 'Play 调试', debug: true, flavor: 'play', enabled: true),
-    (label: 'GitHub release', debug: false, flavor: 'github', enabled: true),
-    (label: 'Play release', debug: false, flavor: 'play', enabled: true),
-    (label: '未指定渠道', debug: true, flavor: null, enabled: true),
-  ]) {
-    test('${build.label} 不能被研究参数开启公开来源', () {
-      expect(
-        permitsQuoteResearch(
-          debugBuild: build.debug,
-          flavor: build.flavor,
-          explicitlyEnabled: build.enabled,
-        ),
-        isFalse,
-      );
-    });
-  }
-
-  test('普通客户端不接受研究来源，也不把研究可用当作正式准入', () {
+  test('通用客户端不自动接入显式来源，也不把可用当作许可已审核', () {
     final adapter = ResearchFixtureQuoteAdapter((_) async => []);
     final client = MarketQuoteClient(adapters: [adapter]);
 
@@ -80,7 +47,7 @@ void main() {
     expect(adapter.requests, 0);
   });
 
-  test('显式研究模式仍拒绝普通待审核来源，只选择明确标记的研究来源', () {
+  test('显式接入仍拒绝未标记来源，只选择代码指定的来源', () {
     final pending = ResearchFixtureQuoteAdapter(
       (_) async => [],
       researchOnly: false,
@@ -107,7 +74,7 @@ void main() {
     expect(research.requests, 0);
   });
 
-  test('普通客户端即使装有研究适配器也不能开启或发出查询', () async {
+  test('未允许显式来源的客户端不能开启或发出查询', () async {
     final time = DateTime.utc(2026, 10, 27, 2);
     final adapter = ResearchFixtureQuoteAdapter(
       (_) async => [_researchQuote(time)],
@@ -128,7 +95,7 @@ void main() {
     expect(adapter.requests, 0);
   });
 
-  test('研究缓存与开启偏好换回正式客户端后不能恢复联网或旧报价', () async {
+  test('缓存与开启偏好换回空客户端后不能恢复联网或旧报价', () async {
     final time = DateTime.utc(2026, 10, 27, 2);
     final store = LocalKeyValueStore();
     final portfolio = _researchHolding();
@@ -158,10 +125,10 @@ void main() {
     );
     research.dispose();
 
-    // 保留相同缓存和适配器，仅撤销构建许可；设备中的旧开启标记不能恢复研究能力。
+    // 撤除来源后，设备中的旧开启标记与报价缓存不能恢复联网能力。
     final formal = InvestmentQuoteSync(
       store: store,
-      client: MarketQuoteClient(adapters: [adapter]),
+      client: const MarketQuoteClient(),
       clock: () => time,
     );
     addTearDown(formal.dispose);

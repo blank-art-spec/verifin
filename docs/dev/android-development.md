@@ -99,6 +99,10 @@ flutter run -d <device-id> --flavor diagnostic --dart-define=UNIFIED_DESIGN_PREV
 debug 支持 hot reload；最终图形/OCR/插件行为必须另外用 release/R8 检查。
 同一工作区的 `flutter test`、`flutter pub get` 与 Android 构建必须顺序执行：它们会更新
 插件注册文件和依赖元数据；并行运行曾导致 release 编译误引用 integration_test 插件。
+2026-11-04 本机还复现了旧生成配置配合 `--no-pub` 时残留 `IntegrationTestPlugin` 的情况。
+遇到 release 的 `GeneratedPluginRegistrant.java` 引用该测试插件而编译失败时，先运行
+`flutter build apk --config-only --release --target-platform android-arm64 --flavor github --dart-define=UNIFIED_DESIGN_PREVIEW=true`
+刷新当前发行构建的依赖和插件注册，再顺序构建；不要手改生成注册文件或把测试插件加入生产依赖。
 用户明确要求在正式应用目录调试时使用 `--flavor github`，先核对签名/版本号；不得为
 解决签名不一致卸载正式应用。GitHub/Play 的发布差异仍以 AGENTS 为准。
 

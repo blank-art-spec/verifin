@@ -1,18 +1,18 @@
-# 公开股票参考行情：诊断研究接入
+# 公开股票参考行情：主应用接入与历史验证
 
-更新日期：2026-10-27。本文记录免账号、免 API Key、无自有后台的真实股票查询验证，
+更新日期：2026-11-04。本文记录主应用来源范围，以及 2026-10-27 起免账号、免 API Key、无自有后台的真实股票查询验证，
 配套机制见[参考行情阶段 4](securities-stage04-implementation.md)。
 
 天天基金的货币基金接口与指定香港基金 `HK0001039582` 的独立验证见
 [货币基金接口研究](money-fund-api-research.md)；本页的股票验证结果不外推为基金覆盖。
 同一指定 B 类基金随后通过[招商官方接口](cms-fund-api-research.md)完成 Android 匿名
-单位净值与历史下载验证；诊断来源限定该份额，不提供万份收益、七日年化或全港基金覆盖。
+单位净值与历史下载验证；基金来源限定该份额，不提供万份收益、七日年化或全港基金覆盖。
 
 ## 当前范围
 
 新增 `TencentQuoteAdapter`，由 Android 客户端直接请求腾讯公开股票端点。
-这是可显式装配的诊断研究来源，`QuoteSourceCapability.approved` 仍为 `false`，
-`researchOnly` 为 `true`；技术可达和字段校验不等于已取得正式发布使用许可。
+2026-11-04 起主应用固定装配该来源，`QuoteSourceCapability.approved` 仍为 `false`，
+`researchOnly` 为 `true`；应用可用性、技术可达和字段校验不等于已取得供应方正式许可。
 
 | 市场 | 研究适配器范围 | 本轮取得真实字段的标的 |
 | --- | --- | --- |
@@ -31,16 +31,11 @@
 
 ## 构建与启用边界
 
-正式入口在 `main.dart` 调用 `buildProductionMarketQuoteClient()` 装配客户端。
-研究来源只有同时满足下列三项才进入来源集合：
-
-1. 实际为 debug 构建；
-2. 使用独立 `diagnostic` flavor；
-3. 显式传入 `--dart-define=PUBLIC_QUOTE_RESEARCH=true`。
-
-`permitsQuoteResearch` 集中判断三项条件。正式渠道、release/R8、缺少显式参数的构建
-都保持关闭，CI 发布命令不增加此研究参数。旧设备开关、缓存、导入 JSON 或用户填写的
-标记不能把来源改成 `approved: true`，也不能代替构建条件。
+正式入口在 `main.dart` 调用 `buildProductionMarketQuoteClient()`，固定装配腾讯股票及
+指定招商基金适配器；github、play、diagnostic 及 debug/release 不再使用不同的来源集合，
+无需 `PUBLIC_QUOTE_RESEARCH`。`allowResearchSources` 允许这两个既有公开来源参与请求
+与缓存校验，不把 `approved` 改为 true，也不允许设备偏好、导入 JSON 或响应新增来源。
+联网和自动刷新仍默认关闭，用户开关与逐证券采用继续独立控制实际请求及估值。
 
 通用 `VeriFinController` 的默认客户端仍为空，测试或其他控制器创建不会意外联网。
 仅创建适配器或控制器不会发请求。正式入口在隐私同意、应用锁及首次引导通过后，
@@ -49,7 +44,7 @@
 用户明确需要诊断验证时，可手动运行：
 
 ```powershell
-flutter run -d emulator-5556 --debug --flavor diagnostic --dart-define=UNIFIED_DESIGN_PREVIEW=true --dart-define=PUBLIC_QUOTE_RESEARCH=true
+flutter run -d emulator-5556 --debug --flavor diagnostic --dart-define=UNIFIED_DESIGN_PREVIEW=true
 ```
 
 以上是一次手动命令，不建立自动构建任务。安装和运行继续遵守
@@ -57,7 +52,7 @@ flutter run -d emulator-5556 --debug --flavor diagnostic --dart-define=UNIFIED_D
 
 ## 使用流程与账务不变量
 
-1. 进入真实币种账户的“证券投资 → 参考行情”，检查诊断研究说明和来源范围。
+1. 进入真实币种账户的“证券投资 → 参考行情”，检查参考行情说明和来源范围。
 2. “开启参考行情联网”和自动刷新默认均关闭。用户主动开启后，应用处于前台且已解锁才允许查询。
 3. 联网刷新与“使用合格行情估值”是两个选择。每只证券须单独启用后，合格报价才参与
    参考市值、资产和盈亏的只读计算；没有选择的证券持续使用原手填价。
@@ -82,7 +77,7 @@ flutter run -d emulator-5556 --debug --flavor diagnostic --dart-define=UNIFIED_D
 
 设备短缓存和联网偏好仍保存在本机 KV，不进入完整账目备份；逐证券采用行情的选择和
 手填后备价沿用既有备份字段。关闭联网可保留已校验参考缓存；没有合格报价时回退手填后备价。
-关闭研究构建后，缓存仍须经过当前来源可用性校验，不能使普通构建恢复研究联网。
+缓存仍须经过当前来源可用性与身份校验，不能新增来源或自动开启用户联网开关。
 
 设备行情缓存 v2 在既有报价行之外保存各账户的尝试时间及自动计时。旧 v1 报价仍可读取，
 旧全局尝试时间和冷却不迁移给全部账户；这些字段均是本机派生状态，不改 SQLite 或完整备份版本。
@@ -135,9 +130,9 @@ flutter run -d emulator-5556 --debug --flavor diagnostic --dart-define=UNIFIED_D
 
 ## 技术验证与正式发布的区别
 
-本轮只确认免账号请求的技术可达、公开字段和源时间解释；没有找到允许第三方应用
-自动使用腾讯财经数据的明确正式许可。腾讯来源持续标为“诊断研究”，不把用户同意联网
-解释成数据供应方授权，不把此构建当作正式发布产物。
+前序验证只确认免账号请求的技术可达、公开字段和源时间解释；没有找到允许第三方应用
+自动使用腾讯财经数据的明确正式许可。2026-11-04 的主应用接入只改变构建装配范围，
+保留来源 `approved: false`，不把用户同意联网或应用可用性解释成数据供应方授权。
 
 来源页面的[腾讯服务条款入口](https://www.qq.com/contract.shtml)仍需完成适用范围核对。
 其他候选同样不能以公开可见代替许可：
@@ -148,8 +143,38 @@ flutter run -d emulator-5556 --debug --flavor diagnostic --dart-define=UNIFIED_D
   待核对来源配置，应用不再向这两个来源发请求；历史调查依据保留在[阶段 4](securities-stage04-implementation.md)
   和 Git 历史中。
 
-正式渠道开放前，仍须单独完成适用许可、覆盖范围、Android 字段和使用频率核对；
-这不属于通过修改 `approved`、更换测试身份或放宽响应校验就能完成的步骤。
+适用许可、覆盖范围、Android 字段和使用频率仍需单独核对；
+不能通过修改 `approved`、更换测试身份或放宽响应校验声称完成。
+Android 编译及设备结果见下方本轮验证记录；历史诊断记录只证明对应版本，
+不能据此推定当前 github/play/release 构建已经通过网络或设备验收。
+
+## 2026-11-04 主应用验证
+
+本轮移除来源装配的构建条件，联网和自动刷新默认关闭、逐证券采用及来源范围保持不变。
+自动检查结果：
+
+- `dart format .` 检查 874 个文件，格式化其中两个测试文件。
+- `flutter --no-version-check analyze --no-pub lib test scripts` 无问题，耗时 22.9 秒。
+- 行情工厂、固定来源、页面启用及基金刷新等 7 个专项测试文件共 **53 项通过**。
+- `flutter --no-version-check test --no-pub` 全量 **2,046 项通过、6 项跳过、0 失败**。
+
+专项覆盖无研究参数的主应用来源装配、默认离线、主动授权后的股票/基金解析、
+非法身份回退、请求中关闭联网及迟到响应隔离；测试使用有界公开响应夹具，
+不将自动测试通过写成当前设备已完成真实网络查询。
+
+日志留在仓库外的本机 `D:/CodexWork/tools/logs/`：
+`verifin-quotes-enabled-focused-retry.log`、`verifin-quotes-enabled-analyze-final.log`、
+`verifin-quotes-enabled-all-tests.log`，不随仓库提交。
+
+Android 已通过 github flavor、release/R8、arm64 的本地编译，
+使用 `UNIFIED_DESIGN_PREVIEW=true`，不提供行情研究参数；生成 APK 约 20.3 MB。
+`dart scripts/verify_android_package.dart build/app/outputs/flutter-apk/app-github-release.apk arm64-v8a --compressed`
+确认原生库架构、压缩及包内时区资源结构正确。
+首次构建因本机旧插件注册残留 `IntegrationTestPlugin` 失败；通过发行配置的
+`flutter build apk --config-only` 刷新生成文件后重试成功，依赖锁定版本和功能代码均未变化。
+构建日志为 `verifin-quotes-enabled-build.log`、`verifin-quotes-enabled-config.log` 与
+`verifin-quotes-enabled-build-retry.log`，同样保存在上述本机日志目录。
+尚未安装或执行本轮设备验收，不将本地构建当作正式发布交付。
 
 ## 2026-10-27 股票接入历史验证
 
@@ -179,8 +204,9 @@ flutter run -d emulator-5556 --debug --flavor diagnostic --dart-define=UNIFIED_D
 - 重新冷启动后，在进入行情页之前就读回缓存估值：投资账本净值 **200,239.12 CNY**、
   总资产 **200,599.12 CNY**、负债 **360 CNY**，与三个币种账户原币估值折算一致。
 
-本机可手动双击 `.toolchain/手动构建参考行情实验版.cmd` 复现这套构建条件；
-它复用普通手动构建脚本的显式研究参数，不建立文件监听或自动编译任务，且不随仓库分发。
+当时本机使用 `.toolchain/手动构建参考行情实验版.cmd` 复现这套构建条件；
+该脚本使用显式研究参数，不建立文件监听或自动编译任务，且不随仓库分发。
+当前主应用已不需要该参数，历史命令不能作为新构建验收证据。
 截图、联网前后快照及只读保留核对位于被忽略的 `build/validation/quote-research-20261027/`。
 
 ## 2026-10-27 手动刷新与账户自动计时验收

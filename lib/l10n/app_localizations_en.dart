@@ -7231,14 +7231,14 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketResearchConsent =>
-      'This diagnostic build can send stock symbols to Tencent and a public fund identifier and page language to CMS\'s official source. Providers can see your IP. Quantities, costs, accounts, balances and notes are not sent. This tests requests and valuation; release usage terms remain under review. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
+      'When enabled, stock symbols are sent to Tencent and a public fund identifier and page language to CMS\'s official source. Providers can see your IP. Quantities, costs, accounts, balances and notes are not sent. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
 
   @override
   String get marketResearchNote =>
-      'Experimental stock reference prices and daily NAV for CMS USD Money Market Fund Class B are available only in this diagnostic debug build. Stock quotes may be delayed; fund NAV has date precision only. Manual fallback prices are retained. Reference returns are calculated automatically; no income entries are created.';
+      'Reference prices for supported stocks and daily NAV for CMS USD Money Market Fund Class B are available. Choose separately for each security whether to use quotes for valuation. Stock quotes may be delayed; fund NAV has date precision only. Manual fallback prices are retained; reference returns do not create income entries.';
 
   @override
-  String get marketSourceResearch => 'Experimental; release review pending';
+  String get marketSourceResearch => 'Public reference source';
 
   @override
   String get marketSourceConnected => 'Connected';

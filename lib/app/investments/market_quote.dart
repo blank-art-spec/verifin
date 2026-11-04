@@ -35,8 +35,9 @@ class QuoteSourceCapability {
   final String id, reviewNote;
   final bool approved;
 
-  /// 只供显式诊断构建验证的来源；不等于发布准入，也不能由设备偏好或缓存开启。
-  /// 必须同时由构建工厂允许研究来源，才会参与查询及参考估值。
+  /// 历史命名：标记由工厂显式接入的公开来源，不再表示仅限诊断构建。
+  /// 必须同时由客户端允许此类来源才参与查询及参考估值；不等于使用许可已审核，
+  /// 也不能由设备偏好、缓存或网络响应改变。
   final bool researchOnly;
 
   /// 自动轮询的最短间隔；取它与默认五分钟中更严格的一方。
@@ -384,11 +385,11 @@ abstract class MarketQuoteAdapter {
   Future<List<MarketQuote>> fetch(List<MarketQuoteRequest> requests);
 }
 
-/// 来源分发器；正式来源须评审，研究来源另受独立诊断构建限制，设备开关不能替代。
+/// 来源分发器；通用入口默认空来源，主应用工厂显式接入固定公开来源。
 class MarketQuoteClient {
   /// [adapters] 是代码注入的来源；默认空集合，构造及通用测试不会访问网络。
-  /// [allowResearchSources] 仅由独立 diagnostic 调试构建的显式参数启用，
-  /// 不写入设备偏好，不把研究来源的 [QuoteSourceCapability.approved] 改成 true。
+  /// [allowResearchSources] 是历史命名，由工厂代码显式允许 researchOnly 来源，
+  /// 不受构建渠道限制、不写入设备偏好，也不将来源的 approved 改成 true。
   const MarketQuoteClient({
     this.adapters = const [],
     this.allowResearchSources = false,
@@ -396,7 +397,7 @@ class MarketQuoteClient {
   final List<MarketQuoteAdapter> adapters;
   final bool allowResearchSources;
 
-  /// 判断 [adapter] 能否在本构建使用：正式准入，或显式诊断构建中的研究来源。
+  /// 判断 [adapter] 能否由此客户端使用：已审核，或由代码显式接入的公开来源。
   /// 同步、缓存恢复和页面开关共用此判断，避免仅放开界面却绕过请求/缓存校验。
   bool allowsAdapter(MarketQuoteAdapter adapter) =>
       adapter.capability.approved ||
@@ -410,10 +411,10 @@ class MarketQuoteClient {
   /// 有通过来源门禁的代码适配器时才允许用户启用联网。
   bool get hasApprovedSources => adapters.any((a) => a.capability.approved);
 
-  /// 本构建是否有可用来源；正式构建仍只接受 approved，不受旧设备开关影响。
+  /// 此客户端是否有可用来源；空客户端不能靠旧设备开关或缓存获得来源。
   bool get hasAvailableSources => adapters.any(allowsAdapter);
 
-  /// 当前是否启用了未获发布准入的诊断来源，供界面明确标示验证范围。
+  /// 历史命名：当前是否接入了尚未声明 approved 的公开来源，供界面说明覆盖范围。
   bool get hasResearchSources =>
       allowResearchSources &&
       adapters.any((a) => a.capability.researchOnly && !a.capability.approved);

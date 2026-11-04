@@ -4,6 +4,7 @@ import 'package:verifin/app/common_widgets.dart';
 import 'package:verifin/app/feedback.dart';
 import 'package:verifin/app/investments/market_quote.dart';
 import 'package:verifin/app/investments/investment_widgets.dart';
+import 'package:verifin/app/investments/production_market_quotes.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
@@ -43,19 +44,16 @@ const _testOption = StockSecurity(
 
 /// 创建真实 Controller 与内存仓储，账户包含股票成交和一个本地 TEST 期权。
 ///
-/// [adapter] 只返回内存中的固定股票报价，不联网；[locale] 固定测试偏好语言。
+/// [client] 由用例选择正式来源或本地夹具；[locale] 固定测试偏好语言。
 /// 期权仅用于确认不支持的证券仍保持手填，调用方负责 dispose 返回的控制器。
 Future<({VeriFinController controller, Account account})> _researchController(
-  ResearchFixtureQuoteAdapter adapter,
+  MarketQuoteClient client,
   Locale locale,
 ) async {
   final controller = await VeriFinController.create(
     LocalKeyValueStore()..write('verifin.locale.v1', locale.languageCode),
     repository: InMemoryLedgerRepository(),
-    marketQuoteClient: MarketQuoteClient(
-      adapters: [adapter],
-      allowResearchSources: true,
-    ),
+    marketQuoteClient: client,
   );
   final account = investmentAccountFixture(id: 'research-hkd', currency: 'HKD');
   controller.addAccount(account);
@@ -160,6 +158,39 @@ Finder _valuationSwitch(StockSecurity security) => find.descendant(
 /// 注册中英文、393/360 宽度的研究页面行为；固定夹具不会发送任何真实网络请求。
 void main() {
   useTestDatabases();
+  testWidgets('主应用无实验参数时可开启行情，打开页面仍默认离线', (tester) async {
+    final ready = await _researchController(
+      buildProductionMarketQuoteClient(),
+      const Locale('zh'),
+    );
+    final controller = ready.controller;
+    addTearDown(controller.dispose);
+    await _pumpResearchPage(
+      tester,
+      controller,
+      ready.account.id,
+      width: 393,
+      locale: const Locale('zh'),
+    );
+    final l = AppLocalizations.of(
+      tester.element(find.byType(MarketQuotesPage)),
+    );
+    final enableRow = find.widgetWithText(CompactSwitchRow, l.marketEnable);
+    final automaticRow = find.widgetWithText(
+      CompactSwitchRow,
+      l.marketAutomatic,
+    );
+    expect(tester.widget<CompactSwitchRow>(enableRow).onChanged, isNotNull);
+    expect(tester.widget<CompactSwitchRow>(automaticRow).onChanged, isNull);
+    expect(find.text(l.marketGatePending), findsNothing);
+    expect(controller.investmentQuoteSync.state.value.enabled, isFalse);
+    expect(controller.investmentQuoteSync.state.value.automatic, isFalse);
+    expect(controller.investmentQuoteSync.state.value.attemptedAt, isNull);
+    expect(controller.investmentFor(ready.account.id)!.marketPriceIds, isEmpty);
+    expect(controller.accountBalance(ready.account), 5999);
+    expect(controller.accountAssetValue(ready.account), 10099);
+    expect(tester.takeException(), isNull);
+  });
   for (final locale in [const Locale('zh'), const Locale('en')]) {
     for (final width in [393.0, 360.0]) {
       testWidgets('研究来源页面 ${locale.languageCode} $width', (tester) async {
@@ -177,7 +208,10 @@ void main() {
             ),
           ],
         );
-        final ready = await _researchController(adapter, locale);
+        final ready = await _researchController(
+          MarketQuoteClient(adapters: [adapter], allowResearchSources: true),
+          locale,
+        );
         final controller = ready.controller, account = ready.account;
         addTearDown(controller.dispose);
         final before = controller.investmentFor(account.id)!;

@@ -36,9 +36,9 @@
 
 - 普通与投资账本：新建时选择类型，旧账本默认普通；普通手动新增保留计算器路径，投资账本直接进入“普通记账 / 投资交易”双页签并默认投资，复用股票、期权和基金表单。证券币种账户直达持仓，基本资料和资金流水并入证券页；详见[实施记录](docs/dev/investment-ledger-interaction-implementation.md)。
 - 证券代码选择：股票录入可按代码或名称下拉选择本账本已录入的同币种证券，也可主动点击联网搜索公开身份，选择后填入代码与名称；未命中仍可手填。搜索候选需核对名称和品种，不提供成交价、基金净值或期权合约规格，也不自动记账，详见[当前范围](docs/dev/investment-ledger-interaction-implementation.md#2026-11-03-行情排版与证券代码选择)。
-- 股票投资：投资币种账户支持显式期初、买卖/卖空回补、费用股息、拆股和同币种持仓转移，现金与手填参考市值分开，买卖不计消费预算；现支持期权开平仓、保证金核对及确认到期/交割，参考行情缓存与页面刷新机制已接入。手动刷新取消本地五分钟等待；开启自动刷新后，打开软件、回前台或解锁即检查当前账本全部证券账户的已支持持仓，各币种账户独立计时，到期才请求，前台保持默认每五分钟续刷，退后台/锁屏/退出停止，不必打开行情页。生产来源仍未正式准入，默认继续手填估值；独立 diagnostic 调试包可通过显式参数研究腾讯真实股票行情，首批真实样本为中远海能、腾讯及 AVGO/GOOG，期权和 TEST 代码不联网，详见[诊断研究边界](docs/dev/public-quote-research.md)。旧 Yahoo/Nasdaq 博通验证页及待核对来源配置已移除。概览显示现金与多头持仓占总资产的比例，各持仓卡显示对应比例，空头义务单列。资产、负债与净值在首页、小组件及只读 AI 中统一汇总，历史页可主动保存当时价格和汇率依据，缺日不回填。详见 [股票阶段](docs/dev/securities-stage02-implementation.md)、[期权阶段](docs/dev/securities-stage03-implementation.md)与[资产历史阶段](docs/dev/securities-stage05-implementation.md)。
+- 股票投资：投资币种账户支持显式期初、买卖/卖空回补、费用股息、拆股和同币种持仓转移，现金与手填参考市值分开，买卖不计消费预算；现支持期权开平仓、保证金核对及确认到期/交割，参考行情缓存与页面刷新机制已接入。手动刷新取消本地五分钟等待；开启自动刷新后，打开软件、回前台或解锁即检查当前账本全部证券账户的已支持持仓，各币种账户独立计时，到期才请求，前台保持默认每五分钟续刷，退后台/锁屏/退出停止，不必打开行情页。主应用可直接使用腾讯股票参考行情，无需诊断包或额外构建参数；联网与自动刷新默认关闭，逐证券选择采用后才影响参考估值。范围仍限沪深 CNY、港股 HKD 及首批 AVGO/GOOG，期权和 TEST 代码不联网；来源可用不表示已取得供应方正式许可，详见[来源范围与验证记录](docs/dev/public-quote-research.md)。旧 Yahoo/Nasdaq 博通验证页及待核对来源配置已移除。概览显示现金与多头持仓占总资产的比例，各持仓卡显示对应比例，空头义务单列。资产、负债与净值在首页、小组件及只读 AI 中统一汇总，历史页可主动保存当时价格和汇率依据，缺日不回填。详见 [股票阶段](docs/dev/securities-stage02-implementation.md)、[期权阶段](docs/dev/securities-stage03-implementation.md)与[资产历史阶段](docs/dev/securities-stage05-implementation.md)。
 - 基金录入：同币种香港基金支持「按金额买入」和「录入已有持仓」。新申购按金额和净值估算参考份额，区分申请、实际扣款、券商确认与收益起算，实际扣款后净款作为在途资产，每笔独立起算，确认不重复扣钱；已有持仓输入实际份额、总成本和对应净值，自动计算市值与未实现盈亏，在实际核对时刻替换持仓，不回填开户历史或当日日初。旧记录保留原有份额和数据。不自动向券商下单或确认，不生成收入流水，详见[金额与结算说明](docs/dev/fund-amount-settlement.md)。
-- 诊断基金研究：同一显式研究构建可查询招商官方的美元货币市场基金 B 类（HK0001039582），按实际份额、净在途和各净值日自动计算参考收益、基金市值历史；账户中其他证券缺少当日历史价格时，完整账户历史资产保持未知。联网和采用净值默认关闭，沿用手动/前台自动刷新与手填后备，不生成收入流水，不把万份收益或年利率另算一次收益。该接口仅提供单位净值，来源尚未获正式发布准入，匿名直连验证仅覆盖该基金，详见[基金研究与手动验收](docs/dev/cms-fund-api-research.md)。
+- 基金参考净值：主应用可查询招商官方的美元货币市场基金 B 类（HK0001039582），按实际份额、净在途和各净值日自动计算参考收益、基金市值历史；账户中其他证券缺少当日历史价格时，完整账户历史资产保持未知。联网和采用净值默认关闭，沿用手动/前台自动刷新与手填后备，不生成收入流水，不把万份收益或年利率另算一次收益。该接口仅提供单位净值，来源尚未获正式发布准入，匿名直连验证仅覆盖该基金，详见[基金研究与手动验收](docs/dev/cms-fund-api-research.md)。
 - 银行与证券多币种主账户：储蓄卡、投资账户支持一个主账户下的 HKD/USD/CNY 等币种子账户；主币种只用于估值，余额和流水保留原币，普通账户不启用信用卡账单与还款。旧独立账户可在详情显式启用，备份结构保持兼容。
 - 多币种信用父子账户：父账户聚合流水和还款，普通记账只选父账户并按交易币种入账；银行跨币种结算时可在「更多信息 → 入账账户」指定子账户，转账仍选具体账户。相容的旧账户自动归并并保留原交易。外币可选填明确折算额，统计与已出账流水待还优先该金额，未填时按计算当天有效汇率换算；部分还款按剩余原币保留折算比例，原币结清后待还归零。正式账单仍以银行保存的金额为准；支持可选的 Frankfurter 每日汇率更新。
 
@@ -174,9 +174,9 @@ lib/
 | [`AGENTS.md`](AGENTS.md) | 贡献与 Agent 开发规范（含代码规范·组件化） |
 | [`docs/dev/components.md`](docs/dev/components.md) | 组件清单（写新组件前先查） |
 | [`docs/dev/tech-decisions.md`](docs/dev/tech-decisions.md) | 关键技术决策与选型理由 |
-| [`docs/dev/securities-trading-plan.md`](docs/dev/securities-trading-plan.md) | 证券交易与参考行情总体方案（股票/期权/历史依据已实现，生产自动行情待来源准入） |
+| [`docs/dev/securities-trading-plan.md`](docs/dev/securities-trading-plan.md) | 证券交易与参考行情总体方案（股票/期权/历史依据已实现，参考行情限固定股票与基金来源） |
 | [`docs/dev/investment-ledger-interaction-plan.md`](docs/dev/investment-ledger-interaction-plan.md) | 普通/投资账本类型、新增交易页签与证券账户详情整合；[当前实施记录](docs/dev/investment-ledger-interaction-implementation.md)、[开发任务与验收清单](docs/dev/investment-ledger-interaction-acceptance.md) |
-| [`docs/dev/public-quote-research.md`](docs/dev/public-quote-research.md) | 免账号公开股票的诊断研究接入、构建三条件、真实字段/时区依据与正式发布边界 |
+| [`docs/dev/public-quote-research.md`](docs/dev/public-quote-research.md) | 主应用公开股票参考行情、默认关闭的启用流程、真实字段/时区依据与历史验证 |
 | [`docs/dev/securities-trading-acceptance.md`](docs/dev/securities-trading-acceptance.md) | 博通专项流程 B01–B08、证券全面验收 A01–A23 与金额基准（待开发后执行） |
 | [`docs/dev/known-limitations.md`](docs/dev/known-limitations.md) | 已知限制与技术债台账 |
 | [`docs/dev/multi-currency-design.md`](docs/dev/multi-currency-design.md) | 多币种与离线汇率设计、实现结果及验收记录 |

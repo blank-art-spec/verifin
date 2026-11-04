@@ -59,7 +59,7 @@ Future<void> main() async {
             store,
             repository: SqliteLedgerRepository(database),
             logger: logger,
-            // 来源集合由构建条件决定；构造不联网，仍须在参考行情页主动开启。
+            // 固定接入已支持的公开来源；构造不联网，仍须在参考行情页主动开启。
             marketQuoteClient: buildProductionMarketQuoteClient(),
             // 语言偏好为「跟随系统」时，首启动播种的默认数据（账本/分类/简介）按系统语言选文案。
             systemIsEnglish:

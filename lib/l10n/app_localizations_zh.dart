@@ -6977,14 +6977,14 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get marketResearchConsent =>
-      '此诊断版本可向腾讯公开来源发送股票代码，向招商官方发送公开基金标识和页面语言，服务方可见 IP；不发送数量、成本、账户、余额或备注。仅用于联网与估值验证，发布使用条件仍待核对。开启自动刷新后，开屏或回前台检查当前账本持仓；退后台或锁屏暂停。';
+      '开启后向腾讯公开来源发送股票代码，向招商官方发送公开基金标识和页面语言，服务方可见 IP；不发送数量、成本、账户、余额或备注。开启自动刷新后，打开应用或回前台检查当前账本持仓；退后台或锁屏暂停。';
 
   @override
   String get marketResearchNote =>
-      '股票参考价与招商美元货币市场基金 B 类日净值的实验验证已启用，仅此诊断调试版本可用。股票报价可能延迟，基金只提供净值日期；手填后备价继续保留，自动计算参考收益，不生成收入流水。';
+      '可获取已支持股票的参考价及招商美元货币市场基金 B 类日净值；每只证券需单独选择是否用于估值。股票报价可能延迟，基金只提供净值日期；手填后备价继续保留，参考收益不生成收入流水。';
 
   @override
-  String get marketSourceResearch => '实验验证（发布待核对）';
+  String get marketSourceResearch => '公开参考来源';
 
   @override
   String get marketSourceConnected => '已接入';

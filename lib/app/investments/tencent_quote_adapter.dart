@@ -1,4 +1,4 @@
-/// 腾讯公开股票报价的诊断适配器；未通过发布使用条件核对，不自动用于正式渠道。
+/// 腾讯公开股票报价适配器；主应用工厂显式接入，构造不联网。
 library;
 
 import 'dart:async';
@@ -85,7 +85,7 @@ class TencentHttpQuoteTransport implements TencentQuoteTransport {
   void close() => _client.close(force: true);
 }
 
-/// 仅供明确启用的独立诊断包测试真实股票，期权及本地 TEST 代码始终不受支持。
+/// 获取明确覆盖的公开股票报价；期权及本地 TEST 代码始终不受支持。
 class TencentQuoteAdapter extends MarketQuoteAdapter {
   /// [transportFactory] 为每批创建独立连接；[clock] 提供实际抓取时刻，测试可固定。
   /// [requestTimeout] 用于较短的故障测试，生产默认十五秒，不能放宽此网络上限。
@@ -111,13 +111,13 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
   static const maximumBytes = 512 * 1024;
   static const maximumSecurities = 20;
 
-  /// 明确保留研究状态；只有诊断渠道和显式研究构建参数组合允许客户端选用。
+  /// 沿用 researchOnly 历史标记由主应用工厂接入，不把接口可用解释为许可已审核。
   @override
   QuoteSourceCapability get capability => const QuoteSourceCapability(
     'Tencent Finance',
     approved: false,
     researchOnly: true,
-    reviewNote: '公开股票来源仅供诊断验证，发布使用条件待核对',
+    reviewNote: '固定公开股票来源已接入，第三方使用许可审核状态未改变',
   );
 
   /// 核对实际股票身份及原币；沪市 6、深市 0/3 开头，港股只接港元普通代码。
