@@ -1,5 +1,10 @@
 # 组件清单（Component Registry）
 
+2026-11-04 资产列表金额：`accountListBalanceStyle(context:, includeInAssets:)`
+位于 `app/common_widgets_panels.dart`，供主账户卡片与 `AccountSectionCard` 的普通账户行共用。
+使用 `titleMedium`（14sp）/ w600 和主题 `onSurfaceVariant`，不计入资产的普通账户保留弱化色；
+金额格式与正负号沿用现有 helper。`accountBalanceColor` 继续服务账户选择器和投资盈亏的语义色。
+
 2026-11-03 行情排版与证券代码候选，行为和验证边界见[实施记录](investment-ledger-interaction-implementation.md)：
 
 | 组件或函数 | 位置与约定 |
@@ -160,7 +165,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `CreditAccountCycleCard` | 首页展开详情 Widget | `home_page.dart` | 信用账户摘要点行后显示；按信用主体聚合币种子账户，分开显示本账期净消费、当前账期欠款、正式账单与到期流水待还、总欠款、出账/还款日和账期预算进度；日历结转只计算视图，正式快照优先 |
 | `HomeTrendPanel` | 首页概览 Widget | `home_page.dart` | 按实际字体与金额宽度分配主金额和右侧胶囊；放不下时胶囊换行，金额不省略，三个指标方块随宽度和字体换行 |
 | `AccountSectionCard` | Widget | `common_widgets.dart` | 资产页账户分区卡（可折叠 + 分区合计）；普通资产页折叠状态由 Controller 按账本/视图模式持久化，设置页可在草稿中调整；同时服务类型、文件夹分组和隐藏账户等分区，拖拽只由 `sectionDragIndex != null` 开启，`sectionDragImmediate` 控制即时/延迟拖拽 |
-| `accountBalanceColor` | 纯函数 | `common_widgets.dart` | **账户余额上色**（不计入资产=弱化，负=红，正=青绿） |
+| `accountListBalanceStyle` | 样式函数 | `common_widgets.dart` | 资产列表主账户与普通账户余额共用：`titleMedium` / w600 / `onSurfaceVariant`；不计入资产=弱化 |
+| `accountBalanceColor` | 纯函数 | `common_widgets.dart` | 账户选择器及盈亏语义色（不计入资产=弱化，负=红，正=青绿，零=中性） |
 | `accountDisplayName` | 纯函数 | `model_lookup.dart` | 按 id 取账户名，空 id→noneLabel（**展示层用它**，避免误回退首个账户） |
 | `accountById` | 纯函数 | `model_lookup.dart` | 按 id 取账户（会回退首个，展示层慎用） |
 

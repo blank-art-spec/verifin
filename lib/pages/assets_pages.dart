@@ -508,10 +508,7 @@ class _AssetsPageState extends State<AssetsPage> {
                                 : AppLocalizations.of(
                                     context,
                                   ).exchangeRateNotSet,
-                            // 主账户余额使用 17sp 标题字号和粗体，突出右侧金额；
-                            // 仅调整本行排版，沿用原有估值、币种及缺率提示口径。
-                            style: Theme.of(context).textTheme.titleLarge
-                                ?.copyWith(fontWeight: FontWeight.w800),
+                            style: accountListBalanceStyle(context: context),
                           ),
                         ),
                       );
