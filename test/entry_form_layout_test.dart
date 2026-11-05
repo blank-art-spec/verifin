@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/rendering.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/app_theme.dart';
 import 'package:verifin/app/common_widgets.dart';
@@ -8,6 +9,40 @@ import 'package:verifin/pages/attachments_editor.dart';
 import 'package:verifin/pages/entry_detail_page.dart';
 
 import 'support/test_harness.dart';
+
+/// 可真实解码的隔离缩略图；布局和全屏交互都不访问设备文件或网络。
+const _attachmentPng =
+    'data:image/png;base64,'
+    'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
+
+/// 检查附件标题 [title] 与数量 [count] 完整显示在编辑区内且互不遮挡。
+/// [tester] 读取真实布局结果，不依赖头部采用 Row、Wrap 或其他具体实现。
+void _expectAttachmentHeader(
+  WidgetTester tester, {
+  required String title,
+  required String count,
+}) {
+  final titleFinder = find.text(title), countFinder = find.text(count);
+  expect(titleFinder, findsOneWidget);
+  expect(countFinder, findsOneWidget);
+  final bounds = tester.getRect(find.byType(AttachmentsEditor));
+  for (final text in [titleFinder, countFinder]) {
+    final rect = tester.getRect(text);
+    expect(rect.left, greaterThanOrEqualTo(bounds.left));
+    expect(rect.right, lessThanOrEqualTo(bounds.right));
+    expect(rect.top, greaterThanOrEqualTo(bounds.top));
+    expect(rect.bottom, lessThanOrEqualTo(bounds.bottom));
+    final paragraph = tester.renderObject<RenderParagraph>(
+      find.descendant(of: text, matching: find.byType(RichText)),
+    );
+    expect(paragraph.didExceedMaxLines, isFalse);
+  }
+  expect(
+    tester.getRect(titleFinder).overlaps(tester.getRect(countFinder)),
+    isFalse,
+  );
+  expect(tester.takeException(), isNull);
+}
 
 void main() {
   useTestDatabases();
@@ -165,16 +200,17 @@ void main() {
   });
 
   testWidgets('紧凑附件条展示多张图片和小型删除按钮', (tester) async {
-    const image =
-        'data:image/png;base64,'
-        'iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
     final removed = <int>[];
 
     await tester.pumpWidget(
       zhMaterialApp(
         home: Scaffold(
           body: AttachmentsEditor(
-            dataUrls: const <String>[image, image, image],
+            dataUrls: const <String>[
+              _attachmentPng,
+              _attachmentPng,
+              _attachmentPng,
+            ],
             onAddDataUrl: (_) {},
             onRemoveIndex: removed.add,
             showHeader: false,
@@ -195,6 +231,90 @@ void main() {
     await tester.tap(find.byKey(const Key('attachment_remove_visual_1')));
     expect(removed, <int>[1]);
   });
+
+  for (final layout in [
+    (language: 'en', width: 264.0, scale: 1.5),
+    (language: 'zh', width: 337.0, scale: 1.0),
+  ]) {
+    for (final initialCount in [0, 3]) {
+      testWidgets(
+        '附件头部完整布局并保留查看删除 ${layout.language}/${layout.width}/${layout.scale}/$initialCount',
+        (tester) async {
+          tester.view.devicePixelRatio = 1;
+          tester.view.physicalSize = Size(layout.width + 56, 852);
+          addTearDown(tester.view.reset);
+          final images = List<String>.filled(
+            initialCount,
+            _attachmentPng,
+            growable: true,
+          );
+          final removed = <int>[];
+          final english = layout.language == 'en';
+          final title = english ? 'Attachments' : '图片附件';
+
+          await tester.pumpWidget(
+            zhMaterialApp(
+              theme: buildVeriFinTheme(Brightness.light),
+              home: Builder(
+                builder: (context) => Localizations.override(
+                  context: context,
+                  locale: Locale(layout.language),
+                  child: MediaQuery(
+                    data: MediaQuery.of(
+                      context,
+                    ).copyWith(textScaler: TextScaler.linear(layout.scale)),
+                    child: Scaffold(
+                      body: StatefulBuilder(
+                        builder: (context, setState) => Align(
+                          alignment: Alignment.topCenter,
+                          child: SizedBox(
+                            width: layout.width,
+                            child: AttachmentsEditor(
+                              dataUrls: images,
+                              onAddDataUrl: (_) {},
+                              onRemoveIndex: (index) => setState(() {
+                                removed.add(index);
+                                images.removeAt(index);
+                              }),
+                              showAddButton: false,
+                            ),
+                          ),
+                        ),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          );
+          await tester.pumpAndSettle();
+          _expectAttachmentHeader(
+            tester,
+            title: title,
+            count: english ? '$initialCount images' : '$initialCount 张',
+          );
+
+          if (initialCount == 0) {
+            expect(find.byType(Image), findsNothing);
+            return;
+          }
+          // 点击第二张真实缩略图，确认头部换行后查看页仍对应原来的索引。
+          await tester.tap(find.byType(Image).at(1));
+          await tester.pumpAndSettle();
+          expect(find.text('2 / 3'), findsOneWidget);
+          await tester.tap(find.byIcon(Icons.delete_outline));
+          await tester.pumpAndSettle();
+          expect(removed, [1]);
+          expect(images, hasLength(2));
+          _expectAttachmentHeader(
+            tester,
+            title: title,
+            count: english ? '2 images' : '2 张',
+          );
+        },
+      );
+    }
+  }
 
   testWidgets('记账页类型分段条的转账选中色是语义蓝，与下方金额一致', (tester) async {
     tester.view.devicePixelRatio = 1;

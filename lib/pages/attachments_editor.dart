@@ -34,38 +34,54 @@ class AttachmentsEditor extends StatelessWidget {
     onAddDataUrl(dataUrl);
   }
 
+  /// 按 [context] 的语言、主题及系统字号显示附件；标题与数量有足够空间时分居两端，
+  /// 空间不足则让数量自然换行，保留完整文字。缩略图仍独立横向滚动，不挤占标题宽度。
   @override
   Widget build(BuildContext context) {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.start,
       children: <Widget>[
         if (showHeader) ...<Widget>[
-          Row(
-            children: <Widget>[
-              Icon(
-                Icons.image_outlined,
-                size: 20,
-                color: Theme.of(
-                  context,
-                ).colorScheme.onSurface.withValues(alpha: 0.6),
-              ),
-              const SizedBox(width: 8),
-              Text(
-                AppLocalizations.of(context).attachTitle,
-                style: Theme.of(
-                  context,
-                ).textTheme.titleSmall?.copyWith(fontWeight: FontWeight.w700),
-              ),
-              const Spacer(),
-              Text(
-                AppLocalizations.of(context).attachCount(dataUrls.length),
-                style: Theme.of(context).textTheme.labelSmall?.copyWith(
-                  color: Theme.of(
-                    context,
-                  ).colorScheme.onSurface.withValues(alpha: 0.5),
+          SizedBox(
+            width: double.infinity,
+            child: Wrap(
+              alignment: WrapAlignment.spaceBetween,
+              crossAxisAlignment: WrapCrossAlignment.center,
+              spacing: 12,
+              runSpacing: 4,
+              children: <Widget>[
+                // 图标和标题保持一组；Flexible 也允许标题本身在极窄空间换行。
+                Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: <Widget>[
+                    Icon(
+                      Icons.image_outlined,
+                      size: 20,
+                      color: Theme.of(
+                        context,
+                      ).colorScheme.onSurface.withValues(alpha: 0.6),
+                    ),
+                    const SizedBox(width: 8),
+                    Flexible(
+                      child: Text(
+                        AppLocalizations.of(context).attachTitle,
+                        style: Theme.of(context).textTheme.titleSmall?.copyWith(
+                          fontWeight: FontWeight.w700,
+                        ),
+                      ),
+                    ),
+                  ],
                 ),
-              ),
-            ],
+                Text(
+                  AppLocalizations.of(context).attachCount(dataUrls.length),
+                  style: Theme.of(context).textTheme.labelSmall?.copyWith(
+                    color: Theme.of(
+                      context,
+                    ).colorScheme.onSurface.withValues(alpha: 0.5),
+                  ),
+                ),
+              ],
+            ),
           ),
           const SizedBox(height: 10),
         ],
