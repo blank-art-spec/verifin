@@ -331,7 +331,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与来源门禁；`MarketQuoteClient.allowsAdapter` 统一来源、请求和缓存判断，`hasApprovedSources` 与 `hasAvailableSources`/`hasResearchSources` 区分正式许可状态和当前可用的公开参考来源。`InvestmentQuoteSync.refresh` 区分手动和自动：手动不受本地五分钟等待限制，自动按账本及币种账户独立计时，取默认五分钟与来源更严格间隔；请求中仍防重复。状态、尝试时间及下次自动刷新时间随当前账户切换，设备缓存 v2 保存账户计时，兼容 v1 报价但不沿用旧全局冷却。`MarketQuotesPage` 只负责当前账户显示和手动操作，不再拥有应用级自动调度。`formatQuoteTime(includeSeconds: true)` 在行情页显示到秒，便于辨别同一分钟内的手动抓取；持仓信息区传 `compact: true`，以应用语言的带年份短日期代替完整日期和星期，时间精度及设备时区仍保留。两参数默认均为 false，历史等既有调用保持完整日期及分钟级时间。主应用提供固定的腾讯股票与指定招商基金来源，`approved` 仍为 false；不能将测试夹具当作真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
 
-- 公开股票研究：`investments/tencent_quote_adapter.dart` 的 `TencentQuoteAdapter` / `TencentHttpQuoteTransport` 实现固定 HTTPS、每批 20 个身份/15 秒/512 KiB、GBK 及源时间校验；支持沪深 CNY、港股 HKD 及首批 AVGO/GOOG，期权和 TEST 代码不查询，`approved: false`/`researchOnly: true`。`production_market_quotes.dart` 的 `buildProductionMarketQuoteClient` 由 `main.dart` 固定装配腾讯股票与指定招商基金，启用 `allowResearchSources` 只表达应用允许使用这两个来源，不改写 `approved`；不再依赖 debug、flavor 或额外编译参数。构造不联网，通用 Controller 默认空客户端，用户联网/自动刷新仍默认关闭。范围与历史证据见[来源记录](public-quote-research.md)。
+- 公开股票研究：`investments/tencent_quote_adapter.dart` 的 `TencentQuoteAdapter` / `TencentHttpQuoteTransport` 实现固定 HTTPS、每批 20 个身份/15 秒/512 KiB、GBK 及源时间校验；支持沪深 CNY、港股 HKD，以及 1–5 位美股字母代码和 .A/.B 类股，响应须匹配原代码及 .OQ/.N；腾讯适配器不查询期权和 TEST，`approved: false`/`researchOnly: true`。`production_market_quotes.dart` 的 `buildProductionMarketQuoteClient` 由 `main.dart` 固定装配腾讯股票、指定招商基金及未配置不请求的 Alpaca OPRA 期权，启用 `allowResearchSources` 只表达应用允许使用固定装配来源，不改写 `approved`；不再依赖 debug、flavor 或额外编译参数。构造不联网，通用 Controller 默认空客户端，用户联网/自动刷新仍默认关闭。范围与历史证据见[来源记录](public-quote-research.md)。
 
 - 证券行情前台会话：`investments/investment_quote_session.dart` 的 `InvestmentQuoteSession` 负责当前账本全部证券账户已支持持仓的到期检查与自动排程，沿用 `InvestmentQuoteSync` 的逐账户计时、缓存、请求防重及旧结果校验；不依赖详情页可见，不在构造时发请求。`pages/market_quote_session_gate.dart` 的 `MarketQuoteSessionGate` 将根级前后台、应用锁及通过隐私同意/首次引导后的可用状态连接到会话。打开软件、回前台及解锁时检查，到期才查询；退后台、锁屏、退出、关闭授权或切换账本会停止旧会话的后续请求。联网和自动开关仍为设备全局偏好且默认关闭，不注册后台服务。
 
@@ -344,6 +344,16 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 证券展示组合：`app/investments/investment_widgets.dart` 的 `InvestmentSection` 复用 `VeriCard`，统一分组标题、内容伸展和内部 Material 墨水层；`InvestmentHint` 统一次级说明的图标、行距和主题颜色，图标按当前字体、语言、文字宽度及系统字号测出的首行实际行高中居中，辅助粗体/行高/字间距偏好与正文一致，续行保持独立文字列，不加固定像素偏移。`InvestmentInputField` 令标签独立占位、随字号换行，并为输入框保留可访问性名称；`investmentInputDecoration` 只提供实色底色，不添加浮动标签。`investmentOutlineButtonStyle` 对齐次要按钮与主按钮的圆角、间距和触控高度。均只负责展示，不访问 Controller。
 - 证券概览排版：同文件 `InvestmentMetricPair(first, second, filled)` 只排列两个 `SummaryMetric`。普通手机及 1.5 倍字号保持等宽双列，每列预留五个当前正文字号汉字的宽度（最低 96dp）、两侧各 10dp 内边距及 12dp 列间距，空间不足才改单列；三组共用门槛。`filled` 用实色画布色与统一圆角突出现金/持仓，false 用于次级资产与盈亏。金额完整换行、不缩小字号，内部 Row 保持标准指标 Expanded 关系合法，仅对这两个静态项测量等高；不读取或计算账务。
-- 持仓报价依据：同文件 `InvestmentQuoteDetails(source, quoteTime)` 接收公开来源名称及调用方已格式化的来源报价时间，仅在已采用的有效报价存在时展示。使用主题画布实色与 `veriRadiusSm`、装饰性云图标，来源为 `bodySmall`/w600，时间标签和内容为 `labelMedium`，复用 `marketQuoteTime` 本地化标签；长来源和时间完整换行，不设固定高度、不省略时区。持仓卡将其放在数量、成本、参考价、占比与盈亏之后、操作区之前；组件只负责排版，不访问 Controller、缓存或估值。
+- 持仓报价依据：同文件 `InvestmentQuoteDetails(source, quoteTime, olderThanOneDay, delayMinutes)` 接收公开来源名称及调用方已格式化的来源报价时间，仅在已采用的有效报价存在时展示。使用主题画布实色与 `veriRadiusSm`、装饰性云图标，来源为 `bodySmall`/w600，时间标签和内容为 `labelMedium`，复用 `marketQuoteTime` 本地化标签；长来源和时间完整换行，不设固定高度、不省略时区。持仓卡将其放在数量、成本、参考价、占比与盈亏之后、操作区之前；组件只负责排版，不访问 Controller、缓存或估值。可显示来源声明的延迟及超过 24 小时的提示；年龄由 `MarketQuote.isOlderThanOneDay` 按真正采用的来源时间判定，基金日净值排除。
 
 - 投资草稿序号：Controller 公共只读 `nextInvestmentEventSequenceFor(accountId)` 复用既有 `_nextStockSequence`，返回当前账本真实证券账户的最新可用序号，账户失效返回 null。股票新事件保存时读取，期权预览时读取并冻结组合/现金依据；编辑旧事件仍保留原序号，不能在草稿初始化时长期占用序号。
+
+### 美股期权行情与分批刷新（2026-11-05）
+
+`AlpacaOptionQuoteAdapter` / `AlpacaHttpOptionQuoteTransport` 只查询固定官方 OPRA 快照；
+`MarketQuoteRequest` 提取到期日、权利、行权价及公开标的身份，不带交割备注或账务。
+`OptionQuoteSettingsPage(configured, onSave)` 复用标准编辑草稿及退出保护，凭证仅本次运行有效；
+`InvestmentQuoteSync.reconfigureSource(sourceId, configure, affectedPortfolios)` 先清该来源缓存再
+应用内存配置，撤销旧结果，不清其他来源缓存。工厂新增该适配器，未配置时不支持任何请求。
+`InvestmentQuoteSync.refresh` 处理全部持仓，每批最多 20 项串行，失败继续、取消撤销整轮；
+内存保留全部有效报价，磁盘继续限定最新 100 条及 512 KiB。详见[期权来源说明](us-option-quote-source.md)。

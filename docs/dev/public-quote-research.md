@@ -1,6 +1,6 @@
 # 公开股票参考行情：主应用接入与历史验证
 
-更新日期：2026-11-04。本文记录主应用来源范围，以及 2026-10-27 起免账号、免 API Key、无自有后台的真实股票查询验证，
+更新日期：2026-11-05。本文记录主应用来源范围，以及 2026-10-27 起免账号、免 API Key、无自有后台的真实股票查询验证，
 配套机制见[参考行情阶段 4](securities-stage04-implementation.md)。
 
 天天基金的货币基金接口与指定香港基金 `HK0001039582` 的独立验证见
@@ -18,8 +18,8 @@
 | --- | --- | --- |
 | 沪深 A 股 | CNY 股票代码；沪市 6 开头、深市 0/3 开头 | 中远海能 `600026`，来源代码 `sh600026` |
 | 港股 | HKD 普通股票代码，保留五位前导零 | 腾讯控股 `00700`，来源代码 `hk00700` |
-| 美股 | 仅明确核对的 AVGO、GOOG，不声明覆盖全部美股 | `usAVGO`、`usGOOG`，响应身份须分别为 `AVGO.OQ`、`GOOG.OQ` |
-| 期权及本地测试证券 | 不支持，不发请求 | `TEST-TCH…` 等合约始终保留手填参考价 |
+| 美股 | 1–5 位大写字母，可附 .A/.B 类别后缀；响应须为原代码加 .OQ 或 .N，不声明全部个股都可用 | 原 AVGO/GOOG；新增真实采样 AAPL/MSFT/NVDA、IBM/JPM、BRK.A/BRK.B |
+| 期权及本地测试证券 | 腾讯适配器不支持；美股期权另见[Alpaca 接入](us-option-quote-source.md) | `TEST-TCH…` 等合约始终保留手填参考价 |
 
 沪深、香港代码协议可接受的范围，不代表所有个股都已在 Android 上逐一验收。
 不接入港股人民币柜台，不把 GOOG 与 GOOGL、A 股 `600026` 与港股 `01138` 混用。
@@ -32,8 +32,8 @@
 ## 构建与启用边界
 
 正式入口在 `main.dart` 调用 `buildProductionMarketQuoteClient()`，固定装配腾讯股票及
-指定招商基金适配器；github、play、diagnostic 及 debug/release 不再使用不同的来源集合，
-无需 `PUBLIC_QUOTE_RESEARCH`。`allowResearchSources` 允许这两个既有公开来源参与请求
+指定招商基金，以及未配置不请求的 Alpaca OPRA 期权适配器；github、play、diagnostic 及 debug/release 不再使用不同的来源集合，
+无需 `PUBLIC_QUOTE_RESEARCH`。`allowResearchSources` 允许固定装配来源参与请求
 与缓存校验，不把 `approved` 改为 true，也不允许设备偏好、导入 JSON 或响应新增来源。
 联网和自动刷新仍默认关闭，用户开关与逐证券采用继续独立控制实际请求及估值。
 
@@ -267,3 +267,15 @@ Android 已通过 github flavor、release/R8、arm64 的本地编译，
 
 本轮证据位于被忽略的 `build/validation/app-quote-session-20261027/`，
 静态检查、专项、全量与构建日志在 `.toolchain/logs/app-quote-session-*.log`。
+
+## 2026-11-05 股票扩展验证
+
+匿名请求 7 个新增美股得到 HTTP 200、2,786 字节原始 GBK。AAPL/MSFT/NVDA 的响应身份
+为 `.OQ`，IBM/JPM 为 `.N`；BRK.A/BRK.B 保留点号，身份分别为 `BRK.A.N`/`BRK.B.N`。
+各条来源币种为 USD，报价时间按纽约 IANA 时区换算。原始响应、可读文本与抓取元数据
+在 `test/fixtures/investments/tencent_stocks_20261105.*`，未将其他后缀或基金/期权当股票接受。
+这证明所列样例可解析，不保证所有满足代码语法的证券均有报价；不新增实时性承诺。
+
+当前生产工厂另提供需单独配置的 Alpaca OPRA 期权来源；股票依然不需要凭证。
+超过 20 项持仓分批刷新，批次失败保留旧值并继续；超过 24 小时的参考报价会提示，
+不把抓取成功当作报价更新。完整期权边界见[期权来源记录](us-option-quote-source.md)。

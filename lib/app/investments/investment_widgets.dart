@@ -175,10 +175,14 @@ class InvestmentQuoteDetails extends StatelessWidget {
     required this.source,
     required this.quoteTime,
     this.dateOnly = false,
+    this.olderThanOneDay = false,
+    this.delayMinutes,
   });
 
   final String source, quoteTime;
   final bool dateOnly;
+  final bool olderThanOneDay;
+  final int? delayMinutes;
 
   /// 以主题画布实色弱化来源区；来源与时间分两层，避免长说明打断金额行。
   /// 装饰图标不重复朗读；不固定高度、不省略日期，保留系统大字号和浅深主题。
@@ -229,6 +233,10 @@ class InvestmentQuoteDetails extends StatelessWidget {
                         Text(quoteTime, style: caption),
                       ],
                     ),
+                    if (delayMinutes != null)
+                      Text(l.marketDelayKnown(delayMinutes!), style: caption),
+                    if (olderThanOneDay)
+                      Text(l.marketQuoteOlderThanOneDay, style: caption),
                   ],
                 ),
               ),

@@ -7403,7 +7403,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketResearchConsent =>
-      'When enabled, stock symbols are sent to Tencent and a public fund identifier and page language to CMS\'s official source. Providers can see your IP. Quantities, costs, accounts, balances and notes are not sent. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
+      'When enabled, stock symbols go to Tencent, and public fund identifiers and page language to CMS. After option setup, contract symbols and authentication credentials go to Alpaca. Providers can see your IP; position sizes, costs, ledger accounts, balances and notes are not sent. Automatic refresh checks current-ledger holdings only while the app is in the foreground and unlocked.';
 
   @override
   String get marketResearchNote =>
@@ -7420,8 +7420,12 @@ class AppLocalizationsEn extends AppLocalizations {
       'This source does not cover this security. Using the manual reference price.';
 
   @override
+  String get marketQuoteOlderThanOneDay =>
+      'This quote is more than 24 hours old, possibly from before the market closed. It remains in use if market valuation is enabled. Check its time.';
+
+  @override
   String get marketOptionUnsupported =>
-      'This source does not provide option quotes. Local TEST examples are fictional contracts and are never queried. Using the manual reference price.';
+      'Set up US option quotes and check the full contract symbol against its details. Unsupported contracts keep the manual price; TEST examples are never queried.';
 
   @override
   String get marketSourceReview => 'Source terms and field review';
@@ -8023,4 +8027,48 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get securitiesOpeningCashRequired =>
       'Enter an opening cash amount of 0 or more';
+
+  @override
+  String get optionQuoteTitle => 'US option quotes';
+
+  @override
+  String get optionQuoteConfigured => 'Configured · This session only';
+
+  @override
+  String get optionQuoteNotConfigured => 'Not configured';
+
+  @override
+  String get optionQuoteIntro =>
+      'Uses Alpaca OPRA quotes. An Alpaca account with OPRA data access is required.';
+
+  @override
+  String get optionQuoteCredentials => 'Quote credentials';
+
+  @override
+  String get optionQuoteKeyId => 'Alpaca Key ID';
+
+  @override
+  String get optionQuoteSecretKey => 'Alpaca Secret Key';
+
+  @override
+  String get optionQuoteReplaceHint =>
+      'Configured for this session. Enter both credentials to replace the current configuration, or leave them blank to keep it.';
+
+  @override
+  String get optionQuoteSetupHint => 'Enter both credentials, then save.';
+
+  @override
+  String get optionQuoteSessionOnly =>
+      'Credentials are kept only for this app session to read quotes. They are not included in backups or logs. Set them again after restarting the app.';
+
+  @override
+  String get optionQuoteClear => 'Clear session configuration';
+
+  @override
+  String get optionQuoteSaveFailed =>
+      'Not saved. Check the credentials and try again.';
+
+  @override
+  String get optionQuoteCredentialInvalid =>
+      'Use 1–512 ASCII letters, numbers or symbols, without whitespace.';
 }

@@ -852,6 +852,11 @@ class _StockPositionCard extends StatelessWidget {
             InvestmentQuoteDetails(
               source: quote!.source,
               dateOnly: quote.dateOnly,
+              olderThanOneDay: quote.isOlderThanOneDay(
+                MarketQuoteRequest(security),
+                c.investmentQuoteSync.clock(),
+              ),
+              delayMinutes: quote.delayMinutes,
               quoteTime: formatQuoteTime(
                 context,
                 quoteReference.time,

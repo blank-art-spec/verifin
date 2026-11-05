@@ -1,0 +1,12 @@
+{
+  "source": "https://docs.alpaca.markets/us/reference/optionsnapshots.md",
+  "sourceRetrievedOn": "2026-11-05",
+  "sourceHttpStatus": 200,
+  "kind": "official-openapi-documentation-example-NOT-live-market-response",
+  "jsonPointer": "/paths/~1v1beta1~1options~1snapshots/get/responses/200/content/application~1json/examples/snapshots/value",
+  "exampleDate": "2024-04-22",
+  "limitations": [
+    "No Alpaca credentials were used. No authenticated market data request has been verified.",
+    "This fixture validates the documented schema only and does not prove Android connectivity or OPRA entitlement."
+  ]
+}

@@ -1,0 +1,222 @@
+{
+  "Status": 200,
+  "ResponseContentType": "text/html; charset=GBK",
+  "FetchedAtUtc": "2026-11-05T13:41:36.9989526Z",
+  "Url": "https://qt.gtimg.cn/q=usAAPL,usMSFT,usNVDA,usIBM,usJPM,usBRK.B,usBRK.A",
+  "UserAgent": "VeriFin public-stock-research",
+  "ApprovedForProduction": false,
+  "Length": 2786,
+  "Notes": "原始匿名公开响应；抓取时刻取保存完成时间；.OQ/.N和A/B类别股格式仅证明所列样例可解析，不表示全部美股覆盖或实时性承诺。",
+  "Rows": [
+    {
+      "RequestCode": "usAAPL",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "苹果"
+        },
+        {
+          "Index": 2,
+          "Value": "AAPL.OQ"
+        },
+        {
+          "Index": 3,
+          "Value": "349.51"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-04 16:00:01"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usMSFT",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "微软"
+        },
+        {
+          "Index": 2,
+          "Value": "MSFT.OQ"
+        },
+        {
+          "Index": 3,
+          "Value": "555.80"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-04 16:00:01"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usNVDA",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "英伟达"
+        },
+        {
+          "Index": 2,
+          "Value": "NVDA.OQ"
+        },
+        {
+          "Index": 3,
+          "Value": "200.13"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-04 16:00:01"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usIBM",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "IBM"
+        },
+        {
+          "Index": 2,
+          "Value": "IBM.N"
+        },
+        {
+          "Index": 3,
+          "Value": "254.32"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-04 16:05:07"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usJPM",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "摩根大通"
+        },
+        {
+          "Index": 2,
+          "Value": "JPM.N"
+        },
+        {
+          "Index": 3,
+          "Value": "352.11"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-04 16:05:07"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usBRK.B",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "伯克希尔B"
+        },
+        {
+          "Index": 2,
+          "Value": "BRK.B.N"
+        },
+        {
+          "Index": 3,
+          "Value": "579.09"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-04 16:05:07"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usBRK.A",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "伯克希尔"
+        },
+        {
+          "Index": 2,
+          "Value": "BRK.A.N"
+        },
+        {
+          "Index": 3,
+          "Value": "869300.76"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-04 16:05:07"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        }
+      ]
+    }
+  ]
+}

@@ -97,7 +97,7 @@ void main() {
   test('主应用无参数接入固定来源，通用控制器仍为空且未授权', () async {
     final client = buildProductionMarketQuoteClient();
     expect(client.hasAvailableSources, isTrue);
-    expect(client.adapters, hasLength(2));
+    expect(client.adapters, hasLength(3));
     expect(
       client.adapterFor(MarketQuoteRequest(_stock)),
       isA<TencentQuoteAdapter>(),

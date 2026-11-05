@@ -35,16 +35,38 @@ const _goog = StockSecurity(
   currencyCode: 'USD',
 );
 final _capturedAt = DateTime.utc(2026, 10, 27, 2, 35);
+final _expandedCapturedAt = DateTime.utc(2026, 11, 5, 13, 41, 36);
+
+/// 来自扩展样例的美股普通股，保留点号以区分同一公司的两种类别。
+final _expandedSecurities = [
+  for (final symbol in ['AAPL', 'MSFT', 'NVDA', 'IBM', 'JPM', 'BRK.B', 'BRK.A'])
+    StockSecurity(
+      symbol: symbol,
+      name: symbol,
+      market: StockMarket.us,
+      currencyCode: 'USD',
+    ),
+];
 
 /// 读取真实公开 GBK 响应；样例捕获时间固定，测试不会联网或假设这是今天的价格。
 List<int> _fixtureBytes() => File(
   'test/fixtures/investments/tencent_stocks_20261027.gbk',
 ).readAsBytesSync();
 
+/// 读取新增纳斯达克、纽约证券交易所及类别股的真实公开响应。
+List<int> _expandedFixtureBytes() => File(
+  'test/fixtures/investments/tencent_stocks_20261105.gbk',
+).readAsBytesSync();
+
 /// 修改单行公开样例的指定字段，以覆盖真实格式上的身份、价格和时间边界。
 /// [queryCode] 是来源请求代码；[index] 是字段位置，[value] 是本用例注入的异常或边界输入。
-String _withField(String queryCode, int index, String value) {
-  final text = gbk.decode(_fixtureBytes());
+String _withField(
+  String queryCode,
+  int index,
+  String value, {
+  List<int>? bytes,
+}) {
+  final text = gbk.decode(bytes ?? _fixtureBytes());
   return text
       .split(RegExp(r'\r?\n'))
       .map((line) {
@@ -236,6 +258,148 @@ void main() {
     }
   });
 
+  test('真实七股响应经生产传输兼容纳斯达克、纽约证券交易所及点号类别股', () async {
+    final client = _RecordingClient(
+      _RecordingRequest(_RecordingResponse(200, _expandedFixtureBytes())),
+    );
+    final adapter = TencentQuoteAdapter(
+      transportFactory: () => TencentHttpQuoteTransport(client: client),
+      clock: () => _expandedCapturedAt,
+    );
+    final requests = _expandedSecurities.map(MarketQuoteRequest.new).toList();
+    expect(requests.every(adapter.supports), isTrue);
+    final quotes = await adapter.fetch(requests);
+    expect(quotes, hasLength(7));
+    expect(
+      client.urls.single.toString(),
+      'https://qt.gtimg.cn/q=usAAPL,usMSFT,usNVDA,usIBM,usJPM,usBRK.B,usBRK.A',
+    );
+    const prices = [
+      '349.51',
+      '555.8',
+      '200.13',
+      '254.32',
+      '352.11',
+      '579.09',
+      '869300.76',
+    ];
+    for (var index = 0; index < quotes.length; index++) {
+      final quote = quotes[index];
+      expect(quote.securityId, requests[index].securityId);
+      expect(quote.last, prices[index]);
+      expect(quote.currency, 'USD');
+      expect(quote.unit, QuotePriceUnit.share);
+      expect(
+        quote.lastAt,
+        index < 3
+            ? DateTime.utc(2026, 11, 4, 21, 0, 1)
+            : DateTime.utc(2026, 11, 4, 21, 5, 7),
+      );
+      expect(quote.fetchedAt, _expandedCapturedAt);
+    }
+    expect(client.forceClosed, isTrue);
+  });
+
+  for (final change in [
+    (index: 0, value: '100'),
+    (index: 2, value: 'BRK.A.N'),
+    (index: 2, value: 'BRK.B.OQ.EXTRA'),
+    (index: 2, value: 'BRK.B.PK'),
+    (index: 2, value: 'BRK-B.N'),
+    (index: 35, value: 'HKD'),
+  ]) {
+    test('纽约类别股仍完整校验市场、类别、交易所后缀及原币 ${change.index}/${change.value}', () async {
+      final transport = _FixtureTransport(
+        (_) => _response(
+          text: _withField(
+            'usBRK.B',
+            change.index,
+            change.value,
+            bytes: _expandedFixtureBytes(),
+          ),
+        ),
+      );
+      final adapter = TencentQuoteAdapter(
+        transportFactory: () => transport,
+        clock: () => _expandedCapturedAt,
+      );
+      final quotes = await adapter.fetch(
+        _expandedSecurities.map(MarketQuoteRequest.new).toList(),
+      );
+      expect(quotes, hasLength(6));
+      expect(
+        quotes.any((quote) => quote.securityId == 'us:stock:BRK.B'),
+        isFalse,
+      );
+      expect(
+        quotes.any((quote) => quote.securityId == 'us:stock:BRK.A'),
+        isTrue,
+      );
+    });
+  }
+
+  test('扩展美股仍拒绝未知格式、期权、基金及错误原币，不从代码猜证券类型', () async {
+    var created = 0;
+    final adapter = TencentQuoteAdapter(
+      transportFactory: () {
+        created++;
+        return _FixtureTransport((_) => _response());
+      },
+    );
+    final requests = [
+      for (final symbol in [
+        'aapl',
+        ' AAPL',
+        'AAPL ',
+        'BRK-B',
+        'BRK.C',
+        'BRK.AA',
+        'ABCDEF',
+        'AAPL.OQ',
+        'AAPL,MSFT',
+        'SPX:IND',
+        'AAPL261218C00350000',
+      ])
+        MarketQuoteRequest(
+          StockSecurity(
+            symbol: symbol,
+            name: symbol,
+            market: StockMarket.us,
+            currencyCode: 'USD',
+          ),
+        ),
+      MarketQuoteRequest(
+        const StockSecurity(
+          symbol: 'AAPL',
+          name: '错币种',
+          market: StockMarket.us,
+          currencyCode: 'HKD',
+        ),
+      ),
+      MarketQuoteRequest(
+        const StockSecurity(
+          symbol: 'SPY',
+          name: '基金',
+          market: StockMarket.us,
+          currencyCode: 'USD',
+          type: InvestmentSecurityType.fund,
+        ),
+      ),
+      MarketQuoteRequest(
+        StockSecurity(
+          symbol: 'AAPL',
+          name: '期权不得当股票',
+          market: StockMarket.us,
+          currencyCode: 'USD',
+          option: optionFixture().option,
+        ),
+      ),
+    ];
+    expect(requests.every((request) => !adapter.supports(request)), isTrue);
+    expect(await adapter.fetch(requests), isEmpty);
+    expect(created, 0);
+  });
+
   test('同一股票去重；不支持的代码与所有期权不会进入公开请求', () async {
     var created = 0;
     final transport = _FixtureTransport((_) => _response());
@@ -248,8 +412,8 @@ void main() {
     );
     final unsupported = [
       const StockSecurity(
-        symbol: 'MSFT',
-        name: '未核对美股',
+        symbol: 'BRK-B',
+        name: '非来源类别股格式',
         market: StockMarket.us,
         currencyCode: 'USD',
       ),
@@ -320,7 +484,7 @@ void main() {
     (code: 'sh600026', index: 82, value: 'USD'),
     (code: 'hk00700', index: 2, value: '700'),
     (code: 'hk00700', index: 75, value: 'CNY'),
-    (code: 'usAVGO', index: 2, value: 'AVGO.N'),
+    (code: 'usAVGO', index: 2, value: 'GOOG.N'),
     (code: 'usAVGO', index: 35, value: 'HKD'),
   ]) {
     test('错误证券、市场或原币不进入有效报价 ${change.code}/${change.index}', () async {
@@ -539,6 +703,11 @@ void main() {
       'https://qt.gtimg.cn/q=sh600026?other=1',
       'https://qt.gtimg.cn/q=sh600026#fragment',
       'https://qt.gtimg.cn/q=TEST-TCH-CALL',
+      'https://qt.gtimg.cn/q=usBRK-B',
+      'https://qt.gtimg.cn/q=usBRK.AA',
+      'https://qt.gtimg.cn/q=usAAPL.OQ',
+      'https://qt.gtimg.cn/q=usAAPL261218C00350000',
+      'https://qt.gtimg.cn/q=${List.filled(21, 'usAAPL').join(',')}',
     ]) {
       await expectLater(transport.get(Uri.parse(url)), throwsFormatException);
     }

@@ -12,6 +12,12 @@ import '../timezone_database.dart';
 import 'investment_decimal.dart';
 import 'market_quote.dart';
 
+// 仅映射用户声明为股票的身份；语法不用于推断基金、权证或期权类型。
+// 点号 A/B 类股及 .OQ/.N 返回身份见 2026-11-05 的真实公开响应夹具。
+const _usStockSymbolPattern = r'[A-Z]{1,5}(?:\.[AB])?';
+const _stockQueryPattern =
+    '(?:(?:sh|sz)\\d{6}|hk\\d{5}|us$_usStockSymbolPattern)';
+
 /// 一次腾讯 HTTP 响应；[body] 保持字节流，读取方可在超限时立即停止。
 class TencentQuoteResponse {
   /// [statusCode] 是原始 HTTP 状态；[body] 尚未完整读取，不能预先把大响应放入内存。
@@ -51,7 +57,7 @@ class TencentHttpQuoteTransport implements TencentQuoteTransport {
   @override
   Future<TencentQuoteResponse> get(Uri uri) async {
     final validPath = RegExp(
-      r'^/q=(?:(?:sh|sz)\d{6}|hk\d{5}|us(?:AVGO|GOOG))(?:,(?:(?:sh|sz)\d{6}|hk\d{5}|us(?:AVGO|GOOG))){0,19}$',
+      '^/q=$_stockQueryPattern(?:,$_stockQueryPattern){0,19}\$',
     );
     if (uri.scheme != 'https' ||
         uri.host != 'qt.gtimg.cn' ||
@@ -121,7 +127,7 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
   );
 
   /// 核对实际股票身份及原币；沪市 6、深市 0/3 开头，港股只接港元普通代码。
-  /// 美股首批只支持已核对的 AVGO/GOOG，不据这两只样例宣称完整美股覆盖。
+  /// 美股接有界字母代码和 A/B 类股；返回身份还须匹配已核对的 .OQ/.N 市场后缀。
   /// [request] 不包含账户或持仓数量；期权、TEST、人民币港股柜台及未知市场不发请求。
   @override
   bool supports(MarketQuoteRequest request) => _queryCode(request) != null;
@@ -205,7 +211,7 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
     }
     if (request.market == StockMarket.us &&
         request.currency == 'USD' &&
-        const {'AVGO', 'GOOG'}.contains(request.symbol)) {
+        RegExp('^$_usStockSymbolPattern\$').hasMatch(request.symbol)) {
       return 'us${request.symbol}';
     }
     return null;
@@ -219,7 +225,7 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
     DateTime fetchedAt,
   ) {
     final rows = <String, List<String>>{}, duplicated = <String>{};
-    final rowPattern = RegExp(r'^v_([a-zA-Z0-9]+)="([^"\r\n]*)";$');
+    final rowPattern = RegExp('^v_($_stockQueryPattern)="([^"\\r\\n]*)";\$');
     for (final line in text.split(RegExp(r'\r?\n'))) {
       final match = rowPattern.firstMatch(line.trim());
       if (match == null) continue;
@@ -243,12 +249,9 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
         StockMarket.hk => '100',
         StockMarket.cn => item.key.startsWith('sh') ? '1' : '51',
       };
-      final sourceSymbol = request.market == StockMarket.us
-          ? '${request.symbol}.OQ'
-          : request.symbol;
       if (fields.length <= currencyIndex ||
           fields[0].trim() != marketCode ||
-          fields[2].trim() != sourceSymbol ||
+          !_matchesSourceSymbol(fields[2].trim(), request) ||
           fields[currencyIndex].trim() != request.currency) {
         continue;
       }
@@ -276,6 +279,16 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
     }
     return List.unmodifiable(quotes);
   }
+
+  /// [sourceSymbol] 必须完整保留请求代码和类别点号，不模糊截断其他交易所后缀。
+  /// [request] 的美股身份只接受真实核对的纳斯达克 .OQ 或纽约证券交易所 .N。
+  static bool _matchesSourceSymbol(
+    String sourceSymbol,
+    MarketQuoteRequest request,
+  ) => request.market == StockMarket.us
+      ? sourceSymbol == '${request.symbol}.OQ' ||
+            sourceSymbol == '${request.symbol}.N'
+      : sourceSymbol == request.symbol;
 
   /// 严格解析实际源时间；沪深/香港为 UTC+8，美股为 America/New_York（含夏令时）。
   /// [raw] 不允许缺时分秒；[market] 选择对应来源格式，非法日期或夏令时跳时返回 null。

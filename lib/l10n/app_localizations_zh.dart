@@ -7138,7 +7138,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get marketResearchConsent =>
-      '开启后向腾讯公开来源发送股票代码，向招商官方发送公开基金标识和页面语言，服务方可见 IP；不发送数量、成本、账户、余额或备注。开启自动刷新后，打开应用或回前台检查当前账本持仓；退后台或锁屏暂停。';
+      '开启后向腾讯发送股票代码，向招商发送公开基金标识和页面语言；配置期权来源后向 Alpaca 发送合约代码与认证凭证。服务方可见 IP；不发送持仓数量、成本、账本账户、余额或备注。自动刷新仅在应用前台且已解锁时检查当前账本持仓。';
 
   @override
   String get marketResearchNote =>
@@ -7154,8 +7154,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketSecurityUnsupported => '当前来源尚不支持此证券，继续使用手填参考价。';
 
   @override
+  String get marketQuoteOlderThanOneDay =>
+      '报价距今已超过24小时，可能来自休市前。采用行情估值时仍使用此报价，请核对报价时间。';
+
+  @override
   String get marketOptionUnsupported =>
-      '当前来源不支持期权报价；本地 TEST 示例为虚构合约，不会联网查询，继续使用手填参考价。';
+      '请先配置美股期权行情，并核对完整合约代码与合约资料。暂不支持的合约继续手填；TEST 示例不会联网查询。';
 
   @override
   String get marketSourceReview => '来源使用条件与字段核对';
@@ -7716,4 +7720,44 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get securitiesOpeningCashRequired => '请填写不小于 0 的期初现金';
+
+  @override
+  String get optionQuoteTitle => '美股期权行情';
+
+  @override
+  String get optionQuoteConfigured => '已配置 · 仅本次运行';
+
+  @override
+  String get optionQuoteNotConfigured => '未配置';
+
+  @override
+  String get optionQuoteIntro => '使用 Alpaca 的 OPRA 行情，需要 Alpaca 账户及 OPRA 数据权限。';
+
+  @override
+  String get optionQuoteCredentials => '行情凭证';
+
+  @override
+  String get optionQuoteKeyId => 'Alpaca Key ID';
+
+  @override
+  String get optionQuoteSecretKey => 'Alpaca Secret Key';
+
+  @override
+  String get optionQuoteReplaceHint => '本次运行已配置。填写两项凭证可替换现有配置，留空则保持不变。';
+
+  @override
+  String get optionQuoteSetupHint => '填写两项凭证后保存。';
+
+  @override
+  String get optionQuoteSessionOnly =>
+      '凭证仅在本次运行中保留，用于读取行情，不写入备份或日志。重启应用后需重新设置。';
+
+  @override
+  String get optionQuoteClear => '清除本次配置';
+
+  @override
+  String get optionQuoteSaveFailed => '未保存，请检查凭证后重试。';
+
+  @override
+  String get optionQuoteCredentialInvalid => '请使用 1–512 个英文字母、数字或英文符号，不含空白。';
 }

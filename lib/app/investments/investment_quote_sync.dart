@@ -94,6 +94,7 @@ class InvestmentQuoteSync {
   Future<void> Function()? _scheduledRefresh;
   int _generation = 0;
   bool _disposed = false, _enabled = false, _automatic = false;
+  bool _sourceReconfiguring = false;
   String? _visible;
   bool _applicationManaged = false, _applicationActive = false;
   final _foregroundOwners = <String>{};
@@ -238,7 +239,8 @@ class InvestmentQuoteSync {
     return QuoteSyncState(
       enabled: _enabled,
       automatic: _automatic,
-      status: _enabled && _runningOwners.contains(owner)
+      status:
+          _enabled && (_sourceReconfiguring || _runningOwners.contains(owner))
           ? QuoteSyncStatus.loading
           : account?.status ?? fallback,
       changed: account?.changed ?? 0,
@@ -333,6 +335,73 @@ class InvestmentQuoteSync {
     _scheduledRefresh = null;
     _publish(QuoteSyncStatus.idle);
     return true;
+  }
+
+  /// 更新 [sourceId] 的内存配置前，撤销旧请求并持久清除该来源的全部账户缓存。
+  /// [affectedPortfolios] 是调用方确认可能使用新配置的账户；它们与旧来源缓存所属
+  /// 账户的自动冷却会重置，其他来源价格及独立账户计时保留。此方法不读取或保存凭证。
+  /// [configure] 必须同步、原子地应用已验证的配置，只在清理持久缓存成功后调用；
+  /// 返回 false 时调用方保留草稿。清理失败也撤销内存旧价，并明确显示未缓存状态。
+  Future<bool> reconfigureSource({
+    required String sourceId,
+    required void Function() configure,
+    required Iterable<InvestmentPortfolio> affectedPortfolios,
+  }) async {
+    if (_disposed || _sourceReconfiguring) return false;
+    final owners = affectedPortfolios.map(_owner).toSet();
+    final removedKeys = _cache.entries
+        .where((entry) => entry.value.quote.source == sourceId)
+        .map((entry) => entry.key)
+        .toList();
+    for (final key in removedKeys) {
+      owners.add(key.substring(0, key.lastIndexOf('|')));
+    }
+    final accounts = <String, _AccountRefreshState>{};
+    _sourceReconfiguring = true;
+    _generation++;
+    _timer?.cancel();
+    _timer = null;
+    _scheduledRefresh = null;
+    for (final key in removedKeys) {
+      _cache.remove(key);
+    }
+    for (final owner in owners) {
+      final account = _accounts.putIfAbsent(owner, _AccountRefreshState.new);
+      account.automaticAt = null;
+      account.status = QuoteSyncStatus.idle;
+      account.changed = 0;
+      accounts[owner] = account;
+    }
+    _publishVisible();
+    if (removedKeys.isNotEmpty) onPricesChanged?.call();
+    var status = QuoteSyncStatus.notCached;
+    try {
+      // 新请求在保存期间统一暂停；已排队的旧快照写完后再写此清理结果，不能复活旧价。
+      if (!await _persistCache() || _disposed) return false;
+      try {
+        configure();
+      } catch (_) {
+        // 配置回调只应用预先验证的内存状态；异常不含凭证或调用方原文。
+        status = QuoteSyncStatus.failed;
+        logger?.warning('参考行情来源配置更新失败', source: 'investment_quote');
+        return false;
+      }
+      status = QuoteSyncStatus.idle;
+      return true;
+    } finally {
+      // 保存期间发生的旧响应及会话变化都不能把上一份来源配置带回新配置。
+      _generation++;
+      _sourceReconfiguring = false;
+      if (!_disposed) {
+        for (final entry in accounts.entries) {
+          if (identical(_accounts[entry.key], entry.value)) {
+            entry.value.status = status;
+            entry.value.changed = 0;
+          }
+        }
+        _publishVisible(fallback: status);
+      }
+    }
   }
 
   /// 账户、事件、恢复或初始化后核对上下文；不匹配缓存不能复活到新账目。
@@ -568,7 +637,7 @@ class InvestmentQuoteSync {
     return history == null || history.points.last.date.isBefore(requiredDate);
   }
 
-  /// 返回当前持有或尚需补齐清仓历史、且来源明确支持的公开请求，每来源最多20项。
+  /// 返回当前持有或尚需补齐清仓历史、且来源明确支持的全部公开请求。
   /// 所有账户信息只用于本地选择，实际传给适配器的对象仍仅含公开证券身份。
   Map<MarketQuoteAdapter, List<MarketQuoteRequest>> _requestGroups(
     InvestmentPortfolio portfolio,
@@ -586,7 +655,7 @@ class InvestmentQuoteSync {
       final adapter = client.adapterFor(request);
       if (adapter == null) continue;
       final group = groups.putIfAbsent(adapter, () => []);
-      if (group.length < 20) group.add(request);
+      group.add(request);
     }
     return groups;
   }
@@ -595,7 +664,7 @@ class InvestmentQuoteSync {
   bool hasSupportedHoldings(InvestmentPortfolio portfolio) =>
       _requestGroups(portfolio).isNotEmpty;
 
-  /// 合并同来源的最多20个身份，串行来源请求、每批15秒上限；不抓全市场再筛持仓。
+  /// 同来源按每批最多20个身份串行请求，每批15秒上限；不抓全市场再筛持仓。
   /// [isCurrent] 在请求前及提交前重读账本、持仓和手填修订，旧响应不会跨上下文生效。
   /// [automatic] 默认为 false，表示用户手动刷新，不等待本地五分钟间隔。
   /// 页面进入及定时调用传 true，只受该账户自己的自动间隔约束；手动请求
@@ -605,7 +674,11 @@ class InvestmentQuoteSync {
     required bool Function() isCurrent,
     bool automatic = false,
   }) async {
-    if (_disposed || !_enabled || !_allowsRequest(_owner(p)) || !isCurrent()) {
+    if (_disposed ||
+        _sourceReconfiguring ||
+        !_enabled ||
+        !_allowsRequest(_owner(p)) ||
+        !isCurrent()) {
       return false;
     }
     final owner = _owner(p);
@@ -634,62 +707,72 @@ class InvestmentQuoteSync {
     _runningOwners.add(owner);
     final revision = _generation, digest = _digest(p);
     _publish(QuoteSyncStatus.loading, owner: owner);
-    var changed = 0, failed = false;
+    final updates = <String, ({String digest, MarketQuote quote})>{};
+    var failed = false;
+    // 每批前后及持久化等待后都重新核对会话，不因前一批失败跳过取消检查。
+    bool current() =>
+        !_disposed &&
+        !_sourceReconfiguring &&
+        revision == _generation &&
+        _enabled &&
+        _allowsRequest(owner) &&
+        isCurrent();
     try {
       for (final group in groups.entries) {
-        // 上一来源失败同样可能伴随关闭或离页；开始下一批之前必须重新核对授权。
-        if (_disposed ||
-            revision != _generation ||
-            !_enabled ||
-            !_allowsRequest(owner) ||
-            !isCurrent()) {
-          return false;
-        }
-        try {
-          final quotes = await group.key
-              .fetch(List.unmodifiable(group.value))
-              .timeout(const Duration(seconds: 15));
-          if (_disposed ||
-              revision != _generation ||
-              !_enabled ||
-              !_allowsRequest(owner) ||
-              !isCurrent()) {
-            return false;
-          }
+        for (var offset = 0; offset < group.value.length; offset += 20) {
+          if (!current()) return false;
           if (!client.allowsAdapter(group.key)) {
             failed = true;
-            continue;
+            break;
           }
-          for (final quote in quotes.take(20)) {
-            final request = group.value
-                .where((q) => q.securityId == quote.securityId)
-                .firstOrNull;
-            if (request == null || quote.source != group.key.capability.id) {
-              continue;
-            }
-            final reference = quote.reference(request, clock());
-            if (reference == null) {
+          final batch = List<MarketQuoteRequest>.unmodifiable(
+            group.value.skip(offset).take(20),
+          );
+          final requested = {for (final q in batch) q.securityId: q};
+          try {
+            final quotes = await group.key
+                .fetch(batch)
+                .timeout(const Duration(seconds: 15));
+            if (!current()) return false;
+            if (!client.allowsAdapter(group.key)) {
               failed = true;
               continue;
             }
-            final key = '$owner|${quote.securityId}',
-                old = _cache[key]?.quote.reference(request, clock());
-            if (old != null && reference.time.isBefore(old.time)) continue;
-            _cache[key] = (digest: digest, quote: quote);
-            changed++;
+            for (final quote in quotes.take(20)) {
+              // 响应只能匹配本批请求，不能提前接受其他批次或其他账户的身份。
+              final request = requested[quote.securityId];
+              if (request == null || quote.source != group.key.capability.id) {
+                continue;
+              }
+              final reference = quote.reference(request, clock());
+              if (reference == null) {
+                failed = true;
+                continue;
+              }
+              final key = '$owner|${quote.securityId}',
+                  old = (updates[key] ?? _cache[key])?.quote.reference(
+                    request,
+                    clock(),
+                  );
+              if (old != null && reference.time.isBefore(old.time)) continue;
+              updates[key] = (digest: digest, quote: quote);
+            }
+          } catch (_) {
+            // 有界来源失败属于正常降级；只记来源/数量，不记录异常原文或响应正文。
+            failed = true;
+            logger?.warning(
+              '参考行情来源 ${group.key.capability.id} 失败，数量 ${batch.length}',
+              source: 'investment_quote',
+            );
           }
-        } catch (_) {
-          // 有界来源失败属于正常降级；只记来源/数量，不记录异常原文或响应正文。
-          failed = true;
-          logger?.warning(
-            '参考行情来源 ${group.key.capability.id} 失败，数量 ${group.value.length}',
-            source: 'investment_quote',
-          );
         }
       }
-      if (_disposed || revision != _generation || !isCurrent()) return false;
+      if (!current()) return false;
+      // 整轮取消时不留下未通知的部分新价格；失败批的原缓存保留，成功批统一接受。
+      _cache.addAll(updates);
+      final changed = updates.length;
       final persisted = await _persistCache();
-      if (_disposed || revision != _generation || !isCurrent()) return false;
+      if (!current()) return false;
       _publish(
         !persisted
             ? QuoteSyncStatus.notCached
@@ -718,17 +801,14 @@ class InvestmentQuoteSync {
     }
   }
 
-  /// 小缓存串行持久化、最多100项；失败显示“未缓存”，本次内存报价及旧磁盘可解释。
+  /// 磁盘小缓存串行持久化、最多100项；不因磁盘限额删除本会话已刷新的内存报价。
+  /// 保存失败显示“未缓存”，本次内存报价及旧磁盘可解释。
   Future<bool> _persistCache() async {
-    if (_cache.length > 100) {
-      final keys = _cache.keys.toList()
-        ..sort(
-          (a, b) =>
-              _cache[a]!.quote.fetchedAt.compareTo(_cache[b]!.quote.fetchedAt),
-        );
-      for (final key in keys.take(_cache.length - 100)) {
-        _cache.remove(key);
-      }
+    final rows = _cache.entries.toList();
+    if (rows.length > 100) {
+      rows.sort(
+        (a, b) => b.value.quote.fetchedAt.compareTo(a.value.quote.fetchedAt),
+      );
     }
     if (_accounts.length > 100) {
       final owners = _accounts.keys.toList()
@@ -759,7 +839,7 @@ class InvestmentQuoteSync {
           },
       ],
       'rows': [
-        for (final e in _cache.entries)
+        for (final e in rows.take(100))
           {
             'key': e.key,
             'digest': e.value.digest,

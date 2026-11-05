@@ -2,6 +2,7 @@
 library;
 
 import '../models/investment.dart';
+import '../models/option_contract.dart';
 import '../../l10n/app_localizations.dart';
 import 'investment_decimal.dart';
 
@@ -47,17 +48,27 @@ class QuoteSourceCapability {
 
 /// 传输请求只包含公开证券身份；账本/账户 ID 和数量不会传给适配器。
 class MarketQuoteRequest {
-  /// [security] 只提取代码、市场、原币及股票/基金/期权品种，不携带账务字段。
+  /// [security] 只提取代码、市场、原币及品种；期权额外提取公开合约身份。
+  /// 不携带数量、成本、交割说明或其他用户备注，来源不能从这些字段得到持仓信息。
   MarketQuoteRequest(StockSecurity security)
     : securityId = security.id,
       symbol = security.symbol,
       market = security.market,
       currency = security.currencyCode,
       option = security.option != null,
-      fund = security.isFund;
+      fund = security.isFund,
+      optionExpiry = security.option?.expiry,
+      optionRight = security.option?.right,
+      optionStrike = security.option?.strike,
+      optionUnderlyingSymbol =
+          security.option?.underlyingId.startsWith('us:stock:') == true
+          ? security.option!.underlyingId.substring('us:stock:'.length)
+          : null;
   final String securityId, symbol, currency;
   final StockMarket market;
   final bool option, fund;
+  final String? optionExpiry, optionStrike, optionUnderlyingSymbol;
+  final OptionRight? optionRight;
 }
 
 /// 一条公开基金净值观察；只有日期和每份净值，没有持仓、收益流水或账户信息。
@@ -193,6 +204,15 @@ class MarketQuote {
   final QuoteTradeState tradeState;
   final bool dateOnly;
   final FundNavHistory? navHistory;
+
+  /// 对有效股票/期权报价显示超过二十四小时的事实提示，不推断交易所状态。
+  /// 休市期间也可能出现旧报价；提示不改变采用规则，基金日净值不使用此阈值。
+  bool isOlderThanOneDay(MarketQuoteRequest request, DateTime now) {
+    if (request.fund || dateOnly) return false;
+    final value = reference(request, now);
+    return value != null &&
+        now.difference(value.time) > const Duration(hours: 24);
+  }
 
   /// 校验身份、单位和字段时间；期权优先有效双边中间值，否则用带时间的正成交价。
   /// 不将零/负数、时间未知、明显未来时间或抓取成功自动解释成有效估值。

@@ -169,7 +169,12 @@ void main() {
         const time = '2026/10/27 16:14 CST';
         await _pumpDetails(
           tester,
-          const InvestmentQuoteDetails(source: source, quoteTime: time),
+          const InvestmentQuoteDetails(
+            source: source,
+            quoteTime: time,
+            olderThanOneDay: true,
+            delayMinutes: 15,
+          ),
           width: scenario.width,
           scale: scenario.scale,
           locale: scenario.locale,
@@ -181,6 +186,8 @@ void main() {
         expect(find.text(source), findsOneWidget);
         expect(find.text(time), findsOneWidget);
         expect(find.text(l.marketQuoteTime), findsOneWidget);
+        expect(find.text(l.marketQuoteOlderThanOneDay), findsOneWidget);
+        expect(find.text(l.marketDelayKnown(15)), findsOneWidget);
         _expectCompleteDetails(tester, details);
       },
     );

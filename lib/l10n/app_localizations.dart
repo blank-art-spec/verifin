@@ -12948,7 +12948,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketResearchConsent.
   ///
   /// In zh, this message translates to:
-  /// **'开启后向腾讯公开来源发送股票代码，向招商官方发送公开基金标识和页面语言，服务方可见 IP；不发送数量、成本、账户、余额或备注。开启自动刷新后，打开应用或回前台检查当前账本持仓；退后台或锁屏暂停。'**
+  /// **'开启后向腾讯发送股票代码，向招商发送公开基金标识和页面语言；配置期权来源后向 Alpaca 发送合约代码与认证凭证。服务方可见 IP；不发送持仓数量、成本、账本账户、余额或备注。自动刷新仅在应用前台且已解锁时检查当前账本持仓。'**
   String get marketResearchConsent;
 
   /// No description provided for @marketResearchNote.
@@ -12975,10 +12975,16 @@ abstract class AppLocalizations {
   /// **'当前来源尚不支持此证券，继续使用手填参考价。'**
   String get marketSecurityUnsupported;
 
+  /// No description provided for @marketQuoteOlderThanOneDay.
+  ///
+  /// In zh, this message translates to:
+  /// **'报价距今已超过24小时，可能来自休市前。采用行情估值时仍使用此报价，请核对报价时间。'**
+  String get marketQuoteOlderThanOneDay;
+
   /// No description provided for @marketOptionUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'当前来源不支持期权报价；本地 TEST 示例为虚构合约，不会联网查询，继续使用手填参考价。'**
+  /// **'请先配置美股期权行情，并核对完整合约代码与合约资料。暂不支持的合约继续手填；TEST 示例不会联网查询。'**
   String get marketOptionUnsupported;
 
   /// No description provided for @marketSourceReview.
@@ -14024,6 +14030,84 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'请填写不小于 0 的期初现金'**
   String get securitiesOpeningCashRequired;
+
+  /// No description provided for @optionQuoteTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'美股期权行情'**
+  String get optionQuoteTitle;
+
+  /// No description provided for @optionQuoteConfigured.
+  ///
+  /// In zh, this message translates to:
+  /// **'已配置 · 仅本次运行'**
+  String get optionQuoteConfigured;
+
+  /// No description provided for @optionQuoteNotConfigured.
+  ///
+  /// In zh, this message translates to:
+  /// **'未配置'**
+  String get optionQuoteNotConfigured;
+
+  /// No description provided for @optionQuoteIntro.
+  ///
+  /// In zh, this message translates to:
+  /// **'使用 Alpaca 的 OPRA 行情，需要 Alpaca 账户及 OPRA 数据权限。'**
+  String get optionQuoteIntro;
+
+  /// No description provided for @optionQuoteCredentials.
+  ///
+  /// In zh, this message translates to:
+  /// **'行情凭证'**
+  String get optionQuoteCredentials;
+
+  /// No description provided for @optionQuoteKeyId.
+  ///
+  /// In zh, this message translates to:
+  /// **'Alpaca Key ID'**
+  String get optionQuoteKeyId;
+
+  /// No description provided for @optionQuoteSecretKey.
+  ///
+  /// In zh, this message translates to:
+  /// **'Alpaca Secret Key'**
+  String get optionQuoteSecretKey;
+
+  /// No description provided for @optionQuoteReplaceHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次运行已配置。填写两项凭证可替换现有配置，留空则保持不变。'**
+  String get optionQuoteReplaceHint;
+
+  /// No description provided for @optionQuoteSetupHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写两项凭证后保存。'**
+  String get optionQuoteSetupHint;
+
+  /// No description provided for @optionQuoteSessionOnly.
+  ///
+  /// In zh, this message translates to:
+  /// **'凭证仅在本次运行中保留，用于读取行情，不写入备份或日志。重启应用后需重新设置。'**
+  String get optionQuoteSessionOnly;
+
+  /// No description provided for @optionQuoteClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除本次配置'**
+  String get optionQuoteClear;
+
+  /// No description provided for @optionQuoteSaveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未保存，请检查凭证后重试。'**
+  String get optionQuoteSaveFailed;
+
+  /// No description provided for @optionQuoteCredentialInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请使用 1–512 个英文字母、数字或英文符号，不含空白。'**
+  String get optionQuoteCredentialInvalid;
 }
 
 class _AppLocalizationsDelegate
