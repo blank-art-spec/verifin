@@ -1,5 +1,15 @@
 # 组件清单（Component Registry）
 
+2026-11-05 多项证券期初，行为见[股票阶段记录](securities-stage02-implementation.md)
+及[期权阶段记录](securities-stage03-implementation.md)：
+
+| 组件或函数 | 位置与约定 |
+| --- | --- |
+| `InvestmentSetupPage` | `pages/investment_setup_page.dart`；统一账户现金、生效时间、融资与可增删编辑的多证券期初草稿列表，复用 `EntryEditorSurface` 处理退出及保存保护；最后一次提交才启用账户 |
+| `InvestmentOpeningHolding` / `composeInvestmentOpening` | `app/investments/investment_opening_draft.dart`；内存草稿与纯组装入口，分别保留证券、方向、数量、总成本、参考价及可选期权标的／冻结额；重复方向、合约、报价及冻结额冲突不静默覆盖，调用既有投影核验 |
+| `investmentOpeningMarginEvents` | 同文件；将每合约明确冻结额转成期初时刻的零资金 `optionMargin` 核对事实，拒绝无对应期权持仓的冻结额；供预览与原子启用共同使用 |
+| `StockEditorPage.openingPortfolio` / `OptionEditorPage.openingPortfolio` | 原表单的期初草稿模式；可通过 `openingHolding` 编辑列表条目，保存只返回 `InvestmentOpeningHolding`，不调用买入／开仓保存；股票按单位成本换算，期权直接录入总成本 |
+
 2026-11-04 资产列表金额：`accountListBalanceStyle(context:, includeInAssets:)`
 位于 `app/common_widgets_panels.dart`，供主账户卡片与 `AccountSectionCard` 的普通账户行共用。
 使用 `titleMedium`（14sp）/ w600 和主题 `onSurfaceVariant`，不计入资产的普通账户保留弱化色；

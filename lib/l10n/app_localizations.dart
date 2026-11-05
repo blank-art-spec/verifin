@@ -11972,6 +11972,90 @@ abstract class AppLocalizations {
   /// **'启用证券持仓'**
   String get investEnable;
 
+  /// No description provided for @investOpeningHoldingTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初持仓'**
+  String get investOpeningHoldingTitle;
+
+  /// No description provided for @investOpeningHoldingQuantity.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初数量'**
+  String get investOpeningHoldingQuantity;
+
+  /// No description provided for @investOpeningOptionTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初期权持仓'**
+  String get investOpeningOptionTitle;
+
+  /// No description provided for @investOpeningOptionHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'录入期初已持有的合约。总成本填写多头实际总成本或空头净开仓所得，不再扣减或增加现金；留空表示未知。'**
+  String get investOpeningOptionHint;
+
+  /// No description provided for @investOpeningPortfolioHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写同一期初时刻的现金和已有持仓，可添加多只股票、基金和期权。现金只填实际现金余额（含冻结资金），不包含持仓市值；添加持仓不会再次扣款。全部核对后一起保存。'**
+  String get investOpeningPortfolioHint;
+
+  /// No description provided for @investOpeningEmpty.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未添加期初持仓。可逐项添加，也可仅填写现金后启用。'**
+  String get investOpeningEmpty;
+
+  /// No description provided for @investOpeningAddStock.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加股票'**
+  String get investOpeningAddStock;
+
+  /// No description provided for @investOpeningAddOption.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加期权'**
+  String get investOpeningAddOption;
+
+  /// No description provided for @investOpeningAddFund.
+  ///
+  /// In zh, this message translates to:
+  /// **'添加基金'**
+  String get investOpeningAddFund;
+
+  /// No description provided for @investOpeningRemove.
+  ///
+  /// In zh, this message translates to:
+  /// **'移除'**
+  String get investOpeningRemove;
+
+  /// No description provided for @investOpeningDuplicate.
+  ///
+  /// In zh, this message translates to:
+  /// **'此证券的相同方向已录入，请编辑已有条目，不要重复添加。'**
+  String get investOpeningDuplicate;
+
+  /// No description provided for @investOpeningContractConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'同一期权的合约规格不一致，请核对已有条目。'**
+  String get investOpeningContractConflict;
+
+  /// No description provided for @investOpeningPriceConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'同一证券的多空持仓须使用一致的参考价，请核对已有条目。'**
+  String get investOpeningPriceConflict;
+
+  /// No description provided for @investOpeningMarginConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'同一期权的多空持仓共用一份冻结保证金，请填写一致的总冻结额。'**
+  String get investOpeningMarginConflict;
+
   /// No description provided for @investSetupHint.
   ///
   /// In zh, this message translates to:

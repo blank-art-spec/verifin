@@ -6859,6 +6859,55 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investEnable => 'Enable securities holdings';
 
   @override
+  String get investOpeningHoldingTitle => 'Opening holdings';
+
+  @override
+  String get investOpeningHoldingQuantity => 'Opening quantity';
+
+  @override
+  String get investOpeningOptionTitle => 'Opening option holding';
+
+  @override
+  String get investOpeningOptionHint =>
+      'Record contracts already held at the opening date. Enter the total long-position cost or net short-opening proceeds; this does not change cash. Leave the cost blank if unknown.';
+
+  @override
+  String get investOpeningPortfolioHint =>
+      'Enter cash and existing holdings at the same opening time. Add any stocks, funds and options you already hold. Cash includes frozen funds but excludes holdings value. Adding holdings does not charge cash again. Review and save everything together.';
+
+  @override
+  String get investOpeningEmpty =>
+      'No opening holdings yet. Add them individually, or enable the account with cash only.';
+
+  @override
+  String get investOpeningAddStock => 'Add stock';
+
+  @override
+  String get investOpeningAddOption => 'Add option';
+
+  @override
+  String get investOpeningAddFund => 'Add fund';
+
+  @override
+  String get investOpeningRemove => 'Remove';
+
+  @override
+  String get investOpeningDuplicate =>
+      'This security and direction are already listed. Edit the existing item instead of adding it again.';
+
+  @override
+  String get investOpeningContractConflict =>
+      'The specifications for this option do not match. Check the existing item.';
+
+  @override
+  String get investOpeningPriceConflict =>
+      'Long and short holdings of the same security must use the same reference price. Check the existing item.';
+
+  @override
+  String get investOpeningMarginConflict =>
+      'Long and short holdings of the same option share one frozen margin. Enter the same total frozen amount.';
+
+  @override
   String get investSetupHint =>
       'Confirm opening cash. If the old balance includes stocks, enter cash and holdings separately to avoid double counting.';
 

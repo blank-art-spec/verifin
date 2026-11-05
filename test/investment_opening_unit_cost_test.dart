@@ -5,6 +5,7 @@ import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/local_storage/local_storage.dart';
 import 'package:verifin/pages/investment_page.dart';
+import 'package:verifin/pages/investment_setup_page.dart';
 
 import 'support/investment_fixture.dart';
 import 'support/test_harness.dart';
@@ -19,7 +20,7 @@ Finder _formScroll() => find
 Future<void> _openEditor(
   WidgetTester tester,
   VeriFinController controller,
-  StockEditorPage page,
+  Widget page,
 ) async {
   await tester.pumpWidget(
     VeriFinScope(
@@ -52,6 +53,51 @@ Future<void> _enter(WidgetTester tester, String field, String value) async {
 Future<void> _save(WidgetTester tester) async {
   final save = find.widgetWithText(FilledButton, '保存');
   await tester.scrollUntilVisible(save, 220, scrollable: _formScroll());
+  await tester.tap(save);
+  await tester.pumpAndSettle();
+}
+
+/// 通过真实启用列表添加单条草稿；单条返回后仍不能创建账户组合。
+Future<void> _startOpening(
+  WidgetTester tester,
+  VeriFinController controller,
+  String accountId,
+) async {
+  await _openEditor(
+    tester,
+    controller,
+    InvestmentSetupPage(accountId: accountId),
+  );
+  await tester.enterText(find.byKey(const Key('opening-cash')), '100');
+  final add = find.byKey(const Key('opening-add-stock'));
+  await tester.scrollUntilVisible(
+    add,
+    180,
+    scrollable: find
+        .descendant(
+          of: find.byType(InvestmentSetupPage),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  await tester.tap(add);
+  await tester.pumpAndSettle();
+}
+
+/// 最终保存同时提交现金及全部期初草稿。
+Future<void> _saveOpening(WidgetTester tester) async {
+  final save = find.byKey(const Key('opening-save'));
+  await tester.scrollUntilVisible(
+    save,
+    220,
+    scrollable: find
+        .descendant(
+          of: find.byType(InvestmentSetupPage),
+          matching: find.byType(Scrollable),
+        )
+        .first,
+  );
+  await tester.pumpAndSettle();
   await tester.tap(save);
   await tester.pumpAndSettle();
 }
@@ -116,12 +162,7 @@ void main() {
       final account = investmentAccountFixture(currency: sample.currency);
       c.addAccount(account);
       await c.waitForPendingWrites();
-      await _openEditor(
-        tester,
-        c,
-        StockEditorPage(accountId: account.id, setup: true),
-      );
-      await _enter(tester, 'cash', '100');
+      await _startOpening(tester, c, account.id);
       await _enter(tester, 'symbol', 'AVGO');
       await _enter(tester, 'name', '博通');
       await _enter(tester, 'quantity', sample.quantity);
@@ -136,6 +177,8 @@ void main() {
       }
       await _enter(tester, 'reference', '20');
       await _save(tester);
+      expect(c.investmentFor(account.id), isNull);
+      await _saveOpening(tester);
 
       final portfolio = c.investmentFor(account.id)!;
       expect(portfolio.openingHoldings.single.cost, sample.totalCost);
@@ -167,11 +210,7 @@ void main() {
     final account = investmentAccountFixture();
     c.addAccount(account);
     await c.waitForPendingWrites();
-    await _openEditor(
-      tester,
-      c,
-      StockEditorPage(accountId: account.id, setup: true),
-    );
+    await _startOpening(tester, c, account.id);
     await _enter(tester, 'symbol', 'AVGO');
     await _enter(tester, 'name', '博通');
     await _enter(tester, 'quantity', '1');

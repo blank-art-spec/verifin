@@ -3,6 +3,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/pages/investment_page.dart';
+import 'package:verifin/pages/investment_setup_page.dart';
 import 'package:verifin/pages/transaction_entry_page.dart';
 import 'support/investment_fixture.dart';
 import 'support/test_harness.dart';
@@ -18,9 +19,7 @@ void main() {
     await tester.pumpWidget(
       VeriFinScope(
         controller: c,
-        child: zhMaterialApp(
-          home: StockEditorPage(accountId: account.id, setup: true),
-        ),
+        child: zhMaterialApp(home: InvestmentSetupPage(accountId: account.id)),
       ),
     );
     await tester.pumpAndSettle();
@@ -46,19 +45,22 @@ void main() {
     await tester.pumpAndSettle();
     await tester.tap(find.text('启用证券持仓'));
     await tester.pumpAndSettle();
-    await tester.enterText(find.byKey(const ValueKey('stock-cash')), '5000');
-    Navigator.of(tester.element(find.byType(StockEditorPage))).pop();
+    await tester.enterText(find.byKey(const ValueKey('opening-cash')), '5000');
+    await tester.pumpAndSettle();
+    await tester.binding.handlePopRoute();
+    await tester.pumpAndSettle();
+    await tester.tap(find.text('不保存'));
     await tester.pumpAndSettle();
     expect(c.investmentFor(account.id), isNull);
     await tester.tap(find.text('启用证券持仓'));
     await tester.pumpAndSettle();
-    final save = find.widgetWithText(FilledButton, '保存');
+    final save = find.byKey(const Key('opening-save'));
     await tester.scrollUntilVisible(
       save,
       250,
       scrollable: find
           .descendant(
-            of: find.byType(StockEditorPage),
+            of: find.byType(InvestmentSetupPage),
             matching: find.byType(Scrollable),
           )
           .first,

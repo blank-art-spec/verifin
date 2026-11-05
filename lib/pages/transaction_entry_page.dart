@@ -16,6 +16,7 @@ import 'entry_detail_page.dart';
 import 'entry_editor_session.dart';
 import 'fund_entry_page.dart';
 import 'investment_page.dart';
+import 'investment_setup_page.dart';
 import 'option_editor_page.dart';
 import 'securities_account_creation.dart';
 import 'sheets.dart';
@@ -193,7 +194,7 @@ class _TransactionEntryPageState extends State<TransactionEntryPage> {
     }
     await Navigator.of(context).push<void>(
       MaterialPageRoute<void>(
-        builder: (_) => StockEditorPage(accountId: selected.id, setup: true),
+        builder: (_) => InvestmentSetupPage(accountId: selected.id),
       ),
     );
     if (!mounted) return;

@@ -196,6 +196,7 @@ mixin _InvestmentOps on _ControllerOps {
 
   /// 首次启用 [accountId]；[openingCash] 为核对后的真实现金，不是原总资产。
   /// [openingHoldings] 可包含未知成本；[manualPrices] 只用于参考估值，取消草稿无副作用。
+  /// [openingOptionMargins] 为每合约期初冻结额，与现金和多项持仓同次原子保存。
   Future<bool> enableInvestment({
     required String accountId,
     required String openingCash,
@@ -203,6 +204,7 @@ mixin _InvestmentOps on _ControllerOps {
     List<StockSecurity> securities = const [],
     List<StockHolding> openingHoldings = const [],
     Map<String, String> manualPrices = const {},
+    Map<String, String> openingOptionMargins = const {},
     bool allowFinancing = false,
   }) => _runInvestmentCommand(() async {
     final account = _accounts
@@ -235,6 +237,12 @@ mixin _InvestmentOps on _ControllerOps {
       securities: securities,
       openingHoldings: openingHoldings,
       manualPrices: manualPrices,
+      events: investmentOpeningMarginEvents(
+        openedAt: time,
+        securities: securities,
+        holdings: openingHoldings,
+        margins: openingOptionMargins,
+      ),
       allowFinancing: allowFinancing,
     );
     return _saveInvestmentCandidates([..._investmentPortfolios, value]);
@@ -968,6 +976,14 @@ void validateInvestmentPortfolios(
       throw const FormatException('投资持仓需要明确的手填参考价');
     }
     valuation.marketValue!.toDouble();
+    // 多项持仓的合计也必须可展示，避免各项合法但冻结或盈亏合计溢出后落库。
+    valuation.unrealized?.toDouble();
+    projection.frozenMargin.toDouble();
+    projection.realized.toDouble();
+    projection.income.toDouble();
+    for (final position in projection.positions) {
+      position.cost?.toDouble();
+    }
     for (final event in p.events.where((e) => e.batchId != null)) {
       batches.putIfAbsent(event.batchId!, () => []).add((p, event));
     }

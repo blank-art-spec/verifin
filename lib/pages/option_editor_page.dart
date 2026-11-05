@@ -6,6 +6,9 @@ import 'dart:convert';
 import 'package:flutter/material.dart';
 import '../app/calendar_days.dart';
 import '../app/common_widgets.dart';
+import '../app/currency_catalog.dart';
+import '../app/investments/investment_decimal.dart';
+import '../app/investments/investment_opening_draft.dart';
 import '../app/investments/investment_widgets.dart';
 import '../app/currency_math.dart';
 import '../app/investments/stock_projection.dart';
@@ -26,7 +29,12 @@ class OptionEditorPage extends StatefulWidget {
     this.specificationOnly = false,
     this.initialShort = false,
     this.editorSession,
-  });
+    this.openingPortfolio,
+    this.openingHolding,
+  }) : assert(openingHolding == null || openingPortfolio != null),
+       assert(
+         openingPortfolio == null || (event == null && !specificationOnly),
+       );
   final String accountId;
   final String? securityId;
   final StockEvent? event;
@@ -35,6 +43,10 @@ class OptionEditorPage extends StatefulWidget {
 
   /// 非空时由双页签外壳管理保存和返回，本页仅提供同一套期权表单。
   final EntryEditorSession? editorSession;
+
+  /// 非空时只编辑启用页持有的期初草稿，返回条目，不创建组合或成交。
+  final InvestmentPortfolio? openingPortfolio;
+  final InvestmentOpeningHolding? openingHolding;
 
   /// 每个页面持有独立草稿，离页时销毁，不通过全局状态中转未确认输入。
   @override
@@ -77,9 +89,17 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   OptionSettlement _settlement = OptionSettlement.unsupported;
   StockEventKind _kind = StockEventKind.optionBuyOpen;
   _OptionDraft? _draft;
+  InvestmentOpeningHolding? _openingResult;
   String? _previewInputSnapshot;
   ({InvestmentPortfolio portfolio, StockProjection projection, double cash})?
   _preview;
+
+  bool get _opening => widget.openingPortfolio != null;
+
+  /// 期初页的组合尚未落库；普通交易继续只读 Controller 的当前组合。
+  InvestmentPortfolio? get _portfolio =>
+      widget.openingPortfolio ??
+      VeriFinScope.of(context).investmentFor(widget.accountId);
 
   /// 只比较用户可编辑事实，预览计算本身不视作一笔待保存修改。
   String get _editorSnapshot => editorDraftSnapshot(
@@ -111,11 +131,12 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     super.didChangeDependencies();
     if (_loaded) return;
     _loaded = true;
-    final c = VeriFinScope.of(context), p = c.investmentFor(widget.accountId);
+    final c = VeriFinScope.of(context), p = _portfolio;
     _bookId = c.activeBook.id;
     final e = widget.event;
     _id = e?.id ?? 'option-${DateTime.now().microsecondsSinceEpoch}';
-    _date = e?.occurredAt ?? DateTime.now();
+    _date =
+        e?.occurredAt ?? widget.openingPortfolio?.openedAt ?? DateTime.now();
     _expiry = addCalendarDays(_date, 30);
     _sequence =
         e?.sequence ?? c.nextInvestmentEventSequenceFor(widget.accountId) ?? 0;
@@ -127,6 +148,13 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
             ? StockEventKind.optionBuyClose
             : StockEventKind.optionSellClose);
     _short = e?.short ?? widget.initialShort;
+    if (_opening) {
+      _market = p?.currencyCode == 'HKD'
+          ? StockMarket.hk
+          : p?.currencyCode == 'CNY'
+          ? StockMarket.cn
+          : StockMarket.us;
+    }
     _confirmed = e?.settlementConfirmed ?? false;
     _uncovered = e?.allowUncoveredAssignment ?? false;
     for (final key in [
@@ -146,6 +174,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       'reference',
       'margin',
       'note',
+      'cost',
     ]) {
       _fields[key] = TextEditingController();
     }
@@ -158,6 +187,25 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
         .where((s) => s.id == (e?.securityId ?? widget.securityId))
         .firstOrNull;
     if (selected != null) _loadContract(selected, p!);
+    final opening = widget.openingHolding;
+    if (opening != null && p != null) {
+      final underlying = opening.underlying;
+      _loadContract(
+        opening.security,
+        p.copyWith(
+          securities: [
+            ...p.securities.where((s) => s.id != underlying?.id),
+            ?underlying,
+          ],
+        ),
+      );
+      _short = opening.holding.short;
+      _fields['quantity']!.text = opening.holding.quantity;
+      _fields['cost']!.text = opening.holding.cost ?? '';
+      _fields['margin']!.text = opening.frozenMargin ?? '';
+      _fields['reference']!.text = opening.referencePrice;
+      _fields['underlyingPrice']!.text = opening.underlyingPrice ?? '';
+    }
     _initialEditorSnapshot = _editorSnapshot;
   }
 
@@ -185,6 +233,10 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       'reference': p.manualPrices[s.id] ?? '',
     }.entries) {
       _fields[pair.key]!.text = pair.value;
+    }
+    if (_opening && widget.openingHolding == null) {
+      _fields['margin']!.text =
+          projectStocks(p).frozenMargins[s.id]?.toString() ?? '';
     }
     _invalidate();
   }
@@ -228,7 +280,9 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   );
 
   /// 用文本事实建立候选；每张行权现金直接取输入，不用行权价乘股数猜调整合约。
-  _OptionDraft _readDraft(InvestmentPortfolio p) {
+  ({StockSecurity security, StockSecurity underlying}) _readSecurities(
+    InvestmentPortfolio p,
+  ) {
     String text(String key) => _fields[key]!.text.trim();
     final underlying = StockSecurity(
       symbol: text('underlying'),
@@ -255,6 +309,14 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       currencyCode: p.currencyCode,
       option: contract,
     );
+    return (security: security, underlying: underlying);
+  }
+
+  /// 实际交易沿用原来的事件语义；期初条目不经过此方法。
+  _OptionDraft _readDraft(InvestmentPortfolio p) {
+    String text(String key) => _fields[key]!.text.trim();
+    final definitions = _readSecurities(p);
+    final security = definitions.security, underlying = definitions.underlying;
     final zeroPrice = {
       StockEventKind.optionExpire,
       StockEventKind.optionPhysicalSettle,
@@ -282,6 +344,115 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       text('reference'),
       text('underlyingPrice').isEmpty ? null : text('underlyingPrice'),
     );
+  }
+
+  /// 用临时组合核对期初条目，编辑时先移除原方向，不覆盖其他期初或产生交易。
+  /// 成本为原币总额；参考权利金通过现有乘数算法估值，冻结额只作披露。
+  InvestmentOpeningHolding _readOpening(InvestmentPortfolio p) {
+    String text(String key) => _fields[key]!.text.trim();
+    final definitions = _readSecurities(p),
+        digits = CurrencyCatalog.require(p.currencyCode).minorUnit;
+    final quantity = InvestmentDecimal.parse(text('quantity'));
+    final rawCost = text('cost').isEmpty
+        ? null
+        : InvestmentDecimal.parse(text('cost'));
+    final reference = InvestmentDecimal.parse(text('reference'));
+    final rawMargin = text('margin').isEmpty
+        ? null
+        : InvestmentDecimal.parse(text('margin'));
+    final underlyingPrice = text('underlyingPrice').isEmpty
+        ? null
+        : InvestmentDecimal.parse(text('underlyingPrice'));
+    if ((rawCost != null && rawCost.units < BigInt.zero) ||
+        reference.units < BigInt.zero ||
+        (underlyingPrice != null && underlyingPrice.units < BigInt.zero)) {
+      throw const FormatException('期初成本或参考价不能为负');
+    }
+    // 总成本舍入后也必须处于金额显示边界内；尤其接近上限时不能向父列表返回溢出值。
+    final totalCost = rawCost?.rounded(digits);
+    totalCost?.toDouble();
+    reference.toDouble();
+    underlyingPrice?.toDouble();
+    rawMargin?.toDouble();
+    final holding = StockHolding(
+      securityId: definitions.security.id,
+      short: _short,
+      quantity: quantity.toString(),
+      cost: totalCost?.toString(),
+    );
+    final original = widget.openingHolding?.holding;
+    final candidate = p.copyWith(
+      securities: [
+        ...p.securities.where(
+          (s) =>
+              s.id != definitions.underlying.id &&
+              s.id != definitions.security.id,
+        ),
+        definitions.underlying,
+        definitions.security,
+      ],
+      openingHoldings: [
+        ...p.openingHoldings.where(
+          (h) =>
+              original == null ||
+              h.securityId != original.securityId ||
+              h.short != original.short,
+        ),
+        holding,
+      ],
+      events: [
+        ...p.events,
+        if (rawMargin != null)
+          StockEvent(
+            id: 'opening-margin-check-$_id',
+            securityId: definitions.security.id,
+            kind: StockEventKind.optionMargin,
+            occurredAt: p.openedAt,
+            sequence: p.events.fold<int>(
+              0,
+              (value, e) => e.sequence >= value ? e.sequence + 1 : value,
+            ),
+            quantity: '0',
+            price: '0',
+            marginAfter: rawMargin.toString(),
+          ),
+      ],
+      manualPrices: {
+        ...p.manualPrices,
+        definitions.security.id: reference.toString(),
+        if (underlyingPrice != null)
+          definitions.underlying.id: underlyingPrice.toString(),
+      },
+    );
+    final projection = projectStocks(candidate);
+    final valuation = valueStocks(candidate, projection);
+    if (valuation.marketValue == null) {
+      throw const FormatException('期初持仓须填写有效参考价');
+    }
+    valuation.marketValue!.toDouble();
+    return InvestmentOpeningHolding(
+      security: definitions.security,
+      holding: holding,
+      referencePrice: reference.toString(),
+      underlying: definitions.underlying,
+      underlyingPrice: underlyingPrice?.toString(),
+      frozenMargin: rawMargin?.toString(),
+    );
+  }
+
+  /// 期初草稿也绑定真实币种账户及当前账本，切换或删除后不能带回旧资料。
+  bool _hasValidAccount(InvestmentPortfolio p) {
+    final c = VeriFinScope.of(context);
+    return c.activeBook.id == _bookId &&
+        p.accountId == widget.accountId &&
+        p.bookId == _bookId &&
+        c.accounts.any(
+          (a) =>
+              a.id == widget.accountId &&
+              a.bookId == _bookId &&
+              a.currencyCode == p.currencyCode &&
+              a.type.supportsSecurities,
+        );
   }
 
   /// 捕获实际影响预览的账户组合与现金，字符串只留当前编辑会话，不输出或持久化。
@@ -335,6 +506,25 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   Future<bool> _save(InvestmentPortfolio p) async {
     if (_busy || _submitted) return false;
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
+    if (_opening) {
+      if (!_hasValidAccount(p)) {
+        setState(() => _error = l.optionValidationError);
+        return false;
+      }
+      try {
+        final result = _readOpening(p);
+        setState(() {
+          _openingResult = result;
+          _submitted = true;
+          _initialEditorSnapshot = _editorSnapshot;
+          _error = null;
+        });
+        return true;
+      } on FormatException {
+        setState(() => _error = l.optionValidationError);
+        return false;
+      }
+    }
     final current = c.investmentFor(widget.accountId);
     if (c.activeBook.id != _bookId ||
         current == null ||
@@ -384,7 +574,9 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
 
   /// 原独立期权页保存后走受控返回，保留原预览及 Controller 二次校验流程。
   Future<void> _saveAndExit(InvestmentPortfolio portfolio) async {
-    if (await _save(portfolio) && mounted) _exitController.exit();
+    if (await _save(portfolio) && mounted) {
+      _exitController.exit(result: () => _openingResult);
+    }
   }
 
   /// 删除也重放全部后续交割；破坏后续持仓/资金的删除会被拒绝，不残留半笔。
@@ -415,8 +607,10 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context),
         l = AppLocalizations.of(context),
-        p = c.investmentFor(widget.accountId);
-    if (c.activeBook.id != _bookId || p == null) {
+        p = _portfolio;
+    if (c.activeBook.id != _bookId ||
+        p == null ||
+        (_opening && !_hasValidAccount(p))) {
       return EntryEditorSurface(
         session: widget.editorSession,
         isDirty: _editorDirty,
@@ -444,15 +638,18 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     final value = _preview == null
         ? null
         : valueStocks(_preview!.portfolio, _preview!.projection).marketValue;
-    final locked = _selected != null;
+    final locked = !_opening && _selected != null;
     return EntryEditorSurface(
       session: widget.editorSession,
       isDirty: _editorDirty,
       canSave:
-          !_busy && !_submitted && (widget.specificationOnly || _draft != null),
+          !_busy &&
+          !_submitted &&
+          (_opening || widget.specificationOnly || _draft != null),
       onSave: () => _save(p),
       exitController: _exitController,
       isSaving: _busy,
+      popResult: () => _openingResult,
       body: SafeArea(
         child: VeriPage(
           child: Material(
@@ -462,13 +659,17 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
               children: [
                 if (widget.editorSession == null)
                   VeriHeader(
-                    title: widget.specificationOnly
+                    title: _opening
+                        ? l.investOpeningOptionTitle
+                        : widget.specificationOnly
                         ? l.optionVerifySpec
                         : l.optionTitle,
                     showBack: true,
                   ),
                 const SizedBox(height: 12),
-                InvestmentHint(l.optionManualHint),
+                InvestmentHint(
+                  _opening ? l.investOpeningOptionHint : l.optionManualHint,
+                ),
                 const SizedBox(height: 12),
                 InvestmentSection(
                   title: l.investSecurityDetails,
@@ -502,7 +703,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                               },
                         child: Text(l.optionSelect),
                       ),
-                    if (!widget.specificationOnly) ...[
+                    if (!widget.specificationOnly && !_opening) ...[
                       VeriAnchoredChoice<StockEventKind>(
                         values: const [
                           StockEventKind.optionBuyOpen,
@@ -668,7 +869,34 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                   ],
                 ),
                 const SizedBox(height: 12),
-                if (!widget.specificationOnly) ...[
+                if (_opening) ...[
+                  InvestmentSection(
+                    title: l.investOpeningOptionTitle,
+                    children: [
+                      _field('quantity', l.optionContracts, number: true),
+                      _field('cost', l.investOpeningCost, number: true),
+                      SwitchListTile(
+                        contentPadding: EdgeInsets.zero,
+                        value: _short,
+                        title: Text(l.investShortPosition),
+                        onChanged: _busy
+                            ? null
+                            : (v) => setState(() {
+                                _short = v;
+                                _invalidate();
+                              }),
+                      ),
+                      _field('margin', l.optionMargin, number: true),
+                      Text(l.optionMarginHint),
+                      _field('reference', l.investReference, number: true),
+                      _field(
+                        'underlyingPrice',
+                        l.optionUnderlyingReference,
+                        number: true,
+                      ),
+                    ],
+                  ),
+                ] else if (!widget.specificationOnly) ...[
                   InvestmentSection(
                     title: l.investTradeDetails,
                     children: [
@@ -820,7 +1048,10 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                 if (widget.editorSession == null)
                   FilledButton(
                     onPressed:
-                        _busy || (!widget.specificationOnly && _draft == null)
+                        _busy ||
+                            (!_opening &&
+                                !widget.specificationOnly &&
+                                _draft == null)
                         ? null
                         : () => _saveAndExit(p),
                     child: Text(_busy ? l.commonProcessing : l.investSave),

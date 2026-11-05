@@ -12,6 +12,7 @@ import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
 import '../app/feedback.dart';
 import '../app/investments/investment_decimal.dart';
+import '../app/investments/investment_opening_draft.dart';
 import '../app/investments/stock_projection.dart';
 import '../app/investments/quote_format.dart';
 import '../app/investments/market_quote.dart';
@@ -22,6 +23,7 @@ import 'sheets.dart';
 import 'option_editor_page.dart';
 import 'market_quotes_page.dart';
 import 'investment_history_page.dart';
+import 'investment_setup_page.dart';
 import 'fund_entry_page.dart';
 import 'account_information_section.dart';
 import 'transaction_entry_page.dart';
@@ -136,7 +138,9 @@ class InvestmentPage extends StatelessWidget {
     unawaited(
       Navigator.of(context).push<void>(
         MaterialPageRoute(
-          builder: (_) => isOption
+          builder: (_) => setup
+              ? InvestmentSetupPage(accountId: accountId)
+              : isOption
               ? OptionEditorPage(
                   accountId: accountId,
                   event: event,
@@ -146,7 +150,6 @@ class InvestmentPage extends StatelessWidget {
                   accountId: accountId,
                   event: event,
                   securityId: securityId,
-                  setup: setup,
                   transfer: transfer,
                   initialShort: short,
                 ),
@@ -1015,22 +1018,31 @@ class _StockPositionCard extends StatelessWidget {
 
 /// 股票或已有基金的期初、成交和转移页面；未点保存不会产生任何用户数据。
 class StockEditorPage extends StatefulWidget {
-  /// [setup] 表示显式启用；[event] 非空表示编辑；[transfer] 表示跨账户原子批次。
+  /// [openingPortfolio] 非空时只返回一项期初草稿；[event] 编辑成交，
+  /// [transfer] 表示跨账户原子批次，三种模式不能相互混用。
   const StockEditorPage({
     super.key,
     required this.accountId,
     this.event,
     this.securityId,
-    this.setup = false,
+    this.openingPortfolio,
+    this.openingHolding,
+    this.openingSecurityType = InvestmentSecurityType.stock,
     this.transfer = false,
     this.initialShort = false,
     this.editorSession,
-  });
+  }) : assert(openingHolding == null || openingPortfolio != null),
+       assert(openingPortfolio == null || (event == null && !transfer));
   final String accountId;
   final StockEvent? event;
   final String? securityId;
-  final bool setup, transfer;
+  final bool transfer;
   final bool initialShort;
+
+  /// 父级启用页的内存快照与待编辑条目；返回前不创建账户组合或资金事件。
+  final InvestmentPortfolio? openingPortfolio;
+  final InvestmentOpeningHolding? openingHolding;
+  final InvestmentSecurityType openingSecurityType;
 
   /// 非空时复用本表单内容，外层负责新增页签与全部草稿的退出。
   final EntryEditorSession? editorSession;
@@ -1051,10 +1063,9 @@ class _StockEditorPageState extends State<StockEditorPage> {
   late DateTime _date;
   late String _id, _bookId;
   int _sequence = 0;
-  bool _initialized = false,
-      _saving = false,
-      _financing = false,
-      _short = false;
+  bool _initialized = false, _saving = false, _short = false;
+  InvestmentOpeningHolding? _openingResult;
+  String? _initialOpeningUnitCost;
   String? _error, _target, _initialReference;
   List<StockSecurity> _onlineSecurities = const [];
   String? _onlineQuery,
@@ -1064,6 +1075,8 @@ class _StockEditorPageState extends State<StockEditorPage> {
   String? _autofilledReferenceIdentity;
   int _searchGeneration = 0, _suggestionOpenRequest = 0;
   bool _searching = false, _lookupVisible = true;
+
+  bool get _opening => widget.openingPortfolio != null;
 
   /// 搜索只绑定代码输入、所选市场和品种；数量、真实成交价等编辑不改变搜索身份。
   String get _securityLookupContext =>
@@ -1107,7 +1120,6 @@ class _StockEditorPageState extends State<StockEditorPage> {
       _securityType.name,
       _kind.name,
       _date.toIso8601String(),
-      _financing,
       _short,
       _target,
     ],
@@ -1151,41 +1163,57 @@ class _StockEditorPageState extends State<StockEditorPage> {
     if (account == null) {
       return;
     }
-    final p = c.investmentFor(account.id), e = widget.event;
+    final p = widget.openingPortfolio ?? c.investmentFor(account.id);
+    final e = widget.event, opening = widget.openingHolding;
     _bookId = account.bookId;
     _market = account.currencyCode == 'HKD'
         ? StockMarket.hk
         : account.currencyCode == 'CNY'
         ? StockMarket.cn
         : StockMarket.us;
-    final security = p?.securities
-        .where((s) => s.id == (e?.securityId ?? widget.securityId))
-        .firstOrNull;
+    final security =
+        opening?.security ??
+        p?.securities
+            .where((s) => s.id == (e?.securityId ?? widget.securityId))
+            .firstOrNull;
     _market = security?.market ?? _market;
-    _securityType = security?.type ?? InvestmentSecurityType.stock;
+    _securityType =
+        security?.type ??
+        (_opening ? widget.openingSecurityType : InvestmentSecurityType.stock);
     _kind = e?.kind ?? StockEventKind.buy;
     _short = _securityType == InvestmentSecurityType.fund
         ? false
-        : widget.initialShort;
+        : opening?.holding.short ?? widget.initialShort;
     _date = e?.occurredAt ?? DateTime.now();
     _id = e?.id ?? 'stock-${DateTime.now().microsecondsSinceEpoch}';
     _sequence =
         e?.sequence ?? c.nextInvestmentEventSequenceFor(account.id) ?? 0;
-    _financing = p?.allowFinancing ?? false;
-    _initialReference = p?.manualPrices[security?.id];
+    _initialReference =
+        opening?.referencePrice ?? p?.manualPrices[security?.id];
+    if (opening != null) {
+      final originalCost = opening.holding.cost == null
+          ? null
+          : InvestmentDecimal.parse(opening.holding.cost!);
+      final average = stockAverageUnitCost(
+        originalCost,
+        InvestmentDecimal.parse(opening.holding.quantity),
+      );
+      // 不可表示的均价留空；未改数量及成本时始终保留原始总额。
+      _initialOpeningUnitCost =
+          average == null ||
+              (average.units == BigInt.zero &&
+                  originalCost!.units != BigInt.zero)
+          ? ''
+          : average.toString();
+    }
     for (final pair in {
       'symbol': security?.symbol ?? '',
       'name': security?.name ?? '',
-      'quantity': e?.quantity ?? '',
+      'quantity': opening?.holding.quantity ?? e?.quantity ?? '',
       'price': e?.price ?? '',
       'fee': e?.fee ?? '0',
       'reference': _initialReference ?? '',
-      'cash': c
-          .accountBalance(account)
-          .toStringAsFixed(
-            CurrencyCatalog.require(account.currencyCode).minorUnit,
-          ),
-      'cost': '',
+      'cost': _initialOpeningUnitCost ?? '',
       'note': e?.note ?? '',
     }.entries) {
       _fields[pair.key] = TextEditingController(text: pair.value);
@@ -1239,10 +1267,13 @@ class _StockEditorPageState extends State<StockEditorPage> {
     final suggestions = account == null
         ? const <InvestmentSecuritySuggestion>[]
         : collectInvestmentSecuritySuggestions(
-            portfolios: c.accounts
-                .where((value) => value.currencyCode == account.currencyCode)
-                .map((value) => c.investmentFor(value.id))
-                .whereType<InvestmentPortfolio>(),
+            portfolios: [
+              if (widget.openingPortfolio != null) widget.openingPortfolio!,
+              ...c.accounts
+                  .where((value) => value.currencyCode == account.currencyCode)
+                  .map((value) => c.investmentFor(value.id))
+                  .whereType<InvestmentPortfolio>(),
+            ],
             bookId: _bookId,
             accountId: widget.accountId,
             currencyCode: account.currencyCode,
@@ -1390,7 +1421,13 @@ class _StockEditorPageState extends State<StockEditorPage> {
         .firstOrNull;
     if (account == null ||
         account.bookId != _bookId ||
-        (!widget.setup && c.investmentFor(account.id) == null)) {
+        (!_opening && c.investmentFor(account.id) == null) ||
+        (_opening &&
+            (!account.type.supportsSecurities ||
+                widget.openingPortfolio!.accountId != account.id ||
+                widget.openingPortfolio!.bookId != _bookId ||
+                widget.openingPortfolio!.currencyCode !=
+                    account.currencyCode))) {
       setState(() => _error = l.investSaveError);
       return false;
     }
@@ -1410,19 +1447,45 @@ class _StockEditorPageState extends State<StockEditorPage> {
       );
       final quantity = _fields['quantity']!.text.trim();
       final reference = _fields['reference']!.text.trim();
-      if (widget.setup) {
-        final hasHolding = quantity.isNotEmpty;
-        if (hasHolding &&
-            (symbol.isEmpty || security.name.isEmpty || reference.isEmpty)) {
+      if (_opening) {
+        if (symbol.isEmpty ||
+            security.name.isEmpty ||
+            reference.isEmpty ||
+            widget.event != null ||
+            widget.transfer ||
+            security.option != null) {
           throw const FormatException('期初资料不完整');
         }
+        final units = InvestmentDecimal.parse(quantity);
+        final referencePrice = InvestmentDecimal.parse(reference);
+        if (units.units <= BigInt.zero || referencePrice.units < BigInt.zero) {
+          throw const FormatException('期初数量或参考价不合法');
+        }
+        referencePrice.toDouble();
         String? openingTotalCost;
         final unitCostText = _fields['cost']!.text.trim();
-        if (hasHolding && unitCostText.isNotEmpty) {
-          final units = InvestmentDecimal.parse(quantity);
+        final original = widget.openingHolding;
+        final unchangedUnits =
+            original != null &&
+            units.compareTo(
+                  InvestmentDecimal.parse(original.holding.quantity),
+                ) ==
+                0;
+        final unchangedCost =
+            unitCostText == (_initialOpeningUnitCost ?? '') ||
+            (unitCostText.isNotEmpty &&
+                (_initialOpeningUnitCost?.isNotEmpty ?? false) &&
+                InvestmentDecimal.parse(unitCostText).compareTo(
+                      InvestmentDecimal.parse(_initialOpeningUnitCost!),
+                    ) ==
+                    0);
+        if (unchangedUnits && unchangedCost) {
+          // 八位均价仅供预填；仅改参考价、名称或数字格式不能反乘覆盖总成本。
+          openingTotalCost = original.holding.cost;
+        } else if (unitCostText.isNotEmpty) {
           final unitCost = InvestmentDecimal.parse(unitCostText);
-          if (units.units <= BigInt.zero || unitCost.units < BigInt.zero) {
-            throw const FormatException('期初数量或单位成本不合法');
+          if (unitCost.units < BigInt.zero) {
+            throw const FormatException('期初单位成本不合法');
           }
           // 表单录入每股/每份成本，持久化仍为总成本；量价相乘后只在现金精度舍入。
           openingTotalCost = units
@@ -1432,24 +1495,43 @@ class _StockEditorPageState extends State<StockEditorPage> {
               )
               .toString();
         }
-        ok = await c.enableInvestment(
-          accountId: account.id,
-          openingCash: _fields['cash']!.text,
-          openedAt: _date,
-          securities: hasHolding ? [security] : [],
-          openingHoldings: hasHolding
-              ? [
-                  StockHolding(
-                    securityId: security.id,
-                    short: _short,
-                    quantity: quantity,
-                    cost: openingTotalCost,
-                  ),
-                ]
-              : [],
-          manualPrices: hasHolding ? {security.id: reference} : {},
-          allowFinancing: _financing,
+        if (openingTotalCost != null) {
+          InvestmentDecimal.parse(openingTotalCost).toDouble();
+        }
+        final holding = StockHolding(
+          securityId: security.id,
+          short: _short,
+          quantity: units.toString(),
+          cost: openingTotalCost,
         );
+        final p = widget.openingPortfolio!;
+        final candidate = p.copyWith(
+          securities: [
+            ...p.securities.where((s) => s.id != security.id),
+            security,
+          ],
+          openingHoldings: [
+            ...p.openingHoldings.where(
+              (h) =>
+                  original == null ||
+                  h.securityId != original.holding.securityId ||
+                  h.short != original.holding.short,
+            ),
+            holding,
+          ],
+          manualPrices: {
+            ...p.manualPrices,
+            security.id: referencePrice.toString(),
+          },
+        );
+        final projection = projectStocks(candidate);
+        valueStocks(candidate, projection).marketValue?.toDouble();
+        _openingResult = InvestmentOpeningHolding(
+          security: security,
+          holding: holding,
+          referencePrice: referencePrice.toString(),
+        );
+        ok = true;
       } else if (widget.transfer) {
         if (_target == null) throw const FormatException('请选择转入账户');
         ok = await c.transferStock(
@@ -1521,7 +1603,9 @@ class _StockEditorPageState extends State<StockEditorPage> {
 
   /// 原独立页面保存成功后通过同一个退出控制器返回；嵌入模式由宿主调用 _save。
   Future<void> _saveAndExit() async {
-    if (await _save() && mounted) _exitController.exit();
+    if (await _save() && mounted) {
+      _exitController.exit(result: () => _openingResult);
+    }
   }
 
   /// 展示可取消的完整表单；市场/动作复用既有锚点选择器，日期时间沿用公共入口。
@@ -1529,7 +1613,15 @@ class _StockEditorPageState extends State<StockEditorPage> {
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
     if (c.activeBook.id != _bookId ||
-        !c.accounts.any((a) => a.id == widget.accountId)) {
+        !c.accounts.any(
+          (a) =>
+              a.id == widget.accountId &&
+              (!_opening ||
+                  (a.type.supportsSecurities &&
+                      widget.openingPortfolio!.accountId == a.id &&
+                      widget.openingPortfolio!.bookId == _bookId &&
+                      widget.openingPortfolio!.currencyCode == a.currencyCode)),
+        )) {
       return EntryEditorSurface(
         session: widget.editorSession,
         isDirty: _editorDirty,
@@ -1570,6 +1662,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
       canSave: !_saving && !_submitted,
       onSave: _save,
       exitController: _exitController,
+      popResult: () => _openingResult,
       isSaving: _saving,
       body: SafeArea(
         child: VeriPage(
@@ -1580,8 +1673,8 @@ class _StockEditorPageState extends State<StockEditorPage> {
               children: [
                 if (widget.editorSession == null)
                   VeriHeader(
-                    title: widget.setup
-                        ? l.investEnableOpening
+                    title: _opening
+                        ? l.investOpeningHoldingTitle
                         : widget.transfer
                         ? l.investTransfer
                         : _securityType == InvestmentSecurityType.fund
@@ -1590,15 +1683,10 @@ class _StockEditorPageState extends State<StockEditorPage> {
                     showBack: true,
                   ),
                 const SizedBox(height: 12),
-                if (widget.setup) ...[
-                  Text(l.investSetupHint),
-                  const SizedBox(height: 12),
-                  _field('cash', l.investOpeningCash, numeric: true),
-                ],
                 InvestmentSection(
                   title: l.investSecurityDetails,
                   children: [
-                    if (!widget.setup && !widget.transfer)
+                    if (!_opening && !widget.transfer)
                       VeriAnchoredChoice<StockEventKind>(
                         values: [
                           StockEventKind.buy,
@@ -1669,9 +1757,11 @@ class _StockEditorPageState extends State<StockEditorPage> {
                 ),
                 const SizedBox(height: 12),
                 InvestmentSection(
-                  title: l.investTradeDetails,
+                  title: _opening
+                      ? l.investOpeningHoldingTitle
+                      : l.investTradeDetails,
                   children: [
-                    if (widget.setup ||
+                    if (_opening ||
                         widget.transfer ||
                         !{
                           StockEventKind.dividend,
@@ -1679,10 +1769,8 @@ class _StockEditorPageState extends State<StockEditorPage> {
                         }.contains(_kind))
                       _field(
                         'quantity',
-                        widget.setup
-                            ? _securityType == InvestmentSecurityType.fund
-                                  ? l.investFundOpeningQuantity
-                                  : l.investOpeningQuantity
+                        _opening
+                            ? l.investOpeningHoldingQuantity
                             : _kind == StockEventKind.split
                             ? l.investSplitNew
                             : _securityType == InvestmentSecurityType.fund
@@ -1690,7 +1778,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
                             : l.investQuantity,
                         numeric: true,
                       ),
-                    if (widget.setup) ...[
+                    if (_opening) ...[
                       _field('cost', l.investOpeningUnitCost, numeric: true),
                       Text(
                         l.investOpeningUnitCostHint,
@@ -1703,14 +1791,8 @@ class _StockEditorPageState extends State<StockEditorPage> {
                           onChanged: (v) => setState(() => _short = v),
                           title: Text(l.investShortPosition),
                         ),
-                      SwitchListTile(
-                        contentPadding: EdgeInsets.zero,
-                        value: _financing,
-                        onChanged: (v) => setState(() => _financing = v),
-                        title: Text(l.investFinance),
-                      ),
                     ],
-                    if (!widget.setup && !widget.transfer) ...[
+                    if (!_opening && !widget.transfer) ...[
                       _field('price', switch (_kind) {
                         StockEventKind.dividend ||
                         StockEventKind.fee => l.investTotalAmount,
@@ -1772,29 +1854,28 @@ class _StockEditorPageState extends State<StockEditorPage> {
                           title: Text(l.investShortPosition),
                         ),
                     ],
-                    ListTile(
-                      contentPadding: EdgeInsets.zero,
-                      title: Text(
-                        widget.setup ? l.investOpeningDate : l.investDate,
+                    if (!_opening)
+                      ListTile(
+                        contentPadding: EdgeInsets.zero,
+                        title: Text(l.investDate),
+                        subtitle: Text(
+                          '${MaterialLocalizations.of(context).formatFullDate(_date)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_date))}',
+                        ),
+                        onTap: () async {
+                          final day = await showEntryDatePicker(
+                            context: context,
+                            initialDateTime: _date,
+                          );
+                          if (!context.mounted || day == null) return;
+                          final time = await showEntryTimePicker(
+                            context: context,
+                            initialDateTime: day,
+                          );
+                          if (!mounted || time == null) return;
+                          setState(() => _date = time);
+                        },
                       ),
-                      subtitle: Text(
-                        '${MaterialLocalizations.of(context).formatFullDate(_date)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(_date))}',
-                      ),
-                      onTap: () async {
-                        final day = await showEntryDatePicker(
-                          context: context,
-                          initialDateTime: _date,
-                        );
-                        if (!context.mounted || day == null) return;
-                        final time = await showEntryTimePicker(
-                          context: context,
-                          initialDateTime: day,
-                        );
-                        if (!mounted || time == null) return;
-                        setState(() => _date = time);
-                      },
-                    ),
-                    _field('note', l.investNote),
+                    if (!_opening) _field('note', l.investNote),
                   ],
                 ),
                 const SizedBox(height: 16),

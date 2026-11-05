@@ -6630,6 +6630,50 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investEnable => '启用证券持仓';
 
   @override
+  String get investOpeningHoldingTitle => '期初持仓';
+
+  @override
+  String get investOpeningHoldingQuantity => '期初数量';
+
+  @override
+  String get investOpeningOptionTitle => '期初期权持仓';
+
+  @override
+  String get investOpeningOptionHint =>
+      '录入期初已持有的合约。总成本填写多头实际总成本或空头净开仓所得，不再扣减或增加现金；留空表示未知。';
+
+  @override
+  String get investOpeningPortfolioHint =>
+      '填写同一期初时刻的现金和已有持仓，可添加多只股票、基金和期权。现金只填实际现金余额（含冻结资金），不包含持仓市值；添加持仓不会再次扣款。全部核对后一起保存。';
+
+  @override
+  String get investOpeningEmpty => '尚未添加期初持仓。可逐项添加，也可仅填写现金后启用。';
+
+  @override
+  String get investOpeningAddStock => '添加股票';
+
+  @override
+  String get investOpeningAddOption => '添加期权';
+
+  @override
+  String get investOpeningAddFund => '添加基金';
+
+  @override
+  String get investOpeningRemove => '移除';
+
+  @override
+  String get investOpeningDuplicate => '此证券的相同方向已录入，请编辑已有条目，不要重复添加。';
+
+  @override
+  String get investOpeningContractConflict => '同一期权的合约规格不一致，请核对已有条目。';
+
+  @override
+  String get investOpeningPriceConflict => '同一证券的多空持仓须使用一致的参考价，请核对已有条目。';
+
+  @override
+  String get investOpeningMarginConflict => '同一期权的多空持仓共用一份冻结保证金，请填写一致的总冻结额。';
+
+  @override
   String get investSetupHint => '请确认期初现金。若原余额包含股票，请将现金与持仓分别填写，避免重复计入。';
 
   @override
