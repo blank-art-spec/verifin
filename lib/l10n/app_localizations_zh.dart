@@ -6780,6 +6780,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investOpeningUnitCostHint => '填写每股／每份的平均成本，总成本按持仓数量自动计算；留空表示未知。';
 
   @override
+  String get investAverageUnitCost => '每股平均成本';
+
+  @override
+  String get investCorrectOpeningCost => '更正期初成本';
+
+  @override
+  String get investOpeningShares => '期初股数';
+
+  @override
+  String get investOpeningTotalCost => '期初总成本';
+
+  @override
+  String get investCorrectOpeningCostHint =>
+      '填写期初每股平均成本，总成本按期初股数计算。保存后重算后续已实现盈亏和剩余成本，现金、持仓数量及成交记录不变。已有历史估值需重新核对。';
+
+  @override
+  String get investUnitCostInvalid => '请输入非负的每股成本，最多八位小数，并检查总成本是否超出支持范围。';
+
+  @override
+  String get investCostChanged => '持仓资料已变化，请返回后重新打开成本更正。当前草稿尚未保存。';
+
+  @override
+  String get investCostCorrectionFailed =>
+      '成本未保存。请检查是否影响已有转出成本或后续交易；保存失败时原记录保持不变。';
+
+  @override
   String get investFinance => '已确认此账户允许真实融资 / 负现金';
 
   @override

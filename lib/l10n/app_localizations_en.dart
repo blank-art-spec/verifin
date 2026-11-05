@@ -7012,6 +7012,34 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter the average cost per share or unit. Total cost is calculated from the opening quantity; leave blank if unknown.';
 
   @override
+  String get investAverageUnitCost => 'Average cost per share';
+
+  @override
+  String get investCorrectOpeningCost => 'Correct opening cost';
+
+  @override
+  String get investOpeningShares => 'Opening shares';
+
+  @override
+  String get investOpeningTotalCost => 'Opening total cost';
+
+  @override
+  String get investCorrectOpeningCostHint =>
+      'Enter the opening average cost per share. Total cost uses the opening share count. Saving recalculates subsequent realized profit/loss and remaining cost without changing cash, quantities or trades. Saved valuations need to be checked again.';
+
+  @override
+  String get investUnitCostInvalid =>
+      'Enter a non-negative cost per share with up to eight decimal places, and check that the total cost is within the supported range.';
+
+  @override
+  String get investCostChanged =>
+      'The holding details have changed. Go back and reopen cost correction. Your draft has not been saved.';
+
+  @override
+  String get investCostCorrectionFailed =>
+      'Cost was not saved. Check whether it affects existing transfer costs or later trades. Original records remain unchanged if saving fails.';
+
+  @override
   String get investFinance =>
       'This account is confirmed to allow actual financing / negative cash';
 

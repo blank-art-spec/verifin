@@ -12272,6 +12272,54 @@ abstract class AppLocalizations {
   /// **'填写每股／每份的平均成本，总成本按持仓数量自动计算；留空表示未知。'**
   String get investOpeningUnitCostHint;
 
+  /// No description provided for @investAverageUnitCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'每股平均成本'**
+  String get investAverageUnitCost;
+
+  /// No description provided for @investCorrectOpeningCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'更正期初成本'**
+  String get investCorrectOpeningCost;
+
+  /// No description provided for @investOpeningShares.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初股数'**
+  String get investOpeningShares;
+
+  /// No description provided for @investOpeningTotalCost.
+  ///
+  /// In zh, this message translates to:
+  /// **'期初总成本'**
+  String get investOpeningTotalCost;
+
+  /// No description provided for @investCorrectOpeningCostHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写期初每股平均成本，总成本按期初股数计算。保存后重算后续已实现盈亏和剩余成本，现金、持仓数量及成交记录不变。已有历史估值需重新核对。'**
+  String get investCorrectOpeningCostHint;
+
+  /// No description provided for @investUnitCostInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入非负的每股成本，最多八位小数，并检查总成本是否超出支持范围。'**
+  String get investUnitCostInvalid;
+
+  /// No description provided for @investCostChanged.
+  ///
+  /// In zh, this message translates to:
+  /// **'持仓资料已变化，请返回后重新打开成本更正。当前草稿尚未保存。'**
+  String get investCostChanged;
+
+  /// No description provided for @investCostCorrectionFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'成本未保存。请检查是否影响已有转出成本或后续交易；保存失败时原记录保持不变。'**
+  String get investCostCorrectionFailed;
+
   /// No description provided for @investFinance.
   ///
   /// In zh, this message translates to:

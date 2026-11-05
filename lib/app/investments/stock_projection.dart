@@ -343,6 +343,27 @@ int compareStockEvents(StockEvent a, StockEvent b) {
   return time != 0 ? time : a.sequence.compareTo(b.sequence);
 }
 
+/// 将股票/ETF 的 [totalCost] 除以 [quantity]，得到最多八位小数的每股平均成本。
+/// 成本未知、数量非正或结果超出报价范围时返回 null；不适用于带乘数的期权。
+/// 此值仅供展示和编辑草稿预填，不能反乘后覆盖原始总成本，以免舍入改变账目。
+InvestmentDecimal? stockAverageUnitCost(
+  InvestmentDecimal? totalCost,
+  InvestmentDecimal quantity,
+) {
+  if (totalCost == null || quantity.units <= BigInt.zero) return null;
+  final average = totalCost.allocated(
+    InvestmentDecimal.parse('1'),
+    quantity,
+    8,
+  );
+  try {
+    return InvestmentDecimal.parse(average.toString());
+  } on FormatException {
+    // 极小碎股可能使均价超出输入/报价范围；只隐藏派生均价，原始总成本仍完整显示。
+    return null;
+  }
+}
+
 /// 按手填参考价估算所有多空持仓；缺价返回 null，未知成本只影响盈亏完整性。
 /// [projection] 是同一 [portfolio] 的重放结果，避免 UI 与资产汇总各写一套公式。
 ({InvestmentDecimal? marketValue, InvestmentDecimal? unrealized}) valueStocks(

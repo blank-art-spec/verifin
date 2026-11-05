@@ -25,6 +25,7 @@ import 'fund_entry_page.dart';
 import 'account_information_section.dart';
 import 'transaction_entry_page.dart';
 import 'entry_editor_session.dart';
+import 'stock_opening_cost_page.dart';
 import '../app/investments/investment_valuation.dart';
 
 /// 将资产占比按当前语言显示为一位小数的百分比，不修改原始精度。
@@ -656,7 +657,7 @@ class _StockPositionCard extends StatelessWidget {
   final InvestmentAccountValuation accountValuation;
   final VoidCallback onTransfer, onTrade;
 
-  /// 展示方向、数量、总成本、参考价及占总资产比例；未知成本不显示成零。
+  /// 展示方向、数量、每股成本、总成本、参考价及占总资产比例；未知成本不显示成零。
   /// 多头以市值计算持仓占比，空头以回补义务单列，期权沿用显式权利金乘数。
   @override
   Widget build(BuildContext context) {
@@ -688,6 +689,18 @@ class _StockPositionCard extends StatelessWidget {
         : position.short
         ? position.cost! - value
         : value - position.cost!;
+    final ordinaryStock = !security.isFund && security.option == null;
+    final averageCost = ordinaryStock
+        ? stockAverageUnitCost(position.cost, position.quantity)
+        : null;
+    // 从原始聚合定位期初事实；行情估值副本不能作为编辑并发校验的基线。
+    final originalPortfolio = c.investmentFor(accountId);
+    final opening = originalPortfolio?.openingHoldings
+        .where(
+          (h) =>
+              h.securityId == position.securityId && h.short == position.short,
+        )
+        .firstOrNull;
     return VeriCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -764,6 +777,17 @@ class _StockPositionCard extends StatelessWidget {
                     portfolio.currencyCode,
                   ),
           ),
+          if (ordinaryStock)
+            DetailInfoRow(
+              inline: true,
+              label: l.investAverageUnitCost,
+              value: averageCost == null
+                  ? l.investUnknown
+                  : formatUserSecurityPrice(
+                      averageCost.toString(),
+                      portfolio.currencyCode,
+                    ),
+            ),
           DetailInfoRow(
             inline: true,
             label: quoteReference == null
@@ -916,7 +940,19 @@ class _StockPositionCard extends StatelessWidget {
                   child: Text(l.optionVerifySpec),
                 ),
               ],
-              if (position.cost == null)
+              if (ordinaryStock && opening != null && originalPortfolio != null)
+                TextButton(
+                  onPressed: () => Navigator.of(context).push<void>(
+                    MaterialPageRoute<void>(
+                      builder: (_) => StockOpeningCostPage(
+                        portfolio: originalPortfolio,
+                        holding: opening,
+                      ),
+                    ),
+                  ),
+                  child: Text(l.investCorrectOpeningCost),
+                )
+              else if (position.cost == null)
                 TextButton(
                   onPressed: () async {
                     final raw = await showTextInputDialog(

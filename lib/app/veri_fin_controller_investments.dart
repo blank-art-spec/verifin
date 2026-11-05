@@ -316,20 +316,46 @@ mixin _InvestmentOps on _ControllerOps {
     ]);
   });
 
-  /// 为未确认期初成本补值；不创造现金腿，不猜测历史成交。
+  /// 补录或更正期初持仓成本，再从期初重放后续买卖、拆股及盈亏；不创造现金腿。
+  /// [accountId] 为当前账本的真实币种账户，[securityId] 与 [short] 共同选择期初仓位。
+  /// [cost] 默认仍是期初总成本，保持旧调用及已保存数据的语义；[perUnit] 为 true 时，
+  /// 它表示股票每股成本，必须乘以期初数量，而不是卖出或拆股后的当前数量。
+  /// 量价乘积仅在最后按币种现金精度舍入；负单位成本须在舍入之前拒绝。
+  /// [expectedPortfolio] 为编辑页打开时取得的原始组合，非空时拒绝已被其他操作改变的
+  /// 草稿，避免用旧数量或旧成本覆盖新记录。全量校验及落库成功后才更新内存；
+  /// 如成本更正会破坏既有跨账户转移的成本配对，则保留原数据并返回 false。
   Future<bool> setStockOpeningCost(
     String accountId,
     String securityId,
     bool short,
-    String cost,
-  ) => _runInvestmentCommand(() async {
+    String cost, {
+    bool perUnit = false,
+    InvestmentPortfolio? expectedPortfolio,
+  }) => _runInvestmentCommand(() async {
     final current = investmentFor(accountId);
-    if (current == null) return false;
-    if (!current.openingHoldings.any(
-      (h) => h.securityId == securityId && h.short == short,
-    )) {
+    if (current == null ||
+        (expectedPortfolio != null && !identical(current, expectedPortfolio))) {
       return false;
     }
+    final holding = current.openingHoldings
+        .where((h) => h.securityId == securityId && h.short == short)
+        .firstOrNull;
+    final security = current.securities
+        .where((s) => s.id == securityId)
+        .firstOrNull;
+    if (holding == null || security == null || (perUnit && !security.isStock)) {
+      return false;
+    }
+    final input = InvestmentDecimal.parse(cost);
+    if (input.units < BigInt.zero) {
+      throw const FormatException('期初成本不能为负');
+    }
+    final totalCost = perUnit
+        ? InvestmentDecimal.parse(holding.quantity).moneyProduct(
+            input,
+            CurrencyCatalog.require(current.currencyCode).minorUnit,
+          )
+        : input;
     final next = current.copyWith(
       openingHoldings: [
         for (final h in current.openingHoldings)
@@ -338,7 +364,7 @@ mixin _InvestmentOps on _ControllerOps {
               securityId: securityId,
               short: short,
               quantity: h.quantity,
-              cost: InvestmentDecimal.parse(cost).toString(),
+              cost: totalCost.toString(),
             )
           else
             h,
