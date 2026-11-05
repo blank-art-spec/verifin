@@ -9,6 +9,9 @@ import '../app/common_widgets.dart';
 import '../app/currency_catalog.dart';
 import '../app/investments/investment_decimal.dart';
 import '../app/investments/investment_opening_draft.dart';
+import '../app/investments/alpaca_option_quote_adapter.dart';
+import '../app/investments/market_quote.dart';
+import '../app/investments/quote_format.dart';
 import '../app/investments/investment_security_autocomplete.dart';
 import '../app/investments/investment_security_suggestions.dart';
 import '../app/investments/investment_widgets.dart';
@@ -20,6 +23,7 @@ import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
 import 'entry_editor_session.dart';
+import 'option_quote_settings_page.dart';
 
 /// 可取消的完整期权草稿；从持仓或既有投资记录进入时复用相同界面。
 class OptionEditorPage extends StatefulWidget {
@@ -96,6 +100,16 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   List<StockSecurity> _onlineUnderlyings = const [];
   String? _underlyingSearchMessage, _underlyingSearchQuery;
   (String, String)? _observedUnderlyingInputs;
+  bool _searchingContract = false, _fillingContract = false;
+  bool _expiryEdited = false, _rightEdited = false;
+  int _contractSearchGeneration = 0, _quoteRevision = 0;
+  final _generatedFields = <String, String>{};
+  DateTime? _generatedExpiry;
+  OptionRight? _generatedRight;
+  String? _adoptedQuotePrice, _contractLookupMessage;
+  MarketQuoteRequest? _contractRequest;
+  MarketQuote? _contractQuote;
+  DraftOptionQuoteStatus? _contractQuoteStatus;
   _OptionDraft? _draft;
   InvestmentOpeningHolding? _openingResult;
   String? _previewInputSnapshot;
@@ -143,6 +157,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       if ((_lookupVisible && !visible) ||
           VeriFinScope.of(context).activeBook.id != _bookId) {
         _clearUnderlyingSearch();
+        _clearContractLookup();
       }
       _lookupVisible = visible;
       return;
@@ -236,6 +251,13 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   /// 载入明确选择的合约；不从 AVGO 行情页猜乘数、到期日或交割股数。
   void _loadContract(StockSecurity s, InvestmentPortfolio p) {
     _clearUnderlyingSearch();
+    _clearContractLookup();
+    _adoptedQuotePrice = null;
+    _generatedFields.clear();
+    _generatedExpiry = null;
+    _generatedRight = null;
+    _expiryEdited = true;
+    _rightEdited = true;
     final o = s.option!;
     final underlying = p.securities.firstWhere((v) => v.id == o.underlyingId);
     _selected = s.id;
@@ -278,6 +300,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   @override
   void dispose() {
     _underlyingSearchGeneration++;
+    _contractSearchGeneration++;
     _fields['underlying']?.removeListener(_underlyingInputChanged);
     _fields['symbol']?.removeListener(_underlyingInputChanged);
     for (final f in _fields.values) {
@@ -302,7 +325,11 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       keyboardType: number
           ? const TextInputType.numberWithOptions(decimal: true, signed: false)
           : TextInputType.text,
-      onChanged: (_) => setState(_invalidate),
+      onChanged: (_) => setState(() {
+        if (key == 'strike') _clearContractLookup(identityChanged: true);
+        if (key == 'reference') _adoptedQuotePrice = null;
+        _invalidate();
+      }),
       decoration: investmentInputDecoration(context),
     ),
   );
@@ -343,8 +370,367 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     _observedUnderlyingInputs = inputs;
     setState(() {
       _clearUnderlyingSearch();
+      if (!_fillingContract) {
+        _clearContractLookup(identityChanged: true, clearGeneratedFields: true);
+      }
       _invalidate();
     });
+  }
+
+  /// 查询结果只属于当前草稿；改变合约身份后不沿用上个合约采用的报价。
+  void _clearContractLookup({
+    bool identityChanged = false,
+    bool clearGeneratedFields = false,
+  }) {
+    _contractSearchGeneration++;
+    _searchingContract = false;
+    _contractRequest = null;
+    _contractQuote = null;
+    _contractQuoteStatus = null;
+    _contractLookupMessage = null;
+    if (identityChanged &&
+        _adoptedQuotePrice != null &&
+        _fields['reference']?.text == _adoptedQuotePrice) {
+      _fields['reference']!.clear();
+    }
+    if (clearGeneratedFields) {
+      _fillingContract = true;
+      try {
+        for (final entry in _generatedFields.entries) {
+          if (_fields[entry.key]!.text == entry.value) {
+            _fields[entry.key]!.clear();
+          }
+        }
+        _generatedFields.clear();
+      } finally {
+        _fillingContract = false;
+      }
+    }
+    if (identityChanged) _adoptedQuotePrice = null;
+  }
+
+  /// 只填写空白或本页生成后未改的字段，用户手填名称和身份始终优先。
+  void _fillContractField(String field, String value) {
+    final controller = _fields[field]!;
+    if (controller.text.trim().isEmpty ||
+        controller.text == _generatedFields[field]) {
+      controller.text = value;
+      _generatedFields[field] = value;
+    }
+  }
+
+  /// 名称是可编辑的本地显示文本；公开代码解析不代表已核对交割规格。
+  String _contractName(MarketQuoteRequest request, String underlyingName) {
+    final l = AppLocalizations.of(context);
+    return l.optionLookupName(
+      underlyingName,
+      MaterialLocalizations.of(
+        context,
+      ).formatCompactDate(DateTime.parse(request.optionExpiry!)),
+      request.optionStrike!,
+      request.optionRight!.label(l),
+    );
+  }
+
+  /// 从完整代码补齐可解析身份，不猜乘数、交割方式、股数、现金或确认状态。
+  void _fillContractIdentity(MarketQuoteRequest request) {
+    if (!_opening && _selected != null) return;
+    _fillingContract = true;
+    try {
+      _fields['symbol']!.text = request.symbol;
+      _fillContractField('underlying', request.optionUnderlyingSymbol!);
+      _fillContractField('strike', request.optionStrike!);
+      if (!_expiryEdited || _expiry == _generatedExpiry) {
+        _expiry = DateTime.parse(request.optionExpiry!);
+        _generatedExpiry = _expiry;
+      }
+      if (!_rightEdited || _right == _generatedRight) {
+        _right = request.optionRight!;
+        _generatedRight = _right;
+      }
+      final matches =
+          _fields['underlying']!.text.trim().toUpperCase() ==
+          request.optionUnderlyingSymbol;
+      if (matches) {
+        _fillContractField('underlyingName', request.optionUnderlyingSymbol!);
+      }
+      final name = matches ? _fields['underlyingName']!.text.trim() : '';
+      _fillContractField(
+        'name',
+        _contractName(
+          request,
+          name.isEmpty ? request.optionUnderlyingSymbol! : name,
+        ),
+      );
+      _invalidate();
+    } finally {
+      _fillingContract = false;
+    }
+  }
+
+  /// 采用报价前核对实际草稿身份，不能把另一个日期或行权价的价格填进来。
+  bool _matchesContractRequest(MarketQuoteRequest request) {
+    try {
+      return _market == request.market &&
+          _fields['symbol']!.text.trim().toUpperCase() == request.symbol &&
+          _fields['underlying']!.text.trim().toUpperCase() ==
+              request.optionUnderlyingSymbol &&
+          _expiry.toIso8601String().substring(0, 10) == request.optionExpiry &&
+          _right == request.optionRight &&
+          InvestmentDecimal.parse(
+                _fields['strike']!.text,
+              ).compareTo(InvestmentDecimal.parse(request.optionStrike!)) ==
+              0;
+    } on FormatException {
+      // 尚未补全或与代码不一致时显示核对提示，不采用其他身份的报价。
+      return false;
+    }
+  }
+
+  /// 显式单次查询：标的名称与报价独立返回，只有公开代码会传给来源。
+  Future<void> _lookupContract() async {
+    final c = VeriFinScope.of(context), p = _portfolio;
+    if (_busy ||
+        _submitted ||
+        _searchingContract ||
+        p == null ||
+        !_hasValidAccount(p)) {
+      return;
+    }
+    final l = AppLocalizations.of(context);
+    MarketQuoteRequest request;
+    try {
+      if (_market != StockMarket.us || p.currencyCode != 'USD') {
+        throw const FormatException('unsupported');
+      }
+      request = MarketQuoteRequest.usOptionSymbol(_fields['symbol']!.text);
+    } on FormatException {
+      setState(() {
+        _clearContractLookup();
+        _contractLookupMessage = l.optionLookupUnsupported;
+      });
+      return;
+    }
+    FocusScope.of(context).unfocus();
+    setState(() {
+      _clearContractLookup();
+      _fillContractIdentity(request);
+      _contractRequest = request;
+      _searchingContract = true;
+    });
+    final generation = _contractSearchGeneration;
+    final snapshot = _underlyingLookupContext;
+    bool current() =>
+        mounted &&
+        generation == _contractSearchGeneration &&
+        snapshot == _underlyingLookupContext &&
+        !_busy &&
+        !_submitted &&
+        _hasValidAccount(p) &&
+        Visibility.of(context) &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
+    Future<void> lookupName() async {
+      try {
+        final securities = await c.searchInvestmentSecurities(
+          request.optionUnderlyingSymbol!,
+          market: request.market,
+          currencyCode: request.currency,
+        );
+        if (!current()) return;
+        final stock = securities
+            .where(
+              (s) =>
+                  s.isStock &&
+                  s.symbol.toUpperCase() == request.optionUnderlyingSymbol &&
+                  s.market == request.market &&
+                  s.currencyCode == request.currency,
+            )
+            .firstOrNull;
+        if (stock == null) {
+          setState(() => _contractLookupMessage = l.optionLookupNameFallback);
+          return;
+        }
+        setState(() {
+          if (_fields['underlying']!.text.trim().toUpperCase() ==
+              stock.symbol.toUpperCase()) {
+            _fillContractField('underlyingName', stock.name);
+          }
+          _fillContractField('name', _contractName(request, stock.name));
+          _invalidate();
+        });
+      } catch (_) {
+        // Controller 已脱敏记录错误；可用代码生成名称，价格查询仍独立继续。
+        if (current()) {
+          setState(() => _contractLookupMessage = l.optionLookupNameFallback);
+        }
+      }
+    }
+
+    Future<void> lookupQuote() async {
+      final result = await c.fetchDraftOptionQuote(request);
+      if (!current()) return;
+      setState(() {
+        _contractQuoteStatus = result.status;
+        _contractQuote = result.quote;
+        _quoteRevision = c.investmentQuoteSync.draftQuoteRevision;
+      });
+    }
+
+    await Future.wait([lookupName(), lookupQuote()]);
+    if (current()) setState(() => _searchingContract = false);
+  }
+
+  /// 最新报价仅在用户点选后写入参考价草稿，不触碰成交、成本、数量或账户。
+  void _useContractQuote() {
+    final request = _contractRequest, quote = _contractQuote;
+    if (_busy || _submitted || request == null || quote == null) return;
+    final sync = VeriFinScope.of(context).investmentQuoteSync;
+    if (_quoteRevision != sync.draftQuoteRevision ||
+        !sync.state.value.enabled ||
+        !_matchesContractRequest(request)) {
+      setState(() {
+        _clearContractLookup();
+        _contractLookupMessage = AppLocalizations.of(context).optionLookupRetry;
+      });
+      return;
+    }
+    final reference = quote.reference(request, sync.clock());
+    if (reference == null) return;
+    setState(() {
+      _fields['reference']!.text = reference.price;
+      _adoptedQuotePrice = reference.price;
+      _invalidate();
+    });
+  }
+
+  /// 期初组合尚未保存也可进入现有凭证编辑器；不回显凭证、不自动开启联网。
+  Future<void> _configureContractQuotes() async {
+    final c = VeriFinScope.of(context);
+    final adapter = c.investmentQuoteSync.client.adapters
+        .whereType<AlpacaOptionQuoteAdapter>()
+        .firstOrNull;
+    if (adapter == null) return;
+    setState(_clearContractLookup);
+    await Navigator.of(context).push<bool>(
+      MaterialPageRoute(
+        builder: (_) => OptionQuoteSettingsPage(
+          configured: adapter.configured,
+          loadFailed: c.optionQuoteCredentialsLoadFailed,
+          onSave: c.saveOptionQuoteCredentials,
+        ),
+      ),
+    );
+  }
+
+  /// 独立启用既有参考行情偏好，不开启自动刷新；成功后重查当前草稿。
+  Future<void> _enableContractQuotes() async {
+    final sync = VeriFinScope.of(context).investmentQuoteSync;
+    final ok = await sync.configure(
+      enabled: true,
+      automatic: sync.state.value.automatic,
+    );
+    if (!mounted) return;
+    if (ok) {
+      await _lookupContract();
+    } else {
+      setState(
+        () => _contractLookupMessage = AppLocalizations.of(
+          context,
+        ).marketSaveFailed,
+      );
+    }
+  }
+
+  /// 结果按来源价格时间展示；保留历史期初提醒，不将可用报价称为实时成交。
+  Widget _contractLookup(InvestmentPortfolio p) {
+    final l = AppLocalizations.of(context),
+        sync = VeriFinScope.of(context).investmentQuoteSync,
+        request = _contractRequest,
+        quote = _contractQuote;
+    final reference = request == null || quote == null
+        ? null
+        : quote.reference(request, sync.clock());
+    final statusMessage = switch (_contractQuoteStatus) {
+      DraftOptionQuoteStatus.networkDisabled => l.optionLookupNetworkDisabled,
+      DraftOptionQuoteStatus.credentialsRequired => l.optionLookupCredentials,
+      DraftOptionQuoteStatus.unsupported => l.optionLookupUnavailable,
+      DraftOptionQuoteStatus.noQuote => l.optionLookupNoQuote,
+      DraftOptionQuoteStatus.failed => l.optionLookupFailed,
+      DraftOptionQuoteStatus.cancelled => l.optionLookupRetry,
+      _ => null,
+    };
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        OutlinedButton.icon(
+          key: const Key('option-contract-search'),
+          style: investmentOutlineButtonStyle(context),
+          onPressed:
+              _busy ||
+                  _submitted ||
+                  _searchingContract ||
+                  _fields['symbol']!.text.trim().isEmpty
+              ? null
+              : _lookupContract,
+          icon: const Icon(Icons.search),
+          label: Text(_searchingContract ? l.commonProcessing : l.optionLookup),
+        ),
+        InvestmentHint(l.optionLookupHint),
+        if (_contractLookupMessage != null)
+          InvestmentHint(_contractLookupMessage!),
+        if (statusMessage != null) InvestmentHint(statusMessage),
+        if (_contractQuoteStatus == DraftOptionQuoteStatus.networkDisabled)
+          TextButton(
+            onPressed: _busy || _searchingContract
+                ? null
+                : _enableContractQuotes,
+            child: Text(l.optionLookupEnable),
+          ),
+        if (_contractQuoteStatus == DraftOptionQuoteStatus.credentialsRequired)
+          TextButton(
+            onPressed: _busy || _searchingContract
+                ? null
+                : _configureContractQuotes,
+            child: Text(l.optionQuoteTitle),
+          ),
+        if (reference != null && request != null && quote != null) ...[
+          const SizedBox(height: 8),
+          Text(request.symbol),
+          DetailInfoRow(
+            inline: true,
+            label: reference.midpoint
+                ? l.optionLookupMidpoint
+                : l.optionLookupLast,
+            value: formatUserSecurityPrice(reference.price, p.currencyCode),
+          ),
+          Text(quote.source),
+          DetailInfoRow(
+            inline: true,
+            label: l.marketQuoteTime,
+            value: formatQuoteTime(
+              context,
+              reference.time,
+              compact: true,
+              includeSeconds: true,
+            ),
+          ),
+          if (quote.isOlderThanOneDay(request, sync.clock()))
+            InvestmentHint(l.marketQuoteOlderThanOneDay),
+          if (_opening) InvestmentHint(l.optionLookupOpeningHint),
+          if (!_matchesContractRequest(request))
+            InvestmentHint(l.optionLookupIdentityConflict),
+          OutlinedButton(
+            key: const Key('option-contract-use-price'),
+            style: investmentOutlineButtonStyle(context),
+            onPressed: _busy || _submitted || !_matchesContractRequest(request)
+                ? null
+                : _useContractQuote,
+            child: Text(l.optionLookupUsePrice),
+          ),
+        ],
+        const SizedBox(height: 12),
+      ],
+    );
   }
 
   /// 复用股票身份候选，当前账户、本账本同币种以及本次远端结果都只用于填代码/名称。
@@ -723,6 +1109,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   Future<bool> _save(InvestmentPortfolio p) async {
     if (_busy || _submitted) return false;
     _clearUnderlyingSearch();
+    _clearContractLookup();
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
     if (_opening) {
       if (!_hasValidAccount(p)) {
@@ -972,10 +1359,15 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                         onSelected: (v) => setState(() {
                           _market = v;
                           _clearUnderlyingSearch();
+                          _clearContractLookup(
+                            identityChanged: true,
+                            clearGeneratedFields: true,
+                          );
                           _invalidate();
                         }),
                       ),
                     _field('symbol', l.optionCode, locked: locked),
+                    if (!widget.specificationOnly) _contractLookup(p),
                     _field('name', l.investName),
                     _underlyingField(p, locked: locked),
                     _field('underlyingName', l.optionUnderlyingName),
@@ -1010,6 +1402,9 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                         labelOf: (v) => v.label(l),
                         onSelected: (v) => setState(() {
                           _right = v;
+                          _rightEdited = true;
+                          _generatedRight = null;
+                          _clearContractLookup(identityChanged: true);
                           _invalidate();
                         }),
                       )
@@ -1033,6 +1428,9 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                               if (!mounted || date == null) return;
                               setState(() {
                                 _expiry = date;
+                                _expiryEdited = true;
+                                _generatedExpiry = null;
+                                _clearContractLookup(identityChanged: true);
                                 _invalidate();
                               });
                             },

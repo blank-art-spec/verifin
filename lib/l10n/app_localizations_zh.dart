@@ -7770,4 +7770,67 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get optionQuoteCredentialInvalid => '请使用 1–512 个英文字母、数字或英文符号，不含空白。';
+
+  @override
+  String get optionLookup => '查询合约与行情';
+
+  @override
+  String get optionLookupHint =>
+      '支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 后查询该期权报价，仅发送公开代码。代码可补全名称、到期日、类型和行权价，交割规格仍须核对。';
+
+  @override
+  String optionLookupName(
+    String underlying,
+    String expiry,
+    String strike,
+    String right,
+  ) {
+    return '$underlying $expiry $strike $right';
+  }
+
+  @override
+  String get optionLookupUnsupported =>
+      '请使用美元账户和标准美股完整合约代码；其他市场、调整合约及 TEST 示例请手动填写。';
+
+  @override
+  String get optionLookupNameFallback => '未查到标的名称，可保留代码生成的名称或自行修改。';
+
+  @override
+  String get optionLookupNetworkDisabled => '合约资料已解析。开启参考行情联网后可查询期权价格。';
+
+  @override
+  String get optionLookupCredentials => '查询期权价格需要配置 Alpaca 凭证，并具备 OPRA 行情权限。';
+
+  @override
+  String get optionLookupUnavailable => '此合约暂无可用行情来源，请手动填写参考价。';
+
+  @override
+  String get optionLookupNoQuote => '没有找到带有效来源时间的报价，请核对合约代码或手动填写参考价。';
+
+  @override
+  String get optionLookupFailed =>
+      '期权报价查询失败，请检查网络、Alpaca 凭证及 OPRA 权限，稍后重试或手动填写。';
+
+  @override
+  String get optionLookupRetry => '查询条件或行情设置已变化，请重新查询后采用价格。';
+
+  @override
+  String get optionLookupEnable => '开启行情联网并重查';
+
+  @override
+  String get optionLookupMidpoint => '参考价（买卖中间价）';
+
+  @override
+  String get optionLookupLast => '参考价（最近成交价）';
+
+  @override
+  String get optionLookupOpeningHint =>
+      '这是最新可用报价，并非历史期初价格。录入过去的持仓时，请按期初时点核对后再采用。';
+
+  @override
+  String get optionLookupIdentityConflict =>
+      '已填标的、到期日、类型或行权价与完整代码不一致，核对一致后才能采用此报价。';
+
+  @override
+  String get optionLookupUsePrice => '填入参考价';
 }

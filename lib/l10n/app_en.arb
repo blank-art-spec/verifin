@@ -2978,5 +2978,22 @@
   "optionQuoteClear": "Clear saved credentials",
   "optionQuoteSaveFailed": "Not saved. Try again later.",
   "optionQuoteLoadFailed": "Saved credentials could not be read. Set them again or clear the saved credentials.",
-  "optionQuoteCredentialInvalid": "Use 1–512 ASCII letters, numbers or symbols, without whitespace."
+  "optionQuoteCredentialInvalid": "Use 1–512 ASCII letters, numbers or symbols, without whitespace.",
+  "optionLookup": "Look up contract and quote",
+  "optionLookupHint": "Supports standard US option symbols. Lookup sends the public underlying symbol to Tencent for its name; quotes use Alpaca when quote networking and credentials are configured. The symbol can fill the name, expiry, right and strike. Verify delivery terms separately.",
+  "optionLookupName": "{underlying} {expiry} {strike} {right}",
+  "optionLookupUnsupported": "Use a USD account and a complete standard US option symbol. Enter other markets, adjusted contracts and TEST examples manually.",
+  "optionLookupNameFallback": "The underlying name was not found. Keep or edit the name generated from the symbol.",
+  "optionLookupNetworkDisabled": "Contract details parsed. Enable quote networking to look up the option price.",
+  "optionLookupCredentials": "Option prices require Alpaca credentials with OPRA data access.",
+  "optionLookupUnavailable": "No quote source is available for this contract. Enter a reference price manually.",
+  "optionLookupNoQuote": "No quote with a valid source time was found. Check the symbol or enter a reference price manually.",
+  "optionLookupFailed": "The option quote lookup failed. Check the network, Alpaca credentials and OPRA access, then retry or enter a price manually.",
+  "optionLookupRetry": "Lookup details or quote settings changed. Look up the contract again before using its price.",
+  "optionLookupEnable": "Enable quote networking and retry",
+  "optionLookupMidpoint": "Reference price (bid/ask midpoint)",
+  "optionLookupLast": "Reference price (last trade)",
+  "optionLookupOpeningHint": "This is the latest available quote, not a historical opening price. Check it against the opening date before using it for past holdings.",
+  "optionLookupIdentityConflict": "The underlying, expiry, right or strike does not match the complete symbol. Review these fields before using this quote.",
+  "optionLookupUsePrice": "Fill reference price"
 }

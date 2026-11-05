@@ -8081,4 +8081,73 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get optionQuoteCredentialInvalid =>
       'Use 1–512 ASCII letters, numbers or symbols, without whitespace.';
+
+  @override
+  String get optionLookup => 'Look up contract and quote';
+
+  @override
+  String get optionLookupHint =>
+      'Supports standard US option symbols. Lookup sends the public underlying symbol to Tencent for its name; quotes use Alpaca when quote networking and credentials are configured. The symbol can fill the name, expiry, right and strike. Verify delivery terms separately.';
+
+  @override
+  String optionLookupName(
+    String underlying,
+    String expiry,
+    String strike,
+    String right,
+  ) {
+    return '$underlying $expiry $strike $right';
+  }
+
+  @override
+  String get optionLookupUnsupported =>
+      'Use a USD account and a complete standard US option symbol. Enter other markets, adjusted contracts and TEST examples manually.';
+
+  @override
+  String get optionLookupNameFallback =>
+      'The underlying name was not found. Keep or edit the name generated from the symbol.';
+
+  @override
+  String get optionLookupNetworkDisabled =>
+      'Contract details parsed. Enable quote networking to look up the option price.';
+
+  @override
+  String get optionLookupCredentials =>
+      'Option prices require Alpaca credentials with OPRA data access.';
+
+  @override
+  String get optionLookupUnavailable =>
+      'No quote source is available for this contract. Enter a reference price manually.';
+
+  @override
+  String get optionLookupNoQuote =>
+      'No quote with a valid source time was found. Check the symbol or enter a reference price manually.';
+
+  @override
+  String get optionLookupFailed =>
+      'The option quote lookup failed. Check the network, Alpaca credentials and OPRA access, then retry or enter a price manually.';
+
+  @override
+  String get optionLookupRetry =>
+      'Lookup details or quote settings changed. Look up the contract again before using its price.';
+
+  @override
+  String get optionLookupEnable => 'Enable quote networking and retry';
+
+  @override
+  String get optionLookupMidpoint => 'Reference price (bid/ask midpoint)';
+
+  @override
+  String get optionLookupLast => 'Reference price (last trade)';
+
+  @override
+  String get optionLookupOpeningHint =>
+      'This is the latest available quote, not a historical opening price. Check it against the opening date before using it for past holdings.';
+
+  @override
+  String get optionLookupIdentityConflict =>
+      'The underlying, expiry, right or strike does not match the complete symbol. Review these fields before using this quote.';
+
+  @override
+  String get optionLookupUsePrice => 'Fill reference price';
 }

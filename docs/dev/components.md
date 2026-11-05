@@ -348,12 +348,22 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 投资草稿序号：Controller 公共只读 `nextInvestmentEventSequenceFor(accountId)` 复用既有 `_nextStockSequence`，返回当前账本真实证券账户的最新可用序号，账户失效返回 null。股票新事件保存时读取，期权预览时读取并冻结组合/现金依据；编辑旧事件仍保留原序号，不能在草稿初始化时长期占用序号。
 
-### 美股期权行情与分批刷新（2026-11-05）
+### 美股期权行情、录入查询与分批刷新（2026-11-06）
 
 `parseUsOptionSymbol`（`investments/us_option_symbol.dart`）统一完整美股期权代码的字母根、
-真实到期日期、方向和千分行权价解析；期权表单只使用其标的代码发起显式股票身份查询，
-Alpaca 适配器继续核对完整合约规格。表单复用 `InvestmentSecurityAutocomplete` 和
-`SecuritySearchClient`，输入不自动联网，候选只填代码/名称；隐藏、切账本及改输入使旧响应失效。
+真实到期日期、方向和千分行权价解析。`OptionEditorPage` 的“查询合约与行情”用公开
+身份补充未手改的草稿字段，并结合标的查询结果生成可编辑期权名称；保留用户名称及
+已锁定身份，不推断权利金乘数、交割资料或规格确认。原标的候选继续复用
+`InvestmentSecurityAutocomplete` 和 `SecuritySearchClient`；输入不自动联网。
+`MarketQuoteRequest.usOptionSymbol` 从完整代码构造公开报价身份，不创建临时证券或
+猜测乘数；`VeriFinController.fetchDraftOptionQuote` 委托
+`InvestmentQuoteSync.fetchDraftOptionQuote` 执行单次只读查询，沿用联网、前台、来源门禁
+和 `MarketQuote.reference`。`DraftOptionQuoteStatus` / `DraftOptionQuoteResult` 表达可用、
+未联网、缺凭证、不支持、缺价、失败或撤销，不保存报价缓存、采用选择或轮询时间。
+`InvestmentQuoteSync.draftQuoteRevision` 供页面在采用前核对设置及会话变更。
+结果显示来源、对应字段时间、中间价／成交价口径及旧价提示；“填入参考价”
+只修改当前草稿，不改成本或成交价，历史期初仍明确提示这是最新可用行情。
+隐藏、切账本、切账户及改身份输入使旧结果失效，未配置或查不到仍可手填。
 
 `AlpacaOptionQuoteAdapter` / `AlpacaHttpOptionQuoteTransport` 只查询固定官方 OPRA 快照；
 `MarketQuoteRequest` 提取到期日、权利、行权价及公开标的身份，不带交割备注或账务。

@@ -5,6 +5,7 @@ import '../models/investment.dart';
 import '../models/option_contract.dart';
 import '../../l10n/app_localizations.dart';
 import 'investment_decimal.dart';
+import 'us_option_symbol.dart';
 
 enum QuotePriceUnit { share, premiumUnit, fundUnit }
 
@@ -64,11 +65,67 @@ class MarketQuoteRequest {
           security.option?.underlyingId.startsWith('us:stock:') == true
           ? security.option!.underlyingId.substring('us:stock:'.length)
           : null;
+
+  /// 未保存的美股期权只从完整代码提取公开身份，不创建证券或猜测交割乘数。
+  /// 输入统一为大写；非标准、TEST 或无效日期/行权价抛出 FormatException。
+  factory MarketQuoteRequest.usOptionSymbol(String symbol) {
+    final normalized = symbol.trim().toUpperCase();
+    final identity = parseUsOptionSymbol(normalized);
+    if (identity == null) throw const FormatException('无法识别完整美股期权代码');
+    final thousand = BigInt.from(1000);
+    final whole = identity.strikeThousandths ~/ thousand;
+    final fraction = (identity.strikeThousandths % thousand).toString().padLeft(
+      3,
+      '0',
+    );
+    return MarketQuoteRequest._usOption(
+      normalized,
+      underlyingSymbol: identity.underlyingSymbol,
+      expiry: identity.expiry,
+      right: identity.right,
+      strike: InvestmentDecimal.parse('$whole.$fraction').toString(),
+    );
+  }
+
+  MarketQuoteRequest._usOption(
+    this.symbol, {
+    required String underlyingSymbol,
+    required String expiry,
+    required OptionRight right,
+    required String strike,
+  }) : securityId = 'us:option:$symbol',
+       market = StockMarket.us,
+       currency = 'USD',
+       option = true,
+       fund = false,
+       optionUnderlyingSymbol = underlyingSymbol,
+       optionExpiry = expiry,
+       optionRight = right,
+       optionStrike = strike;
   final String securityId, symbol, currency;
   final StockMarket market;
   final bool option, fund;
   final String? optionExpiry, optionStrike, optionUnderlyingSymbol;
   final OptionRight? optionRight;
+}
+
+/// 草稿查询只返回本次观察，不创建持仓、保存缓存或开启自动行情。
+enum DraftOptionQuoteStatus {
+  available,
+  networkDisabled,
+  credentialsRequired,
+  unsupported,
+  noQuote,
+  failed,
+  cancelled,
+}
+
+class DraftOptionQuoteResult {
+  const DraftOptionQuoteResult(this.status, {this.quote})
+    : assert((status == DraftOptionQuoteStatus.available) == (quote != null));
+
+  final DraftOptionQuoteStatus status;
+  final MarketQuote? quote;
 }
 
 /// 一条公开基金净值观察；只有日期和每份净值，没有持仓、收益流水或账户信息。

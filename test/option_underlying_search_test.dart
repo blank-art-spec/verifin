@@ -3,6 +3,7 @@ import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/investments/investment_opening_draft.dart';
+import 'package:verifin/app/investments/market_quote.dart';
 import 'package:verifin/app/investments/security_search.dart';
 import 'package:verifin/app/investments/stock_projection.dart';
 import 'package:verifin/app/investments/us_option_symbol.dart';
@@ -14,6 +15,7 @@ import 'package:verifin/pages/option_editor_page.dart';
 
 import 'support/in_memory_ledger_repository.dart';
 import 'support/investment_fixture.dart';
+import 'support/market_quote_fixture.dart';
 import 'support/test_harness.dart';
 
 /// 只记录公开标的检索参数；测试明确完成请求，不访问真实网络。
@@ -49,11 +51,13 @@ Future<VeriFinController> _ready(
   _SearchClient search, {
   bool opening = false,
   bool local = false,
+  MarketQuoteClient quotes = const MarketQuoteClient(),
 }) async {
   final c = await VeriFinController.create(
     LocalKeyValueStore()..write('verifin.locale.v1', 'zh'),
     repository: InMemoryLedgerRepository(),
     securitySearchClient: search,
+    marketQuoteClient: quotes,
   );
   addTearDown(c.dispose);
   c.addAccount(investmentAccountFixture());
@@ -132,25 +136,44 @@ Future<void> _pump(
   VeriFinController c, {
   String? securityId,
   ValueNotifier<bool>? visible,
+  InvestmentPortfolio? openingPortfolio,
+  Locale? locale,
+  double scale = 1,
+  Size size = const Size(393, 852),
 }) async {
-  await tester.binding.setSurfaceSize(const Size(393, 852));
+  await tester.binding.setSurfaceSize(size);
   addTearDown(() => tester.binding.setSurfaceSize(null));
-  final page = OptionEditorPage(accountId: 'stock-usd', securityId: securityId);
+  final page = OptionEditorPage(
+    accountId: 'stock-usd',
+    securityId: securityId,
+    openingPortfolio: openingPortfolio,
+  );
   await tester.pumpWidget(
     VeriFinScope(
       controller: c,
       child: zhMaterialApp(
-        home: visible == null
-            ? page
-            : ValueListenableBuilder<bool>(
-                valueListenable: visible,
-                builder: (context, shown, child) => Visibility(
-                  visible: shown,
-                  maintainState: true,
-                  child: child!,
-                ),
-                child: page,
-              ),
+        home: Builder(
+          builder: (context) => Localizations.override(
+            context: context,
+            locale: locale,
+            child: MediaQuery(
+              data: MediaQuery.of(
+                context,
+              ).copyWith(textScaler: TextScaler.linear(scale)),
+              child: visible == null
+                  ? page
+                  : ValueListenableBuilder<bool>(
+                      valueListenable: visible,
+                      builder: (context, shown, child) => Visibility(
+                        visible: shown,
+                        maintainState: true,
+                        child: child!,
+                      ),
+                      child: page,
+                    ),
+            ),
+          ),
+        ),
       ),
     ),
   );
@@ -175,8 +198,367 @@ Future<void> _save(WidgetTester tester, {bool preview = false}) async {
   await tester.pumpAndSettle();
 }
 
+/// 合约查询与采用分别由用户触发，未完成的响应仍由用例控制。
+Future<void> _contractAction(WidgetTester tester, String action) async {
+  final button = find.byKey(ValueKey('option-contract-$action'));
+  await tester.scrollUntilVisible(button, -220, scrollable: _scroll());
+  await tester.ensureVisible(button);
+  await tester.pumpAndSettle();
+  expect(button.hitTestable(), findsOneWidget);
+  await tester.tap(button);
+  await tester.pump();
+}
+
+/// 只构造本地期权报价，买卖中间价与最新成交价刻意不同以验证采用口径。
+MarketQuote _contractQuote(MarketQuoteRequest request) {
+  final time = DateTime.now().subtract(const Duration(minutes: 2));
+  return MarketQuote(
+    securityId: request.securityId,
+    source: '本地测试夹具',
+    currency: 'USD',
+    unit: QuotePriceUnit.premiumUnit,
+    fetchedAt: DateTime.now(),
+    last: '2.9',
+    lastAt: time,
+    bid: '3',
+    bidAt: time,
+    ask: '3.4',
+    askAt: time,
+  );
+}
+
+/// 完成一次本地名称和报价响应；采用仍通过独立的页面按钮。
+Future<void> _completeContractSearch(
+  WidgetTester tester,
+  _SearchClient search, {
+  bool adopt = true,
+}) async {
+  await _contractAction(tester, 'search');
+  search.requests.last.result.complete([avgoFixture]);
+  await tester.pumpAndSettle();
+  if (adopt) {
+    await _contractAction(tester, 'use-price');
+    await tester.pumpAndSettle();
+  }
+}
+
 void main() {
   useTestDatabases();
+
+  for (final opening in [false, true]) {
+    testWidgets('${opening ? '期初' : '交易'}期权显式查询完整代码，报价须另行采用且不改持仓事实', (
+      tester,
+    ) async {
+      final search = _SearchClient();
+      final release = Completer<void>();
+      final adapter = FixtureQuoteAdapter((requests) async {
+        await release.future;
+        return requests.map(_contractQuote).toList();
+      }, support: (request) => request.option);
+      final c = await _ready(
+        search,
+        opening: opening,
+        quotes: MarketQuoteClient(adapters: [adapter]),
+      );
+      expect(
+        await c.investmentQuoteSync.configure(enabled: true, automatic: false),
+        isTrue,
+      );
+      final before = c.investmentFor('stock-usd')?.toJson();
+      await _pump(
+        tester,
+        c,
+        openingPortfolio: opening
+            ? InvestmentPortfolio(
+                accountId: 'stock-usd',
+                bookId: c.activeBook.id,
+                currencyCode: 'USD',
+                openedAt: DateTime(2026, 10, 1),
+                openingCash: '10000',
+              )
+            : null,
+      );
+      await _enter(tester, 'symbol', 'AVGO261218P00300000');
+      await _enter(tester, 'multiplier', '10');
+      await _enter(tester, 'quantity', '2');
+      await _enter(tester, opening ? 'cost' : 'price', opening ? '175' : '2');
+      await _enter(tester, 'reference', '1.25');
+      await _enter(tester, 'underlyingPrice', '50');
+      expect(search.requests, isEmpty);
+      expect(adapter.requests, 0);
+
+      await _contractAction(tester, 'search');
+      expect(search.requests, hasLength(1));
+      expect(search.requests.single.query, 'AVGO');
+      search.requests.single.result.complete([avgoFixture]);
+      release.complete();
+      await tester.pumpAndSettle();
+
+      expect(adapter.requests, 1);
+      final request = adapter.lastRequests.single;
+      expect(request.symbol, 'AVGO261218P00300000');
+      expect(request.optionUnderlyingSymbol, 'AVGO');
+      expect(request.optionExpiry, '2026-12-18');
+      expect(request.optionRight, OptionRight.put);
+      expect(request.optionStrike, '300');
+      expect(find.textContaining('本地测试夹具'), findsWidgets);
+      final name = (await _field(tester, 'name')).text;
+      expect(name, contains('博通'));
+      expect(name, contains('300'));
+      expect(name, contains('认沽'));
+      expect((await _field(tester, 'underlying')).text, 'AVGO');
+      expect((await _field(tester, 'underlyingName')).text, '博通');
+      expect((await _field(tester, 'strike')).text, '300');
+      expect((await _field(tester, 'multiplier')).text, '10');
+      expect(find.text('非标准 / 待补全'), findsOneWidget);
+      expect(
+        tester
+            .widget<CheckboxListTile>(
+              find.widgetWithText(CheckboxListTile, '已核对结算方式、交割规格及原币金额'),
+            )
+            .value,
+        isFalse,
+      );
+      expect((await _field(tester, 'quantity')).text, '2');
+      expect(
+        (await _field(tester, opening ? 'cost' : 'price')).text,
+        opening ? '175' : '2',
+      );
+      expect((await _field(tester, 'reference')).text, '1.25');
+      expect((await _field(tester, 'underlyingPrice')).text, '50');
+
+      await _contractAction(tester, 'use-price');
+      await tester.pumpAndSettle();
+      expect((await _field(tester, 'reference')).text, '3.2');
+      expect(c.investmentFor('stock-usd')?.toJson(), before);
+      expect(c.investmentQuoteSync.state.value.automatic, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('合约查询保留用户名称及查询期间的新名称', (tester) async {
+    final search = _SearchClient();
+    final adapter = FixtureQuoteAdapter(
+      (requests) async => requests.map(_contractQuote).toList(),
+      support: (request) => request.option,
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'AVGO261218P00300000');
+    await _enter(tester, 'name', '我的期权名称');
+    await _contractAction(tester, 'search');
+    await _enter(tester, 'name', '查询时修改的名称');
+    search.requests.single.result.complete([avgoFixture]);
+    await tester.pumpAndSettle();
+    expect((await _field(tester, 'name', up: true)).text, '查询时修改的名称');
+    expect((await _field(tester, 'underlyingName')).text, '博通');
+    expect((await _field(tester, 'reference')).text, isEmpty);
+    expect(c.investmentFor('stock-usd')!.securities, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('同合约只重查未再次采用，改代码仍清除先前采用的报价', (tester) async {
+    final search = _SearchClient();
+    final adapter = FixtureQuoteAdapter(
+      (requests) async => requests.map(_contractQuote).toList(),
+      support: (request) => request.option,
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'AVGO261218P00300000');
+    await _completeContractSearch(tester, search);
+    expect((await _field(tester, 'reference')).text, '3.2');
+
+    await _completeContractSearch(tester, search, adopt: false);
+    expect(adapter.requests, 2);
+    expect((await _field(tester, 'reference')).text, '3.2');
+    await _enter(tester, 'symbol', 'MSFT261218C00400000', up: true);
+    expect((await _field(tester, 'reference')).text, isEmpty);
+    expect(
+      find.byKey(const ValueKey('option-contract-use-price')),
+      findsNothing,
+    );
+    expect(c.investmentFor('stock-usd')!.securities, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('修改行权价清除采用的旧报价，手填新参考价后改代码保留手填', (tester) async {
+    final search = _SearchClient();
+    final adapter = FixtureQuoteAdapter(
+      (requests) async => requests.map(_contractQuote).toList(),
+      support: (request) => request.option,
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'AVGO261218P00300000');
+    await _completeContractSearch(tester, search);
+    expect((await _field(tester, 'reference')).text, '3.2');
+    await _enter(tester, 'strike', '310', up: true);
+    expect((await _field(tester, 'reference')).text, isEmpty);
+    expect(
+      find.byKey(const ValueKey('option-contract-use-price')),
+      findsNothing,
+    );
+
+    await _enter(tester, 'strike', '300', up: true);
+    await _completeContractSearch(tester, search);
+    expect((await _field(tester, 'reference')).text, '3.2');
+    await _enter(tester, 'reference', '7');
+    await _enter(tester, 'symbol', 'MSFT261218C00400000', up: true);
+    expect((await _field(tester, 'reference')).text, '7');
+    expect(
+      find.byKey(const ValueKey('option-contract-use-price')),
+      findsNothing,
+    );
+    expect(c.investmentFor('stock-usd')!.securities, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('手填行权价与代码冲突时查询保留输入并禁用采用报价', (tester) async {
+    final search = _SearchClient();
+    final adapter = FixtureQuoteAdapter(
+      (requests) async => requests.map(_contractQuote).toList(),
+      support: (request) => request.option,
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'AVGO261218P00300000');
+    await _enter(tester, 'strike', '99');
+    await _enter(tester, 'reference', '5');
+    await _completeContractSearch(tester, search, adopt: false);
+    final adopt = find.byKey(const ValueKey('option-contract-use-price'));
+    await tester.ensureVisible(adopt);
+    expect(tester.widget<OutlinedButton>(adopt).onPressed, isNull);
+    expect((await _field(tester, 'strike')).text, '99');
+    expect((await _field(tester, 'reference')).text, '5');
+    expect(c.investmentFor('stock-usd')!.securities, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('英文窄屏大字号能显示合约查询结果并采用报价，无布局溢出', (tester) async {
+    final search = _SearchClient();
+    final adapter = FixtureQuoteAdapter(
+      (requests) async => requests.map(_contractQuote).toList(),
+      support: (request) => request.option,
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(
+      tester,
+      c,
+      locale: const Locale('en'),
+      scale: 1.6,
+      size: const Size(360, 852),
+    );
+    await _enter(tester, 'symbol', 'AVGO261218P00300000');
+    await _completeContractSearch(tester, search, adopt: false);
+    expect(find.textContaining('本地测试夹具'), findsWidgets);
+    expect(tester.takeException(), isNull);
+    await _contractAction(tester, 'use-price');
+    await tester.pumpAndSettle();
+    expect((await _field(tester, 'reference')).text, '3.2');
+    expect((await _field(tester, 'name', up: true)).text, contains('Put'));
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('改合约代码后旧名称和旧报价晚响应不能覆盖当前草稿', (tester) async {
+    final search = _SearchClient();
+    final release = Completer<void>();
+    final adapter = FixtureQuoteAdapter((requests) async {
+      await release.future;
+      return requests.map(_contractQuote).toList();
+    }, support: (request) => request.option);
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'AVGO261218P00300000');
+    await _contractAction(tester, 'search');
+    await _enter(tester, 'symbol', 'MSFT261218C00400000', up: true);
+    await _enter(tester, 'name', '微软新草稿');
+    await _enter(tester, 'underlying', 'MSFT');
+    await _enter(tester, 'underlyingName', '微软');
+    await _enter(tester, 'strike', '400');
+    await _enter(tester, 'reference', '7');
+    search.requests.single.result.complete([avgoFixture]);
+    release.complete();
+    await tester.pumpAndSettle();
+    expect(
+      (await _field(tester, 'symbol', up: true)).text,
+      'MSFT261218C00400000',
+    );
+    expect((await _field(tester, 'name')).text, '微软新草稿');
+    expect((await _field(tester, 'underlying')).text, 'MSFT');
+    expect((await _field(tester, 'underlyingName')).text, '微软');
+    expect((await _field(tester, 'strike')).text, '400');
+    expect((await _field(tester, 'reference')).text, '7');
+    expect(
+      find.byKey(const ValueKey('option-contract-use-price')),
+      findsNothing,
+    );
+    expect(c.investmentFor('stock-usd')!.securities, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final enabled in [false, true]) {
+    testWidgets('期权行情${enabled ? '权限拒绝' : '联网未开启'}仍保留手填名称与价格', (tester) async {
+      final search = _SearchClient();
+      final adapter = FixtureQuoteAdapter(
+        (_) async => throw StateError('模拟来源拒绝行情权限'),
+        support: (request) => request.option,
+      );
+      final c = await _ready(
+        search,
+        quotes: MarketQuoteClient(adapters: [adapter]),
+      );
+      if (enabled) {
+        await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+      }
+      await _pump(tester, c);
+      await _enter(tester, 'symbol', 'AVGO261218P00300000');
+      await _enter(tester, 'name', '手填期权名称');
+      await _enter(tester, 'multiplier', '10');
+      await _enter(tester, 'quantity', '2');
+      await _enter(tester, 'price', '2.4');
+      await _enter(tester, 'reference', '2.5');
+      await _contractAction(tester, 'search');
+      search.requests.single.result.complete([avgoFixture]);
+      await tester.pumpAndSettle();
+      expect(adapter.requests, enabled ? 1 : 0);
+      expect((await _field(tester, 'name')).text, '手填期权名称');
+      expect((await _field(tester, 'multiplier')).text, '10');
+      expect((await _field(tester, 'quantity')).text, '2');
+      expect((await _field(tester, 'price')).text, '2.4');
+      expect((await _field(tester, 'reference')).text, '2.5');
+      expect(
+        find.byKey(const ValueKey('option-contract-use-price')),
+        findsNothing,
+      );
+      expect(c.investmentFor('stock-usd')!.securities, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
 
   test('标的查询与期权报价共用严格 OCC 语法，不接受调整根或无效日期', () {
     final parsed = parseUsOptionSymbol('AVGO261218P00300000')!;

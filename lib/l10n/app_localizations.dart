@@ -14126,6 +14126,113 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'请使用 1–512 个英文字母、数字或英文符号，不含空白。'**
   String get optionQuoteCredentialInvalid;
+
+  /// No description provided for @optionLookup.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询合约与行情'**
+  String get optionLookup;
+
+  /// No description provided for @optionLookupHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 后查询该期权报价，仅发送公开代码。代码可补全名称、到期日、类型和行权价，交割规格仍须核对。'**
+  String get optionLookupHint;
+
+  /// No description provided for @optionLookupName.
+  ///
+  /// In zh, this message translates to:
+  /// **'{underlying} {expiry} {strike} {right}'**
+  String optionLookupName(
+    String underlying,
+    String expiry,
+    String strike,
+    String right,
+  );
+
+  /// No description provided for @optionLookupUnsupported.
+  ///
+  /// In zh, this message translates to:
+  /// **'请使用美元账户和标准美股完整合约代码；其他市场、调整合约及 TEST 示例请手动填写。'**
+  String get optionLookupUnsupported;
+
+  /// No description provided for @optionLookupNameFallback.
+  ///
+  /// In zh, this message translates to:
+  /// **'未查到标的名称，可保留代码生成的名称或自行修改。'**
+  String get optionLookupNameFallback;
+
+  /// No description provided for @optionLookupNetworkDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约资料已解析。开启参考行情联网后可查询期权价格。'**
+  String get optionLookupNetworkDisabled;
+
+  /// No description provided for @optionLookupCredentials.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询期权价格需要配置 Alpaca 凭证，并具备 OPRA 行情权限。'**
+  String get optionLookupCredentials;
+
+  /// No description provided for @optionLookupUnavailable.
+  ///
+  /// In zh, this message translates to:
+  /// **'此合约暂无可用行情来源，请手动填写参考价。'**
+  String get optionLookupUnavailable;
+
+  /// No description provided for @optionLookupNoQuote.
+  ///
+  /// In zh, this message translates to:
+  /// **'没有找到带有效来源时间的报价，请核对合约代码或手动填写参考价。'**
+  String get optionLookupNoQuote;
+
+  /// No description provided for @optionLookupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'期权报价查询失败，请检查网络、Alpaca 凭证及 OPRA 权限，稍后重试或手动填写。'**
+  String get optionLookupFailed;
+
+  /// No description provided for @optionLookupRetry.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询条件或行情设置已变化，请重新查询后采用价格。'**
+  String get optionLookupRetry;
+
+  /// No description provided for @optionLookupEnable.
+  ///
+  /// In zh, this message translates to:
+  /// **'开启行情联网并重查'**
+  String get optionLookupEnable;
+
+  /// No description provided for @optionLookupMidpoint.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考价（买卖中间价）'**
+  String get optionLookupMidpoint;
+
+  /// No description provided for @optionLookupLast.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考价（最近成交价）'**
+  String get optionLookupLast;
+
+  /// No description provided for @optionLookupOpeningHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'这是最新可用报价，并非历史期初价格。录入过去的持仓时，请按期初时点核对后再采用。'**
+  String get optionLookupOpeningHint;
+
+  /// No description provided for @optionLookupIdentityConflict.
+  ///
+  /// In zh, this message translates to:
+  /// **'已填标的、到期日、类型或行权价与完整代码不一致，核对一致后才能采用此报价。'**
+  String get optionLookupIdentityConflict;
+
+  /// No description provided for @optionLookupUsePrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'填入参考价'**
+  String get optionLookupUsePrice;
 }
 
 class _AppLocalizationsDelegate
