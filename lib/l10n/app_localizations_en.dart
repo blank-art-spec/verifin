@@ -7015,6 +7015,54 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investAverageUnitCost => 'Average cost per share';
 
   @override
+  String get investClearHolding => 'Clear holding';
+
+  @override
+  String get investDeleteOpeningHolding => 'Delete opening holding';
+
+  @override
+  String investClearHoldingConfirm(
+    String name,
+    int openingCount,
+    int eventCount,
+    int subscriptionCount,
+    String before,
+    String after,
+  ) {
+    return '$name\nDelete all long and short holdings and history for this security in this account:\n$openingCount opening records, $eventCount investment events and $subscriptionCount fund subscriptions (including payments, confirmations and refunds).\nCash: $before → $after\nExisting cash reconciliations remain. Other cash movements and profit/loss are recalculated from the remaining records. Other securities and accounts are not cleared. This cannot be undone.';
+  }
+
+  @override
+  String investDeleteOpeningConfirm(
+    String name,
+    String direction,
+    int openingCount,
+    String before,
+    String after,
+  ) {
+    return 'Delete the $direction opening holding for $name ($openingCount records). Later trades remain and are recalculated.\nCash: $before → $after\nUnsaved cost changes will not be saved. This cannot be undone.';
+  }
+
+  @override
+  String get investRemoveTransferBlocked =>
+      'This security has transfers between accounts. It cannot be removed independently because that would affect the other account.';
+
+  @override
+  String get investRemoveSettlementBlocked =>
+      'This security is involved in physical option settlement. It cannot be removed independently because related stock or option records would be affected.';
+
+  @override
+  String get investRemoveHistoryBlocked =>
+      'Removal would leave insufficient holdings or cash for later records. Nothing was changed. Check the related trades first.';
+
+  @override
+  String get investHoldingRemoveFailed =>
+      'Nothing was deleted. Details have changed or saving failed. Reopen the confirmation and try again.';
+
+  @override
+  String get investHoldingRemoved => 'Holding records deleted';
+
+  @override
   String get investCorrectOpeningCost => 'Correct opening cost';
 
   @override

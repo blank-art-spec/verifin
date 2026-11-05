@@ -3,6 +3,7 @@ library;
 
 import 'dart:async';
 import 'package:flutter/material.dart';
+import '../app/app_theme.dart';
 import '../app/common_widgets.dart';
 import '../app/investments/investment_widgets.dart';
 import '../app/investments/investment_security_autocomplete.dart';
@@ -992,6 +993,18 @@ class _StockPositionCard extends StatelessWidget {
                   },
                   child: Text(l.investCostEdit),
                 ),
+              TextButton.icon(
+                onPressed: () => showInvestmentHoldingRemovalConfirmation(
+                  context: context,
+                  accountId: accountId,
+                  securityId: security.id,
+                ),
+                style: TextButton.styleFrom(
+                  foregroundColor: veriSemantic(context, veriExpense),
+                ),
+                icon: const Icon(Icons.delete_outline),
+                label: Text(l.investClearHolding),
+              ),
             ],
           ),
         ],

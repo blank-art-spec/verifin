@@ -1,5 +1,51 @@
 part of 'veri_fin_controller.dart';
 
+/// 删除持仓时不能单独拆开的关联事实，或删除后不再成立的历史账务。
+enum InvestmentHoldingRemovalIssue {
+  /// 跨账户转移必须同时处理两端，不能从单个账户删除一边。
+  transfer,
+
+  /// 实物交割同时改变期权及标的股票，需要独立的整体更正流程。
+  physicalSettlement,
+
+  /// 删除后会出现超量平仓、历史现金不足或其他无效引用。
+  invalidHistory,
+}
+
+/// 只读的持仓删除预览；构造器仅供 Controller 使用，界面不能自行拼造删除候选。
+class InvestmentHoldingRemovalPreview {
+  /// [original] 和 [revision] 固定确认时的持仓及资金依据；[candidate] 是零落库副作用的候选。
+  /// [openingOnly] 为 true 时只删除 [short] 方向期初行，否则清除该证券全部方向及关联记录。
+  /// 三个计数分别说明期初行、投资事件及基金申购事实的删除范围，现金表示同一时点的前后值。
+  const InvestmentHoldingRemovalPreview._({
+    required this.original,
+    required this.securityId,
+    required this.openingOnly,
+    required this.short,
+    required this.openingCount,
+    required this.eventCount,
+    required this.subscriptionCount,
+    required this.cashBefore,
+    required this.cashAfter,
+    required this.issue,
+    required this._candidate,
+    required this._revision,
+  });
+
+  final InvestmentPortfolio original;
+  final String securityId;
+  final bool openingOnly, short;
+  final int openingCount, eventCount, subscriptionCount;
+  final double cashBefore;
+  final double? cashAfter;
+  final InvestmentHoldingRemovalIssue? issue;
+  final InvestmentPortfolio _candidate;
+  final String _revision;
+
+  /// 只有预览完整通过引用、数量及资金校验，才允许界面提供最终确认操作。
+  bool get canRemove => issue == null && cashAfter != null;
+}
+
 /// 股票投资命令：草稿先完整验证，原子落库成功后才发布新内存状态。
 mixin _InvestmentOps on _ControllerOps {
   /// 串行执行投资命令；非法十进制/账务边界返回失败并记录中文原因，不泄露持仓原文。
@@ -264,6 +310,179 @@ mixin _InvestmentOps on _ControllerOps {
             p.accountId == accountId ? next : p,
         ]);
       });
+
+  /// 预览清除 [accountId] 内 [securityId] 的误录账务，绝不伪造成交或修改派生数量。
+  /// 默认同时移除该证券多空期初、全部投资事件及基金申购/付款/退款事实；
+  /// [openingOnly] 为 true 时只删除 [short] 方向的期初行，后续事实全部保留并重放。
+  /// 保留证券定义、后备价格、历史快照、普通资金流水和现金锚点；旧快照按修订摘要失效。
+  /// 返回 null 表示目标已失效或没有可删除事实，关联阻止原因通过预览的 issue 表达。
+  InvestmentHoldingRemovalPreview? previewInvestmentHoldingRemoval({
+    required String accountId,
+    required String securityId,
+    bool openingOnly = false,
+    bool short = false,
+  }) {
+    final current = investmentFor(accountId);
+    if (current == null || !current.securities.any((s) => s.id == securityId)) {
+      return null;
+    }
+    final removedOpening = current.openingHoldings
+        .where(
+          (h) =>
+              h.securityId == securityId && (!openingOnly || h.short == short),
+        )
+        .toList();
+    final removedEvents = openingOnly
+        ? <StockEvent>[]
+        : current.events.where((e) => e.securityId == securityId).toList();
+    final removedSubscriptions = openingOnly
+        ? <FundSubscription>[]
+        : current.fundSubscriptions
+              .where((s) => s.securityId == securityId)
+              .toList();
+    if (removedOpening.isEmpty &&
+        removedEvents.isEmpty &&
+        removedSubscriptions.isEmpty) {
+      return null;
+    }
+    final now = DateTime.now();
+    final anchor = latestBalanceAnchor(accountId);
+    final cashBefore = investmentCashBalance(
+      portfolio: current,
+      entries: _entries,
+      anchor: anchor,
+      at: now,
+    );
+    final revision = investmentRevision(
+      current,
+      _entries,
+      _balanceAnchors,
+      DateTime.utc(9999, 12, 31),
+    );
+    InvestmentHoldingRemovalIssue? issue;
+    if (current.events.any(
+      (e) => e.securityId == securityId && e.batchId != null,
+    )) {
+      issue = InvestmentHoldingRemovalIssue.transfer;
+    } else if (current.events.any((e) {
+      if (e.kind != StockEventKind.optionPhysicalSettle) return false;
+      final contract = current.securities
+          .where((s) => s.id == e.securityId)
+          .firstOrNull;
+      return e.securityId == securityId ||
+          contract?.option?.underlyingId == securityId;
+    })) {
+      issue = InvestmentHoldingRemovalIssue.physicalSettlement;
+    }
+    // 使用完整稳定 ID 清理同刻已包含事实；不能按前缀模糊匹配而删掉相似 ID 的其他记录。
+    final removedCashIds = <String>{
+      for (final event in removedEvents) 'stock:${event.id}',
+      for (final subscription in removedSubscriptions) ...[
+        'fund:${subscription.id}:payment',
+        'fund:${subscription.id}:refund',
+      ],
+    };
+    var next = current.copyWith(
+      openingHoldings: current.openingHoldings
+          .where((h) => !removedOpening.contains(h))
+          .toList(),
+      events: current.events.where((e) => !removedEvents.contains(e)).toList(),
+      fundSubscriptions: current.fundSubscriptions
+          .where((s) => !removedSubscriptions.contains(s))
+          .toList(),
+      anchorIncludedIds: {
+        for (final entry in current.anchorIncludedIds.entries)
+          entry.key: entry.value
+              .where((id) => !removedCashIds.contains(id))
+              .toList(),
+      },
+    );
+    double? cashAfter;
+    if (issue == null) {
+      try {
+        // 连未来已确认基金起算一起重放；清除完成后不能又由残留确认恢复仓位。
+        final future = projectStocks(next, at: DateTime.utc(9999, 12, 31));
+        final remains = future.positions.any((p) => p.securityId == securityId);
+        if (!openingOnly && remains) {
+          throw const FormatException('删除后仍存在目标证券持仓');
+        }
+        if (!remains) {
+          next = next.copyWith(
+            marketPriceIds: next.marketPriceIds
+                .where((id) => id != securityId)
+                .toSet(),
+          );
+        }
+        validateInvestmentPortfolios([
+          for (final p in _investmentPortfolios)
+            p.accountId == accountId ? next : p,
+        ], _accounts);
+        cashAfter = investmentCashBalance(
+          portfolio: next,
+          entries: _entries,
+          anchor: anchor,
+          at: now,
+          rejectUnfundedHistory: !next.allowFinancing,
+        );
+      } on FormatException {
+        // 预览失败属于可恢复的关联校验，界面显示本地化原因；不记录持仓或金额原文。
+        issue = InvestmentHoldingRemovalIssue.invalidHistory;
+      }
+    }
+    return InvestmentHoldingRemovalPreview._(
+      original: current,
+      securityId: securityId,
+      openingOnly: openingOnly,
+      short: short,
+      openingCount: removedOpening.length,
+      eventCount: removedEvents.length,
+      subscriptionCount: removedSubscriptions.length,
+      cashBefore: cashBefore,
+      cashAfter: cashAfter,
+      issue: issue,
+      candidate: next,
+      revision: revision,
+    );
+  }
+
+  /// 确认并原子保存 [preview] 指定的删除范围；预览本身不构成静默删除授权。
+  /// 串行队列内同时校验原聚合身份与全部资金事实摘要，拒绝确认期间新增的交易或锚点；
+  /// 重新预览后再经统一保存校验，失败保留原 SQLite 和内存，不能只删半份关联事实。
+  Future<bool> removeInvestmentHolding(
+    InvestmentHoldingRemovalPreview preview,
+  ) => _runInvestmentCommand(() async {
+    final current = investmentFor(preview.original.accountId);
+    if (current == null ||
+        !preview.canRemove ||
+        !identical(current, preview.original) ||
+        investmentRevision(
+              current,
+              _entries,
+              _balanceAnchors,
+              DateTime.utc(9999, 12, 31),
+            ) !=
+            preview._revision) {
+      _logger?.warning('持仓删除依据已变化或预览未通过，请重新核对', source: 'investment');
+      return false;
+    }
+    final refreshed = previewInvestmentHoldingRemoval(
+      accountId: current.accountId,
+      securityId: preview.securityId,
+      openingOnly: preview.openingOnly,
+      short: preview.short,
+    );
+    if (refreshed == null ||
+        !refreshed.canRemove ||
+        refreshed.cashBefore != preview.cashBefore ||
+        refreshed.cashAfter != preview.cashAfter) {
+      _logger?.warning('持仓删除的资金或关联依据已变化，请重新核对', source: 'investment');
+      return false;
+    }
+    return _saveInvestmentCandidates([
+      for (final p in _investmentPortfolios)
+        p.accountId == current.accountId ? refreshed._candidate : p,
+    ]);
+  });
 
   /// 设置持续手填参考价；[price] 允许明确的零，不把缺价或网络失败自动当零。
   Future<bool> setStockReferencePrice(

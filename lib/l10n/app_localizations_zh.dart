@@ -6783,6 +6783,52 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investAverageUnitCost => '每股平均成本';
 
   @override
+  String get investClearHolding => '清除持仓';
+
+  @override
+  String get investDeleteOpeningHolding => '删除期初持仓';
+
+  @override
+  String investClearHoldingConfirm(
+    String name,
+    int openingCount,
+    int eventCount,
+    int subscriptionCount,
+    String before,
+    String after,
+  ) {
+    return '$name\n将删除当前账户中该证券的全部多头、空头及历史记录：\n期初 $openingCount 条，投资交易 $eventCount 条，基金申购 $subscriptionCount 笔（含付款、确认及退款）。\n现金：$before → $after\n已有现金核对保持不变，其余现金和盈亏按剩余记录重算。其他证券及账户不会被清除。此操作不可撤销。';
+  }
+
+  @override
+  String investDeleteOpeningConfirm(
+    String name,
+    String direction,
+    int openingCount,
+    String before,
+    String after,
+  ) {
+    return '删除 $name 的$direction期初持仓（$openingCount 条）。后续交易继续保留并重算。\n现金：$before → $after\n未保存的成本草稿不会保存。此操作不可撤销。';
+  }
+
+  @override
+  String get investRemoveTransferBlocked =>
+      '该证券有关联的跨账户转移，暂不支持单独删除，以免改变另一账户的持仓。';
+
+  @override
+  String get investRemoveSettlementBlocked =>
+      '该证券涉及期权实物交割，暂不支持单独删除，以免改变关联股票或期权的记录。';
+
+  @override
+  String get investRemoveHistoryBlocked => '删除会使后续持仓数量或现金不足，未作任何修改。请先核对相关交易。';
+
+  @override
+  String get investHoldingRemoveFailed => '未删除：资料已变化或保存失败，请重新打开确认后重试。';
+
+  @override
+  String get investHoldingRemoved => '已删除持仓记录';
+
+  @override
   String get investCorrectOpeningCost => '更正期初成本';
 
   @override

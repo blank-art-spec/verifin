@@ -1847,6 +1847,84 @@ class _IconChoiceCell extends StatelessWidget {
   }
 }
 
+/// 预览并确认删除当前账户的一只证券，或只删除指定方向的已保存期初持仓。
+/// [accountId] 为真实币种账户，[securityId] 为该账户的证券；[openingOnly] 为 true
+/// 时仅删除 [short] 指定方向的期初记录，不提交页面上尚未保存的成本草稿。
+/// 确认前展示准确范围及现金前后值；取消无写入，命令用预览依据拒绝过期确认。
+Future<bool> showInvestmentHoldingRemovalConfirmation({
+  required BuildContext context,
+  required String accountId,
+  required String securityId,
+  bool openingOnly = false,
+  bool short = false,
+}) async {
+  final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
+  final feedback = VeriFeedbackHost.of(context);
+  final preview = c.previewInvestmentHoldingRemoval(
+    accountId: accountId,
+    securityId: securityId,
+    openingOnly: openingOnly,
+    short: short,
+  );
+  if (preview == null || !preview.canRemove) {
+    final message = switch (preview?.issue) {
+      InvestmentHoldingRemovalIssue.transfer => l.investRemoveTransferBlocked,
+      InvestmentHoldingRemovalIssue.physicalSettlement =>
+        l.investRemoveSettlementBlocked,
+      InvestmentHoldingRemovalIssue.invalidHistory =>
+        l.investRemoveHistoryBlocked,
+      null => l.investHoldingRemoveFailed,
+    };
+    unawaited(
+      feedback.showMessage(message: message, tone: VeriFeedbackTone.error),
+    );
+    return false;
+  }
+  final security = preview.original.securities.firstWhere(
+    (s) => s.id == securityId,
+  );
+  final name = '${security.name} · ${security.symbol}';
+  final currency = preview.original.currencyCode;
+  final before = formatUserMoney(preview.cashBefore, currency);
+  final after = formatUserMoney(preview.cashAfter!, currency);
+  final confirmed = await showConfirmDialog(
+    context,
+    title: openingOnly ? l.investDeleteOpeningHolding : l.investClearHolding,
+    message: openingOnly
+        ? l.investDeleteOpeningConfirm(
+            name,
+            short ? l.investShortPosition : l.investLong,
+            preview.openingCount,
+            before,
+            after,
+          )
+        : l.investClearHoldingConfirm(
+            name,
+            preview.openingCount,
+            preview.eventCount,
+            preview.subscriptionCount,
+            before,
+            after,
+          ),
+    confirmLabel: openingOnly ? l.commonDelete : l.investClearHolding,
+    destructive: true,
+    scrollable: true,
+  );
+  if (!context.mounted || !confirmed) return false;
+  final ok = await runWithLoadingDialog(
+    context: context,
+    task: () => c.removeInvestmentHolding(preview),
+  );
+  // 成功后持仓卡可能已从树中移除；使用确认前取得的根反馈控制器，不再访问旧 context。
+  unawaited(
+    feedback.showMessage(
+      message: ok ? l.investHoldingRemoved : l.investHoldingRemoveFailed,
+      tone: ok ? VeriFeedbackTone.success : VeriFeedbackTone.error,
+    ),
+  );
+  return ok;
+}
+
 Future<String?> showTextInputDialog({
   required BuildContext context,
   required String title,

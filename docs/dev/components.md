@@ -300,6 +300,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 ## 维护约定
 
+- 持仓删除：Controller 的 `previewInvestmentHoldingRemoval` 返回只读 `InvestmentHoldingRemovalPreview`（范围、条数、现金前后及 `InvestmentHoldingRemovalIssue`），`removeInvestmentHolding` 验证原组合和资金事实摘要后原子保存。`sheets.dart` 的 `showInvestmentHoldingRemovalConfirmation(context:, accountId:, securityId:, openingOnly:, short:)` 共用破坏性确认、阻塞进度及根反馈；持仓卡清除该证券全部方向，期初成本页仅删指定方向期初。`showConfirmDialog(scrollable: true)` 为这类长说明提供窄屏/大字号滚动，默认 false 保持其他确认行为。
+
 - 股票期初成本更正：`StockOpeningCostPage`（`pages/stock_opening_cost_page.dart`）复用 `EntryEditorSurface`、`InvestmentSection` 和 `InvestmentInputField`，展示期初股数、每股输入及总额预览；`setStockOpeningCost` 的 `perUnit` 按期初数量计算，`expectedPortfolio` 拒绝过期草稿。`stock_projection.dart` 的 `stockAverageUnitCost(totalCost, quantity)` 为持仓卡和编辑预填共用的八位均价纯函数，不适用于期权乘数，也不能反乘回写未修改的总成本。
 
 - 证券主操作：`InvestmentPage` 在概览后将股票、基金、期权、核对现金四个原入口按两行等宽排列，同排等高且文案完整换行，极窄时单列；额外基金交易入口随后展示。`FundOperationsButton.style` 允许调用方统一操作区的尺寸、对齐与图标大小，默认样式及原基金菜单行为保留。

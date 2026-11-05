@@ -371,6 +371,7 @@ class EntryTagField extends StatelessWidget {
 /// 统一的确认对话框：取消 + 确认两个按钮，返回用户是否确认（取消 / 点外部关闭
 /// 均返回 false）。[destructive] 为 true 时确认按钮用红色（删除 / 清空 / 重置等
 /// 破坏性操作），使全应用的危险操作视觉一致。
+/// [scrollable] 用于含删除范围及金额预览的长说明，开启后窄屏和大字号仍可滚动确认。
 Future<bool> showConfirmDialog(
   BuildContext context, {
   required String title,
@@ -378,11 +379,13 @@ Future<bool> showConfirmDialog(
   String? confirmLabel,
   String? cancelLabel,
   bool destructive = false,
+  bool scrollable = false,
 }) async {
   final l10n = AppLocalizations.of(context);
   final confirmed = await showDialog<bool>(
     context: context,
     builder: (dialogContext) => AlertDialog(
+      scrollable: scrollable,
       title: Text(title),
       content: Text(message),
       actions: <Widget>[

@@ -11,6 +11,7 @@ import '../app/models.dart';
 import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'entry_editor_session.dart';
+import 'sheets.dart';
 
 /// 更正已录入的股票/ETF 期初成本，沿用真实期初数量并预览换算后的总额。
 class StockOpeningCostPage extends StatefulWidget {
@@ -139,6 +140,38 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
     if (await _save() && mounted) _exitController.exit();
   }
 
+  /// 删除当前方向已保存的期初记录；成本输入仍是草稿，不会先保存再删除。
+  /// 先确认页面仍对应原始聚合，避免旧页面误删后来替换的期初；再由共享入口
+  /// 预览后续持仓/现金并原子提交，失败或取消时继续保留此页草稿。
+  Future<void> _deleteOpening() async {
+    if (_saving || _saved) return;
+    final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
+    if (!identical(
+      c.investmentFor(widget.portfolio.accountId),
+      widget.portfolio,
+    )) {
+      setState(() => _error = l.investCostChanged);
+      return;
+    }
+    setState(() {
+      _saving = true;
+      _error = null;
+    });
+    final ok = await showInvestmentHoldingRemovalConfirmation(
+      context: context,
+      accountId: widget.portfolio.accountId,
+      securityId: widget.holding.securityId,
+      openingOnly: true,
+      short: widget.holding.short,
+    );
+    if (!mounted) return;
+    setState(() {
+      _saving = false;
+      _saved = ok;
+    });
+    if (ok) _exitController.exit();
+  }
+
   /// 复用证券输入组件、实色卡片和标准页面骨架，预览只读且随输入即时更新。
   /// [context] 提供当前语言、金额显示偏好及账本作用域，窄屏/大字号自然换行。
   @override
@@ -241,6 +274,15 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
               FilledButton(
                 onPressed: !_saving && !_saved && _dirty ? _saveAndClose : null,
                 child: Text(l.commonSave),
+              ),
+              const SizedBox(height: 8),
+              TextButton.icon(
+                onPressed: _saving || _saved ? null : _deleteOpening,
+                style: TextButton.styleFrom(
+                  foregroundColor: veriSemantic(context, veriExpense),
+                ),
+                icon: const Icon(Icons.delete_outline),
+                label: Text(l.investDeleteOpeningHolding),
               ),
             ],
           ),

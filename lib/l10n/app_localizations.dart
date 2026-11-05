@@ -12278,6 +12278,73 @@ abstract class AppLocalizations {
   /// **'每股平均成本'**
   String get investAverageUnitCost;
 
+  /// No description provided for @investClearHolding.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除持仓'**
+  String get investClearHolding;
+
+  /// No description provided for @investDeleteOpeningHolding.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除期初持仓'**
+  String get investDeleteOpeningHolding;
+
+  /// 删除持仓的范围与现金预览说明
+  ///
+  /// In zh, this message translates to:
+  /// **'{name}\n将删除当前账户中该证券的全部多头、空头及历史记录：\n期初 {openingCount} 条，投资交易 {eventCount} 条，基金申购 {subscriptionCount} 笔（含付款、确认及退款）。\n现金：{before} → {after}\n已有现金核对保持不变，其余现金和盈亏按剩余记录重算。其他证券及账户不会被清除。此操作不可撤销。'**
+  String investClearHoldingConfirm(
+    String name,
+    int openingCount,
+    int eventCount,
+    int subscriptionCount,
+    String before,
+    String after,
+  );
+
+  /// 删除持仓的范围与现金预览说明
+  ///
+  /// In zh, this message translates to:
+  /// **'删除 {name} 的{direction}期初持仓（{openingCount} 条）。后续交易继续保留并重算。\n现金：{before} → {after}\n未保存的成本草稿不会保存。此操作不可撤销。'**
+  String investDeleteOpeningConfirm(
+    String name,
+    String direction,
+    int openingCount,
+    String before,
+    String after,
+  );
+
+  /// No description provided for @investRemoveTransferBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'该证券有关联的跨账户转移，暂不支持单独删除，以免改变另一账户的持仓。'**
+  String get investRemoveTransferBlocked;
+
+  /// No description provided for @investRemoveSettlementBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'该证券涉及期权实物交割，暂不支持单独删除，以免改变关联股票或期权的记录。'**
+  String get investRemoveSettlementBlocked;
+
+  /// No description provided for @investRemoveHistoryBlocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'删除会使后续持仓数量或现金不足，未作任何修改。请先核对相关交易。'**
+  String get investRemoveHistoryBlocked;
+
+  /// No description provided for @investHoldingRemoveFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未删除：资料已变化或保存失败，请重新打开确认后重试。'**
+  String get investHoldingRemoveFailed;
+
+  /// No description provided for @investHoldingRemoved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已删除持仓记录'**
+  String get investHoldingRemoved;
+
   /// No description provided for @investCorrectOpeningCost.
   ///
   /// In zh, this message translates to:
