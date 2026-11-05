@@ -279,3 +279,19 @@ Android 已通过 github flavor、release/R8、arm64 的本地编译，
 当前生产工厂另提供需单独配置的 Alpaca OPRA 期权来源；股票依然不需要凭证。
 超过 20 项持仓分批刷新，批次失败保留旧值并继续；超过 24 小时的参考报价会提示，
 不把抓取成功当作报价更新。完整期权边界见[期权来源记录](us-option-quote-source.md)。
+
+## 2026-11-05 ETF 后缀与标的隔离核对
+
+SNDG 是独立的两倍做多 SNDK ETF，身份由
+[发行方](https://leverageshares.com/us/etfs/leverage-shares-2x-long-sndk-daily-etf)和
+[Cboe](https://www.cboe.com/us/equities/listings/listed_products/symbols/SNDG/)核对。
+15:39:53 UTC 的腾讯原始响应中，SNDG/SPY/VTI 的来源代码后缀为 `.AM`、类型为 `GP-ETF`；
+旧解析只接受 `.OQ/.N`，因此错误拒收了 SNDG 报价。现额外接受完整代码匹配且类型为
+`GP-ETF` 的 `.AM`，保留 USD、市场标记、源时间、字节上限等校验；`.AM` 仅是来源后缀，
+不据此推断真实挂牌交易所。成交价格按 ETF 自身每份价格读取，不取标的股票价、不另乘杠杆。
+同批八项原始响应及时间元数据见 `test/fixtures/investments/tencent_etfs_20261105.*`。
+
+15:45:36 UTC 同批请求返回 TSLL.OQ=8.34、TSLA.OQ=347.86；smartbox 分别返回各自代码与名称。
+原始双标的夹具为 `tencent_tsll_tsla_20261105.*`，身份查询夹具为
+`tencent_security_search_tsll_20261105.json`。测试覆盖请求顺序变化和错配身份拒收，
+不能把这次历史采样价视为当前报价。旧 `.AM` 响应未入缓存，无需凭此批量清理其他来源报价。

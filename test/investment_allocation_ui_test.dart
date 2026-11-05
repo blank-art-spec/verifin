@@ -124,6 +124,67 @@ Future<void> _expectPositionShare(
 /// 无参数、无返回值；所有场景使用隔离控制器，不连接设备或真实行情服务。
 void main() {
   useTestDatabases();
+  testWidgets('JPM 碎股卡显示可核对的市值，顶部只加一次剩余现金', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    final account = investmentAccountFixture();
+    controller.addAccount(account);
+    await controller.waitForPendingWrites();
+    const jpm = StockSecurity(
+      symbol: 'JPM',
+      name: '摩根大通',
+      market: StockMarket.us,
+      currencyCode: 'USD',
+    );
+    expect(
+      await controller.enableInvestment(
+        accountId: account.id,
+        openingCash: '438.77',
+        openedAt: DateTime(2026, 10, 1),
+        securities: const [jpm],
+        openingHoldings: [
+          StockHolding(
+            securityId: jpm.id,
+            short: false,
+            quantity: '1.7',
+            cost: '567.60',
+          ),
+        ],
+        manualPrices: {jpm.id: '344.27'},
+      ),
+      isTrue,
+    );
+    await _pumpAllocationPage(tester, controller, accountId: account.id);
+    final l = AppLocalizations.of(tester.element(find.byType(InvestmentPage)));
+    expect(_metric(tester, l.investCash).value, contains('438.77'));
+    expect(_metric(tester, l.investLongValue).value, contains('585.26'));
+    expect(_metric(tester, l.investUnrealized).value, contains('17.66'));
+    expect(find.textContaining('1024.03'), findsOneWidget);
+    final scroll = find
+        .descendant(
+          of: find.byType(InvestmentPage),
+          matching: find.byType(Scrollable),
+        )
+        .first;
+    final valueRow = find.byWidgetPredicate(
+      (widget) =>
+          widget is DetailInfoRow &&
+          widget.label == l.investPositionMarketValue,
+    );
+    await tester.scrollUntilVisible(
+      valueRow,
+      180,
+      scrollable: scroll,
+      maxScrolls: 50,
+    );
+    expect(tester.widget<DetailInfoRow>(valueRow).value, contains('585.26'));
+    expect(tester.takeException(), isNull);
+    expect(
+      controller.investmentFor(account.id)!.openingHoldings.single.cost,
+      '567.60',
+    );
+  });
+
   for (final scenario in [
     (
       locale: const Locale('zh'),

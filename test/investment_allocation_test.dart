@@ -28,6 +28,52 @@ InvestmentAccountValuation _valuation({
 
 /// 注册证券资产占比的纯计算回归，无参数、无返回值；不联网、写库或连接设备。
 void main() {
+  test('已知 JPM 碎股与 TSLL 持仓按每股价汇总，不额外乘 ETF 杠杆倍数', () {
+    const jpm = StockSecurity(
+      symbol: 'JPM',
+      name: 'JPM',
+      market: StockMarket.us,
+      currencyCode: 'USD',
+    );
+    const tsll = StockSecurity(
+      symbol: 'TSLL',
+      name: 'TSLL',
+      market: StockMarket.us,
+      currencyCode: 'USD',
+    );
+    // 只复现用户已提供完整量价的两项及现金，不把它当作用户完整账户。
+    final portfolio = InvestmentPortfolio(
+      accountId: 'fractional-usd',
+      bookId: defaultLedgerBookId,
+      currencyCode: 'USD',
+      openedAt: DateTime(2026, 10, 1),
+      openingCash: '438.77',
+      securities: const [jpm, tsll],
+      openingHoldings: [
+        StockHolding(
+          securityId: jpm.id,
+          short: false,
+          quantity: '1.7',
+          cost: '567.60',
+        ),
+        StockHolding(
+          securityId: tsll.id,
+          short: false,
+          quantity: '160',
+          cost: '1974.40',
+        ),
+      ],
+      manualPrices: {jpm.id: '344.27', tsll.id: '8.42'},
+    );
+    final cash = investmentCashBalance(portfolio: portfolio, entries: []);
+    final valuation = valueInvestmentAccount(portfolio, cash);
+    // 两项按美元分分别舍入：585.26 + 1347.20，不额外乘 ETF 杠杆倍数。
+    expect(cash, 438.77);
+    expect(valuation.longValue, 1932.46);
+    expect(valuation.amounts!.net, closeTo(2371.23, 1e-9));
+    expect(valuation.unrealized, -609.54);
+  });
+
   test('真实测试模板：现金与双标的持仓按同一总资产计算', () {
     final root =
         jsonDecode(

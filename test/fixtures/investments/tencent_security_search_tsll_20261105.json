@@ -1,0 +1,16 @@
+{
+  "TSLL": {
+    "Symbol": "TSLL",
+    "Url": "https://smartbox.gtimg.cn/s3/?q=TSLL&t=all",
+    "Status": 200,
+    "Response": "v_hint=\"us~tsll.oq~2\\u500d\\u505a\\u591a\\u7279\\u65af\\u62c9etfdirexion~2bzdtsletfdirexion~GP\"",
+    "FetchedAtUtc": "2026-11-05T15:46:23.7024697Z"
+  },
+  "TSLA": {
+    "Symbol": "TSLA",
+    "Url": "https://smartbox.gtimg.cn/s3/?q=TSLA&t=all",
+    "Status": 200,
+    "Response": "v_hint=\"us~tsla.oq~\\u7279\\u65af\\u62c9~tsl~GP\"",
+    "FetchedAtUtc": "2026-11-05T15:46:24.1342776Z"
+  }
+}

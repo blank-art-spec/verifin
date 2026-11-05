@@ -13,7 +13,7 @@ import '../l10n/app_localizations.dart';
 import 'entry_editor_session.dart';
 import 'sheets.dart';
 
-/// 更正已录入的股票/ETF 期初成本，沿用真实期初数量并预览换算后的总额。
+/// 更正已录入的股票/ETF 期初数量与每股成本，预览换算后的总额。
 class StockOpeningCostPage extends StatefulWidget {
   /// [portfolio] 必须是 Controller 的原始聚合，用于保存时拒绝过期草稿。
   /// [holding] 为其中同证券、同方向的期初持仓；不接收当前剩余数量或期权仓位。
@@ -33,10 +33,11 @@ class StockOpeningCostPage extends StatefulWidget {
 
 class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
   final _exitController = EditorExitController();
-  late final TextEditingController _unitCost;
+  late final TextEditingController _quantity, _unitCost;
   late final String _initialText;
   bool _saving = false;
   bool _saved = false;
+  bool _unitCostEdited = false;
   String? _error;
 
   /// 以原总成本除以期初股数预填均价；未知成本仍为空，不伪造零成本。
@@ -49,6 +50,9 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
     final average = stockAverageUnitCost(
       originalCost,
       InvestmentDecimal.parse(widget.holding.quantity),
+      cashDigits: CurrencyCatalog.require(
+        widget.portfolio.currencyCode,
+      ).minorUnit,
     );
     // 非零总成本的均价可能小于八位精度；留空待核对，使明确输入 0 仍能表达归零。
     _initialText =
@@ -57,34 +61,59 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
         ? ''
         : average.toString();
     _unitCost = TextEditingController(text: _initialText);
+    _quantity = TextEditingController(text: widget.holding.quantity);
   }
 
   /// 释放输入框资源；持久化只发生在用户明确保存时。
   @override
   void dispose() {
     _unitCost.dispose();
+    _quantity.dispose();
     super.dispose();
   }
 
   /// 比较原始文本以驱动离页提醒；成功后不再把已提交内容当作未保存草稿。
-  bool get _dirty => !_saved && _unitCost.text.trim() != _initialText;
+  bool get _dirty =>
+      !_saved &&
+      (_unitCost.text.trim() != _initialText ||
+          _quantity.text.trim() != widget.holding.quantity ||
+          (_unitCostEdited &&
+              _initialText.isEmpty &&
+              widget.holding.cost != null));
 
   /// 仅修改了数字格式时保留原总成本，避免八位均价反乘后改变原始现金精度总额。
   /// [unitCost] 是已解析的非负输入，不将用于展示的均价当作权威成本替换依据。
-  bool _keepsOriginalTotal(InvestmentDecimal unitCost) =>
+  bool _keepsOriginalTotal(
+    InvestmentDecimal quantity,
+    InvestmentDecimal unitCost,
+  ) =>
       widget.holding.cost != null &&
       _initialText.isNotEmpty &&
+      quantity.compareTo(InvestmentDecimal.parse(widget.holding.quantity)) ==
+          0 &&
       unitCost.compareTo(InvestmentDecimal.parse(_initialText)) == 0;
 
+  /// 数量以八位定点解析；零数量应使用删除期初入口，不把更正偷偷变成删除。
+  InvestmentDecimal _readQuantity() {
+    final quantity = InvestmentDecimal.parse(_quantity.text);
+    if (quantity.units <= BigInt.zero) {
+      throw const FormatException('期初数量必须为正');
+    }
+    return quantity;
+  }
+
   /// 校验每股成本并计算期初总成本；[unitCost] 不能为负，合法零成本允许保存。
-  /// 按期初股数相乘后只舍入一次；非法/超范围输入由表单显示本地化错误。
-  InvestmentDecimal _totalCost(InvestmentDecimal unitCost) {
+  /// 按草稿股数相乘后只舍入一次；留空表示未知，非法/超范围输入显示本地化错误。
+  InvestmentDecimal _totalCost(
+    InvestmentDecimal quantity,
+    InvestmentDecimal unitCost,
+  ) {
     if (unitCost.units < BigInt.zero) {
       throw const FormatException('期初单位成本不能为负');
     }
-    final total = _keepsOriginalTotal(unitCost)
+    final total = _keepsOriginalTotal(quantity, unitCost)
         ? InvestmentDecimal.parse(widget.holding.cost!)
-        : InvestmentDecimal.parse(widget.holding.quantity).moneyProduct(
+        : quantity.moneyProduct(
             unitCost,
             CurrencyCatalog.require(widget.portfolio.currencyCode).minorUnit,
           );
@@ -92,8 +121,21 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
     return total;
   }
 
+  /// 留空保持未知；原总成本无法换算成可输入均价时，空白是保留原金额的显示回退，
+  /// 不能仅因更正数量或数字格式就抹去已知成本。明确编辑均价后清空才表示未知。
+  InvestmentDecimal? _readTotalCost(InvestmentDecimal quantity) {
+    if (_unitCost.text.trim().isEmpty) {
+      return !_unitCostEdited &&
+              _initialText.isEmpty &&
+              widget.holding.cost != null
+          ? InvestmentDecimal.parse(widget.holding.cost!)
+          : null;
+    }
+    return _totalCost(quantity, InvestmentDecimal.parse(_unitCost.text));
+  }
+
   /// 保存到同一账本、同一原始聚合；冲突或落库失败保留草稿供核对，不关闭页面。
-  /// Controller 负责串行重放及原子写入，此处只提供单位成本和并发校验依据。
+  /// Controller 负责串行重放及原子写入，此处提供明确数量、总成本及并发校验依据。
   Future<bool> _save() async {
     if (_saving || _saved) return false;
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
@@ -104,10 +146,16 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
       setState(() => _error = l.investCostChanged);
       return false;
     }
-    late InvestmentDecimal unitCost;
+    late InvestmentDecimal quantity;
+    InvestmentDecimal? totalCost;
     try {
-      unitCost = InvestmentDecimal.parse(_unitCost.text);
-      _totalCost(unitCost);
+      quantity = _readQuantity();
+    } on FormatException {
+      setState(() => _error = l.investOpeningQuantityInvalid);
+      return false;
+    }
+    try {
+      totalCost = _readTotalCost(quantity);
     } on FormatException {
       // 输入错误属于可恢复的字段校验；不记录敏感金额，保留原文让用户直接修正。
       setState(() => _error = l.investUnitCostInvalid);
@@ -117,13 +165,12 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
       _saving = true;
       _error = null;
     });
-    final keepTotal = _keepsOriginalTotal(unitCost);
-    final ok = await c.setStockOpeningCost(
+    final ok = await c.setStockOpeningHolding(
       widget.portfolio.accountId,
       widget.holding.securityId,
       widget.holding.short,
-      keepTotal ? widget.holding.cost! : unitCost.toString(),
-      perUnit: !keepTotal,
+      quantity: quantity.toString(),
+      cost: totalCost?.toString(),
       expectedPortfolio: widget.portfolio,
     );
     if (!mounted) return ok;
@@ -205,9 +252,7 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
     );
     InvestmentDecimal? total;
     try {
-      total = !_dirty && widget.holding.cost != null
-          ? InvestmentDecimal.parse(widget.holding.cost!)
-          : _totalCost(InvestmentDecimal.parse(_unitCost.text));
+      total = _readTotalCost(_readQuantity());
     } on FormatException {
       // 空白或尚未输入完成时不制造零总额；提交时再显示字段校验错误。
     }
@@ -230,10 +275,18 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
                   Text(
                     widget.holding.short ? l.investShortPosition : l.investLong,
                   ),
-                  DetailInfoRow(
-                    inline: true,
+                  InvestmentInputField(
                     label: l.investOpeningShares,
-                    value: widget.holding.quantity,
+                    child: TextField(
+                      key: const ValueKey('stock-opening-quantity'),
+                      controller: _quantity,
+                      readOnly: _saving || _saved,
+                      keyboardType: const TextInputType.numberWithOptions(
+                        decimal: true,
+                      ),
+                      decoration: investmentInputDecoration(context),
+                      onChanged: (_) => setState(() => _error = null),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   InvestmentInputField(
@@ -241,11 +294,15 @@ class _StockOpeningCostPageState extends State<StockOpeningCostPage> {
                     child: TextField(
                       key: const ValueKey('stock-opening-unit-cost'),
                       controller: _unitCost,
+                      readOnly: _saving || _saved,
                       keyboardType: const TextInputType.numberWithOptions(
                         decimal: true,
                       ),
                       decoration: investmentInputDecoration(context),
-                      onChanged: (_) => setState(() => _error = null),
+                      onChanged: (_) => setState(() {
+                        _unitCostEdited = true;
+                        _error = null;
+                      }),
                     ),
                   ),
                   DetailInfoRow(

@@ -661,7 +661,7 @@ class _StockPositionCard extends StatelessWidget {
   final InvestmentAccountValuation accountValuation;
   final VoidCallback onTransfer, onTrade;
 
-  /// 展示方向、数量、每股成本、总成本、参考价及占总资产比例；未知成本不显示成零。
+  /// 展示方向、数量、每股成本、总成本、参考价、市值及占总资产比例；未知成本不显示成零。
   /// 多头以市值计算持仓占比，空头以回补义务单列，期权沿用显式权利金乘数。
   @override
   Widget build(BuildContext context) {
@@ -695,7 +695,13 @@ class _StockPositionCard extends StatelessWidget {
         : value - position.cost!;
     final ordinaryStock = !security.isFund && security.option == null;
     final averageCost = ordinaryStock
-        ? stockAverageUnitCost(position.cost, position.quantity)
+        ? stockAverageUnitCost(
+            position.cost,
+            position.quantity,
+            cashDigits: CurrencyCatalog.require(
+              portfolio.currencyCode,
+            ).minorUnit,
+          )
         : null;
     // 从原始聚合定位期初事实；行情估值副本不能作为编辑并发校验的基线。
     final originalPortfolio = c.investmentFor(accountId);
@@ -804,6 +810,15 @@ class _StockPositionCard extends StatelessWidget {
           if (quoteReference == null &&
               portfolio.marketPriceIds.contains(security.id))
             InvestmentHint(l.marketNoQuote),
+          DetailInfoRow(
+            inline: true,
+            label: position.short
+                ? l.investShortObligation
+                : l.investPositionMarketValue,
+            value: value == null
+                ? l.investUnknown
+                : formatUserMoney(value.toDouble(), portfolio.currencyCode),
+          ),
           DetailInfoRow(
             inline: true,
             label: position.short ? l.investShortShare : l.investHoldingsShare,
@@ -1202,6 +1217,7 @@ class _StockEditorPageState extends State<StockEditorPage> {
       final average = stockAverageUnitCost(
         originalCost,
         InvestmentDecimal.parse(opening.holding.quantity),
+        cashDigits: CurrencyCatalog.require(account.currencyCode).minorUnit,
       );
       // 不可表示的均价留空；未改数量及成本时始终保留原始总额。
       _initialOpeningUnitCost =

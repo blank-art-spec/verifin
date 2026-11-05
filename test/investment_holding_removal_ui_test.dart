@@ -269,7 +269,7 @@ void main() {
       isTrue,
     );
     await _pumpRemovalPage(tester, controller);
-    final edit = find.widgetWithText(TextButton, '更正期初成本');
+    final edit = find.widgetWithText(TextButton, '更正期初持仓');
     await _revealRemovalAction(tester, edit, InvestmentPage);
     await tester.tap(edit);
     await tester.pumpAndSettle();
@@ -338,7 +338,7 @@ void main() {
     final controller = await _removalController();
     final account = investmentAccountFixture();
     await _pumpRemovalPage(tester, controller);
-    final edit = find.widgetWithText(TextButton, '更正期初成本');
+    final edit = find.widgetWithText(TextButton, '更正期初持仓');
     await _revealRemovalAction(tester, edit, InvestmentPage);
     await tester.tap(edit);
     await tester.pumpAndSettle();
@@ -366,7 +366,7 @@ void main() {
 
     expect(find.byType(AlertDialog), findsNothing);
     expect(find.byType(StockOpeningCostPage), findsOneWidget);
-    expect(find.text('持仓资料已变化，请返回后重新打开成本更正。当前草稿尚未保存。'), findsOneWidget);
+    expect(find.text('持仓资料已变化，请返回后重新打开期初持仓更正。当前草稿尚未保存。'), findsOneWidget);
     expect(identical(controller.investmentFor(account.id), updated), isTrue);
     expect(updated.openingHoldings.single.cost, '400');
     expect(updated.openingHoldings.single.quantity, '3');

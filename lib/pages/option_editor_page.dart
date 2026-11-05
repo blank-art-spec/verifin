@@ -9,7 +9,10 @@ import '../app/common_widgets.dart';
 import '../app/currency_catalog.dart';
 import '../app/investments/investment_decimal.dart';
 import '../app/investments/investment_opening_draft.dart';
+import '../app/investments/investment_security_autocomplete.dart';
+import '../app/investments/investment_security_suggestions.dart';
 import '../app/investments/investment_widgets.dart';
+import '../app/investments/us_option_symbol.dart';
 import '../app/currency_math.dart';
 import '../app/investments/stock_projection.dart';
 import '../app/models.dart';
@@ -88,6 +91,11 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   OptionRight _right = OptionRight.call;
   OptionSettlement _settlement = OptionSettlement.unsupported;
   StockEventKind _kind = StockEventKind.optionBuyOpen;
+  bool _searchingUnderlying = false, _lookupVisible = true;
+  int _underlyingSearchGeneration = 0, _underlyingOpenRequest = 0;
+  List<StockSecurity> _onlineUnderlyings = const [];
+  String? _underlyingSearchMessage, _underlyingSearchQuery;
+  (String, String)? _observedUnderlyingInputs;
   _OptionDraft? _draft;
   InvestmentOpeningHolding? _openingResult;
   String? _previewInputSnapshot;
@@ -129,7 +137,17 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
-    if (_loaded) return;
+    final visible =
+        Visibility.of(context) && (ModalRoute.of(context)?.isCurrent ?? true);
+    if (_loaded) {
+      if ((_lookupVisible && !visible) ||
+          VeriFinScope.of(context).activeBook.id != _bookId) {
+        _clearUnderlyingSearch();
+      }
+      _lookupVisible = visible;
+      return;
+    }
+    _lookupVisible = visible;
     _loaded = true;
     final c = VeriFinScope.of(context), p = _portfolio;
     _bookId = c.activeBook.id;
@@ -207,10 +225,17 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       _fields['underlyingPrice']!.text = opening.underlyingPrice ?? '';
     }
     _initialEditorSnapshot = _editorSnapshot;
+    _observedUnderlyingInputs = (
+      _fields['underlying']!.text,
+      _fields['symbol']!.text,
+    );
+    _fields['underlying']!.addListener(_underlyingInputChanged);
+    _fields['symbol']!.addListener(_underlyingInputChanged);
   }
 
   /// 载入明确选择的合约；不从 AVGO 行情页猜乘数、到期日或交割股数。
   void _loadContract(StockSecurity s, InvestmentPortfolio p) {
+    _clearUnderlyingSearch();
     final o = s.option!;
     final underlying = p.securities.firstWhere((v) => v.id == o.underlyingId);
     _selected = s.id;
@@ -252,6 +277,9 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   /// 释放所有输入资源，取消或系统返回均不持久化草稿。
   @override
   void dispose() {
+    _underlyingSearchGeneration++;
+    _fields['underlying']?.removeListener(_underlyingInputChanged);
+    _fields['symbol']?.removeListener(_underlyingInputChanged);
     for (final f in _fields.values) {
       f.dispose();
     }
@@ -278,6 +306,195 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       decoration: investmentInputDecoration(context),
     ),
   );
+
+  /// 手填标的优先；完整 OCC 合约代码只能辅助提取标的，不能自动填写其他合约条款。
+  String get _underlyingQuery {
+    final typed = _fields['underlying']!.text.trim();
+    if (_market != StockMarket.us) return typed;
+    final symbol = typed.isEmpty ? _fields['symbol']!.text.trim() : typed;
+    return parseUsOptionSymbol(symbol.toUpperCase())?.underlyingSymbol ?? typed;
+  }
+
+  /// 请求修订只保留当前草稿身份，不含数量、成本、价格或私有备注。
+  String get _underlyingLookupContext => jsonEncode([
+    _bookId,
+    widget.accountId,
+    _market.name,
+    _selected,
+    _fields['underlying']!.text,
+    _fields['symbol']!.text,
+  ]);
+
+  /// 清理仅属于本页的候选；任何代码、市场或既有合约变动都使旧响应失效。
+  void _clearUnderlyingSearch() {
+    _underlyingSearchGeneration++;
+    _searchingUnderlying = false;
+    _onlineUnderlyings = const [];
+    _underlyingSearchMessage = null;
+    _underlyingSearchQuery = null;
+  }
+
+  /// 自动补全使用同一文本控制器，输入和候选点选都要撤销旧预览；不自动联网。
+  void _underlyingInputChanged() {
+    if (!mounted) return;
+    final inputs = (_fields['underlying']!.text, _fields['symbol']!.text);
+    // 光标、选区或焦点变化不能清空刚收到的身份候选；仅真实输入变化才撤销查询。
+    if (inputs == _observedUnderlyingInputs) return;
+    _observedUnderlyingInputs = inputs;
+    setState(() {
+      _clearUnderlyingSearch();
+      _invalidate();
+    });
+  }
+
+  /// 复用股票身份候选，当前账户、本账本同币种以及本次远端结果都只用于填代码/名称。
+  Widget _underlyingField(
+    InvestmentPortfolio portfolio, {
+    required bool locked,
+  }) {
+    final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
+    final suggestions = collectInvestmentSecuritySuggestions(
+      portfolios: [
+        portfolio,
+        ...c.accounts
+            .where((account) => account.currencyCode == portfolio.currencyCode)
+            .map((account) => c.investmentFor(account.id))
+            .whereType<InvestmentPortfolio>(),
+      ],
+      bookId: _bookId,
+      accountId: widget.accountId,
+      currencyCode: portfolio.currencyCode,
+      market: _market,
+      type: InvestmentSecurityType.stock,
+      remoteSecurities: _onlineUnderlyings,
+      remoteQuery: _underlyingSearchQuery,
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        InvestmentSecurityAutocomplete(
+          controller: _fields['underlying']!,
+          fieldKey: const ValueKey('option-underlying'),
+          label: l.optionUnderlying,
+          suggestions: suggestions,
+          readOnly: locked || _busy || _submitted,
+          openRequest: _underlyingOpenRequest,
+          onSelected: (suggestion) => setState(() {
+            _fields['underlyingName']!.text = suggestion.security.name;
+            // 即使候选来自当前账户，也不复制参考价、成本或任何期权条款。
+            _clearUnderlyingSearch();
+            _invalidate();
+          }),
+        ),
+        if (!locked) ...[
+          OutlinedButton.icon(
+            key: const Key('option-underlying-search-online'),
+            style: investmentOutlineButtonStyle(context),
+            onPressed:
+                _busy ||
+                    _submitted ||
+                    _searchingUnderlying ||
+                    _underlyingQuery.isEmpty
+                ? null
+                : _searchUnderlying,
+            icon: const Icon(Icons.search),
+            label: Text(
+              _searchingUnderlying ? l.commonProcessing : l.investSearchOnline,
+            ),
+          ),
+          const SizedBox(height: 6),
+          InvestmentHint(l.investSearchOnlineConsent),
+          if (_underlyingSearchMessage != null) ...[
+            const SizedBox(height: 8),
+            InvestmentHint(_underlyingSearchMessage!),
+          ],
+          const SizedBox(height: 8),
+        ],
+      ],
+    );
+  }
+
+  /// 点击才发送公开标的代码或名称；OCC 输入只提取标的，候选必须由用户明确选择。
+  Future<void> _searchUnderlying() async {
+    final c = VeriFinScope.of(context), portfolio = _portfolio;
+    final query = _underlyingQuery;
+    if (_busy ||
+        _submitted ||
+        _searchingUnderlying ||
+        portfolio == null ||
+        (!_opening && _selected != null) ||
+        !_hasValidAccount(portfolio) ||
+        query.isEmpty) {
+      return;
+    }
+    // 明确点击查询时展示实际要查询的标的代码，保留合约代码及用户的所有条款输入。
+    if (_fields['underlying']!.text.trim() != query) {
+      _fields['underlying']!.text = query;
+    }
+    final generation = ++_underlyingSearchGeneration;
+    final snapshot = _underlyingLookupContext;
+    setState(() {
+      _searchingUnderlying = true;
+      _onlineUnderlyings = const [];
+      _underlyingSearchMessage = null;
+      _underlyingSearchQuery = null;
+    });
+    bool current() =>
+        mounted &&
+        generation == _underlyingSearchGeneration &&
+        snapshot == _underlyingLookupContext &&
+        !_busy &&
+        !_submitted &&
+        _hasValidAccount(portfolio) &&
+        Visibility.of(context) &&
+        (ModalRoute.of(context)?.isCurrent ?? true);
+    void discard() {
+      if (mounted && generation == _underlyingSearchGeneration) {
+        setState(_clearUnderlyingSearch);
+      }
+    }
+
+    try {
+      final securities = await c.searchInvestmentSecurities(
+        query,
+        market: _market,
+        currencyCode: portfolio.currencyCode,
+      );
+      if (!current()) {
+        discard();
+        return;
+      }
+      final eligible = securities
+          .where(
+            (security) =>
+                security.isStock &&
+                security.market == _market &&
+                security.currencyCode == portfolio.currencyCode,
+          )
+          .toList();
+      setState(() {
+        _searchingUnderlying = false;
+        _onlineUnderlyings = eligible;
+        _underlyingSearchQuery = query;
+        if (eligible.isNotEmpty) _underlyingOpenRequest++;
+        _underlyingSearchMessage = eligible.isEmpty
+            ? AppLocalizations.of(context).investSearchNoResults
+            : null;
+      });
+    } catch (_) {
+      // Controller 已记录脱敏错误类型；仅反馈查询失败，保留手填草稿。
+      if (!current()) {
+        discard();
+        return;
+      }
+      setState(() {
+        _searchingUnderlying = false;
+        _underlyingSearchMessage = AppLocalizations.of(
+          context,
+        ).investSearchOnlineFailed;
+      });
+    }
+  }
 
   /// 用文本事实建立候选；每张行权现金直接取输入，不用行权价乘股数猜调整合约。
   ({StockSecurity security, StockSecurity underlying}) _readSecurities(
@@ -505,6 +722,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   /// 提交已预览的冻结事实；保存失败不退页，不宣称已落账。
   Future<bool> _save(InvestmentPortfolio p) async {
     if (_busy || _submitted) return false;
+    _clearUnderlyingSearch();
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
     if (_opening) {
       if (!_hasValidAccount(p)) {
@@ -753,12 +971,13 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                         labelOf: (v) => v.label(l),
                         onSelected: (v) => setState(() {
                           _market = v;
+                          _clearUnderlyingSearch();
                           _invalidate();
                         }),
                       ),
                     _field('symbol', l.optionCode, locked: locked),
                     _field('name', l.investName),
-                    _field('underlying', l.optionUnderlying, locked: locked),
+                    _underlyingField(p, locked: locked),
                     _field('underlyingName', l.optionUnderlyingName),
                   ],
                 ),

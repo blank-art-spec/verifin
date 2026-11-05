@@ -1,0 +1,8 @@
+{
+  "Url": "https://qt.gtimg.cn/q=usTSLL,usTSLA",
+  "Status": 200,
+  "Length": 689,
+  "FetchedAtUtc": "2026-11-05T15:45:36.8875413Z",
+  "Notes": "腾讯匿名公开原始响应，同批请求TSLL/TSLA；TSLL是独立ETF，不替换为TSLA标的价格，也不额外乘杠杆倍数。",
+  "IdentitySource": "https://www.direxion.com/product/daily-tsla-bull-and-bear-leveraged-single-stock-etfs"
+}

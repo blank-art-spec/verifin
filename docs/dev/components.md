@@ -312,7 +312,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 持仓删除：Controller 的 `previewInvestmentHoldingRemoval` 返回只读 `InvestmentHoldingRemovalPreview`（范围、条数、现金前后及 `InvestmentHoldingRemovalIssue`），`removeInvestmentHolding` 验证原组合和资金事实摘要后原子保存。`sheets.dart` 的 `showInvestmentHoldingRemovalConfirmation(context:, accountId:, securityId:, openingOnly:, short:)` 共用破坏性确认、阻塞进度及根反馈；持仓卡清除该证券全部方向，期初成本页仅删指定方向期初。`showConfirmDialog(scrollable: true)` 为这类长说明提供窄屏/大字号滚动，默认 false 保持其他确认行为。
 
-- 股票期初成本更正：`StockOpeningCostPage`（`pages/stock_opening_cost_page.dart`）复用 `EntryEditorSurface`、`InvestmentSection` 和 `InvestmentInputField`，展示期初股数、每股输入及总额预览；`setStockOpeningCost` 的 `perUnit` 按期初数量计算，`expectedPortfolio` 拒绝过期草稿。`stock_projection.dart` 的 `stockAverageUnitCost(totalCost, quantity)` 为持仓卡和编辑预填共用的八位均价纯函数，不适用于期权乘数，也不能反乘回写未修改的总成本。
+- 股票期初持仓更正：`StockOpeningCostPage`（`pages/stock_opening_cost_page.dart`）复用 `EntryEditorSurface`、`InvestmentSection` 和 `InvestmentInputField`，可填写期初股数、每股成本并预览总额；`setStockOpeningHolding` 原子修改数量/成本，完整重放后续交易并检查跨账户转移，`expectedPortfolio` 拒绝过期草稿。旧 `setStockOpeningCost` 保留原签名和数量不变的语义。`stock_projection.dart` 的 `stockAverageUnitCost(totalCost, quantity, cashDigits: ...)` 为持仓卡和编辑预填共用的均价函数，取能反乘还原总成本的最短精度，最多八位；不适用于期权乘数，也不能反乘回写未修改的总成本。
 
 - 证券主操作：`InvestmentPage` 在概览后将股票、基金、期权、核对现金四个原入口按两行等宽排列，同排等高且文案完整换行，极窄时单列；额外基金交易入口随后展示。`FundOperationsButton.style` 允许调用方统一操作区的尺寸、对齐与图标大小，默认样式及原基金菜单行为保留。
 
@@ -349,6 +349,11 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 - 投资草稿序号：Controller 公共只读 `nextInvestmentEventSequenceFor(accountId)` 复用既有 `_nextStockSequence`，返回当前账本真实证券账户的最新可用序号，账户失效返回 null。股票新事件保存时读取，期权预览时读取并冻结组合/现金依据；编辑旧事件仍保留原序号，不能在草稿初始化时长期占用序号。
 
 ### 美股期权行情与分批刷新（2026-11-05）
+
+`parseUsOptionSymbol`（`investments/us_option_symbol.dart`）统一完整美股期权代码的字母根、
+真实到期日期、方向和千分行权价解析；期权表单只使用其标的代码发起显式股票身份查询，
+Alpaca 适配器继续核对完整合约规格。表单复用 `InvestmentSecurityAutocomplete` 和
+`SecuritySearchClient`，输入不自动联网，候选只填代码/名称；隐藏、切账本及改输入使旧响应失效。
 
 `AlpacaOptionQuoteAdapter` / `AlpacaHttpOptionQuoteTransport` 只查询固定官方 OPRA 快照；
 `MarketQuoteRequest` 提取到期日、权利、行权价及公开标的身份，不带交割备注或账务。

@@ -119,6 +119,35 @@ Map<String, dynamic> _publicFixture() =>
 
 /// 用真实公开响应及故障流验证身份、币种、大小、超时和不执行脚本的网络边界。
 void main() {
+  test('真实smartbox搜索将TSLL与TSLA保留为两个完整身份，不用标的名称替换ETF代码', () async {
+    final fixture =
+        jsonDecode(
+              File(
+                'test/fixtures/investments/tencent_security_search_tsll_20261105.json',
+              ).readAsStringSync(),
+            )
+            as Map<String, dynamic>;
+    for (final symbol in ['TSLL', 'TSLA']) {
+      final sample = fixture[symbol] as Map<String, dynamic>;
+      final transport = _textTransport(sample['Response'] as String);
+      final client = SecuritySearchClient(transportFactory: () => transport);
+      final result = await client.search(
+        symbol,
+        market: StockMarket.us,
+        currencyCode: 'USD',
+      );
+      expect(transport.requested!.queryParameters['q'], symbol);
+      expect(result, hasLength(1));
+      expect(result.single.symbol, symbol);
+      expect(result.single.id, 'us:stock:$symbol');
+      expect(result.single.currencyCode, 'USD');
+      expect(
+        result.single.name,
+        symbol == 'TSLL' ? '2倍做多特斯拉etfdirexion' : '特斯拉',
+      );
+    }
+  });
+
   test('生产传输在创建请求前拒绝非白名单主机、协议、端口及额外参数', () async {
     final client = _HttpClient();
     final transport = TencentSecuritySearchTransport(client: client);

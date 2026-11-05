@@ -110,6 +110,55 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
+  for (final sample in [
+    (quantity: '1.7', cost: '567.60', average: '333.88'),
+    (quantity: '1000000', cost: '123456.78', average: '0.12345678'),
+  ]) {
+    testWidgets('期初草稿再次编辑预填${sample.average}，改参考价不改变总成本', (tester) async {
+      final c = await makeController();
+      addTearDown(c.dispose);
+      final account = investmentAccountFixture();
+      c.addAccount(account);
+      await c.waitForPendingWrites();
+      final holding = StockHolding(
+        securityId: avgoFixture.id,
+        short: false,
+        quantity: sample.quantity,
+        cost: sample.cost,
+      );
+      final original = InvestmentOpeningHolding(
+        security: avgoFixture,
+        holding: holding,
+        referencePrice: '20',
+      );
+      InvestmentOpeningHolding? result;
+      await _open(
+        tester,
+        c,
+        StockEditorPage(
+          accountId: account.id,
+          openingPortfolio: _base(holdings: [holding]),
+          openingHolding: original,
+        ),
+        (value) => result = value,
+      );
+      expect(
+        tester
+            .widget<TextField>(find.byKey(const ValueKey('stock-cost')))
+            .controller!
+            .text,
+        sample.average,
+      );
+      await _enter(tester, 'reference', '21');
+      await _save(tester);
+      expect(result!.holding.cost, sample.cost);
+      expect(result!.holding.quantity, sample.quantity);
+      expect(result!.referencePrice, '21');
+      expect(c.investmentFor(account.id), isNull);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
   testWidgets('编辑期初参考价保留原始总成本，不反乘舍入后的每股均价', (tester) async {
     final c = await makeController();
     addTearDown(c.dispose);

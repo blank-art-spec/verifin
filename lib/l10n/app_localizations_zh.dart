@@ -6686,6 +6686,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investMarketValue => '持仓净值';
 
   @override
+  String get investPositionMarketValue => '持仓市值';
+
+  @override
   String get investRealized => '已实现盈亏';
 
   @override
@@ -6873,7 +6876,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investHoldingRemoved => '已删除持仓记录';
 
   @override
-  String get investCorrectOpeningCost => '更正期初成本';
+  String get investCorrectOpeningCost => '更正期初持仓';
 
   @override
   String get investOpeningShares => '期初股数';
@@ -6883,17 +6886,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get investCorrectOpeningCostHint =>
-      '填写期初每股平均成本，总成本按期初股数计算。保存后重算后续已实现盈亏和剩余成本，现金、持仓数量及成交记录不变。已有历史估值需重新核对。';
+      '核对期初股数和每股平均成本，总成本按两者计算；成本留空表示未知。保存后重放后续交易，重算剩余持仓和盈亏，现金及成交记录不变。若数量不足以覆盖后续卖出、转出或交割，将拒绝保存。已有历史估值需重新核对。';
+
+  @override
+  String get investOpeningQuantityInvalid =>
+      '请输入大于零的期初股数，最多十二位整数、八位小数。移除期初持仓请使用删除入口。';
 
   @override
   String get investUnitCostInvalid => '请输入非负的每股成本，最多八位小数，并检查总成本是否超出支持范围。';
 
   @override
-  String get investCostChanged => '持仓资料已变化，请返回后重新打开成本更正。当前草稿尚未保存。';
+  String get investCostChanged => '持仓资料已变化，请返回后重新打开期初持仓更正。当前草稿尚未保存。';
 
   @override
   String get investCostCorrectionFailed =>
-      '成本未保存。请检查是否影响已有转出成本或后续交易；保存失败时原记录保持不变。';
+      '期初持仓未保存。请检查数量和成本是否影响后续卖出、转出或交割；保存失败时原记录保持不变。';
 
   @override
   String get investFinance => '已确认此账户允许真实融资 / 负现金';

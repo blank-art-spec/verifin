@@ -6921,6 +6921,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investMarketValue => 'Net holdings value';
 
   @override
+  String get investPositionMarketValue => 'Position market value';
+
+  @override
   String get investRealized => 'Realized P/L';
 
   @override
@@ -7112,7 +7115,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investHoldingRemoved => 'Holding records deleted';
 
   @override
-  String get investCorrectOpeningCost => 'Correct opening cost';
+  String get investCorrectOpeningCost => 'Correct opening holding';
 
   @override
   String get investOpeningShares => 'Opening shares';
@@ -7122,7 +7125,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investCorrectOpeningCostHint =>
-      'Enter the opening average cost per share. Total cost uses the opening share count. Saving recalculates subsequent realized profit/loss and remaining cost without changing cash, quantities or trades. Saved valuations need to be checked again.';
+      'Check the opening shares and average cost per share. Their product gives the total cost; leave cost blank if unknown. Saving replays later trades and recalculates remaining holdings and profit/loss without changing cash or trade records. Insufficient shares for later sales, transfers or settlement will prevent saving. Saved valuations need to be checked again.';
+
+  @override
+  String get investOpeningQuantityInvalid =>
+      'Enter positive opening shares with up to twelve integer digits and eight decimal places. Use the delete action to remove an opening holding.';
 
   @override
   String get investUnitCostInvalid =>
@@ -7130,11 +7137,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get investCostChanged =>
-      'The holding details have changed. Go back and reopen cost correction. Your draft has not been saved.';
+      'The holding details have changed. Go back and reopen opening holding correction. Your draft has not been saved.';
 
   @override
   String get investCostCorrectionFailed =>
-      'Cost was not saved. Check whether it affects existing transfer costs or later trades. Original records remain unchanged if saving fails.';
+      'The opening holding was not saved. Check whether the quantity and cost affect later sales, transfers or settlement. Original records remain unchanged if saving fails.';
 
   @override
   String get investFinance =>

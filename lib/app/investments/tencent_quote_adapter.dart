@@ -13,7 +13,7 @@ import 'investment_decimal.dart';
 import 'market_quote.dart';
 
 // 仅映射用户声明为股票的身份；语法不用于推断基金、权证或期权类型。
-// 点号 A/B 类股及 .OQ/.N 返回身份见 2026-11-05 的真实公开响应夹具。
+// 点号 A/B 类股、.OQ/.N 及 ETF 的 .AM 返回身份见 2026-11-05 真实公开响应夹具。
 const _usStockSymbolPattern = r'[A-Z]{1,5}(?:\.[AB])?';
 const _stockQueryPattern =
     '(?:(?:sh|sz)\\d{6}|hk\\d{5}|us$_usStockSymbolPattern)';
@@ -127,7 +127,7 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
   );
 
   /// 核对实际股票身份及原币；沪市 6、深市 0/3 开头，港股只接港元普通代码。
-  /// 美股接有界字母代码和 A/B 类股；返回身份还须匹配已核对的 .OQ/.N 市场后缀。
+  /// 美股接有界字母代码和 A/B 类股；返回须匹配 .OQ/.N 或带 GP-ETF 类型的 .AM 身份。
   /// [request] 不包含账户或持仓数量；期权、TEST、人民币港股柜台及未知市场不发请求。
   @override
   bool supports(MarketQuoteRequest request) => _queryCode(request) != null;
@@ -251,7 +251,11 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
       };
       if (fields.length <= currencyIndex ||
           fields[0].trim() != marketCode ||
-          !_matchesSourceSymbol(fields[2].trim(), request) ||
+          !_matchesSourceSymbol(
+            fields[2].trim(),
+            request,
+            sourceType: fields.length > 56 ? fields[56].trim() : null,
+          ) ||
           fields[currencyIndex].trim() != request.currency) {
         continue;
       }
@@ -281,13 +285,16 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
   }
 
   /// [sourceSymbol] 必须完整保留请求代码和类别点号，不模糊截断其他交易所后缀。
-  /// [request] 的美股身份只接受真实核对的纳斯达克 .OQ 或纽约证券交易所 .N。
+  /// [request] 的美股身份保留 .OQ/.N；.AM 只接真实样例核对的 [sourceType] GP-ETF。
+  /// .AM 是来源返回后缀，不据此推断 ETF 的挂牌交易所，也不拿其标的股票代替 ETF。
   static bool _matchesSourceSymbol(
     String sourceSymbol,
-    MarketQuoteRequest request,
-  ) => request.market == StockMarket.us
+    MarketQuoteRequest request, {
+    required String? sourceType,
+  }) => request.market == StockMarket.us
       ? sourceSymbol == '${request.symbol}.OQ' ||
-            sourceSymbol == '${request.symbol}.N'
+            sourceSymbol == '${request.symbol}.N' ||
+            (sourceSymbol == '${request.symbol}.AM' && sourceType == 'GP-ETF')
       : sourceSymbol == request.symbol;
 
   /// 严格解析实际源时间；沪深/香港为 UTC+8，美股为 America/New_York（含夏令时）。

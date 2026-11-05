@@ -6,11 +6,9 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/investment.dart';
-import '../models/option_contract.dart';
 import 'investment_decimal.dart';
 import 'market_quote.dart';
-
-const _occPattern = r'([A-Z]{1,6})(\d{6})([CP])(\d{8})';
+import 'us_option_symbol.dart';
 
 /// 未读取的原始响应；适配器累计字节后再解析，避免先完整下载才检查大小。
 class AlpacaOptionQuoteResponse {
@@ -70,7 +68,7 @@ class AlpacaHttpOptionQuoteTransport implements AlpacaOptionQuoteTransport {
         symbols == null ||
         symbols.length != 1 ||
         !RegExp(
-          '^$_occPattern(?:,$_occPattern){0,19}\$',
+          '^$usOptionSymbolPattern(?:,$usOptionSymbolPattern){0,19}\$',
         ).hasMatch(symbols.single) ||
         !_validCredential(keyId) ||
         !_validCredential(secretKey)) {
@@ -269,33 +267,23 @@ class AlpacaOptionQuoteAdapter extends MarketQuoteAdapter {
     if (!request.option ||
         request.fund ||
         request.market != StockMarket.us ||
-        request.currency != 'USD' ||
-        request.symbol.startsWith('TEST')) {
+        request.currency != 'USD') {
       return null;
     }
-    final match = RegExp('^$_occPattern\$').firstMatch(request.symbol);
-    if (match == null || match[1] != request.optionUnderlyingSymbol) {
+    final identity = parseUsOptionSymbol(request.symbol);
+    if (identity == null ||
+        identity.underlyingSymbol != request.optionUnderlyingSymbol) {
       return null;
     }
-    final date = match[2]!;
-    final year = 2000 + int.parse(date.substring(0, 2));
-    final month = int.parse(date.substring(2, 4)),
-        day = int.parse(date.substring(4, 6));
-    final expiry = DateTime.utc(year, month, day);
-    if (expiry.year != year ||
-        expiry.month != month ||
-        expiry.day != day ||
-        request.optionExpiry !=
-            '$year-${date.substring(2, 4)}-${date.substring(4, 6)}' ||
-        request.optionRight !=
-            (match[3] == 'C' ? OptionRight.call : OptionRight.put) ||
+    if (request.optionExpiry != identity.expiry ||
+        request.optionRight != identity.right ||
         request.optionStrike == null) {
       return null;
     }
     try {
       final strike = InvestmentDecimal.parse(request.optionStrike!);
       if (strike.units <= BigInt.zero ||
-          strike.units != BigInt.parse(match[4]!) * BigInt.from(100000)) {
+          strike.units != identity.strikeThousandths * BigInt.from(100000)) {
         return null;
       }
     } on FormatException {

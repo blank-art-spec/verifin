@@ -1,2 +1,2 @@
 # 真实 GBK 行情响应按原始字节保存，避免 Windows 换行转换改变采样证据。
-test/fixtures/investments/tencent_stocks_20261105.gbk -text
+test/fixtures/investments/tencent_*.gbk -text

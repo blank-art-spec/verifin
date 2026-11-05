@@ -558,6 +558,47 @@ mixin _InvestmentOps on _ControllerOps {
     String cost, {
     bool perUnit = false,
     InvestmentPortfolio? expectedPortfolio,
+  }) => _setStockOpeningHolding(
+    accountId,
+    securityId,
+    short,
+    cost: cost,
+    perUnit: perUnit,
+    expectedPortfolio: expectedPortfolio,
+  );
+
+  /// 更正股票/ETF 的期初数量及成本；不新增成交或现金调整，不改证券身份和方向。
+  /// [quantity] 必须为正；[cost] 为 null 表示未知成本，否则默认是总成本，
+  /// [perUnit] 为 true 时由每股成本与本次更正的数量计算总成本。全量重放后续事件，
+  /// 超量卖出、转出、交割或跨账户成本配对失效均拒绝，落库成功前不修改内存。
+  /// [expectedPortfolio] 保留原始聚合并发保护；基金/期权沿用各自的更正流程。
+  Future<bool> setStockOpeningHolding(
+    String accountId,
+    String securityId,
+    bool short, {
+    required String quantity,
+    required String? cost,
+    bool perUnit = false,
+    InvestmentPortfolio? expectedPortfolio,
+  }) => _setStockOpeningHolding(
+    accountId,
+    securityId,
+    short,
+    quantity: quantity,
+    cost: cost,
+    perUnit: perUnit,
+    expectedPortfolio: expectedPortfolio,
+  );
+
+  /// 新旧期初更正入口共用一份串行校验及原子保存；省略数量即保留旧成本 API 语义。
+  Future<bool> _setStockOpeningHolding(
+    String accountId,
+    String securityId,
+    bool short, {
+    String? quantity,
+    required String? cost,
+    required bool perUnit,
+    InvestmentPortfolio? expectedPortfolio,
   }) => _runInvestmentCommand(() async {
     final current = investmentFor(accountId);
     if (current == null ||
@@ -570,19 +611,24 @@ mixin _InvestmentOps on _ControllerOps {
     final security = current.securities
         .where((s) => s.id == securityId)
         .firstOrNull;
-    if (holding == null || security == null || (perUnit && !security.isStock)) {
+    if (holding == null ||
+        security == null ||
+        ((quantity != null || perUnit) && !security.isStock)) {
       return false;
     }
-    final input = InvestmentDecimal.parse(cost);
-    if (input.units < BigInt.zero) {
-      throw const FormatException('期初成本不能为负');
+    final units = InvestmentDecimal.parse(quantity ?? holding.quantity);
+    final input = cost == null ? null : InvestmentDecimal.parse(cost);
+    if (units.units <= BigInt.zero ||
+        (input != null && input.units < BigInt.zero)) {
+      throw const FormatException('期初数量必须为正且成本不能为负');
     }
-    final totalCost = perUnit
-        ? InvestmentDecimal.parse(holding.quantity).moneyProduct(
+    final totalCost = perUnit && input != null
+        ? units.moneyProduct(
             input,
             CurrencyCatalog.require(current.currencyCode).minorUnit,
           )
         : input;
+    totalCost?.toDouble();
     final next = current.copyWith(
       openingHoldings: [
         for (final h in current.openingHoldings)
@@ -590,8 +636,8 @@ mixin _InvestmentOps on _ControllerOps {
             StockHolding(
               securityId: securityId,
               short: short,
-              quantity: h.quantity,
-              cost: totalCost.toString(),
+              quantity: quantity == null ? h.quantity : units.toString(),
+              cost: totalCost?.toString(),
             )
           else
             h,

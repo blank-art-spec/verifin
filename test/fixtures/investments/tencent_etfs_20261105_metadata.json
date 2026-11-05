@@ -1,0 +1,285 @@
+{
+  "Url": "https://qt.gtimg.cn/q=usSNDG,usSNDK,usJPM,usSPY,usQQQ,usVTI,usBRK.A,usBRK.B",
+  "Status": 200,
+  "Length": 2833,
+  "FetchedAtUtc": "2026-11-05T15:39:53.7772004Z",
+  "Notes": "腾讯匿名公开原始响应，SNDG 是独立的杠杆 ETF，不是 SNDK 股票。仅从自身字段3取得每份交易价格，不乘2，不以标的报价或净值代替。AM 是来源后缀，不等于真实挂牌交易所。",
+  "IdentitySources": [
+    "https://leverageshares.com/us/etfs/leverage-shares-2x-long-sndk-daily-etf",
+    "https://www.cboe.com/us/equities/listings/listed_products/symbols/SNDG/"
+  ],
+  "Rows": [
+    {
+      "RequestCode": "usSNDG",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "2倍做多闪迪ETF-Leverage Shares"
+        },
+        {
+          "Index": 2,
+          "Value": "SNDG.AM"
+        },
+        {
+          "Index": 3,
+          "Value": "2.15"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-05 10:39:40"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        },
+        {
+          "Index": 56,
+          "Value": "GP-ETF"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usSNDK",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "闪迪"
+        },
+        {
+          "Index": 2,
+          "Value": "SNDK.OQ"
+        },
+        {
+          "Index": 3,
+          "Value": "851.76"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-05 10:39:41"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        },
+        {
+          "Index": 56,
+          "Value": "GP"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usJPM",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "摩根大通"
+        },
+        {
+          "Index": 2,
+          "Value": "JPM.N"
+        },
+        {
+          "Index": 3,
+          "Value": "341.89"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-05 10:39:41"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        },
+        {
+          "Index": 56,
+          "Value": "GP"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usSPY",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "标普500指数ETF-SPDR"
+        },
+        {
+          "Index": 2,
+          "Value": "SPY.AM"
+        },
+        {
+          "Index": 3,
+          "Value": "746.21"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-05 10:39:41"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        },
+        {
+          "Index": 56,
+          "Value": "GP-ETF"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usQQQ",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "纳指100ETF-Invesco"
+        },
+        {
+          "Index": 2,
+          "Value": "QQQ.OQ"
+        },
+        {
+          "Index": 3,
+          "Value": "658.83"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-05 10:39:41"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        },
+        {
+          "Index": 56,
+          "Value": "GP-ETF"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usVTI",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "美国全股市ETF-Vanguard"
+        },
+        {
+          "Index": 2,
+          "Value": "VTI.AM"
+        },
+        {
+          "Index": 3,
+          "Value": "367.00"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-05 10:39:41"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        },
+        {
+          "Index": 56,
+          "Value": "GP-ETF"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usBRK.A",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "伯克希尔"
+        },
+        {
+          "Index": 2,
+          "Value": "BRK.A.N"
+        },
+        {
+          "Index": 3,
+          "Value": "872707.98"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-05 10:34:52"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        },
+        {
+          "Index": 56,
+          "Value": "GP"
+        }
+      ]
+    },
+    {
+      "RequestCode": "usBRK.B",
+      "Count": 73,
+      "Fields": [
+        {
+          "Index": 0,
+          "Value": "200"
+        },
+        {
+          "Index": 1,
+          "Value": "伯克希尔B"
+        },
+        {
+          "Index": 2,
+          "Value": "BRK.B.N"
+        },
+        {
+          "Index": 3,
+          "Value": "582.42"
+        },
+        {
+          "Index": 30,
+          "Value": "2026-11-05 10:39:40"
+        },
+        {
+          "Index": 35,
+          "Value": "USD"
+        },
+        {
+          "Index": 56,
+          "Value": "GP"
+        }
+      ]
+    }
+  ]
+}

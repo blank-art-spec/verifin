@@ -344,18 +344,31 @@ int compareStockEvents(StockEvent a, StockEvent b) {
 }
 
 /// 将股票/ETF 的 [totalCost] 除以 [quantity]，得到最多八位小数的每股平均成本。
+/// 从 [cashDigits] 起选取反乘后按同一现金精度仍能还原总额的最短精度，
+/// 消除现金舍入产生的无意义尾数；数量较大而确需高精度时仍保留相应小数位。
 /// 成本未知、数量非正或结果超出报价范围时返回 null；不适用于带乘数的期权。
-/// 此值仅供展示和编辑草稿预填，不能反乘后覆盖原始总成本，以免舍入改变账目。
+/// 无法在八位内还原总额时保留八位近似值。此值仅供显示及草稿预填，
+/// 无改动时仍须保留原始总成本，不能把派生单价当作实际录入或成交事实。
 InvestmentDecimal? stockAverageUnitCost(
   InvestmentDecimal? totalCost,
-  InvestmentDecimal quantity,
-) {
+  InvestmentDecimal quantity, {
+  required int cashDigits,
+}) {
   if (totalCost == null || quantity.units <= BigInt.zero) return null;
-  final average = totalCost.allocated(
-    InvestmentDecimal.parse('1'),
-    quantity,
-    8,
-  );
+  if (cashDigits < 0 || cashDigits > 8) {
+    throw const FormatException('现金精度不合法');
+  }
+  final one = InvestmentDecimal.parse('1');
+  var average = totalCost.allocated(one, quantity, 8);
+  for (var digits = cashDigits; digits < 8; digits++) {
+    // 每个候选都从原始总额直接计算，避免先舍八位再舍短精度的二次舍入。
+    final candidate = totalCost.allocated(one, quantity, digits);
+    if (candidate.moneyProduct(quantity, cashDigits).compareTo(totalCost) ==
+        0) {
+      average = candidate;
+      break;
+    }
+  }
   try {
     return InvestmentDecimal.parse(average.toString());
   } on FormatException {

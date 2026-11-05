@@ -77,6 +77,10 @@ Future<void> _enter(WidgetTester tester, String field, String value) async {
 Future<void> _save(WidgetTester tester) async {
   final save = find.widgetWithText(FilledButton, '保存');
   await tester.scrollUntilVisible(save, 240, scrollable: _scroll());
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(save);
+  await tester.pumpAndSettle();
+  expect(save.hitTestable(), findsOneWidget);
   await tester.tap(save);
   await tester.pumpAndSettle();
 }

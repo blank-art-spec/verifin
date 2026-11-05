@@ -36,6 +36,7 @@ const _goog = StockSecurity(
 );
 final _capturedAt = DateTime.utc(2026, 10, 27, 2, 35);
 final _expandedCapturedAt = DateTime.utc(2026, 11, 5, 13, 41, 36);
+final _etfCapturedAt = DateTime.utc(2026, 11, 5, 15, 39, 54);
 
 /// 来自扩展样例的美股普通股，保留点号以区分同一公司的两种类别。
 final _expandedSecurities = [
@@ -56,6 +57,16 @@ List<int> _fixtureBytes() => File(
 /// 读取新增纳斯达克、纽约证券交易所及类别股的真实公开响应。
 List<int> _expandedFixtureBytes() => File(
   'test/fixtures/investments/tencent_stocks_20261105.gbk',
+).readAsBytesSync();
+
+/// SNDG 与 SNDK 同批采样，ETF 使用自身报价，不替换为标的或施加杠杆乘数。
+List<int> _etfFixtureBytes() => File(
+  'test/fixtures/investments/tencent_etfs_20261105.gbk',
+).readAsBytesSync();
+
+/// 同时捕获 TSLL 与 TSLA；两者名称有关联，但必须按完整代码分别取价。
+List<int> _tsllFixtureBytes() => File(
+  'test/fixtures/investments/tencent_tsll_tsla_20261105.gbk',
 ).readAsBytesSync();
 
 /// 修改单行公开样例的指定字段，以覆盖真实格式上的身份、价格和时间边界。
@@ -299,6 +310,163 @@ void main() {
     }
     expect(client.forceClosed, isTrue);
   });
+
+  test('真实SNDG及ETF响应接纳AM后缀，价格与标的SNDK及类别股严格分离', () async {
+    final client = _RecordingClient(
+      _RecordingRequest(_RecordingResponse(200, _etfFixtureBytes())),
+    );
+    final adapter = TencentQuoteAdapter(
+      transportFactory: () => TencentHttpQuoteTransport(client: client),
+      clock: () => _etfCapturedAt,
+    );
+    final requests = [
+      for (final symbol in [
+        'SNDG',
+        'SNDK',
+        'JPM',
+        'SPY',
+        'QQQ',
+        'VTI',
+        'BRK.A',
+        'BRK.B',
+      ])
+        MarketQuoteRequest(
+          StockSecurity(
+            symbol: symbol,
+            name: symbol,
+            market: StockMarket.us,
+            currencyCode: 'USD',
+          ),
+        ),
+    ];
+    final quotes = await adapter.fetch(requests);
+    expect(quotes, hasLength(8));
+    const prices = [
+      '2.15',
+      '851.76',
+      '341.89',
+      '746.21',
+      '658.83',
+      '367',
+      '872707.98',
+      '582.42',
+    ];
+    for (var index = 0; index < quotes.length; index++) {
+      expect(quotes[index].securityId, requests[index].securityId);
+      expect(quotes[index].last, prices[index]);
+      expect(quotes[index].currency, 'USD');
+      expect(quotes[index].unit, QuotePriceUnit.share);
+    }
+    expect(quotes.first.lastAt, DateTime.utc(2026, 11, 5, 15, 39, 40));
+    expect(quotes[1].lastAt, DateTime.utc(2026, 11, 5, 15, 39, 41));
+    expect(
+      client.urls.single.path,
+      '/q=usSNDG,usSNDK,usJPM,usSPY,usQQQ,usVTI,usBRK.A,usBRK.B',
+    );
+    expect(client.forceClosed, isTrue);
+  });
+
+  test('真实TSLL与TSLA同批回包按完整身份取价，不依赖响应顺序或标的名称', () async {
+    final transport = _FixtureTransport(
+      (_) => TencentQuoteResponse(
+        statusCode: 200,
+        body: Stream.value(_tsllFixtureBytes()),
+      ),
+    );
+    final adapter = TencentQuoteAdapter(
+      transportFactory: () => transport,
+      clock: () => DateTime.utc(2026, 11, 5, 15, 45, 37),
+    );
+    // 与真实响应相反的请求顺序，防止用数组位置把高价标的给低价ETF。
+    final quotes = await adapter.fetch([
+      for (final symbol in ['TSLA', 'TSLL'])
+        MarketQuoteRequest(
+          StockSecurity(
+            symbol: symbol,
+            name: symbol,
+            market: StockMarket.us,
+            currencyCode: 'USD',
+          ),
+        ),
+    ]);
+    expect(transport.requests.single.path, '/q=usTSLA,usTSLL');
+    expect(quotes.map((quote) => quote.securityId), [
+      'us:stock:TSLA',
+      'us:stock:TSLL',
+    ]);
+    expect(quotes.map((quote) => quote.last), ['347.86', '8.34']);
+    expect(quotes.last.unit, QuotePriceUnit.share);
+    expect(quotes.last.lastAt, DateTime.utc(2026, 11, 5, 15, 45, 20));
+  });
+
+  test('TSLL行即使被塞入TSLA报价身份也拒收，不以名称推断或取另一行补齐', () async {
+    final transport = _FixtureTransport(
+      (_) => _response(
+        text: _withField('usTSLL', 2, 'TSLA.OQ', bytes: _tsllFixtureBytes()),
+      ),
+    );
+    final adapter = TencentQuoteAdapter(
+      transportFactory: () => transport,
+      clock: () => DateTime.utc(2026, 11, 5, 15, 45, 37),
+    );
+    final quotes = await adapter.fetch([
+      MarketQuoteRequest(
+        const StockSecurity(
+          symbol: 'TSLL',
+          name: '2倍做多特斯拉ETF',
+          market: StockMarket.us,
+          currencyCode: 'USD',
+        ),
+      ),
+    ]);
+    expect(transport.requests.single.path, '/q=usTSLL');
+    expect(quotes, isEmpty);
+  });
+
+  for (final change in [
+    (index: 0, value: '100'),
+    (index: 2, value: 'SNDK.AM'),
+    (index: 2, value: 'SNDG.PK'),
+    (index: 3, value: '2,150'),
+    (index: 35, value: 'HKD'),
+    (index: 56, value: ''),
+    (index: 56, value: 'GP'),
+    (index: 56, value: 'GP-ETF-W'),
+  ]) {
+    test(
+      'AM后缀仅接纳精确ETF身份、类型、原币和十进制价格 ${change.index}/${change.value}',
+      () async {
+        final transport = _FixtureTransport(
+          (_) => _response(
+            text: _withField(
+              'usSNDG',
+              change.index,
+              change.value,
+              bytes: _etfFixtureBytes(),
+            ),
+          ),
+        );
+        final adapter = TencentQuoteAdapter(
+          transportFactory: () => transport,
+          clock: () => _etfCapturedAt,
+        );
+        final quotes = await adapter.fetch([
+          for (final symbol in ['SNDG', 'SNDK'])
+            MarketQuoteRequest(
+              StockSecurity(
+                symbol: symbol,
+                name: symbol,
+                market: StockMarket.us,
+                currencyCode: 'USD',
+              ),
+            ),
+        ]);
+        expect(quotes, hasLength(1));
+        expect(quotes.single.securityId, 'us:stock:SNDK');
+        expect(quotes.single.last, '851.76');
+      },
+    );
+  }
 
   for (final change in [
     (index: 0, value: '100'),
