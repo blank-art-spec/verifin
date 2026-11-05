@@ -6322,6 +6322,12 @@ class AppLocalizationsZh extends AppLocalizations {
   String get entryAuditTitle => '修改历史';
 
   @override
+  String get entryAuditExpand => '展开';
+
+  @override
+  String get entryAuditCollapse => '收起';
+
+  @override
   String get entryAuditActorUser => '用户';
 
   @override

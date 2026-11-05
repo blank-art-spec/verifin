@@ -6535,6 +6535,12 @@ class AppLocalizationsEn extends AppLocalizations {
   String get entryAuditTitle => 'Change history';
 
   @override
+  String get entryAuditExpand => 'Expand';
+
+  @override
+  String get entryAuditCollapse => 'Collapse';
+
+  @override
   String get entryAuditActorUser => 'User';
 
   @override

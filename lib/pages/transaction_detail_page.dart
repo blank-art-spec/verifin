@@ -127,6 +127,75 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   late String _initialFingerprint;
   bool _saving = false;
 
+  /// 当前页面已展开的历史记录下标。历史按提交顺序追加，用原列表下标区分
+  /// 同一时刻的多次操作；状态只用于浏览，不参与草稿或持久化。
+  final Set<int> _expandedAuditRecordIndices = <int>{};
+
+  /// 切换 [recordIndex] 对应记录的字段明细；下标沿用原始历史顺序，
+  /// 不受页面倒序展示影响。状态保存在页面上，滚动离屏后回来仍保持原选择。
+  void _toggleAuditRecord(int recordIndex) {
+    setState(() {
+      if (!_expandedAuditRecordIndices.add(recordIndex)) {
+        _expandedAuditRecordIndices.remove(recordIndex);
+      }
+    });
+  }
+
+  /// 构建一条只读历史卡片：[record] 提供已保存的操作、时间和字段前后值，
+  /// [recordIndex] 是它在原始历史列表中的位置，用于关联独立的展开状态。
+  /// 操作摘要与时间始终显示，明细仅在展开时创建；本方法不会修改交易草稿。
+  Widget _buildAuditRecordCard(EntryAuditRecord record, int recordIndex) {
+    final l10n = AppLocalizations.of(context);
+    final materialL10n = MaterialLocalizations.of(context);
+    final textTheme = Theme.of(context).textTheme;
+    final expanded = _expandedAuditRecordIndices.contains(recordIndex);
+
+    return VeriCard(
+      key: ValueKey('entry_audit_record_$recordIndex'),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: <Widget>[
+          Row(
+            children: <Widget>[
+              Expanded(
+                child: Text(
+                  '${_auditActorLabel(l10n, record.actor)} · ${_auditReasonLabel(l10n, record.reason)}',
+                  style: textTheme.titleSmall,
+                ),
+              ),
+              const SizedBox(width: 8),
+              Semantics(
+                expanded: expanded,
+                child: TextButton.icon(
+                  key: ValueKey('entry_audit_toggle_$recordIndex'),
+                  onPressed: () => _toggleAuditRecord(recordIndex),
+                  icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
+                  label: Text(
+                    expanded ? l10n.entryAuditCollapse : l10n.entryAuditExpand,
+                  ),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 4),
+          Text(
+            '${materialL10n.formatFullDate(record.at)} ${materialL10n.formatTimeOfDay(TimeOfDay.fromDateTime(record.at))}${record.sourceId.isEmpty ? '' : ' · ${record.sourceId}'}',
+            style: textTheme.bodySmall,
+          ),
+          if (expanded)
+            for (final change in record.changes.entries)
+              Padding(
+                padding: const EdgeInsets.only(top: 6),
+                child: Text(
+                  '${_auditFieldLabel(l10n, change.key)}：${_auditFieldValue(l10n, change.key, change.value.before)} → ${_auditFieldValue(l10n, change.key, change.value.after)}',
+                  style: textTheme.bodySmall,
+                ),
+              ),
+        ],
+      ),
+    );
+  }
+
   /// 首次载入已保存交易作为编辑基线，后续依赖更新不覆盖用户正在修改的草稿。
   /// 消费时间和可选入账时间分别回填，保存前的取消与修改都只影响页面状态。
   @override
@@ -181,6 +250,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     super.dispose();
   }
 
+  /// 使用 [context] 读取主题与账本状态，构建交易编辑页；修改历史按提交倒序
+  /// 展示摘要，每条明细的展开状态独立于编辑草稿，查看历史不会产生待保存修改。
   @override
   Widget build(BuildContext context) {
     final controller = VeriFinScope.of(context);
@@ -602,31 +673,12 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                 if (entry.auditHistory.isNotEmpty) ...<Widget>[
                   const SizedBox(height: 12),
                   SectionLabel(AppLocalizations.of(context).entryAuditTitle),
-                  for (final record in entry.auditHistory.reversed) ...<Widget>[
-                    VeriCard(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: <Widget>[
-                          Text(
-                            '${_auditActorLabel(AppLocalizations.of(context), record.actor)} · ${_auditReasonLabel(AppLocalizations.of(context), record.reason)}',
-                            style: Theme.of(context).textTheme.titleSmall,
-                          ),
-                          const SizedBox(height: 4),
-                          Text(
-                            '${MaterialLocalizations.of(context).formatFullDate(record.at)} ${MaterialLocalizations.of(context).formatTimeOfDay(TimeOfDay.fromDateTime(record.at))}${record.sourceId.isEmpty ? '' : ' · ${record.sourceId}'}',
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
-                          for (final change in record.changes.entries)
-                            Padding(
-                              padding: const EdgeInsets.only(top: 6),
-                              child: Text(
-                                '${_auditFieldLabel(AppLocalizations.of(context), change.key)}：${_auditFieldValue(AppLocalizations.of(context), change.key, change.value.before)} → ${_auditFieldValue(AppLocalizations.of(context), change.key, change.value.after)}',
-                                style: Theme.of(context).textTheme.bodySmall,
-                              ),
-                            ),
-                        ],
-                      ),
-                    ),
+                  for (
+                    var index = entry.auditHistory.length - 1;
+                    index >= 0;
+                    index--
+                  ) ...<Widget>[
+                    _buildAuditRecordCard(entry.auditHistory[index], index),
                     const SizedBox(height: 8),
                   ],
                 ],

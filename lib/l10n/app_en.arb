@@ -2516,6 +2516,8 @@
   "sourceEvidenceAmount": "Source amount",
   "sourceEvidenceMerchant": "Source merchant",
   "entryAuditTitle": "Change history",
+  "entryAuditExpand": "Expand",
+  "entryAuditCollapse": "Collapse",
   "entryAuditActorUser": "User",
   "entryAuditActorCapture": "Auto capture",
   "entryAuditActorImport": "Statement import",

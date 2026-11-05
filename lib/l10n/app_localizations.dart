@@ -11396,6 +11396,18 @@ abstract class AppLocalizations {
   /// **'修改历史'**
   String get entryAuditTitle;
 
+  /// 展开一条修改历史的字段明细。
+  ///
+  /// In zh, this message translates to:
+  /// **'展开'**
+  String get entryAuditExpand;
+
+  /// 收起一条修改历史的字段明细，保留操作摘要和时间。
+  ///
+  /// In zh, this message translates to:
+  /// **'收起'**
+  String get entryAuditCollapse;
+
   /// No description provided for @entryAuditActorUser.
   ///
   /// In zh, this message translates to:
