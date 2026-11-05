@@ -46,7 +46,9 @@ LedgerEntry appendEntryAudit({
   return after.copyWith(auditHistory: history);
 }
 
-/// 把可审计字段转换成稳定文本；不把派生退款缓存和完整原始通知写入历史。
+/// 把交易 [entry] 的可审计字段转换成稳定文本。
+/// 入账时间精度只在已有入账日期时记录，区分“仅日期”和用户确认的零点；
+/// 不把派生退款缓存和完整原始通知写入历史。
 Map<String, String> _auditedEntryFields(LedgerEntry entry) => <String, String>{
   'type': entry.type.name,
   'amount': entry.amount.toString(),
@@ -63,6 +65,9 @@ Map<String, String> _auditedEntryFields(LedgerEntry entry) => <String, String>{
   'occurredAt': entry.occurredAt.toIso8601String(),
   'occurredAtPrecision': entry.occurredAtPrecision.name,
   'postDate': entry.postDate?.toIso8601String() ?? '',
+  'postDatePrecision': entry.postDate == null
+      ? ''
+      : entry.postDatePrecision.name,
   'billingCycleId': entry.billingCycleId ?? '',
   'tagIds': entry.tagIds.join(','),
   'fee': entry.fee.toString(),

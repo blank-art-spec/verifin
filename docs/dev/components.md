@@ -73,7 +73,7 @@ HK/USD 基金 B 类；`hongKongFundDayEnd` 提供纯日期的香港日报末截�
 | `CreditRepaymentPage` | 父账户范围选择复用 `VeriAnchoredChoice<CreditRepaymentScope>`；原币分配、来源选择、补齐参考额、整批编辑/撤销；日期与时分保存到同批所有记录，编辑保留原精度 |
 | `showEntryDatePicker` / `showEntryTimePicker` | `pages/sheets.dart`；记账与还款共用。改日期保留时分秒；确认时间精确到分钟；取消返回 null，不修改草稿 |
 | `normalizeCreditHierarchy` | `app/credit_hierarchy.dart`；明确名称的历史子账户幂等归并；冲突 ID 返回供界面复核 |
-| `creditExpenseBelongsToStatement` | `app/credit_card.dart`；部分还款验证遵循银行明确归期，否则复用本地周期，不按记账日自行跨期 |
+| `creditExpenseBelongsToStatement` | `app/credit_card.dart`；部分还款验证遵循银行明确归期，否则以入账日（未填则消费日）匹配正式账单周期；账单日当天的自动归期仍进入下一期 |
 | `creditStatementOverview` / `buildCreditCycleOverview` | `app/credit_card.dart`；主体内购汇按两端实际金额转移无正式账单覆盖的原币债务；主体已出账流水待还逐笔优先明确参考额，否则按 `now` 有效汇率换算，关联到账退款独立折算，部分还款保留剩余原币比例、结清无尾差，正式快照优先。子账户概览传入 `internalAccountCurrencies`，待还与未出账保持账户原币 |
 | `projectStatisticsCurrency` | `app/statistics_currency.dart`；明确参考额优先、否则最新汇率，重算退款净额并返回缺失币种；只读投影，不覆盖原始交易 |
 | `FrankfurterClient` | `app/frankfurter_client.dart`；只发送币种/日期，校验日汇率响应、超时和体积；由 Controller 合并并落库 |
@@ -207,6 +207,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `groupEntriesByDate` / `relativeDay` | 纯函数 | `common_widgets.dart` | 按日分组、日期倒序 / 相对今天；`DateEntryGroup` 分组模型 |
 | `CalendarPreview` | Widget | `common_widgets.dart` | 月历预览（内建月份切换 + 日收支）；必传 `currencyCode`；单币种账本隐藏单位时右下角不再显示轻量单位提示，并**连同前置 6dp 间距整块不构建**（`if (!textCurrencyUnitHidden)`，见维护约定），多币种账本照常显示 |
 | `EntryTagField` | Widget | `common_widgets.dart` | 记账表单标签行 |
+| `EntryPostDateFields` / `EntryDateTimePicker` / `EntryPostDateDraft` | Widget / 选择器签名 / 草稿记录 | `entry_sheets.dart` | 新建支出、导入草稿和交易详情共用可选入账日期与时分；页面注入 `showEntryDatePicker` / `showEntryTimePicker`，取消不改草稿，只选日期保存日期精度，清除时分保留日期，清除日期回退消费时间。受控草稿经页面最终保存才落库 |
 | `AttachmentsEditor` | Widget | `attachments_editor.dart` | 多图片附件横向缩略图、全屏查看和逐张删除；默认自带标题与拍照/相册添加入口，记账页的轻量元数据布局通过 `showHeader:false` / `showAddButton:false` 只复用缩略图条，添加入口由页面标签触发 |
 | `TagSelectorSheet` / `pickEntryTags` | Widget / Sheet 函数 | `entry_sheets.dart` / `sheets.dart` | 交易按维度选标签、即时在指定维度创建；单选维度只保留一个，多选维度可同时勾选。`groupId` 聚焦一个维度，`templatesOnly` 供独立模板入口使用；支持保存、套用和删除当前账本标签模板 |
 | `ProjectManagementPage` / `ProjectDetailPage` / `ProjectEditorPage` | 页面 | `project_pages.dart` | 项目元数据、预算进度、分类构成和关联交易入口；保存由 Controller 原子写项目及关联标签 |
@@ -269,6 +270,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | 日历日算术 | `calendar_days.dart`（经 `ledger_math.dart` re-export） | `calendarDaysBetween` `addCalendarDays`——**「相隔几天」「往后推 N 天」一律走这两个，禁止裸用 `difference().inDays` / `add(Duration(days:))`**：那是绝对时间，跨夏令时会差一小时→错一天（CI 在 UTC 恒绿，只在欧美时区暴露） |
 | 账目数学 | `ledger_math.dart` | `signedAmount` `accountDeltaForEntry` `entryTouchesAccount` `colorForType` `sumByType` `isZeroAmount` `normalizeAmount`（金额按分规整）；`dateOnly` `cumulativeWeekWindowFor` `monthWindowFor` `weekWindowFor` `quarterWindowFor` `quarterOfMonth` `entriesInWindow` `valuesForTypeInWindow` `dailyExpenseValues` `dayExpenseTotal` `monthlyExpenseValues` `monthlyNetValuesForType`；`DateWindow` |
 | 金额/时间格式化 | `ledger_math.dart` | `formatAmount` `formatExpenseAmount` `formatIncomeAmount` `formatSignedAmount` `formatCompactAmount` `formatTime`（**金额文本只走这些**，勿内联手拼） |
+| 支出账单依据时间 | `models/ledger_entry.dart` 的 `LedgerEntry.billingOccurredAt` | 支出返回 `postDate ?? occurredAt`，收入/转账/退款仍返回 `occurredAt`；仅用于账单归期、当前时刻过滤和账期报表，不替换余额、日常统计或交易列表的消费时间。银行明确 `billingCycleId` 仍由账单算法优先处理 |
+| 时间精度名称 | `models/ledger_entry.dart` 的 `OccurredAtPrecision.label` | 按当前语言展示仅日期、精确到分钟或秒，供修改历史等界面复用；存储继续使用稳定的枚举名称 |
 | 全局金额偏好 | `amount_format.dart` | 顶层量 `currencyFractionStyle`（紧凑/货币标准小数位）、`moneyUnitStyle`（符号后置/代码前置）、`hideUnitInSingleCurrency` 与 `activeBookUsesMultipleCurrencies`；**派生闸门 `activeMoneyCodeDisplay`（`none` 即隐藏单位）是唯一判断依据**，`formatUserMoney` 族与 `textCurrencyUnitHidden`（族 5）都读它，界面不要另写判断条件；Controller 单向同步，界面不直接修改顶层状态；`amountForceTwoDecimals` 仅为旧设置兼容入口 |
 | 序列/坐标轴 | `series_math.dart` | `isInMonth` `monthAxisLabels` `reportAxisLabels` `isoWeekNumber` `accountBalanceSeries` `accountMonthlyBalanceSeries` `accountMonthlyBalanceSeriesBatch` `monthlyNetAssetSeries` `balanceAxisLabels` `bookkeepingDays` |
 | 统计分析 | `report_analysis.dart` | `reportSummary` `reportMonthlyComparison` `reportPeriodComparison` `formatChangeRatio` `reportCategoryStats` `reportCategoryStatsByOwn` `reportCategoryChildStats` `reportTagStats` `reportAccountStats` `reportMerchantStats` `reportTrend`；`ReportRange`（账期/月/季/年/自定义）`ReportSummary` `ReportComparison` `ReportCategoryStat` `ReportTagStat` `ReportAccountStat` `ReportMerchantStat` `ReportTrend`。信用币种子账户在账户排行中按主体合并；商户只认来源证据，账期趋势可覆盖绘图分桶日期但不改交易日期；账期同比/环比由页面先按正式账单边界和 `billingCycleId` 筛好三个周期，再交给通用对比汇总。 |

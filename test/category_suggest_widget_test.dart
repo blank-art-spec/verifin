@@ -16,6 +16,25 @@ Future<void> _ensureNoteVisible(WidgetTester tester) async {
   );
 }
 
+/// 将 [categoryId] 对应分类滚回视口并等待文本输入后的布局校正，返回可点击目标。
+/// 懒构建缓存中的分类可能存在却在屏幕外，因此必须检查真实命中，不能只按存在即点击。
+Future<Finder> _ensureCategoryVisible(
+  WidgetTester tester,
+  String categoryId,
+) async {
+  final category = find.byKey(Key('entry_category_$categoryId'));
+  await tester.scrollUntilVisible(
+    category,
+    -200,
+    scrollable: find.byType(Scrollable).first,
+  );
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(category);
+  await tester.pumpAndSettle();
+  expect(category.hitTestable(), findsOneWidget);
+  return category.hitTestable();
+}
+
 Account _account(String id, String bookId, String name) => Account(
   id: id,
   bookId: bookId,
@@ -76,7 +95,7 @@ void main() {
       );
     }
 
-    await pumpApp(tester, store);
+    final appController = await pumpApp(tester, store);
     await tapBottomTab(tester, 0);
     await createQuickEntry(tester);
 
@@ -93,21 +112,31 @@ void main() {
     );
 
     // 用户手动改选餐饮后，不再被自动识别覆盖。
-    await tester.scrollUntilVisible(
-      find.byKey(const Key('entry_category_dining')),
-      -200,
-      scrollable: find.byType(Scrollable).first,
-    );
-    await tester.tap(find.byKey(const Key('entry_category_dining')));
-    await tester.pump();
+    await tester.tap(await _ensureCategoryVisible(tester, 'dining'));
+    await tester.pumpAndSettle();
     await _ensureNoteVisible(tester);
     await tester.enterText(find.byKey(const Key('entry_note_field')), '打车回家');
     await tester.pump(const Duration(milliseconds: 350));
     await tester.pumpAndSettle();
+    await _ensureCategoryVisible(tester, 'dining');
     expect(
       find.byKey(const Key('entry_category_selected_dining')),
       findsOneWidget,
     );
+
+    // 保留前面的零账户识别场景，最后补入真实账户以验证手动分类也会正确落账。
+    appController.addAccount(_account('cash-save', bookId, '现金'));
+    await appController.waitForPendingWrites();
+    await tester.pumpAndSettle();
+    final save = find.byKey(const Key('save_entry_button'));
+    expect(save.hitTestable(), findsOneWidget);
+    await tester.tap(save);
+    await tester.pumpAndSettle();
+    await appController.waitForPendingWrites();
+    final saved = appController.entries.singleWhere(
+      (entry) => entry.note == '打车回家',
+    );
+    expect(saved.categoryId, 'dining');
   });
 
   testWidgets('re-entering a learned amount infers type, category and note', (

@@ -10682,6 +10682,72 @@ abstract class AppLocalizations {
   /// **'银行记账日'**
   String get entryPostDate;
 
+  /// No description provided for @entryPostingDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'入账日期（选填）'**
+  String get entryPostingDate;
+
+  /// No description provided for @entryPostingDateUnset.
+  ///
+  /// In zh, this message translates to:
+  /// **'未填写，按消费时间计算'**
+  String get entryPostingDateUnset;
+
+  /// No description provided for @entryPostingTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'入账时间（选填）'**
+  String get entryPostingTime;
+
+  /// No description provided for @entryPostingTimeUnset.
+  ///
+  /// In zh, this message translates to:
+  /// **'未记录具体时间'**
+  String get entryPostingTimeUnset;
+
+  /// No description provided for @entryPostingDateClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'清除入账日期'**
+  String get entryPostingDateClear;
+
+  /// No description provided for @entryPostingTimeClear.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅保留入账日期'**
+  String get entryPostingTimeClear;
+
+  /// No description provided for @entryPostingDateHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'账单优先按入账日期和时间计算；未填写时按消费时间。银行已确认的账期仍优先。'**
+  String get entryPostingDateHint;
+
+  /// No description provided for @entryPostingPrecision.
+  ///
+  /// In zh, this message translates to:
+  /// **'入账时间精度'**
+  String get entryPostingPrecision;
+
+  /// No description provided for @entryTimePrecisionDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'仅日期'**
+  String get entryTimePrecisionDate;
+
+  /// No description provided for @entryTimePrecisionMinute.
+  ///
+  /// In zh, this message translates to:
+  /// **'精确到分钟'**
+  String get entryTimePrecisionMinute;
+
+  /// No description provided for @entryTimePrecisionSecond.
+  ///
+  /// In zh, this message translates to:
+  /// **'精确到秒'**
+  String get entryTimePrecisionSecond;
+
   /// No description provided for @statementPostBillRefund.
   ///
   /// In zh, this message translates to:

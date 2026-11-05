@@ -786,6 +786,76 @@ void main() {
       isEmpty,
     );
   });
+  test('部分还款核验先按银行明确账期偿旧期，再按期内入账顺序确定未付消费', () async {
+    final c = await makeController();
+    addTearDown(c.dispose);
+    expect(await c.addAccountDraft(card('usd', 'USD')), isTrue);
+    final account = c.accounts.single;
+    final now = DateTime.now();
+    final older =
+        expense(
+          'older-cycle-later-posting',
+          account.id,
+          'USD',
+          10,
+          reference: 60,
+          date: DateTime(now.year, now.month - 3, 10),
+        ).copyWith(
+          postDate: DateTime(now.year, now.month - 1, 10),
+          billingCycleId: billingCycleIdFor(
+            DateTime(now.year, now.month - 2, 25),
+          ),
+        );
+    final newer =
+        expense(
+          'newer-cycle-earlier-posting',
+          account.id,
+          'USD',
+          10,
+          reference: 70,
+          date: DateTime(now.year, now.month - 3, 11),
+        ).copyWith(
+          postDate: DateTime(now.year, now.month - 2, 10),
+          billingCycleId: billingCycleIdFor(
+            DateTime(now.year, now.month - 1, 25),
+          ),
+        );
+    for (final entry in [older, newer]) {
+      expect(
+        (await c.saveEntryAggregateDraftResult(
+          entry: entry,
+          isNew: true,
+        )).isSuccess,
+        isTrue,
+      );
+    }
+    // 首次还款时两笔参考额齐全，按银行期次先还清 older；以后编辑不改真实还款事实。
+    expect(
+      (await c.recordCreditRepayment(
+        repaymentEntryId: 'paid-older-cycle',
+        accountId: account.id,
+        amount: 10,
+        occurredAt: now,
+      )).isSuccess,
+      isTrue,
+    );
+    expect(
+      (await c.saveEntryAggregateDraftResult(
+        entry: older.copyWith(clearReferenceBaseAmount: true, baseAmount: 0),
+        isNew: false,
+      )).isSuccess,
+      isTrue,
+    );
+    expect(c.creditOverview(account).billedOutstanding, 10);
+    expect(
+      c.repaymentMissingReferences(account.creditAccountId!, [
+        CreditRepaymentLine(accountId: account.id, amount: 5),
+      ]),
+      isEmpty,
+      reason: '已还清的旧期即使入账更晚，也不能被误判为当前仍欠的缺参考额消费',
+    );
+  });
+
   test('多币种扣款分摊合计一次，修改和删除整批同步恢复', () async {
     final f = await setup();
     final c = f.c;
@@ -1058,6 +1128,30 @@ void main() {
     c.switchLedgerBook(old);
     expect(c.exchangeRates.single.baseCurrencyCode, 'CNY');
     expect(c.exchangeRates.single.rateToBase, 7.2);
+  });
+
+  test('部分还款按可选入账日匹配正式账单，旧消费日期不遗漏待还外币', () async {
+    final f = await setup();
+    final original = f.c.entries.firstWhere((e) => e.id == 'usd-expense');
+    // 消费发生在正式账单开始前，实际入账落在账单内；部分还款仍须补齐参考额。
+    expect(
+      (await f.c.saveEntryAggregateDraftResult(
+        entry: original.copyWith(
+          occurredAt: DateTime(2026, 8, 25),
+          postDate: DateTime(2026, 9, 10, 14, 20),
+          postDatePrecision: OccurredAtPrecision.minute,
+        ),
+        isNew: false,
+      )).isSuccess,
+      isTrue,
+    );
+    final lines = [
+      const CreditRepaymentLine(accountId: 'cny', amount: 50),
+      const CreditRepaymentLine(accountId: 'usd', amount: 5),
+    ];
+    expect(f.c.repaymentMissingReferences(f.parent, lines).map((e) => e.id), [
+      'usd-expense',
+    ]);
   });
 
   test('部分还款校验尊重银行确认归期，不因记账日跨期而漏掉待还外币', () async {

@@ -5937,6 +5937,39 @@ class AppLocalizationsZh extends AppLocalizations {
   String get entryPostDate => '银行记账日';
 
   @override
+  String get entryPostingDate => '入账日期（选填）';
+
+  @override
+  String get entryPostingDateUnset => '未填写，按消费时间计算';
+
+  @override
+  String get entryPostingTime => '入账时间（选填）';
+
+  @override
+  String get entryPostingTimeUnset => '未记录具体时间';
+
+  @override
+  String get entryPostingDateClear => '清除入账日期';
+
+  @override
+  String get entryPostingTimeClear => '仅保留入账日期';
+
+  @override
+  String get entryPostingDateHint => '账单优先按入账日期和时间计算；未填写时按消费时间。银行已确认的账期仍优先。';
+
+  @override
+  String get entryPostingPrecision => '入账时间精度';
+
+  @override
+  String get entryTimePrecisionDate => '仅日期';
+
+  @override
+  String get entryTimePrecisionMinute => '精确到分钟';
+
+  @override
+  String get entryTimePrecisionSecond => '精确到秒';
+
+  @override
   String get statementPostBillRefund => '出账后退款';
 
   @override

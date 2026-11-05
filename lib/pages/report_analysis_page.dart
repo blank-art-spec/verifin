@@ -142,7 +142,9 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     );
   }
 
-  /// 取当前范围内的交易；账期模式同时限定信用主体并尊重银行确认的账期 id。
+  /// 取 [range] 内的交易；[useBillingCycleRules] 开启时限定 [selectedCredit] 的子账户。
+  /// 账期优先尊重银行确认的账期 id，未确认时按支出入账时间（未填则消费时间）筛选；
+  /// 自然月、季度、年度等普通统计仍按消费时间，不把入账日期当成消费日期。
   List<LedgerEntry> _entriesForRange(
     VeriFinController controller,
     ReportRange range,
@@ -167,7 +169,7 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
           if (entry.billingCycleId != null) {
             return entry.billingCycleId == cycleId;
           }
-          final occurred = dateOnly(entry.occurredAt);
+          final occurred = dateOnly(entry.billingOccurredAt);
           return !occurred.isBefore(start) && !occurred.isAfter(end);
         })
         .toList(growable: false);
@@ -177,7 +179,7 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
   ///
   /// 锚点按月或按年平移且保留 1–28 日，确保 9/25–10/24 的上一期是
   /// 8/25–9/24，而不是因为锚点掉到月初跳过一期。每个周期再独立解析正式账单边界，
-  /// 并通过 [_entriesForRange] 让银行确认的 `billingCycleId` 优先于发生日期。
+  /// 并通过 [_entriesForRange] 依次采用银行确认的账期、入账时间和消费时间。
   ReportComparison _billingCycleComparison(
     VeriFinController controller,
     CreditAccount selectedCredit,
@@ -226,13 +228,14 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     );
   }
 
-  /// 返回趋势图使用的分桶日期。
+  /// 返回交易 [entry] 在账期范围 [range] 内用于趋势图的分桶日期。
   ///
   /// 银行可把账单日当天的交易显式归到下一账期，此时真实发生日会位于推导窗口外一日。
   /// 汇总仍按 `billingCycleId` 计入，图表则只把点夹到最近边界，保证趋势合计与汇总一致；
+  /// 普通支出先采用入账日期，未填写才采用消费日期；
   /// [LedgerEntry.occurredAt] 本身不会被修改。
   DateTime _trendBucketDate(LedgerEntry entry, ReportRange range) {
-    final occurred = dateOnly(entry.occurredAt);
+    final occurred = dateOnly(entry.billingOccurredAt);
     if (occurred.isBefore(range.start)) {
       return range.start;
     }

@@ -418,8 +418,13 @@ void main() {
           categoryId: 'dining',
           accountId: 'report-credit-card',
           note: '上账期消费',
-          occurredAt: previousCycle.start,
-          billingCycleId: billingCycleIdForWindow(previousCycle),
+          // 消费日在更早账期，按银行入账日进入上账期；普通统计仍保留原消费日。
+          occurredAt: DateTime(
+            previousCycle.start.year,
+            previousCycle.start.month - 1,
+            2,
+          ),
+          postDate: previousCycle.start,
         ),
       )
       ..addEntry(
@@ -453,7 +458,7 @@ void main() {
     expect(find.textContaining('4047'), findsWidgets);
 
     // 账期对比显示本期、上期与去年同期的绝对金额；4047 相对 3704 增加 343，
-    // 环比约 +9.3%。显式账期 id 保证测试同时覆盖银行确认归属优先于发生日期。
+    // 环比约 +9.3%。本期/去年同期验证银行确认归属，上期验证入账日期优先于消费日。
     await tester.ensureVisible(
       find.byKey(const Key('billing_cycle_comparison_card')),
     );

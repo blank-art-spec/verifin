@@ -175,6 +175,7 @@ void main() {
       expect(lunch.billingCycleId, isNull);
       expect(lunch.occurredAtPrecision, OccurredAtPrecision.second);
       expect(lunch.postDate, isNull);
+      expect(lunch.postDatePrecision, OccurredAtPrecision.date);
       expect(lunch.referenceBaseAmount, isNull);
       expect(lunch.repaymentBatchId, isNull);
       final transfer = entries.singleWhere((entry) => entry.id == 'e4');
@@ -252,6 +253,67 @@ void main() {
       await app.close();
     });
   }
+
+  test('v29 升级保留已有入账时刻且默认日期精度，不改消费时间和账期', () async {
+    final path = '${tempDir.path}/v29_posting_precision.db';
+    final raw = await databaseFactoryFfi.openDatabase(path);
+    for (final statement in _schemaV1) {
+      await raw.execute(statement);
+    }
+    await _seedV1Data(raw);
+    for (var version = 2; version <= 29; version++) {
+      await AppDatabase.migrations[version]!(raw);
+    }
+    final dateOnly = DateTime(2026, 11, 5);
+    final exactTime = DateTime(2026, 11, 6, 9, 10, 11, 123);
+    await raw.update(
+      'entries',
+      {'post_date': dateOnly.millisecondsSinceEpoch},
+      where: 'id = ?',
+      whereArgs: ['e2'],
+    );
+    await raw.update(
+      'entries',
+      {
+        'post_date': exactTime.millisecondsSinceEpoch,
+        'billing_cycle_id': '2026-11-25',
+      },
+      where: 'id = ?',
+      whereArgs: ['e3'],
+    );
+    final originalRows = await raw.query('entries', orderBy: 'id');
+    await raw.execute('PRAGMA user_version = 29');
+    await raw.close();
+
+    final app = await AppDatabase.open(factory: databaseFactoryFfi, path: path);
+    try {
+      final entries = await SqliteLedgerRepository(app).loadEntries();
+      expect(entries.singleWhere((entry) => entry.id == 'e1').postDate, isNull);
+      expect(
+        entries.singleWhere((entry) => entry.id == 'e2').postDate,
+        dateOnly,
+      );
+      expect(
+        entries.singleWhere((entry) => entry.id == 'e3').postDate,
+        exactTime,
+      );
+      for (final entry in entries) {
+        final original = originalRows.singleWhere(
+          (row) => row['id'] == entry.id,
+        );
+        expect(entry.postDatePrecision, OccurredAtPrecision.date);
+        expect(
+          entry.occurredAt.millisecondsSinceEpoch,
+          original['occurred_at'],
+        );
+        expect(entry.billingCycleId, original['billing_cycle_id']);
+        expect(entry.toJson().containsKey('postDatePrecision'), isFalse);
+      }
+      expect(await _describeSchema(app.db), freshSchema);
+    } finally {
+      await app.close();
+    }
+  });
 
   test('v27 仅把旧明确手填和导入额迁为参考额，自动缓存与转账不固定', () async {
     final path = '${tempDir.path}/v26_reference_amount.db';

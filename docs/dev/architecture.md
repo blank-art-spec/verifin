@@ -1,14 +1,16 @@
 # 架构导览
 
+2026-11-05：当前数据库为 SQLite v30、完整备份为 JSON v17，继续读取 v1–v16。普通支出复用可选 `LedgerEntry.postDate` 并新增入账精度 `postDatePrecision`；`billingOccurredAt` 集中提供账单依据时间，银行明确归期仍优先，普通消费统计与余额不变。新建与编辑共用 `EntryPostDateFields`，字段由 `entry_sheets.dart` 定义、页面注入原日期/时间选择器。规则与手动验收见[信用账户口径](credit-hierarchy-currency.md#可选入账日期与时间2026-11-05)。
+
 2026-11-04：`main.dart` 通过 `buildProductionMarketQuoteClient()` 固定装配腾讯股票和指定招商基金来源，不再依赖 debug、diagnostic 或 `PUBLIC_QUOTE_RESEARCH`。工厂构造不联网，通用 Controller 默认空客户端；用户联网/自动刷新偏好仍默认关闭，采用报价仍逐证券选择。来源 `approved: false` 保留，不用应用可用性代替供应方许可。
 
 2026-10-22：多币种主体扩展至银行储蓄与证券投资账户，复用已有主体表和关联字段；公共读取 `accountParents`，信用专用读取 `creditAccounts`，禁止普通主体进入信用投影。详情见 [父子账户与币种](credit-hierarchy-currency.md)。
 
 执行规则以 [AGENTS.md](../../AGENTS.md) 为准；这里仅提供源码导航，不重复维护规则。
 
-2026-11-02：账本类型与证券账户交互见[当前实施记录](investment-ledger-interaction-implementation.md)。当前数据库为 SQLite v29、完整备份 JSON v16；新增 `LedgerBook.bookType`，旧数据库及旧备份缺字段默认普通。通用新增由 `pages/quick_entry.dart` 分流，投资账本使用 `TransactionEntryPage` 和领域表单共享的 `EntryEditorSession` / `EntryEditorSurface`；账户导航由 `account_navigation.dart` 集中，原子开户命令位于 `veri_fin_controller_securities_accounts.dart`。
+2026-11-02：账本类型与证券账户交互见[当前实施记录](investment-ledger-interaction-implementation.md)。该阶段以 SQLite v29 / JSON v16 新增 `LedgerBook.bookType`，旧数据库及旧备份缺字段默认普通；当前版本见上方最新记录。通用新增由 `pages/quick_entry.dart` 分流，投资账本使用 `TransactionEntryPage` 和领域表单共享的 `EntryEditorSession` / `EntryEditorSurface`；账户导航由 `account_navigation.dart` 集中，原子开户命令位于 `veri_fin_controller_securities_accounts.dart`。
 
-股票阶段现已实现精确持仓、独立事件和手填估值，早期博通来源验证见 [阶段 0–2 历史记录](securities-stage02-implementation.md)。当前持久化为 SQLite v29（投资聚合表沿用 v28）及 JSON v16 完整备份，普通证券命令入口为 `veri_fin_controller_investments.dart`，基金逐笔结算入口为 `veri_fin_controller_funds.dart`。v13 增加真实基金品种与净值日期精度；v14 增加金额申购阶段、确认关联与已有持仓基准，v15 增加已确认的基金收益规则并继续兼容 v1–v14，旧股票/期权默认字段的 JSON 保持原形状。按金额申购与已有份额录入入口、实际扣款与净在途、逐笔收益起算及实际时刻基准见[基金金额与结算](fund-amount-settlement.md)。期权生命周期见 [阶段 3](securities-stage03-implementation.md)；参考行情机制及门禁见 [阶段 4](securities-stage04-implementation.md)，主应用固定装配的腾讯股票来源见 [公开股票研究](public-quote-research.md)，招商官方基金净值及参考历史见 [基金研究](cms-fund-api-research.md)。旧 Yahoo/Nasdaq 验证页、查询客户端和待核对来源配置已移除。资产分解、主动保存依据与恢复见 [阶段 5](securities-stage05-implementation.md)；来源可用性与供应方正式许可分别记录，期权及三地全品种覆盖仍待验证，见 [总体方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。
+股票阶段现已实现精确持仓、独立事件和手填估值，早期博通来源验证见 [阶段 0–2 历史记录](securities-stage02-implementation.md)。当前持久化为 SQLite v30（投资聚合表沿用 v28）及 JSON v17 完整备份，普通证券命令入口为 `veri_fin_controller_investments.dart`，基金逐笔结算入口为 `veri_fin_controller_funds.dart`。v13 增加真实基金品种与净值日期精度；v14 增加金额申购阶段、确认关联与已有持仓基准，v15 增加已确认的基金收益规则并继续兼容 v1–v14，旧股票/期权默认字段的 JSON 保持原形状。按金额申购与已有份额录入入口、实际扣款与净在途、逐笔收益起算及实际时刻基准见[基金金额与结算](fund-amount-settlement.md)。期权生命周期见 [阶段 3](securities-stage03-implementation.md)；参考行情机制及门禁见 [阶段 4](securities-stage04-implementation.md)，主应用固定装配的腾讯股票来源见 [公开股票研究](public-quote-research.md)，招商官方基金净值及参考历史见 [基金研究](cms-fund-api-research.md)。旧 Yahoo/Nasdaq 验证页、查询客户端和待核对来源配置已移除。资产分解、主动保存依据与恢复见 [阶段 5](securities-stage05-implementation.md)；来源可用性与供应方正式许可分别记录，期权及三地全品种覆盖仍待验证，见 [总体方案](securities-trading-plan.md) 与 [验收操作](securities-trading-acceptance.md)。
 
 Veri Fin 仅交付 Android，权威账目在本机 SQLite，无账号或自有服务端。
 正式入口为 `lib/main.dart`；UI 通过 `VeriFinScope` 读取 `VeriFinController`，

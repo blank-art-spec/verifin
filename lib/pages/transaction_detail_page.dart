@@ -9,6 +9,7 @@ import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
 import '../app/entry_currency_draft.dart';
 import '../app/entry_provenance.dart';
+import '../app/entry_sheets.dart';
 import '../app/feedback.dart';
 import '../app/model_lookup.dart';
 import '../app/ledger_math.dart';
@@ -57,6 +58,7 @@ String _auditFieldLabel(AppLocalizations l10n, String field) => switch (field) {
   'occurredAt' => l10n.entryAuditTime,
   'occurredAtPrecision' => l10n.entryAuditPrecision,
   'postDate' => l10n.entryAuditPostDate,
+  'postDatePrecision' => l10n.entryPostingPrecision,
   'billingCycleId' => l10n.entryAuditBillingCycle,
   'tagIds' => l10n.entryAuditTags,
   'fee' => l10n.entryAuditFee,
@@ -67,6 +69,20 @@ String _auditFieldLabel(AppLocalizations l10n, String field) => switch (field) {
   'sourceIds' => l10n.entryAuditSources,
   _ => field,
 };
+
+/// 格式化审计字段 [field] 的稳定原值 [value]，使用 [l10n] 显示已知时间精度。
+/// 空值沿用历史的空集标记，未知值保留原文以便核查；不修改已保存的审计事实。
+String _auditFieldValue(AppLocalizations l10n, String field, String value) {
+  if (value.isEmpty) return '∅';
+  if (field == 'postDatePrecision' || field == 'occurredAtPrecision') {
+    return OccurredAtPrecision.values
+            .where((precision) => precision.name == value)
+            .firstOrNull
+            ?.label(l10n) ??
+        value;
+  }
+  return value;
+}
 
 class TransactionDetailPage extends StatefulWidget {
   const TransactionDetailPage({super.key, required this.entryId});
@@ -100,6 +116,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   late String? _toAccountId;
   late DateTime _occurredAt;
   late OccurredAtPrecision _occurredAtPrecision;
+  late DateTime? _postDate;
+  late OccurredAtPrecision _postDatePrecision;
   late List<String> _tagIds;
   late double _fee;
   late bool _reimbursable;
@@ -109,6 +127,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   late String _initialFingerprint;
   bool _saving = false;
 
+  /// 首次载入已保存交易作为编辑基线，后续依赖更新不覆盖用户正在修改的草稿。
+  /// 消费时间和可选入账时间分别回填，保存前的取消与修改都只影响页面状态。
   @override
   void didChangeDependencies() {
     super.didChangeDependencies();
@@ -140,6 +160,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     _toAccountId = entry.toAccountId;
     _occurredAt = entry.occurredAt;
     _occurredAtPrecision = entry.occurredAtPrecision;
+    _postDate = entry.postDate;
+    _postDatePrecision = entry.postDatePrecision;
     _tagIds = List<String>.of(entry.tagIds);
     _fee = entry.fee;
     _reimbursable = entry.reimbursable;
@@ -410,13 +432,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                             '${AppLocalizations.of(context).dateMonthDay(_occurredAt)}  ${relativeDay(AppLocalizations.of(context), _occurredAt)}',
                         onTap: _pickDate,
                       ),
-                      if (entry.postDate != null)
-                        DetailInfoRow(
-                          label: AppLocalizations.of(context).entryPostDate,
-                          value: AppLocalizations.of(
-                            context,
-                          ).dateMonthDay(entry.postDate!),
-                        ),
                       DetailInfoRow(
                         label: AppLocalizations.of(context).timeLabel,
                         value: _occurredAtPrecision == OccurredAtPrecision.date
@@ -424,6 +439,22 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                             : formatTime(_occurredAt),
                         onTap: _pickTime,
                       ),
+                      if (_type == EntryType.expense)
+                        EntryPostDateFields(
+                          postDate: _postDate,
+                          precision: _postDatePrecision,
+                          occurredAt: _occurredAt,
+                          datePicker: showEntryDatePicker,
+                          timePicker: showEntryTimePicker,
+                          onChanged: _updatePostDate,
+                        )
+                      else if (_postDate != null)
+                        DetailInfoRow(
+                          label: AppLocalizations.of(context).entryPostDate,
+                          value: AppLocalizations.of(
+                            context,
+                          ).dateMonthDay(_postDate!),
+                        ),
                       DetailInfoRow(
                         label: AppLocalizations.of(context).commonNote,
                         value: _noteController.text.trim().isEmpty
@@ -589,7 +620,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                             Padding(
                               padding: const EdgeInsets.only(top: 6),
                               child: Text(
-                                '${_auditFieldLabel(AppLocalizations.of(context), change.key)}：${change.value.before.isEmpty ? '∅' : change.value.before} → ${change.value.after.isEmpty ? '∅' : change.value.after}',
+                                '${_auditFieldLabel(AppLocalizations.of(context), change.key)}：${_auditFieldValue(AppLocalizations.of(context), change.key, change.value.before)} → ${_auditFieldValue(AppLocalizations.of(context), change.key, change.value.after)}',
                                 style: Theme.of(context).textTheme.bodySmall,
                               ),
                             ),
@@ -1252,6 +1283,14 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
     }
   }
 
+  /// 更新共享编辑器返回的入账 [value]；清除只改变草稿，保存成功后才影响账单计算。
+  void _updatePostDate(EntryPostDateDraft value) {
+    setState(() {
+      _postDate = value.date;
+      _postDatePrecision = value.precision;
+    });
+  }
+
   Future<void> _pickDate() async {
     final picked = await showDatePicker(
       context: context,
@@ -1336,6 +1375,8 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   double get _refundTotal =>
       _refunds.fold<double>(0, (total, refund) => total + refund.amount);
 
+  /// 汇总已有交易的编辑草稿；未改字段沿用原对象，入账日期为空时明确请求清除。
+  /// 返回值只用于变更判断与统一保存命令，不在此处写库或修改消费时间口径。
   LedgerEntry _buildEntry() {
     final entry = _initialEntry;
     if (entry == null) {
@@ -1396,6 +1437,9 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       note: _noteController.text.trim(),
       occurredAt: _occurredAt,
       occurredAtPrecision: _occurredAtPrecision,
+      postDate: _postDate,
+      clearPostDate: _postDate == null,
+      postDatePrecision: _postDatePrecision,
       tagIds: List<String>.of(_tagIds),
       fee: _type == EntryType.transfer && !noAccount
           ? normalizeCurrencyAmount(_fee, _currencyCode)

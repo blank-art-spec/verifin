@@ -5,6 +5,33 @@ import '../../ledger_math.dart';
 import '../../models.dart';
 import 'raw_import.dart';
 
+/// 将来源 [sourcePostDate] 合并到既有交易 [entry]，只更新草稿，不写入账本。
+/// 来源缺日期时保留本地值；同一天的零点日期证据不能覆盖用户已确认的具体时分。
+/// 来源确实改换日期时，日期与精度一起更新，避免把旧的分钟精度错误套在新日期上。
+LedgerEntry _withSourcePostDate(LedgerEntry entry, DateTime? sourcePostDate) {
+  if (sourcePostDate == null) return entry;
+  final local = entry.postDate;
+  final sourceIsDateOnly =
+      sourcePostDate.hour == 0 &&
+      sourcePostDate.minute == 0 &&
+      sourcePostDate.second == 0 &&
+      sourcePostDate.millisecond == 0 &&
+      sourcePostDate.microsecond == 0;
+  if (local != null &&
+      entry.postDatePrecision != OccurredAtPrecision.date &&
+      sourceIsDateOnly &&
+      local.year == sourcePostDate.year &&
+      local.month == sourcePostDate.month &&
+      local.day == sourcePostDate.day) {
+    return entry;
+  }
+  return entry.copyWith(
+    postDate: sourcePostDate,
+    // 原始导入格式没有独立的入账精度声明，沿用银行记账日的保守语义。
+    postDatePrecision: OccurredAtPrecision.date,
+  );
+}
+
 /// 导入计划：待新增的交易，以及为匹配名称需要新建的账户/分类/标签，和逐行错误。
 class ImportPlan {
   const ImportPlan({
@@ -247,10 +274,9 @@ ImportPlan buildImportPlanFromRecords({
       final existing = exactMatches.single;
       reconciledExistingIds.add(existing.id);
       matchedCount++;
-      return existing.copyWith(
+      return _withSourcePostDate(existing, record.postedDate).copyWith(
         reconciliationStatus: ReconciliationStatus.autoMatched,
         referenceBaseAmount: imported.referenceBaseAmount,
-        postDate: record.postedDate,
         sourceRecords: <EntrySourceRecord>[
           ...existing.sourceRecords,
           sourceRecord,
@@ -267,9 +293,8 @@ ImportPlan buildImportPlanFromRecords({
       final existing = conflicts.single;
       reconciledExistingIds.add(existing.id);
       conflictCount++;
-      return existing.copyWith(
+      return _withSourcePostDate(existing, record.postedDate).copyWith(
         reconciliationStatus: ReconciliationStatus.amountConflict,
-        postDate: record.postedDate,
         sourceRecords: <EntrySourceRecord>[
           ...existing.sourceRecords,
           sourceRecord,
@@ -296,6 +321,7 @@ ImportPlan buildImportPlanFromRecords({
       occurredAt: imported.occurredAt,
       occurredAtPrecision: imported.occurredAtPrecision,
       postDate: imported.postDate,
+      postDatePrecision: imported.postDatePrecision,
       tagIds: imported.tagIds,
       fee: imported.fee,
       reimbursable: imported.reimbursable,

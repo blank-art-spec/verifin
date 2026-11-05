@@ -6125,6 +6125,40 @@ class AppLocalizationsEn extends AppLocalizations {
   String get entryPostDate => 'Bank posting date';
 
   @override
+  String get entryPostingDate => 'Posting date (optional)';
+
+  @override
+  String get entryPostingDateUnset => 'Not set; use transaction time';
+
+  @override
+  String get entryPostingTime => 'Posting time (optional)';
+
+  @override
+  String get entryPostingTimeUnset => 'Exact time not recorded';
+
+  @override
+  String get entryPostingDateClear => 'Clear posting date';
+
+  @override
+  String get entryPostingTimeClear => 'Keep date only';
+
+  @override
+  String get entryPostingDateHint =>
+      'Bills use the posting date and time when provided, otherwise the transaction time. A bank-confirmed billing cycle still takes priority.';
+
+  @override
+  String get entryPostingPrecision => 'Posting time precision';
+
+  @override
+  String get entryTimePrecisionDate => 'Date only';
+
+  @override
+  String get entryTimePrecisionMinute => 'To the minute';
+
+  @override
+  String get entryTimePrecisionSecond => 'To the second';
+
+  @override
   String get statementPostBillRefund => 'Refunds after statement';
 
   @override

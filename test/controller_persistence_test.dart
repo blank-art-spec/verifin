@@ -104,7 +104,7 @@ void main() {
       expect(controller.entries, isEmpty);
 
       final raw = controller.exportDataJson();
-      expect((jsonDecode(raw) as Map)['version'], 16);
+      expect((jsonDecode(raw) as Map)['version'], 17);
       final beforePreview = loaded.toJson();
       controller.importDataJson(raw, dryRun: true);
       await controller.waitForPendingWrites();
@@ -248,7 +248,7 @@ void main() {
       controllerAlive = true;
       expectReconciled();
       final raw = controller.exportDataJson();
-      expect((jsonDecode(raw) as Map)['version'], 16);
+      expect((jsonDecode(raw) as Map)['version'], 17);
       controller.importDataJson(raw, dryRun: true);
       expectReconciled();
       controller.resetAllData();
@@ -511,7 +511,7 @@ void main() {
 
           final source = controller.investmentFor(account.id)!.toJson();
           final raw = controller.exportDataJson();
-          expect((jsonDecode(raw) as Map)['version'], 16);
+          expect((jsonDecode(raw) as Map)['version'], 17);
           controller.resetAllData();
           await controller.waitForPendingWrites();
           expect(await repo.loadInvestmentPortfolios(), isEmpty);
@@ -1137,8 +1137,17 @@ void main() {
     expect(reloaded.accounts.length, greaterThanOrEqualTo(8));
     expect(reloaded.entries.length, greaterThanOrEqualTo(20));
     expect(reloaded.categories.any((c) => c.id == 'coffee'), isTrue);
+    // 样例中的可选入账时分经完整恢复和 SQLite 冷读仍保留，消费时间保持原值。
+    final posted = reloaded.entries.singleWhere(
+      (entry) => entry.id == 'entry_20260703_001',
+    );
+    expect(posted.postDate, DateTime(2026, 7, 4, 9, 15));
+    expect(posted.postDatePrecision, OccurredAtPrecision.minute);
+    expect(posted.billingOccurredAt, DateTime(2026, 7, 4, 9, 15));
+    expect(posted.occurredAt, DateTime(2026, 7, 3, 12, 20));
     // 导出应能从 SQLite 恢复出的内存状态重建等价备份。
     final reExported = jsonDecode(reloaded.exportDataJson()) as Map;
+    expect(reExported['version'], 17);
     expect((reExported['data'] as Map)['entries'], isNotEmpty);
     // 冷启动后共用三地组合检查，覆盖父子关联、各币种现金、腾讯期权与独立汇率。
     expect(reloaded.activeBook.id, defaultLedgerBookId);

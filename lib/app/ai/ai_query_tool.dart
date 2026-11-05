@@ -1369,7 +1369,8 @@ class CreditCardBillTool extends AiQueryTool {
           : currentBillingCycle(card.statementDay!, ctx.now);
       final bill = cycle == null
           ? null
-          : billingCycleExpense(ctx.entries, card.id, cycle);
+          // 旧独立账户同样按查询时刻截止，尚未到达的入账时间不提前计入本期账单。
+          : billingCycleExpense(ctx.entries, card.id, cycle, now: ctx.now);
       addResult(
         name: card.name,
         currencyCode: card.currencyCode,

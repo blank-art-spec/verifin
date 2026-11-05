@@ -25,8 +25,8 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 - `docs/dev/known-limitations.md`：已接受技术债及触发整改的阈值。
 - `docs/dev/securities-trading-plan.md`、`docs/dev/securities-trading-acceptance.md`：证券交易、期权与参考行情的待实施方案、任务分阶段及手动验收操作；首个测试标的是博通 AVGO 股票及其认购/认沽（B01–B08），保留三地全面验收 A01–A23。股票阶段见 `docs/dev/securities-stage02-implementation.md`，期权开平仓、保证金与结算见 `docs/dev/securities-stage03-implementation.md`，参考行情机制与来源门禁见 `docs/dev/securities-stage04-implementation.md`，资产分解、历史依据与 JSON v12 恢复见 `docs/dev/securities-stage05-implementation.md`；其余提案不得当作已实现功能或已完成的行情覆盖承诺。
 - `docs/dev/ai-tools.md`：AI 账目查询工具的注册和维护约定。
-- `docs/dev/cms-fund-api-research.md`：招商美元货币市场基金 B 类的匿名官方净值接口、Android 直连证据、主应用参考净值与自动参考收益/历史资产口径；仅覆盖 `HK0001039582` / USD，不代表全部香港基金或正式来源准入。真实基金类型与净值日期精度自 JSON v13 保存，当前完整备份为 v16 / SQLite v29；公开净值历史仅留设备缓存，不生成收入流水或自动权威快照。
-- `docs/dev/fund-amount-settlement.md`：基金按金额买入、已有持仓两个入口；新申购按金额估算份额，已有持仓按实际份额、总成本及净值自动算未实现盈亏，旧报告浮盈仅作兼容、编辑沿用已存份额。记录申请/实际扣款/确认/收益起算的独立时点、净在途资产、逐笔起算与实际核对时刻基准；推算份额不得冒充券商确认，新 CMS 确认按成交净值日归属、旧记录显式重核，净值收益不叠加万份或年化收益；收益规则自 JSON v15 保存，当前 v16 继续读取 v1–v15 旧备份。
+- `docs/dev/cms-fund-api-research.md`：招商美元货币市场基金 B 类的匿名官方净值接口、Android 直连证据、主应用参考净值与自动参考收益/历史资产口径；仅覆盖 `HK0001039582` / USD，不代表全部香港基金或正式来源准入。真实基金类型与净值日期精度自 JSON v13 保存，当前完整备份为 v17 / SQLite v30；公开净值历史仅留设备缓存，不生成收入流水或自动权威快照。
+- `docs/dev/fund-amount-settlement.md`：基金按金额买入、已有持仓两个入口；新申购按金额估算份额，已有持仓按实际份额、总成本及净值自动算未实现盈亏，旧报告浮盈仅作兼容、编辑沿用已存份额。记录申请/实际扣款/确认/收益起算的独立时点、净在途资产、逐笔起算与实际核对时刻基准；推算份额不得冒充券商确认，新 CMS 确认按成交净值日归属、旧记录显式重核，净值收益不叠加万份或年化收益；收益规则自 JSON v15 保存，当前 v17 继续读取 v1–v16 旧备份。
 - `docs/dev/category-budget-override-design.md`：分类默认预算与单期覆盖的职责、Issue #28 兼容方案和验收范围。
 - `docs/dev/multi-currency-design.md`：多币种基础设计；2026-10-18 的当前父子账户、参考折算、联网汇率和统一还款口径见 `docs/dev/credit-hierarchy-currency.md`，覆盖旧文档的全部统计冻结约定。原币及账户实际金额保持不变；统计优先明确参考额，否则用最新汇率。
 - `docs/dev/refund-design.md`、`docs/dev/auto-capture-plan.md`、`docs/dev/i18n-verification.md`、`docs/automation.md`：对应领域的设计与验收资料。`refund-design.md` 含历史方案，退款当前行为以源码、测试和 `docs/dev/known-limitations.md` 为准。
@@ -78,6 +78,7 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 - 退款是关联原支出的独立条目；只有已到账退款影响余额和净额，原支出的 `refundedBaseAmount` 是已到账退款 `baseAmount` 之和的派生缓存。修改退款逻辑前必须阅读 `docs/dev/refund-design.md` 和 `docs/dev/multi-currency-design.md` 并以当前代码/测试为准。
 - 多币种主账户复用 `credit_accounts` / `creditAccountId` 历史存储键，SQLite/JSON 结构不变。通用入口为 `accountParents` / `accountsForParent` / `ensureCurrencyChild`，`creditAccounts` 只读信用主体；普通银行与证券主体不得进入额度、账期、还款计算。旧独立账户仅在用户显式启用后建立关系。
 - 信用账户的当前余额优先从最新 `BalanceAnchor` 起算，锚点前交易不再参与余额；`BillingStatement` 与 `StatementRepaymentAllocation` 分别表达正式账单和还款归属，不得回退为伪造校准交易或从总余额猜账单状态。
+- 支出账单归属优先银行明确 `billingCycleId`，否则读取 `LedgerEntry.billingOccurredAt`（可选入账 `postDate`，未填则消费 `occurredAt`）；未来入账不提前计入实时账单。入账精度由 `postDatePrecision` 保存；该时间不得替代普通月度统计、消费排序或账户实际余额的时间边界。
 - 外部交易证据存于 `LedgerEntry.sourceRecords`，幂等键优先用来源交易号，缺失时用稳定指纹；同一真实交易只保留一条 `LedgerEntry`，各来源只追加证据。
 - 自定义预算周期只改变预算体系口径，统计报表仍按自然月。默认预算使用哨兵键，单月覆盖优先于默认值。
 

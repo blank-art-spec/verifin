@@ -1077,6 +1077,38 @@ void main() {
       expect(plan.entries.single.sourceRecords.single.sourceId, 'cmb');
     });
 
+    test('来源只有同日入账日期时保留手工具体时间及精度', () {
+      final local = localEntry().copyWith(
+        postDate: DateTime(2026, 8, 11, 15, 35),
+        postDatePrecision: OccurredAtPrecision.minute,
+      );
+      final plan = _build(
+        records: <RawImportRecord>[bankRecord()],
+        existingAccounts: <Account>[account],
+        existingCategories: <Category>[category],
+        sourceId: 'cmb',
+        existingEntries: <LedgerEntry>[local],
+      );
+      expect(plan.entries.single.postDate, local.postDate);
+      expect(plan.entries.single.postDatePrecision, OccurredAtPrecision.minute);
+    });
+
+    test('来源修改入账日期时同步恢复日期精度，不能保留旧分钟标记', () {
+      final local = localEntry().copyWith(
+        postDate: DateTime(2026, 8, 12, 15, 35),
+        postDatePrecision: OccurredAtPrecision.minute,
+      );
+      final plan = _build(
+        records: <RawImportRecord>[bankRecord()],
+        existingAccounts: <Account>[account],
+        existingCategories: <Category>[category],
+        sourceId: 'cmb',
+        existingEntries: <LedgerEntry>[local],
+      );
+      expect(plan.entries.single.postDate, DateTime(2026, 8, 11));
+      expect(plan.entries.single.postDatePrecision, OccurredAtPrecision.date);
+    });
+
     test('同一份正式账单连续导入十次不增加交易', () {
       var existing = <LedgerEntry>[];
       for (var run = 0; run < 10; run++) {

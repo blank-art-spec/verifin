@@ -17,6 +17,38 @@ LedgerEntry _entry({String note = '原备注', double amount = 30}) => LedgerEnt
 );
 
 void main() {
+  test('入账日期从仅日期改为确认零点也记录精度变更，清除后记录移除', () {
+    final before = _entry().copyWith(postDate: DateTime(2026, 9, 28));
+    final after = appendEntryAudit(
+      before: before,
+      after: before.copyWith(postDatePrecision: OccurredAtPrecision.minute),
+      actor: EntryAuditActor.user,
+      reason: EntryAuditReason.edited,
+      at: DateTime(2026, 9, 28, 9),
+    );
+    expect(after.auditHistory.single.changes.keys, ['postDatePrecision']);
+    expect(
+      after.auditHistory.single.changes['postDatePrecision']!.before,
+      'date',
+    );
+    expect(
+      after.auditHistory.single.changes['postDatePrecision']!.after,
+      'minute',
+    );
+    final cleared = appendEntryAudit(
+      before: after,
+      after: after.copyWith(clearPostDate: true),
+      actor: EntryAuditActor.user,
+      reason: EntryAuditReason.edited,
+      at: DateTime(2026, 9, 28, 10),
+    );
+    expect(cleared.auditHistory.last.changes['postDate']!.after, isEmpty);
+    expect(
+      cleared.auditHistory.last.changes['postDatePrecision']!.after,
+      isEmpty,
+    );
+  });
+
   test('创建和修改仅记录变化字段，编辑草稿不能覆盖既有历史', () {
     final created = appendEntryAudit(
       before: null,

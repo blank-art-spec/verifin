@@ -13,6 +13,136 @@ import 'models.dart';
 import 'tag_group_labels.dart';
 import '../l10n/app_localizations.dart';
 
+/// 日期或时间选择器的统一签名；页面注入现有 helper，组件不直接创建弹窗。
+/// [context] 用于展示当前语言的选择器，[initialDateTime] 为本次打开的初始值。
+typedef EntryDateTimePicker =
+    Future<DateTime?> Function({
+      required BuildContext context,
+      required DateTime initialDateTime,
+    });
+
+/// 入账日期与可信精度的受控草稿；日期为 null 表示按消费时间计算账单。
+typedef EntryPostDateDraft = ({DateTime? date, OccurredAtPrecision precision});
+
+/// 普通支出新建、导入草稿与交易详情共用的入账日期/时间输入。
+///
+/// [postDate]、[precision] 由父页面保存；[occurredAt] 仅作为首次选日期的初值，
+/// 不会改写消费时间。只选日期时保存日历日，不把消费时分冒充银行入账时分。
+/// [datePicker]、[timePicker] 复用页面的统一选择器，[onChanged] 仅更新草稿，
+/// 最终落账仍由各页面的保存按钮负责。
+class EntryPostDateFields extends StatelessWidget {
+  const EntryPostDateFields({
+    super.key,
+    required this.postDate,
+    required this.precision,
+    required this.occurredAt,
+    required this.datePicker,
+    required this.timePicker,
+    required this.onChanged,
+  });
+
+  final DateTime? postDate;
+  final OccurredAtPrecision precision;
+  final DateTime occurredAt;
+  final EntryDateTimePicker datePicker;
+  final EntryDateTimePicker timePicker;
+  final ValueChanged<EntryPostDateDraft> onChanged;
+
+  /// 选择入账日；首次选择以消费日定位，并把未知时分归零，已有精确时分则保留。
+  /// 取消或页面退出不触发 [onChanged]，避免产生意外草稿修改。
+  Future<void> _pickDate(BuildContext context) async {
+    final initial = postDate ?? dateOnly(occurredAt);
+    final selected = await datePicker(
+      context: context,
+      initialDateTime: initial,
+    );
+    if (!context.mounted || selected == null) return;
+    final selectedPrecision = postDate == null
+        ? OccurredAtPrecision.date
+        : precision;
+    onChanged((
+      date: selectedPrecision == OccurredAtPrecision.date
+          ? dateOnly(selected)
+          : selected,
+      precision: selectedPrecision,
+    ));
+  }
+
+  /// 在已选入账日上补充时分，确认后标为分钟精度；未选日期时不创建隐含日期。
+  /// [context] 只用于打开当前页面的时间选择器，取消仍保留原入账时间。
+  Future<void> _pickTime(BuildContext context) async {
+    final current = postDate;
+    if (current == null) return;
+    final selected = await timePicker(
+      context: context,
+      initialDateTime: current,
+    );
+    if (!context.mounted || selected == null) return;
+    onChanged((date: selected, precision: OccurredAtPrecision.minute));
+  }
+
+  /// 渲染可选日期与时分；清除日期同时清除精度，清除时间则保留入账日。
+  /// [context] 提供应用语言及主题，字段值按本地化日期显示，窄屏允许完整换行。
+  @override
+  Widget build(BuildContext context) {
+    final l10n = AppLocalizations.of(context);
+    final current = postDate;
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        DetailInfoRow(
+          key: const Key('entry_post_date'),
+          label: l10n.entryPostingDate,
+          value: current == null
+              ? l10n.entryPostingDateUnset
+              : MaterialLocalizations.of(context).formatCompactDate(current),
+          placeholder: current == null,
+          onTap: () => _pickDate(context),
+        ),
+        if (current != null) ...[
+          DetailInfoRow(
+            key: const Key('entry_post_time'),
+            label: l10n.entryPostingTime,
+            value: precision == OccurredAtPrecision.date
+                ? l10n.entryPostingTimeUnset
+                : formatTime(current),
+            placeholder: precision == OccurredAtPrecision.date,
+            onTap: () => _pickTime(context),
+          ),
+          Wrap(
+            spacing: 8,
+            children: [
+              TextButton(
+                key: const Key('entry_clear_post_date'),
+                onPressed: () => onChanged((
+                  date: null,
+                  precision: OccurredAtPrecision.date,
+                )),
+                child: Text(l10n.entryPostingDateClear),
+              ),
+              if (precision != OccurredAtPrecision.date)
+                TextButton(
+                  key: const Key('entry_clear_post_time'),
+                  onPressed: () => onChanged((
+                    date: dateOnly(current),
+                    precision: OccurredAtPrecision.date,
+                  )),
+                  child: Text(l10n.entryPostingTimeClear),
+                ),
+            ],
+          ),
+        ],
+        Text(
+          l10n.entryPostingDateHint,
+          style: Theme.of(context).textTheme.bodySmall?.copyWith(
+            color: Theme.of(context).colorScheme.onSurfaceVariant,
+          ),
+        ),
+      ],
+    );
+  }
+}
+
 /// 数字键盘弹层组件体。**勿直接实例化**——统一走 `pages/sheets.dart` 的
 /// `showNumberPadSheet`（包装了 showModalBottomSheet 与样式约定）。
 class NumberPadSheet extends StatefulWidget {

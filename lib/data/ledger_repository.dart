@@ -1251,6 +1251,8 @@ class SqliteLedgerRepository implements LedgerRepository {
 
   // ---- 行映射 ----
 
+  /// 将交易 [e] 编为 SQLite 行；入账日期保存 epoch 毫秒，精度单独保存，
+  /// 因此仅日期与显式午夜时刻在冷启动后仍可区分，不从时间数值反推精度。
   static Map<String, Object?> _entryToRow(LedgerEntry e) => <String, Object?>{
     'id': e.id,
     'book_id': e.bookId,
@@ -1270,6 +1272,7 @@ class SqliteLedgerRepository implements LedgerRepository {
     'occurred_at': e.occurredAt.millisecondsSinceEpoch,
     'occurred_at_precision': e.occurredAtPrecision.name,
     'post_date': e.postDate?.millisecondsSinceEpoch,
+    'post_date_precision': e.postDatePrecision.name,
     'billing_cycle_id': e.billingCycleId,
     // 标签 id 列表以 JSON 数组存单列（整表覆盖式读写，无需关联表）。
     'tag_ids': e.tagIds.isEmpty ? null : jsonEncode(e.tagIds),
@@ -1417,6 +1420,8 @@ class SqliteLedgerRepository implements LedgerRepository {
         setMerchant: row['set_merchant'] as String? ?? '',
       );
 
+  /// 从数据库行 [row] 恢复交易和独立的入账精度；历史缺值按日期精度读取。
+  /// 时间仍沿用本地 epoch 毫秒映射，入账字段不会覆盖原消费时间。
   static LedgerEntry _entryFromRow(Map<String, Object?> row) => LedgerEntry(
     id: row['id'] as String,
     bookId: row['book_id'] as String,
@@ -1442,6 +1447,10 @@ class SqliteLedgerRepository implements LedgerRepository {
     postDate: row['post_date'] == null
         ? null
         : DateTime.fromMillisecondsSinceEpoch(row['post_date'] as int),
+    postDatePrecision: OccurredAtPrecision.fromStorage(
+      row['post_date_precision'] as String?,
+      fallback: OccurredAtPrecision.date,
+    ),
     billingCycleId: row['billing_cycle_id'] as String?,
     tagIds: _decodeTagIds(row['tag_ids']),
     fee: (row['fee'] as num?)?.toDouble() ?? 0,

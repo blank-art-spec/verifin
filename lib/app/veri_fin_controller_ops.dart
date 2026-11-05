@@ -8027,11 +8027,12 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     notifyListeners();
   }
 
-  /// 导出完整 JSON v15 用户数据，保留基金确认的收益归属规则，不导出临时行情缓存或凭证。
+  /// 导出完整 JSON v17 用户数据，保留可选入账日期、具体时间及其可信精度。
+  /// 返回可交给 BackupService 编码的明文 JSON；不导出临时行情缓存或凭证。
   String exportDataJson() {
     final payload = <String, Object?>{
       'app': 'verifin',
-      'version': 16,
+      'version': 17,
       'exportedAt': DateTime.now().toIso8601String(),
       'data': <String, Object?>{
         'investmentPortfolios': _investmentPortfolios
@@ -8107,6 +8108,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   /// ——调用方先经 `BackupService.decodeBackupBytes`（必要时 `decryptEnvelope`）
   /// 还原成明文 JSON 再传入，controller 只认 JSON。
   /// [dryRun] 为 true 时执行同一套解析与校验并返回预览，绝不替换状态或落库。
+  /// 兼容 v1–v16：缺失入账日期沿用消费时间，缺失入账精度按仅日期恢复。
   BackupRestorePreview importDataJson(String rawJson, {bool dryRun = false}) {
     final Object? decoded;
     try {
@@ -8125,7 +8127,7 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
       throw const FormatException('备份版本格式不正确');
     }
     final version = (rawVersion as num?)?.toInt() ?? 1;
-    if (version < 1 || version > 16) {
+    if (version < 1 || version > 17) {
       throw FormatException('不支持的备份版本：$version');
     }
 

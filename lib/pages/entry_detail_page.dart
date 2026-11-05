@@ -12,6 +12,7 @@ import '../app/common_widgets.dart';
 import '../app/currency_catalog.dart';
 import '../app/currency_math.dart';
 import '../app/entry_currency_draft.dart';
+import '../app/entry_sheets.dart';
 import '../app/feedback.dart';
 import '../app/model_lookup.dart';
 import '../app/ledger_math.dart';
@@ -117,6 +118,9 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   late DateTime _occurredAt = _draftNow();
   bool _occurredAtTouched = false;
   OccurredAtPrecision _occurredAtPrecision = OccurredAtPrecision.minute;
+  // 入账日与消费日独立保存；未填时由账单算法回退消费时间，不在表单补造入账事实。
+  DateTime? _postDate;
+  OccurredAtPrecision _postDatePrecision = OccurredAtPrecision.date;
   double _fee = 0;
   String? _currencyCode;
   double? _accountAmount;
@@ -181,6 +185,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
   /// 显式日期、外部草稿和已有输入不得借时钟刷新改写发生时间。
   DateTime _draftNow() => widget.clock?.call() ?? DateTime.now();
 
+  /// 初始化当前录入草稿；已有导入交易完整回填消费时间、入账时间及各自精度，
+  /// AI 草稿缺少的可选入账事实保持为空，不从消费时间自动推算。
   @override
   void initState() {
     super.initState();
@@ -201,6 +207,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       _toAccountId = editing.toAccountId;
       _occurredAt = editing.occurredAt;
       _occurredAtPrecision = editing.occurredAtPrecision;
+      _postDate = editing.postDate;
+      _postDatePrecision = editing.postDatePrecision;
       _fee = editing.fee;
       _currencyCode = editing.currencyCode;
       _accountAmount = editing.accountAmount;
@@ -1232,6 +1240,16 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                       ),
                     ],
                   ),
+                  // 入账是可选账单依据；消费日期、交易排序和日常统计仍保留原语义。
+                  if (_type == EntryType.expense)
+                    EntryPostDateFields(
+                      postDate: _postDate,
+                      precision: _postDatePrecision,
+                      occurredAt: _occurredAt,
+                      datePicker: showEntryDatePicker,
+                      timePicker: showEntryTimePicker,
+                      onChanged: _updatePostDate,
+                    ),
                   // 标记待报销本身不产生任何资金变动，用户容易以为已经「报了」。
                   if (_type == EntryType.expense && _reimbursable)
                     Padding(
@@ -2086,6 +2104,17 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     });
   }
 
+  /// 接收共享入账字段的 [value]，只更新当前草稿；切换类型或页签时保留用户输入。
+  /// 清除日期时同时重置精度，最终支出账单重新按消费时间归期。
+  void _updatePostDate(EntryPostDateDraft value) {
+    setState(() {
+      _postDate = value.date;
+      _postDatePrecision = value.precision;
+    });
+  }
+
+  /// 汇总当前表单为待保存交易；保留来源已确认的账期，入账日期和精度独立于消费时间。
+  /// 此方法不落库，供草稿返回、未保存判断和正式保存共用。
   LedgerEntry _buildDraftEntry() {
     final original = widget.draftEntry;
     final noAccount = _type != EntryType.transfer && _noAccount;
@@ -2132,7 +2161,9 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       note: _noteController.text.trim(),
       occurredAt: _occurredAt,
       occurredAtPrecision: _occurredAtPrecision,
-      postDate: original?.postDate,
+      postDate: _postDate,
+      postDatePrecision: _postDatePrecision,
+      billingCycleId: original?.billingCycleId,
       tagIds: List<String>.of(_tagIds),
       fee: _type == EntryType.transfer
           ? normalizeCurrencyAmount(_fee, code)
@@ -2151,6 +2182,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     _initialAttachmentDataUrls ??= List<String>.of(_pendingAttachments);
   }
 
+  /// 比较 [left] 与 [right] 的可编辑事实，包含入账日期及精度，防止返回时漏报修改。
   bool _sameDraft(LedgerEntry left, LedgerEntry right) =>
       left.type == right.type &&
       left.amount == right.amount &&
@@ -2165,6 +2197,9 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       left.toAccountId == right.toAccountId &&
       left.note == right.note &&
       left.occurredAt == right.occurredAt &&
+      left.occurredAtPrecision == right.occurredAtPrecision &&
+      left.postDate == right.postDate &&
+      left.postDatePrecision == right.postDatePrecision &&
       listEquals(left.tagIds, right.tagIds) &&
       left.fee == right.fee &&
       left.reimbursable == right.reimbursable;

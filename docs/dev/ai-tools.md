@@ -64,7 +64,7 @@
 | `compare` | 指定月份与上月、去年同月的收支环比 / 同比 | `month` | `reportMonthlyComparison` | Stat |
 | `accountsOverview` | 各账户名称、币种与余额一览（不含隐藏账户；隐藏单位时整列不输出「币种」） | — | `ctx.balanceOf` + `convertAccountBalancesToBase` | Table |
 | `netWorth` | 总资产 / 总负债 / 净资产（本位币口径） | — | `convertAccountBalancesToBase` | Stat |
-| `creditCardBill` | 按信用主体聚合多币种子账户的总欠款、共享可用额度、本账期净消费与动态到期日；缺汇率时不伪造部分合计，未迁移旧数据回退单账户口径 | — | `credit_card.dart` | Table |
+| `creditCardBill` | 按信用主体聚合多币种子账户的总欠款、共享可用额度、本账期净消费与动态到期日；账期优先银行明确归属，其次支出入账时间、消费时间，并按快照 `now` 排除未来入账；缺汇率时不伪造部分合计，未迁移旧数据回退单账户口径 | — | `credit_card.dart` | Table |
 | `budgetStatus` | 某预算期的预算、已花、剩余、剩余日均与需要关注的分类 | `month` | `budget_status.dart` | Stat |
 
 **时间窗参数 `range` 预设**：`thisMonth` / `lastMonth` / `thisYear` / `lastYear` / `last7Days` / `last30Days` / `last3Months` / `last6Months` / `last12Months` / `all`；或用 `start`+`end`（`YYYY-MM-DD`）指定显式区间。

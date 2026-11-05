@@ -575,7 +575,8 @@ void main() {
     note: '往返夹具',
     occurredAt: DateTime(2026, 7, 12, 10, 30, 15, 123),
     occurredAtPrecision: OccurredAtPrecision.date,
-    postDate: DateTime(2026, 7, 13),
+    postDate: DateTime(2026, 7, 13, 0, 15, 30, 456),
+    postDatePrecision: OccurredAtPrecision.second,
     billingCycleId: '2026-08-25',
     tagIds: const <String>['t1', 't2'],
     fee: 2.5,
@@ -862,6 +863,74 @@ void main() {
       for (final entry in <LedgerEntry>[entryFull, entryMinimal]) {
         final restored = LedgerEntry.fromJson(jsonRoundTrip(entry.toJson()));
         expect(restored.toJson(), entry.toJson());
+      }
+    });
+
+    test('旧交易缺入账字段仍使用消费时间且不新增默认 JSON 键', () {
+      final legacyJson = entryMinimal.toJson();
+      final restored = LedgerEntry.fromJson(jsonRoundTrip(legacyJson));
+      expect(restored.postDate, isNull);
+      expect(restored.postDatePrecision, OccurredAtPrecision.date);
+      expect(restored.billingOccurredAt, entryMinimal.occurredAt);
+      expect(restored.toJson(), legacyJson);
+      expect(restored.toJson().containsKey('postDatePrecision'), isFalse);
+    });
+
+    test('旧入账日期缺精度保留原始时刻且不推断时分秒可信度', () {
+      final posting = DateTime(2026, 7, 13, 8, 9, 10, 123);
+      final legacyJson = <String, Object?>{
+        ...entryMinimal.toJson(),
+        'postDate': posting.toIso8601String(),
+      };
+      final restored = LedgerEntry.fromJson(jsonRoundTrip(legacyJson));
+      expect(restored.postDate, posting);
+      expect(restored.postDatePrecision, OccurredAtPrecision.date);
+      expect(restored.billingOccurredAt, posting);
+      expect(restored.occurredAt, entryMinimal.occurredAt);
+      expect(restored.toJson(), legacyJson);
+      expect(
+        LedgerEntry.fromJson({
+          ...legacyJson,
+          'postDatePrecision': 'unknown',
+        }).postDatePrecision,
+        OccurredAtPrecision.date,
+      );
+    });
+
+    test('显式午夜入账保留分钟精度，清除后账单回退消费时间', () {
+      final original = entryMinimal.copyWith(
+        postDate: DateTime(2026, 7, 13),
+        postDatePrecision: OccurredAtPrecision.minute,
+      );
+      final restored = LedgerEntry.fromJson(jsonRoundTrip(original.toJson()));
+      expect(restored.postDate, DateTime(2026, 7, 13));
+      expect(restored.postDatePrecision, OccurredAtPrecision.minute);
+      expect(restored.copyWith(note: '其他修改').postDate, restored.postDate);
+      expect(
+        restored.copyWith(note: '其他修改').postDatePrecision,
+        OccurredAtPrecision.minute,
+      );
+      final cleared = restored.copyWith(clearPostDate: true);
+      expect(cleared.postDate, isNull);
+      expect(cleared.postDatePrecision, OccurredAtPrecision.date);
+      expect(cleared.billingOccurredAt, original.occurredAt);
+      expect(cleared.toJson().containsKey('postDate'), isFalse);
+      expect(cleared.toJson().containsKey('postDatePrecision'), isFalse);
+    });
+
+    test('入账日期只影响支出账单时间，不改变收入转账退款发生时间', () {
+      final posting = DateTime(2026, 7, 13, 9, 30);
+      for (final type in EntryType.values) {
+        final entry = entryMinimal.copyWith(
+          type: type,
+          postDate: posting,
+          postDatePrecision: OccurredAtPrecision.minute,
+        );
+        expect(
+          entry.billingOccurredAt,
+          type == EntryType.expense ? posting : entryMinimal.occurredAt,
+        );
+        expect(entry.occurredAt, entryMinimal.occurredAt);
       }
     });
 

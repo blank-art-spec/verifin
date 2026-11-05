@@ -57,8 +57,9 @@ String billingCycleIdFor(DateTime statementDate) {
       '$month-$day';
 }
 
-/// 消费日期对应的目标出账日；出账日当天消费归入下月出账的账期。
-/// 使用日历日推进，避免夏令时使日期边界偏移。
+/// 返回 [occurredAt] 对应的目标出账日，[statementDay] 为每月配置的出账日。
+/// 支出调用方传入 `billingOccurredAt`，使已填写的入账日期优先于消费日期；
+/// 出账日当天入账仍归下期，使用日历日推进以避免夏令时偏移。
 DateTime billingStatementDateForExpense(int statementDay, DateTime occurredAt) {
   return nextStatementDate(
     statementDay,
@@ -143,6 +144,8 @@ class CreditCycleOverview {
 /// [convertToCreditCurrency] 把任意币种金额换成信用主体币种；同币种也应返回原值。
 /// 本账期支出净额使用调用方提供的统计投影；已出账流水的明确参考折算额优先，
 /// 否则按 [now] 的汇率换算。正式账单保持银行实际金额，余额和还款保持账户原币。
+/// 支出按入账时间（未填则消费时间）归期，并精确到 [now] 截止；消费统计与汇率
+/// 使用的原交易时间不改写，银行确认的 `billingCycleId` 仍优先决定账期。
 CreditCycleOverview buildCreditCycleOverview({
   required CreditAccount creditAccount,
   required Iterable<Account> accounts,
@@ -244,13 +247,13 @@ CreditCycleOverview buildCreditCycleOverview({
   final cycleStart = dateOnly(cycle.start);
   final cycleEnd = dateOnly(cycle.end);
   for (final entry in entryList) {
-    final occurred = dateOnly(entry.occurredAt);
+    final billingTime = entry.billingOccurredAt;
+    final occurred = dateOnly(billingTime);
     final inCycle = entry.billingCycleId == null
         ? !occurred.isBefore(cycleStart) &&
               !occurred.isAfter(cycleEnd) &&
-              !occurred.isAfter(dateOnly(now))
-        : entry.billingCycleId == currentCycleId &&
-              !occurred.isAfter(dateOnly(now));
+              !billingTime.isAfter(now)
+        : entry.billingCycleId == currentCycleId && !billingTime.isAfter(now);
     if (entry.type == EntryType.expense &&
         childIds.contains(entry.accountId) &&
         inCycle) {
@@ -482,6 +485,8 @@ class _ScheduledCreditDebtLine {
 
 /// 对没有正式账单覆盖的消费按配置账单日结转。只投影流水，不落库，
 /// 不从账户总余额反推。主体内购汇结算转移原币债务，不算父主体外部还款。
+/// [account] 指定原币子账户，[statementDay] 决定未确认账期的边界，[now] 是查询
+/// 截止时刻；有入账时间的支出按该时刻判断是否生效、所属账期和同一期还款顺序。
 _ScheduledCreditDebt _scheduledCreditDebt({
   required Account account,
   required int statementDay,
@@ -525,14 +530,17 @@ _ScheduledCreditDebt _scheduledCreditDebt({
     final settlement = isCurrencySettlement(entry);
     if ((entry.type != EntryType.expense && !settlement) ||
         entry.accountId != account.id ||
-        entry.occurredAt.isAfter(now)) {
+        entry.billingOccurredAt.isAfter(now)) {
       continue;
     }
     final cycle = entry.billingCycleId == null
         ? settlement
               // 银行出账日购汇已计入当天账单；普通消费仍进入下一期。
               ? nextStatementDate(statementDay, entry.occurredAt)
-              : billingStatementDateForExpense(statementDay, entry.occurredAt)
+              : billingStatementDateForExpense(
+                  statementDay,
+                  entry.billingOccurredAt,
+                )
         : DateTime.tryParse(entry.billingCycleId!);
     if (cycle == null || cycle.isAfter(today)) continue;
     final covered = formal.any((statement) {
@@ -560,7 +568,9 @@ _ScheduledCreditDebt _scheduledCreditDebt({
   }
   for (final lines in linesByCycle.values) {
     lines.sort((a, b) {
-      final byDate = a.entry.occurredAt.compareTo(b.entry.occurredAt);
+      final byDate = a.entry.billingOccurredAt.compareTo(
+        b.entry.billingOccurredAt,
+      );
       // 同一时刻的不同参考汇率不能因载入顺序改变还款后的折算结果。
       return byDate != 0 ? byDate : a.entry.id.compareTo(b.entry.id);
     });
@@ -680,11 +690,16 @@ DateWindow _currentBillingCycleFromStatement({
 
 /// 本期账单金额：本账单周期内、该账户支出的净额合计（退款冲抵后）。
 /// 还款是转账、不计入支出，故不影响本值；本值与「当前欠款」是两个互不矛盾的口径。
+/// [entries] 为待筛选交易，[accountId] 限定账户，[cycle] 为闭区间；未明确归期的
+/// 支出按可选入账日期筛选，未填写时自动沿用消费日期。
+/// [now] 可限定实时查询截止时刻，防止未来具体入账时间提前计入；不传时保留
+/// 整个历史周期的汇总语义，便于查看已选周期而不依赖系统当前时间。
 double billingCycleExpense(
   Iterable<LedgerEntry> entries,
   String accountId,
-  DateWindow cycle,
-) {
+  DateWindow cycle, {
+  DateTime? now,
+}) {
   final start = dateOnly(cycle.start);
   final end = dateOnly(cycle.end);
   final cycleId = billingCycleIdForWindow(cycle);
@@ -693,9 +708,10 @@ double billingCycleExpense(
         (entry) =>
             entry.type == EntryType.expense &&
             entry.accountId == accountId &&
+            (now == null || !entry.billingOccurredAt.isAfter(now)) &&
             (entry.billingCycleId == null
-                ? !dateOnly(entry.occurredAt).isBefore(start) &&
-                      !dateOnly(entry.occurredAt).isAfter(end)
+                ? !dateOnly(entry.billingOccurredAt).isBefore(start) &&
+                      !dateOnly(entry.billingOccurredAt).isAfter(end)
                 : entry.billingCycleId == cycleId),
       )
       .fold<double>(0, (sum, entry) => sum + entry.netAmount);
@@ -714,18 +730,20 @@ class CreditStatementOverview {
   final BillingStatement? latestStatement;
 }
 
-/// 无明确归期的出账日消费不能被旧快照的包含式截止日吸收到上一期。
+/// 判断 [expense] 的入账日（未填则消费日）是否落在 [statement] 的正式周期。
+/// 无明确归期的出账日入账不能被旧快照的包含式截止日吸收到上一期。
 bool _expenseIsInStatementPeriod(
   LedgerEntry expense,
   BillingStatement statement,
 ) {
-  final date = dateOnly(expense.occurredAt);
+  final date = dateOnly(expense.billingOccurredAt);
   return date.isBefore(dateOnly(statement.statementDate)) &&
       !date.isBefore(dateOnly(statement.periodStart)) &&
       !date.isAfter(dateOnly(statement.periodEnd));
 }
 
-/// 还款核验先采用银行确认的归期，再使用本地账单周期；不拿记账日替换消费归期。
+/// 判断 [expense] 是否归属 [statement]：先采用银行确认的账期标识，再按入账日
+/// （未填则消费日）与正式账单周期匹配；仅改变归期，不改消费记录时间。
 bool creditExpenseBelongsToStatement(
   LedgerEntry expense,
   BillingStatement statement,
@@ -799,6 +817,8 @@ List<StatementRefundAllocation> allocateStatementRefunds({
 /// “已出账待还”汇总正式账单剩余和到期流水，不从账户总余额猜；“当前未出账”只统计最近一期
 /// 账期结束后的消费与退款，不把还款转账混入消费。缺少正式账单的已到期消费
 /// 按配置结转，但不伪造最近一期正式账单。
+/// [now] 精确控制入账时刻的生效边界；支出有入账时间时使用该值，退款仍沿用
+/// 实际到账时间。账户余额、原始消费时间及已保存的正式账单金额均不因此改写。
 CreditStatementOverview creditStatementOverview({
   required Account account,
   required Iterable<LedgerEntry> entries,
@@ -882,15 +902,17 @@ CreditStatementOverview creditStatementOverview({
   if (currentCycle != null || cutoff != null) {
     for (final entry in entryList) {
       if (allocatedRefundIds.contains(entry.id)) continue;
-      // 退款只有在实际到账后才会改变信用账户口径，因此筛选未出账条目时
-      // 必须使用与余额计算相同的到账日，而不能只看退款原始发生日。
-      final effectDate = accountEffectDate(entry);
+      // 支出按可选入账时间进入账期；退款仍按实际到账日，不能用申请日提前冲抵。
+      final effectDate = entry.type == EntryType.expense
+          ? entry.billingOccurredAt
+          : accountEffectDate(entry);
       if (entry.accountId != account.id || effectDate.isAfter(now)) {
         continue;
       }
       final belongsToCurrentCycle = entry.billingCycleId == null
           ? currentCycle == null
-                ? effectDate.isAfter(cutoff!)
+                // 正式周期的截止日包含当天全部时刻，不能把中午入账重复计入未出账。
+                ? dateOnly(effectDate).isAfter(dateOnly(cutoff!))
                 : !dateOnly(effectDate).isBefore(currentCycle.start) &&
                       !dateOnly(effectDate).isAfter(currentCycle.end)
           : entry.billingCycleId == currentCycleId;

@@ -14,7 +14,7 @@ class AppDatabase {
   final Database db;
 
   static const String defaultDatabaseName = 'verifin.db';
-  static const int schemaVersion = 29;
+  static const int schemaVersion = 30;
 
   /// 打开（或创建）数据库。测试通过 [factory]/[path] 注入 ffi 与内存路径；
   /// 真实平台留空则由 [resolveDatabaseFactory]/[resolveDatabasePath] 决定。
@@ -85,7 +85,17 @@ class AppDatabase {
         27: _migrateToV27,
         28: _migrateToV28,
         29: _migrateToV29,
+        30: _migrateToV30,
       };
+
+  /// 升级到 v30：为交易保存入账日期的可信精度；[db] 是当前升级事务连接。
+  /// 历史 `post_date` 原值保持不变，新增列默认仅有日期，不把存量午夜或其他
+  /// 时刻推断为银行明确提供的时分秒，也不改消费时间、余额或账单快照。
+  static Future<void> _migrateToV30(Database db) async {
+    await db.execute(
+      "ALTER TABLE entries ADD COLUMN post_date_precision TEXT NOT NULL DEFAULT 'date'",
+    );
+  }
 
   /// 升级到 v29：保存每本账本的录入类型；全部历史账本保持普通，
   /// 不根据名称、投资账户或已有持仓自动判断其用途。[db] 是当前升级事务连接。
@@ -1078,6 +1088,7 @@ class AppDatabase {
       occurred_at INTEGER NOT NULL,
       occurred_at_precision TEXT NOT NULL DEFAULT 'second',
       post_date INTEGER,
+      post_date_precision TEXT NOT NULL DEFAULT 'date',
       billing_cycle_id TEXT,
       tag_ids TEXT,
       fee REAL NOT NULL DEFAULT 0,

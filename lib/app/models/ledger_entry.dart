@@ -28,12 +28,24 @@ enum OccurredAtPrecision {
   minute,
   second;
 
-  /// 从存储值恢复精度；旧数据没有该字段，沿用原先显示秒的行为。
-  static OccurredAtPrecision fromStorage(String? value) =>
-      OccurredAtPrecision.values.firstWhere(
-        (item) => item.name == value,
-        orElse: () => OccurredAtPrecision.second,
-      );
+  /// 返回 [l10n] 对应语言的时间精度名称，供入账修改历史等用户界面使用。
+  /// 存储仍使用枚举的 `name`，切换语言不会改写已保存的精度事实。
+  String label(AppLocalizations l10n) => switch (this) {
+    OccurredAtPrecision.date => l10n.entryTimePrecisionDate,
+    OccurredAtPrecision.minute => l10n.entryTimePrecisionMinute,
+    OccurredAtPrecision.second => l10n.entryTimePrecisionSecond,
+  };
+
+  /// 从存储值 [value] 恢复可信精度；缺失或未知值返回 [fallback]。
+  /// 消费时间默认沿用旧版显示秒的行为，入账日期则显式传入 `date`，
+  /// 避免把历史仅提供日期的银行记录误显示为精确的午夜入账。
+  static OccurredAtPrecision fromStorage(
+    String? value, {
+    OccurredAtPrecision fallback = OccurredAtPrecision.second,
+  }) => OccurredAtPrecision.values.firstWhere(
+    (item) => item.name == value,
+    orElse: () => fallback,
+  );
 }
 
 /// 修改交易的来源类型，审计记录只在本地账本和用户备份中保存。
@@ -270,6 +282,7 @@ class LedgerEntry {
     required this.occurredAt,
     this.occurredAtPrecision = OccurredAtPrecision.second,
     this.postDate,
+    this.postDatePrecision = OccurredAtPrecision.date,
     this.billingCycleId,
     this.tagIds = const <String>[],
     this.fee = 0,
@@ -322,15 +335,28 @@ class LedgerEntry {
   /// [occurredAt] 的可信精度；`date` 时其零点只是排序锚点，不代表实际发生时刻。
   final OccurredAtPrecision occurredAtPrecision;
 
-  /// 银行记账日，独立于交易发生日；来源未给出时为 null。
+  /// 可选的银行入账日期或时刻，独立于消费发生时间；未填写时为 null。
+  /// 支出的账单计算优先使用该值，但收支统计与账户余额仍按消费时间计算。
   final DateTime? postDate;
+
+  /// [postDate] 的可信精度：只选日期为 `date`，另选具体时间为 `minute`。
+  /// 旧数据缺字段时按银行记账日理解，不从午夜或非零时刻猜测来源精度；
+  /// 原有 [postDate] 的时分秒不被迁移改写，空日期时精度无业务含义。
+  final OccurredAtPrecision postDatePrecision;
+
+  /// 返回账单归期所用时间：仅支出优先取 [postDate]，未填则回退 [occurredAt]。
+  /// 该只读派生值不修改交易、收入、退款或转账的发生时间；调用方仅用于
+  /// 信用账单与待还推导，不得替换消费统计、账户余额或资产历史的时间口径。
+  DateTime get billingOccurredAt =>
+      type == EntryType.expense ? postDate ?? occurredAt : occurredAt;
 
   /// 银行确认的信用账期标识，格式固定为该期出账日 `yyyy-MM-dd`。
   ///
   /// 该字段只负责“交易属于哪一期”，不会改写 [occurredAt]。它主要解决账单日当天
   /// 的银行切账时点无法仅凭日历日期判断的问题：例如 9 月 25 日发生的消费，银行已
   /// 明确列入 10 月 25 日账期时写入 `2026-10-25`。`null` 表示旧数据或尚未核准，
-  /// 账期算法才会退回正式账单截止日与交易日期推导。
+  /// 账期算法才会退回正式账单截止日与 [billingOccurredAt] 推导：有入账日期
+  /// 使用入账日期，否则使用消费时间；明确的银行归期仍优先于自动日期推导。
   final String? billingCycleId;
 
   /// 该交易关联的标签 id 列表（多对多，可为空）。
@@ -389,6 +415,10 @@ class LedgerEntry {
   /// 旧统计调用点的源码兼容别名；阶段 3 会迁移为 [netBaseAmount]。
   double get netAmount => netBaseAmount;
 
+  /// 复制交易并替换显式提供的字段；未传参数保留当前值。
+  /// [postDate] 与 [postDatePrecision] 分别表示入账时刻及可信精度；
+  /// [clearPostDate] 为 true 时同时清除入账时刻并恢复日期精度，账单随即回退
+  /// 消费时间。其余 `clearX` 参数用于明确清空可空字段，避免 null 与未修改混淆。
   LedgerEntry copyWith({
     String? id,
     String? bookId,
@@ -412,6 +442,7 @@ class LedgerEntry {
     DateTime? occurredAt,
     OccurredAtPrecision? occurredAtPrecision,
     DateTime? postDate,
+    OccurredAtPrecision? postDatePrecision,
     bool clearPostDate = false,
     String? billingCycleId,
     bool clearBillingCycleId = false,
@@ -453,6 +484,9 @@ class LedgerEntry {
       occurredAt: occurredAt ?? this.occurredAt,
       occurredAtPrecision: occurredAtPrecision ?? this.occurredAtPrecision,
       postDate: clearPostDate ? null : postDate ?? this.postDate,
+      postDatePrecision: clearPostDate
+          ? OccurredAtPrecision.date
+          : postDatePrecision ?? this.postDatePrecision,
       billingCycleId: clearBillingCycleId
           ? null
           : billingCycleId ?? this.billingCycleId,
@@ -469,6 +503,9 @@ class LedgerEntry {
     );
   }
 
+  /// 导出交易备份字段；可选入账日期为空时不输出入账字段。
+  /// 日期精度沿用旧数据默认值而省略，只有显式时分/秒精度写入新键，
+  /// 因此旧交易的 JSON 形状及依赖它的历史投资修订摘要保持不变。
   Map<String, Object?> toJson() {
     return <String, Object?>{
       'id': id,
@@ -489,6 +526,8 @@ class LedgerEntry {
       'occurredAt': occurredAt.toIso8601String(),
       'occurredAtPrecision': occurredAtPrecision.name,
       if (postDate != null) 'postDate': postDate!.toIso8601String(),
+      if (postDate != null && postDatePrecision != OccurredAtPrecision.date)
+        'postDatePrecision': postDatePrecision.name,
       if (billingCycleId != null) 'billingCycleId': billingCycleId,
       if (tagIds.isNotEmpty) 'tagIds': tagIds,
       if (fee != 0) 'fee': fee,
@@ -507,6 +546,8 @@ class LedgerEntry {
     };
   }
 
+  /// 从备份对象 [json] 恢复交易；历史缺少入账日期时保持空值，
+  /// 缺少入账精度时采用 `date`，保留已存在的原始日期/时间数值而不补造事实。
   static LedgerEntry fromJson(Map<String, Object?> json) {
     final type = EntryType.fromStorage(json['type'] as String? ?? 'expense');
     final amount = (json['amount'] as num).toDouble();
@@ -546,6 +587,10 @@ class LedgerEntry {
         json['occurredAtPrecision'] as String?,
       ),
       postDate: DateTime.tryParse(json['postDate'] as String? ?? ''),
+      postDatePrecision: OccurredAtPrecision.fromStorage(
+        json['postDatePrecision'] as String?,
+        fallback: OccurredAtPrecision.date,
+      ),
       billingCycleId: json['billingCycleId'] as String?,
       tagIds: _stringList(json['tagIds']),
       fee: (json['fee'] as num?)?.toDouble() ?? 0,

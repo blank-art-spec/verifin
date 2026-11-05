@@ -333,7 +333,9 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
   ];
 
   /// 全额结清当前所有币种账单豁免；部分还款与超出账单的消费必须有明确参考额。
-  /// 正式账单内按时间先后抵扣已还款；未出账部分按剩余原币债务反推未付流水。
+  /// [parentId] 指定信用主体，[lines] 是本次各子账户拟还的实际原币金额。
+  /// 正式账单内按入账时间（未填则消费时间）先后抵扣已还款；未出账部分按剩余
+  /// 原币债务反推未付流水。账期判定与首页、账户详情一致，不改消费统计或余额。
   @override
   List<LedgerEntry> repaymentMissingReferences(
     String parentId,
@@ -361,7 +363,10 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
                 (e) => e.accountId == account.id && e.type == EntryType.expense,
               )
               .toList()
-            ..sort((a, b) => a.occurredAt.compareTo(b.occurredAt));
+            ..sort((a, b) {
+              final byTime = a.billingOccurredAt.compareTo(b.billingOccurredAt);
+              return byTime != 0 ? byTime : a.id.compareTo(b.id);
+            });
       double net(LedgerEntry expense) {
         final refunds = entries
             .where(
@@ -413,22 +418,43 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
                     ))
                 .clamp(0.0, double.infinity);
         if (account.statementDay != null) {
-          final today = dateOnly(DateTime.now());
-          for (final e in expenses.reversed.where((e) {
-            final cycle = e.billingCycleId == null
-                ? billingStatementDateForExpense(
-                    account.statementDay!,
-                    e.occurredAt,
-                  )
-                : DateTime.tryParse(e.billingCycleId!);
-            if (cycle == null || cycle.isAfter(today)) return false;
-            return !statements.any(
-              (s) =>
-                  billingCycleIdFor(s.statementDate) ==
-                      billingCycleIdFor(cycle) ||
-                  creditExpenseBelongsToStatement(e, s),
-            );
-          })) {
+          final now = DateTime.now();
+          final today = dateOnly(now);
+
+          /// 返回 [expense] 的目标出账日；银行明确归期优先，未提供时按入账日推导。
+          /// 此处仅为未被正式账单覆盖的流水排序，不能用入账先后覆盖银行确认的期次。
+          DateTime? scheduledCycle(LedgerEntry expense) =>
+              expense.billingCycleId == null
+              ? billingStatementDateForExpense(
+                  account.statementDay!,
+                  expense.billingOccurredAt,
+                )
+              : DateTime.tryParse(expense.billingCycleId!);
+
+          final scheduledExpenses =
+              expenses.where((e) {
+                // 与已出账投影使用同一时刻边界，未来入账不能提前成为当前待还。
+                if (e.billingOccurredAt.isAfter(now)) return false;
+                final cycle = scheduledCycle(e);
+                if (cycle == null || cycle.isAfter(today)) return false;
+                return !statements.any(
+                  (s) =>
+                      billingCycleIdFor(s.statementDate) ==
+                          billingCycleIdFor(cycle) ||
+                      creditExpenseBelongsToStatement(e, s),
+                );
+              }).toList()..sort((a, b) {
+                // 已确认账期可能与入账日期先后不同，须和待还投影一样先按期次还旧账。
+                final byCycle = scheduledCycle(
+                  a,
+                )!.compareTo(scheduledCycle(b)!);
+                if (byCycle != 0) return byCycle;
+                final byTime = a.billingOccurredAt.compareTo(
+                  b.billingOccurredAt,
+                );
+                return byTime != 0 ? byTime : a.id.compareTo(b.id);
+              });
+          for (final e in scheduledExpenses.reversed) {
             if (scheduledUnpaid <=
                 currencyAmountTolerance(account.currencyCode)) {
               break;
@@ -455,9 +481,9 @@ mixin _CreditHierarchyOps on ChangeNotifier, _ControllerState, _ControllerOps {
               !statements.any((s) => creditExpenseBelongsToStatement(e, s)) &&
               (cutoff == null ||
                   (e.billingCycleId == null
-                          ? dateOnly(e.occurredAt)
+                          ? dateOnly(e.billingOccurredAt)
                           : DateTime.tryParse(e.billingCycleId!) ??
-                                dateOnly(e.occurredAt))
+                                dateOnly(e.billingOccurredAt))
                       .isAfter(dateOnly(cutoff))),
         )) {
           if (unpaid <= currencyAmountTolerance(account.currencyCode)) break;
