@@ -1,6 +1,6 @@
 # 架构导览
 
-2026-11-05：当前数据库为 SQLite v30、完整备份为 JSON v17，继续读取 v1–v16。普通支出复用可选 `LedgerEntry.postDate` 并新增入账精度 `postDatePrecision`；`billingOccurredAt` 集中提供账单依据时间，银行明确归期仍优先，普通消费统计与余额不变。新建与编辑共用 `EntryPostDateFields`，字段由 `entry_sheets.dart` 定义、页面注入原日期/时间选择器。规则与手动验收见[信用账户口径](credit-hierarchy-currency.md#可选入账日期与时间2026-11-05)。
+2026-11-05：当前数据库为 SQLite v30、完整备份为 JSON v17，继续读取 v1–v16。普通支出复用可选 `LedgerEntry.postDate` 并新增入账精度 `postDatePrecision`；`billingOccurredAt` 集中提供账单依据时间，既有明确归期优先，但手动修改/清除入账信息时通过 `billingCycleIdAfterPostDateEdit` 解除旧标记并重新归期；普通消费统计与余额不变。新建与编辑共用 `EntryPostDateFields`，字段由 `entry_sheets.dart` 定义、页面注入原日期/时间选择器。规则与手动验收见[信用账户口径](credit-hierarchy-currency.md#可选入账日期与时间2026-11-05)。
 
 2026-11-04：`main.dart` 通过 `buildProductionMarketQuoteClient()` 固定装配腾讯股票和指定招商基金来源，不再依赖 debug、diagnostic 或 `PUBLIC_QUOTE_RESEARCH`。工厂构造不联网，通用 Controller 默认空客户端；用户联网/自动刷新偏好仍默认关闭，采用报价仍逐证券选择。来源 `approved: false` 保留，不用应用可用性代替供应方许可。
 

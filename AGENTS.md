@@ -78,7 +78,7 @@ v1.16.0 发布说明：CI Android 两渠道显式带 `--dart-define=UNIFIED_DESI
 - 退款是关联原支出的独立条目；只有已到账退款影响余额和净额，原支出的 `refundedBaseAmount` 是已到账退款 `baseAmount` 之和的派生缓存。修改退款逻辑前必须阅读 `docs/dev/refund-design.md` 和 `docs/dev/multi-currency-design.md` 并以当前代码/测试为准。
 - 多币种主账户复用 `credit_accounts` / `creditAccountId` 历史存储键，SQLite/JSON 结构不变。通用入口为 `accountParents` / `accountsForParent` / `ensureCurrencyChild`，`creditAccounts` 只读信用主体；普通银行与证券主体不得进入额度、账期、还款计算。旧独立账户仅在用户显式启用后建立关系。
 - 信用账户的当前余额优先从最新 `BalanceAnchor` 起算，锚点前交易不再参与余额；`BillingStatement` 与 `StatementRepaymentAllocation` 分别表达正式账单和还款归属，不得回退为伪造校准交易或从总余额猜账单状态。
-- 支出账单归属优先银行明确 `billingCycleId`，否则读取 `LedgerEntry.billingOccurredAt`（可选入账 `postDate`，未填则消费 `occurredAt`）；未来入账不提前计入实时账单。入账精度由 `postDatePrecision` 保存；该时间不得替代普通月度统计、消费排序或账户实际余额的时间边界。
+- 支出账单归属优先既有明确 `billingCycleId`，否则读取 `LedgerEntry.billingOccurredAt`（可选入账 `postDate`，未填则消费 `occurredAt`）；用户手动修改或清除入账日期/精度时，保存交易须清除旧归期标记，使账单按新时间重新归期；取消或改回原值保留标记。未来入账不提前计入实时账单。入账精度由 `postDatePrecision` 保存；该时间不得替代普通月度统计、消费排序或账户实际余额的时间边界。
 - 外部交易证据存于 `LedgerEntry.sourceRecords`，幂等键优先用来源交易号，缺失时用稳定指纹；同一真实交易只保留一条 `LedgerEntry`，各来源只追加证据。
 - 自定义预算周期只改变预算体系口径，统计报表仍按自然月。默认预算使用哨兵键，单月覆盖优先于默认值。
 

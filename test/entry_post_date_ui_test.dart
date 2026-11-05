@@ -13,22 +13,52 @@ import 'support/test_harness.dart';
 final _consumedAt = DateTime(2026, 11, 24, 23, 58);
 
 /// 创建无网络依赖的真实表单账户；[controller] 持有本次用例隔离的内存仓储。
-Future<void> _addAccount(VeriFinController controller) async {
+/// [credit] 为 true 时创建每月 25 日出账的信用账户，返回 Controller 归并后的真实子账户。
+Future<Account> _addAccount(
+  VeriFinController controller, {
+  bool credit = false,
+}) async {
   controller.addAccount(
     Account(
       id: 'posting-cash',
       bookId: controller.activeBook.id,
-      name: '现金',
-      type: AccountType.cash,
+      name: credit ? '测试信用卡' : '现金',
+      type: credit ? AccountType.creditCard : AccountType.cash,
       groupId: null,
-      initialBalance: 1000,
-      iconCode: 'cash',
+      initialBalance: credit ? 0 : 1000,
+      iconCode: credit ? 'credit' : 'cash',
       note: '',
       includeInAssets: true,
       hidden: false,
+      statementDay: credit ? 25 : null,
+      dueDay: credit ? 13 : null,
     ),
   );
   await controller.waitForPendingWrites();
+  return controller.accounts.single;
+}
+
+/// 在固定 11 月 26 日核对 [account] 的父/子账户账单结果，避免实际运行日期造成跨期。
+/// [billed] 为已出账待还，[current] 为本期金额；本组单笔 30 元的余额和总负债必须不变。
+void _expectCreditTotals(
+  VeriFinController controller,
+  Account account, {
+  required double billed,
+  required double current,
+}) {
+  final now = DateTime(2026, 11, 26, 12);
+  final parent = controller.creditCycleOverview(
+    controller.creditAccountForAccount(account)!,
+    now: now,
+  );
+  final child = controller.creditOverview(account, now: now);
+  expect(parent.netSpending, current);
+  expect(parent.currentCycleDebt, current);
+  expect(parent.billedOutstanding, billed);
+  expect(parent.totalDebt, 30);
+  expect(child.billedOutstanding, billed);
+  expect(child.unbilledAmount, current);
+  expect(controller.accountBalance(account), -30);
 }
 
 /// 挂载真实页面，[width] 覆盖常规与窄屏，[use24HourFormat] 明确指定设备时制。
@@ -157,6 +187,37 @@ LedgerEntry _expense(VeriFinController controller) => LedgerEntry(
   billingCycleId: '2026-12-25',
 );
 
+/// 以真实导航打开导入 [entry] 草稿；返回结果交给 [onReturned]，Controller 不落库。
+/// 复用生产草稿页面与保存按钮，避免通过内部回调直接拼造测试结果。
+Future<void> _openDraft(
+  WidgetTester tester,
+  VeriFinController controller, {
+  required LedgerEntry entry,
+  required ValueChanged<LedgerEntry?> onReturned,
+}) async {
+  await _pumpPage(
+    tester,
+    controller,
+    Builder(
+      builder: (context) => Scaffold(
+        body: TextButton(
+          onPressed: () async {
+            final result = await Navigator.of(context).push<LedgerEntry>(
+              MaterialPageRoute(
+                builder: (_) => EntryDetailPage.draft(entry: entry),
+              ),
+            );
+            onReturned(result);
+          },
+          child: const Text('打开草稿'),
+        ),
+      ),
+    ),
+  );
+  await tester.tap(find.text('打开草稿'));
+  await tester.pumpAndSettle();
+}
+
 void main() {
   useTestDatabases();
 
@@ -239,7 +300,7 @@ void main() {
     expect(saved.postDate, DateTime(2026, 11, 25));
     expect(saved.postDatePrecision, OccurredAtPrecision.date);
     expect(saved.occurredAt, _consumedAt);
-    expect(saved.billingCycleId, '2026-12-25');
+    expect(saved.billingCycleId, isNull);
     expect(tester.takeException(), isNull);
   });
 
@@ -269,14 +330,13 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('窄屏已有支出可清除入账日期，保存后回退消费时间', (tester) async {
+  testWidgets('窄屏信用支出清除入账日期后撤销旧归期并按消费时间重算金额', (tester) async {
     final controller = await makeController();
     addTearDown(controller.dispose);
-    await _addAccount(controller);
-    controller.addEntry(
-      _expense(controller).copyWith(clearBillingCycleId: true),
-    );
+    final account = await _addAccount(controller, credit: true);
+    controller.addEntry(_expense(controller));
     await controller.waitForPendingWrites();
+    _expectCreditTotals(controller, account, billed: 0, current: 30);
     await _pumpPage(
       tester,
       controller,
@@ -290,45 +350,166 @@ void main() {
     expect(saved.postDate, isNull);
     expect(saved.postDatePrecision, OccurredAtPrecision.date);
     expect(saved.billingOccurredAt, _consumedAt);
+    expect(saved.billingCycleId, isNull);
+    _expectCreditTotals(controller, account, billed: 30, current: 0);
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('导入草稿入账日期修改只返回草稿并保留银行确认账期', (tester) async {
+  testWidgets('信用支出跨账单日修改入账时间后立即重算本期及已出账待还', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    final account = await _addAccount(controller, credit: true);
+    controller.addEntry(_expense(controller));
+    await controller.waitForPendingWrites();
+    _expectCreditTotals(controller, account, billed: 0, current: 30);
+    await _pumpPage(
+      tester,
+      controller,
+      const TransactionDetailPage(entryId: 'posting-expense'),
+    );
+
+    // 原 12 月 25 日标记与 11 月 24 日入账推导的 11 月 25 日账期不同，必须撤销旧标记。
+    await _selectPostingDay(tester, 24);
+    await _tapField(tester, find.byTooltip('保存'), delta: -240);
+    await controller.waitForPendingWrites();
+    final saved = controller.entries.single;
+    expect(saved.postDate, DateTime(2026, 11, 24, 14, 37));
+    expect(saved.postDatePrecision, OccurredAtPrecision.minute);
+    expect(saved.billingCycleId, isNull);
+    expect(saved.occurredAt, _consumedAt);
+    _expectCreditTotals(controller, account, billed: 30, current: 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('入账日期改后改回或取消选择不会清除归期，修改其他字段保存仍保留', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    final account = await _addAccount(controller, credit: true);
+    controller.addEntry(_expense(controller));
+    await controller.waitForPendingWrites();
+    await _pumpPage(
+      tester,
+      controller,
+      const TransactionDetailPage(entryId: 'posting-expense'),
+    );
+    await _selectPostingDay(tester, 24);
+    await _selectPostingDay(tester, 25);
+    await _tapField(tester, find.byKey(const Key('entry_post_time')));
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<UnsavedChangesGuard>(find.byType(UnsavedChangesGuard))
+          .isDirty,
+      isFalse,
+    );
+
+    // 通过另一字段产生实际保存，验证“未改入账事实”不会在最终组装时丢弃银行归期。
+    await _tapField(tester, find.widgetWithText(DetailInfoRow, '备注'));
+    await tester.enterText(
+      find.descendant(
+        of: find.byType(AlertDialog),
+        matching: find.byType(TextField),
+      ),
+      '仅补充备注',
+    );
+    await tester.tap(
+      find.descendant(of: find.byType(AlertDialog), matching: find.text('确认')),
+    );
+    await tester.pumpAndSettle();
+    await _tapField(tester, find.byTooltip('保存'), delta: -240);
+    await controller.waitForPendingWrites();
+    final saved = controller.entries.single;
+    expect(saved.note, '仅补充备注');
+    expect(saved.postDate, DateTime(2026, 11, 25, 14, 37));
+    expect(saved.postDatePrecision, OccurredAtPrecision.minute);
+    expect(saved.billingCycleId, '2026-12-25');
+    _expectCreditTotals(controller, account, billed: 0, current: 30);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('导入草稿入账日期修改撤销旧归期且只返回草稿', (tester) async {
     final controller = await makeController();
     addTearDown(controller.dispose);
     await _addAccount(controller);
     LedgerEntry? result;
-    await _pumpPage(
+    await _openDraft(
       tester,
       controller,
-      Builder(
-        builder: (context) => Scaffold(
-          body: TextButton(
-            onPressed: () async {
-              result = await Navigator.of(context).push<LedgerEntry>(
-                MaterialPageRoute(
-                  builder: (_) =>
-                      EntryDetailPage.draft(entry: _expense(controller)),
-                ),
-              );
-            },
-            child: const Text('打开草稿'),
-          ),
-        ),
-      ),
+      entry: _expense(controller),
+      onReturned: (value) => result = value,
     );
-    await tester.tap(find.text('打开草稿'));
-    await tester.pumpAndSettle();
-    await _selectPostingDay(tester, 26);
+    await _selectPostingDay(tester, 24);
     final fields = tester.widget<EntryPostDateFields>(
       find.byType(EntryPostDateFields),
     );
-    expect(fields.postDate, DateTime(2026, 11, 26, 14, 37));
+    expect(fields.postDate, DateTime(2026, 11, 24, 14, 37));
     expect(fields.precision, OccurredAtPrecision.minute);
     await tester.tap(find.byKey(const Key('save_entry_button')));
     await tester.pumpAndSettle();
     expect(result, isNotNull);
-    expect(result!.postDate, DateTime(2026, 11, 26, 14, 37));
+    expect(result!.postDate, DateTime(2026, 11, 24, 14, 37));
+    expect(result!.billingCycleId, isNull);
+    expect(controller.entries, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('导入草稿清除入账日期时同步清除旧归期且不落库', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    await _addAccount(controller);
+    LedgerEntry? result;
+    await _openDraft(
+      tester,
+      controller,
+      entry: _expense(controller),
+      onReturned: (value) => result = value,
+    );
+    await _tapField(tester, find.byKey(const Key('entry_clear_post_date')));
+    await tester.tap(find.byKey(const Key('save_entry_button')));
+    await tester.pumpAndSettle();
+    expect(result, isNotNull);
+    expect(result!.postDate, isNull);
+    expect(result!.postDatePrecision, OccurredAtPrecision.date);
+    expect(result!.billingCycleId, isNull);
+    expect(result!.billingOccurredAt, _consumedAt);
+    expect(controller.entries, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('导入草稿入账日期改回初值且取消时分选择后保留旧归期', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    await _addAccount(controller);
+    LedgerEntry? result;
+    await _openDraft(
+      tester,
+      controller,
+      entry: _expense(controller),
+      onReturned: (value) => result = value,
+    );
+    await _selectPostingDay(tester, 24);
+    await _selectPostingDay(tester, 25);
+    await _tapField(tester, find.byKey(const Key('entry_post_time')));
+    await tester.tap(find.text('取消'));
+    await tester.pumpAndSettle();
+    expect(
+      tester
+          .widget<UnsavedChangesGuard>(find.byType(UnsavedChangesGuard))
+          .isDirty,
+      isFalse,
+    );
+    final note = find.byKey(const Key('entry_note_field'));
+    await _tapField(tester, note, delta: -240);
+    await tester.enterText(note, '只修改草稿备注');
+    tester.testTextInput.hide();
+    await tester.pumpAndSettle();
+    await tester.tap(find.byKey(const Key('save_entry_button')));
+    await tester.pumpAndSettle();
+    expect(result, isNotNull);
+    expect(result!.note, '只修改草稿备注');
+    expect(result!.postDate, DateTime(2026, 11, 25, 14, 37));
+    expect(result!.postDatePrecision, OccurredAtPrecision.minute);
     expect(result!.billingCycleId, '2026-12-25');
     expect(controller.entries, isEmpty);
     expect(tester.takeException(), isNull);

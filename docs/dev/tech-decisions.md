@@ -2,7 +2,9 @@
 
 2026-11-05 可选入账日期与时间：复用交易 `postDate`，新增 `postDatePrecision` 区分只知日期、
 分钟和秒；普通支出表单允许选填和清除，未填写不从消费时间补造银行事实。
-账期归属以银行明确 `billingCycleId` 优先，其次 `postDate`，最后 `occurredAt`；
+未编辑的既有记录以明确 `billingCycleId` 优先，其次 `postDate`，最后 `occurredAt`；
+手动修改/清除入账日期或精度且最终值与初始值不同时，保存交易同时清除旧 `billingCycleId`，
+让新入账时间（清除后为消费时间）重新决定账期；取消或改回原值不会解除原标记。
 `LedgerEntry.billingOccurredAt` 只服务支出账单和账期报表，普通自然月统计与账户余额仍沿用消费时间。
 实时账单计算排除尚未到达的具体入账时刻，已发生消费的总负债不因此消失。
 正式账单金额与退款实际到账边界不变，具体规则与待执行手动验收见[信用账户口径](credit-hierarchy-currency.md#可选入账日期与时间2026-11-05)。

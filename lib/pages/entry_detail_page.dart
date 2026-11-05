@@ -2113,7 +2113,8 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     });
   }
 
-  /// 汇总当前表单为待保存交易；保留来源已确认的账期，入账日期和精度独立于消费时间。
+  /// 汇总当前表单为待保存交易；手动修改入账日期或精度时清除旧账期，重新按日期归期。
+  /// 未修改入账信息则保留原有账期标记，入账日期和精度独立于消费时间。
   /// 此方法不落库，供草稿返回、未保存判断和正式保存共用。
   LedgerEntry _buildDraftEntry() {
     final original = widget.draftEntry;
@@ -2163,7 +2164,11 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       occurredAtPrecision: _occurredAtPrecision,
       postDate: _postDate,
       postDatePrecision: _postDatePrecision,
-      billingCycleId: original?.billingCycleId,
+      billingCycleId: billingCycleIdAfterPostDateEdit(
+        original: original,
+        postDate: _postDate,
+        precision: _postDatePrecision,
+      ),
       tagIds: List<String>.of(_tagIds),
       fee: _type == EntryType.transfer
           ? normalizeCurrencyAmount(_fee, code)
@@ -2200,6 +2205,7 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
       left.occurredAtPrecision == right.occurredAtPrecision &&
       left.postDate == right.postDate &&
       left.postDatePrecision == right.postDatePrecision &&
+      left.billingCycleId == right.billingCycleId &&
       listEquals(left.tagIds, right.tagIds) &&
       left.fee == right.fee &&
       left.reimbursable == right.reimbursable;

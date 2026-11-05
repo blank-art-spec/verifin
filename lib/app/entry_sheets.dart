@@ -24,6 +24,23 @@ typedef EntryDateTimePicker =
 /// 入账日期与可信精度的受控草稿；日期为 null 表示按消费时间计算账单。
 typedef EntryPostDateDraft = ({DateTime? date, OccurredAtPrecision precision});
 
+/// 决定手动编辑入账信息后是否保留原账期标记。
+/// [original] 是打开页面时的交易；[postDate]、[precision] 是最终待保存的草稿。
+/// 日期或具体时间精度发生变化（包括清除日期）时返回 null，让账单按新入账时间
+/// 或消费时间重新归期；取消、未修改或改回原值时保留旧标记。此方法不写入数据，
+/// 也不改动独立保存的正式账单金额；调用方在最终保存交易时应用返回值。
+String? billingCycleIdAfterPostDateEdit({
+  required LedgerEntry? original,
+  required DateTime? postDate,
+  required OccurredAtPrecision precision,
+}) {
+  if (original == null) return null;
+  final changed =
+      original.postDate != postDate ||
+      (postDate != null && original.postDatePrecision != precision);
+  return changed ? null : original.billingCycleId;
+}
+
 /// 普通支出新建、导入草稿与交易详情共用的入账日期/时间输入。
 ///
 /// [postDate]、[precision] 由父页面保存；[occurredAt] 仅作为首次选日期的初值，

@@ -1376,6 +1376,7 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       _refunds.fold<double>(0, (total, refund) => total + refund.amount);
 
   /// 汇总已有交易的编辑草稿；未改字段沿用原对象，入账日期为空时明确请求清除。
+  /// 入账日期或精度有实际修改时同步清除旧账期标记，使账单按新日期重新计算归属。
   /// 返回值只用于变更判断与统一保存命令，不在此处写库或修改消费时间口径。
   LedgerEntry _buildEntry() {
     final entry = _initialEntry;
@@ -1440,6 +1441,13 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
       postDate: _postDate,
       clearPostDate: _postDate == null,
       postDatePrecision: _postDatePrecision,
+      clearBillingCycleId:
+          billingCycleIdAfterPostDateEdit(
+            original: entry,
+            postDate: _postDate,
+            precision: _postDatePrecision,
+          ) ==
+          null,
       tagIds: List<String>.of(_tagIds),
       fee: _type == EntryType.transfer && !noAccount
           ? normalizeCurrencyAmount(_fee, _currencyCode)
