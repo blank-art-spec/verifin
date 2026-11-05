@@ -9,6 +9,7 @@ import 'app/backup/backup_coordinator.dart';
 import 'app/feedback.dart';
 import 'app/home_widget_service.dart';
 import 'app/investments/production_market_quotes.dart';
+import 'app/investments/option_quote_credential_store.dart';
 import 'app/l10n_outside_context.dart';
 import 'app/logging/app_logger.dart';
 import 'app/models.dart';
@@ -61,6 +62,9 @@ Future<void> main() async {
             logger: logger,
             // 固定接入已支持的公开来源；构造不联网，仍须在参考行情页主动开启。
             marketQuoteClient: buildProductionMarketQuoteClient(),
+            // 仅从 Android 加密存储恢复期权认证，不开启联网，也不写入账目备份。
+            optionQuoteCredentialStore:
+                const PlatformOptionQuoteCredentialStore(),
             // 语言偏好为「跟随系统」时，首启动播种的默认数据（账本/分类/简介）按系统语言选文案。
             systemIsEnglish:
                 PlatformDispatcher.instance.locale.languageCode.toLowerCase() !=

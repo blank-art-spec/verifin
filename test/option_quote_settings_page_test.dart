@@ -14,6 +14,7 @@ final _secretKey = find.byKey(const ValueKey('optionQuoteSecretKey'));
 Future<void> _open(
   WidgetTester tester, {
   bool configured = false,
+  bool loadFailed = false,
   required Future<bool> Function(String, String) onSave,
   ValueChanged<bool?>? onResult,
 }) async {
@@ -27,6 +28,7 @@ Future<void> _open(
                 MaterialPageRoute(
                   builder: (_) => OptionQuoteSettingsPage(
                     configured: configured,
+                    loadFailed: loadFailed,
                     onSave: onSave,
                   ),
                 ),
@@ -76,7 +78,8 @@ void main() {
       isNull,
     );
     expect(find.textContaining('OPRA 数据权限'), findsOneWidget);
-    expect(find.textContaining('重启应用后需重新设置'), findsOneWidget);
+    expect(find.textContaining('重启后自动恢复'), findsOneWidget);
+    expect(find.textContaining('本机已保存。填写两项凭证'), findsOneWidget);
     expect(calls, 0);
   });
 
@@ -202,8 +205,8 @@ void main() {
         tester.widget<TextField>(_secretKey).controller!.text,
         '  example-secret  ',
       );
-      expect(find.text('未保存，请检查凭证后重试。'), findsOneWidget);
-      expect(find.text('未保存，请检查凭证后重试。').hitTestable(), findsOneWidget);
+      expect(find.text('未保存，请稍后重试。'), findsOneWidget);
+      expect(find.text('未保存，请稍后重试。').hitTestable(), findsOneWidget);
       expect(find.textContaining('sensitive-error-payload'), findsNothing);
       expect(tester.takeException(), isNull);
     });
@@ -248,7 +251,7 @@ void main() {
     expect(find.byType(OptionQuoteSettingsPage), findsNothing);
   });
 
-  testWidgets('明确清除本次配置交付空凭证并返回成功', (tester) async {
+  testWidgets('明确清除已保存凭证交付空凭证并返回成功', (tester) async {
     final calls = <(String, String)>[];
     bool? result;
     await _open(
@@ -260,11 +263,32 @@ void main() {
       },
       onResult: (value) => result = value,
     );
-    await tester.ensureVisible(find.text('清除本次配置'));
-    await tester.tap(find.text('清除本次配置'));
+    await tester.ensureVisible(find.text('清除已保存凭证'));
+    await tester.tap(find.text('清除已保存凭证'));
     await tester.pumpAndSettle();
     expect(calls, [('', '')]);
     expect(result, isTrue);
+    expect(find.byType(OptionQuoteSettingsPage), findsNothing);
+  });
+
+  testWidgets('读取失败不声称未配置，保留错误提示并允许主动清除', (tester) async {
+    final calls = <(String, String)>[];
+    await _open(
+      tester,
+      loadFailed: true,
+      onSave: (keyId, secretKey) async {
+        calls.add((keyId, secretKey));
+        return true;
+      },
+    );
+    expect(find.text('本机凭证读取失败，请重新配置或清除已保存凭证。'), findsOneWidget);
+    expect(find.text('填写两项凭证后保存。'), findsNothing);
+    expect(find.textContaining('本机已保存。'), findsNothing);
+    expect(calls, isEmpty);
+    await tester.ensureVisible(find.text('清除已保存凭证'));
+    await tester.tap(find.text('清除已保存凭证'));
+    await tester.pumpAndSettle();
+    expect(calls, [('', '')]);
     expect(find.byType(OptionQuoteSettingsPage), findsNothing);
   });
 }

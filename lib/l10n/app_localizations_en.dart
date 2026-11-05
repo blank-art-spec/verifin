@@ -8032,7 +8032,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get optionQuoteTitle => 'US option quotes';
 
   @override
-  String get optionQuoteConfigured => 'Configured · This session only';
+  String get optionQuoteConfigured => 'Saved on this device';
 
   @override
   String get optionQuoteNotConfigured => 'Not configured';
@@ -8052,21 +8052,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionQuoteReplaceHint =>
-      'Configured for this session. Enter both credentials to replace the current configuration, or leave them blank to keep it.';
+      'Saved on this device. Enter both credentials to replace the current configuration, or leave them blank to keep it.';
 
   @override
   String get optionQuoteSetupHint => 'Enter both credentials, then save.';
 
   @override
-  String get optionQuoteSessionOnly =>
-      'Credentials are kept only for this app session to read quotes. They are not included in backups or logs. Set them again after restarting the app.';
+  String get optionQuoteLocalStorage =>
+      'Credentials are encrypted on this device and restored automatically after restarting. They are excluded from ledger backups and logs. Set them again after uninstalling or moving to another device.';
 
   @override
-  String get optionQuoteClear => 'Clear session configuration';
+  String get optionQuoteClear => 'Clear saved credentials';
 
   @override
-  String get optionQuoteSaveFailed =>
-      'Not saved. Check the credentials and try again.';
+  String get optionQuoteSaveFailed => 'Not saved. Try again later.';
+
+  @override
+  String get optionQuoteLoadFailed =>
+      'Saved credentials could not be read. Set them again or clear the saved credentials.';
 
   @override
   String get optionQuoteCredentialInvalid =>

@@ -28,6 +28,8 @@ import 'investments/investment_opening_draft.dart';
 import 'investments/stock_projection.dart';
 import 'investments/stock_cash_math.dart';
 import 'investments/market_quote.dart';
+import 'investments/alpaca_option_quote_adapter.dart';
+import 'investments/option_quote_credential_store.dart';
 import 'investments/security_search.dart';
 import 'investments/investment_quote_sync.dart';
 import 'investments/investment_valuation.dart';
@@ -61,6 +63,7 @@ part 'veri_fin_controller_account_reminders.dart';
 part 'veri_fin_controller_workday_calendar.dart';
 part 'veri_fin_controller_credit_hierarchy.dart';
 part 'veri_fin_controller_investments.dart';
+part 'veri_fin_controller_option_quotes.dart';
 part 'veri_fin_controller_funds.dart';
 part 'veri_fin_controller_securities_accounts.dart';
 
@@ -197,6 +200,7 @@ class VeriFinController extends ChangeNotifier
         _ControllerState,
         _ControllerOps,
         _InvestmentOps,
+        _OptionQuoteCredentialOps,
         _SecuritiesAccountOps,
         _FundOps,
         _AccountEntryReminderOps,
@@ -210,6 +214,7 @@ class VeriFinController extends ChangeNotifier
     this._workdayCalendarClient, {
     AppLogger? logger,
     MarketQuoteClient marketQuoteClient = const MarketQuoteClient(),
+    OptionQuoteCredentialStore? optionQuoteCredentialStore,
     SecuritySearchClient? securitySearchClient,
     bool systemIsEnglish = false,
     // ignore: prefer_initializing_formals
@@ -219,6 +224,9 @@ class VeriFinController extends ChangeNotifier
        // 私有字段保留公开注入参数名，避免把实现细节暴露给 create 调用者。
        // ignore: prefer_initializing_formals
        _marketQuoteClient = marketQuoteClient,
+       // 保留与 create 一致的公开注入参数名，内部字段不进入调用方接口。
+       // ignore: prefer_initializing_formals
+       _optionQuoteCredentialStore = optionQuoteCredentialStore,
        _securitySearchClient = securitySearchClient ?? SecuritySearchClient() {
     _loadPreferences();
     themePreferenceListenable = ValueNotifier<ThemePreference>(
@@ -236,6 +244,7 @@ class VeriFinController extends ChangeNotifier
   /// （全新数据库首启动写入默认数据）。账目类数据只以 SQLite 为准。
   /// [workdayCalendarClient] 允许测试注入公开日历响应；创建阶段只读缓存，不自动联网。
   /// [securitySearchClient] 允许测试注入证券身份响应；仅用户点击搜索时查询，不自动联网。
+  /// [optionQuoteCredentialStore] 由生产入口显式注入；为空时不调用原生凭证存储。
   static Future<VeriFinController> create(
     LocalKeyValueStore store, {
     required LedgerRepository repository,
@@ -243,6 +252,7 @@ class VeriFinController extends ChangeNotifier
     bool systemIsEnglish = false,
     HolidayCalendarClient workdayCalendarClient = const HolidayCalendarClient(),
     MarketQuoteClient marketQuoteClient = const MarketQuoteClient(),
+    OptionQuoteCredentialStore? optionQuoteCredentialStore,
     SecuritySearchClient? securitySearchClient,
   }) async {
     final controller = VeriFinController._(
@@ -251,9 +261,12 @@ class VeriFinController extends ChangeNotifier
       workdayCalendarClient,
       logger: logger,
       marketQuoteClient: marketQuoteClient,
+      optionQuoteCredentialStore: optionQuoteCredentialStore,
       securitySearchClient: securitySearchClient,
       systemIsEnglish: systemIsEnglish,
     );
+    // 凭证先于任何延迟创建的行情缓存恢复；这里只读设备，不启动行情请求。
+    await controller._restoreOptionQuoteCredentials();
     await controller._loadFromRepository();
     await controller._restoreCaptureLinksFromSources();
     await controller.upgradeCreditHierarchy();
@@ -278,6 +291,8 @@ class VeriFinController extends ChangeNotifier
   final HolidayCalendarClient _workdayCalendarClient;
   @override
   final MarketQuoteClient _marketQuoteClient;
+  @override
+  final OptionQuoteCredentialStore? _optionQuoteCredentialStore;
   final SecuritySearchClient _securitySearchClient;
 
   /// 显式查询 [query] 对应的公开股票资料，按 [market] 和 [currencyCode] 本地过滤。

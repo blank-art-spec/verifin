@@ -125,7 +125,8 @@ class AlpacaOptionQuoteAdapter extends MarketQuoteAdapter {
 
   bool get configured => _keyId.isNotEmpty && _secretKey.isNotEmpty;
 
-  /// 凭证只留内存；双空明确清除，单项缺失不改变原配置，变化时撤销在途观察。
+  /// 适配器只持有内存凭证，设备加密保存由 Controller 负责。
+  /// 双空明确清除，单项缺失不改变原配置，变化时撤销在途观察。
   void configure({required String keyId, required String secretKey}) {
     final key = keyId.trim(), secret = secretKey.trim();
     if (key.isEmpty != secret.isEmpty ||

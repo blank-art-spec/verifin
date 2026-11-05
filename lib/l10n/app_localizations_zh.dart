@@ -7725,7 +7725,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get optionQuoteTitle => '美股期权行情';
 
   @override
-  String get optionQuoteConfigured => '已配置 · 仅本次运行';
+  String get optionQuoteConfigured => '已保存到本机';
 
   @override
   String get optionQuoteNotConfigured => '未配置';
@@ -7743,20 +7743,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get optionQuoteSecretKey => 'Alpaca Secret Key';
 
   @override
-  String get optionQuoteReplaceHint => '本次运行已配置。填写两项凭证可替换现有配置，留空则保持不变。';
+  String get optionQuoteReplaceHint => '本机已保存。填写两项凭证可替换现有配置，留空则保持不变。';
 
   @override
   String get optionQuoteSetupHint => '填写两项凭证后保存。';
 
   @override
-  String get optionQuoteSessionOnly =>
-      '凭证仅在本次运行中保留，用于读取行情，不写入备份或日志。重启应用后需重新设置。';
+  String get optionQuoteLocalStorage =>
+      '凭证在本机加密保存，重启后自动恢复，不进入账目备份和日志。卸载或换机后需重新配置。';
 
   @override
-  String get optionQuoteClear => '清除本次配置';
+  String get optionQuoteClear => '清除已保存凭证';
 
   @override
-  String get optionQuoteSaveFailed => '未保存，请检查凭证后重试。';
+  String get optionQuoteSaveFailed => '未保存，请稍后重试。';
+
+  @override
+  String get optionQuoteLoadFailed => '本机凭证读取失败，请重新配置或清除已保存凭证。';
 
   @override
   String get optionQuoteCredentialInvalid => '请使用 1–512 个英文字母、数字或英文符号，不含空白。';

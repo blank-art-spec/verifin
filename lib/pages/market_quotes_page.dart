@@ -139,30 +139,16 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
     _activate(force: true);
   }
 
-  /// 期权认证独立于账目，表单只提交本次运行内的凭证；更换前撤销旧请求和旧缓存。
+  /// 期权认证独立于账目，交由 Controller 加密保存；更换前撤销旧请求和旧缓存。
   /// 不回显已存秘密、不自动开启联网，保存失败时由编辑页保留尚未提交的输入。
   Future<void> _configureOptions(AlpacaOptionQuoteAdapter adapter) async {
-    final c = _controller!, sync = _sync!;
+    final c = _controller!;
     final changed = await Navigator.of(context).push<bool>(
       MaterialPageRoute(
         builder: (_) => OptionQuoteSettingsPage(
           configured: adapter.configured,
-          onSave: (keyId, secretKey) => sync.reconfigureSource(
-            sourceId: adapter.capability.id,
-            configure: () =>
-                adapter.configure(keyId: keyId, secretKey: secretKey),
-            affectedPortfolios: c.accounts
-                .map((account) => c.investmentFor(account.id))
-                .whereType<InvestmentPortfolio>()
-                .where(
-                  (portfolio) => portfolio.securities.any(
-                    (security) =>
-                        security.market == StockMarket.us &&
-                        security.currencyCode == 'USD' &&
-                        security.option != null,
-                  ),
-                ),
-          ),
+          loadFailed: c.optionQuoteCredentialsLoadFailed,
+          onSave: c.saveOptionQuoteCredentials,
         ),
       ),
     );
@@ -288,7 +274,9 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                           SettingsRow(
                             icon: Icons.vpn_key_outlined,
                             title: l.optionQuoteTitle,
-                            trailing: optionSource.configured
+                            trailing: c.optionQuoteCredentialsLoadFailed
+                                ? l.optionQuoteLoadFailed
+                                : optionSource.configured
                                 ? l.optionQuoteConfigured
                                 : l.optionQuoteNotConfigured,
                             trailingMaxLines: null,
@@ -341,7 +329,9 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                               value:
                                   source.id == optionSource?.capability.id &&
                                       !optionSource!.configured
-                                  ? l.optionQuoteNotConfigured
+                                  ? c.optionQuoteCredentialsLoadFailed
+                                        ? l.optionQuoteLoadFailed
+                                        : l.optionQuoteNotConfigured
                                   : source.approved
                                   ? l.marketSourceConnected
                                   : source.researchOnly &&

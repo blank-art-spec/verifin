@@ -1,4 +1,4 @@
-/// 美股期权行情凭证草稿；本页不持久化凭证、不读取既有秘密，也不发网络请求。
+/// 美股期权行情凭证草稿；加密保存交由调用方，本页不读取既有秘密或直接访问文件及网络。
 library;
 
 import 'dart:async';
@@ -10,17 +10,20 @@ import '../app/feedback.dart';
 import '../app/investments/investment_widgets.dart';
 import '../l10n/app_localizations.dart';
 
-/// 只通过显式保存向调用方交付凭证，调用方仅可在本次应用运行中持有它们。
+/// 只通过显式保存向调用方交付凭证，调用方完成本机加密保存后才能返回成功。
 class OptionQuoteSettingsPage extends StatefulWidget {
   /// [configured] 仅表示已有配置，不向表单提供已保存的凭证。
-  /// [onSave] 成功时返回 true；两个空串表示明确清除，失败不得改变当前配置。
+  /// [loadFailed] 表示旧凭证读取失败，仍允许主动替换或清除，不伪装成未配置。
+  /// [onSave] 加密保存或删除落盘成功后返回 true；两个空串表示明确清除。
   const OptionQuoteSettingsPage({
     super.key,
     required this.configured,
     required this.onSave,
+    this.loadFailed = false,
   });
 
   final bool configured;
+  final bool loadFailed;
   final Future<bool> Function(String keyId, String secretKey) onSave;
 
   @override
@@ -100,7 +103,7 @@ class _OptionQuoteSettingsPageState extends State<OptionQuoteSettingsPage> {
 
   /// 清除是独立显式动作；普通返回或输入空白不会清掉现有配置。
   Future<void> _clearAndExit() async {
-    if (!widget.configured || _saving) return;
+    if ((!widget.configured && !widget.loadFailed) || _saving) return;
     if (await _commit('', '') && mounted) {
       _exitController.exit(result: () => true);
     }
@@ -145,7 +148,9 @@ class _OptionQuoteSettingsPageState extends State<OptionQuoteSettingsPage> {
                         title: l10n.optionQuoteCredentials,
                         children: [
                           InvestmentHint(
-                            widget.configured
+                            widget.loadFailed
+                                ? l10n.optionQuoteLoadFailed
+                                : widget.configured
                                 ? l10n.optionQuoteReplaceHint
                                 : l10n.optionQuoteSetupHint,
                           ),
@@ -197,7 +202,7 @@ class _OptionQuoteSettingsPageState extends State<OptionQuoteSettingsPage> {
                                   ),
                             ),
                           ),
-                          if (widget.configured)
+                          if (widget.configured || widget.loadFailed)
                             OutlinedButton.icon(
                               onPressed: _saving ? null : _clearAndExit,
                               style: investmentOutlineButtonStyle(context),
@@ -207,7 +212,7 @@ class _OptionQuoteSettingsPageState extends State<OptionQuoteSettingsPage> {
                         ],
                       ),
                       const SizedBox(height: 12),
-                      InvestmentHint(l10n.optionQuoteSessionOnly),
+                      InvestmentHint(l10n.optionQuoteLocalStorage),
                     ],
                   ),
                 ),

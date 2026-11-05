@@ -341,11 +341,14 @@ class InvestmentQuoteSync {
   /// [affectedPortfolios] 是调用方确认可能使用新配置的账户；它们与旧来源缓存所属
   /// 账户的自动冷却会重置，其他来源价格及独立账户计时保留。此方法不读取或保存凭证。
   /// [configure] 必须同步、原子地应用已验证的配置，只在清理持久缓存成功后调用；
+  /// [persistConfiguration] 可将配置保存到独立安全存储；它成功前不调用 configure，
+  /// 等待期间仍拦截刷新，失败只记录固定提示，不接触或记录凭证内容。
   /// 返回 false 时调用方保留草稿。清理失败也撤销内存旧价，并明确显示未缓存状态。
   Future<bool> reconfigureSource({
     required String sourceId,
     required void Function() configure,
     required Iterable<InvestmentPortfolio> affectedPortfolios,
+    Future<void> Function()? persistConfiguration,
   }) async {
     if (_disposed || _sourceReconfiguring) return false;
     final owners = affectedPortfolios.map(_owner).toSet();
@@ -379,9 +382,11 @@ class InvestmentQuoteSync {
       // 新请求在保存期间统一暂停；已排队的旧快照写完后再写此清理结果，不能复活旧价。
       if (!await _persistCache() || _disposed) return false;
       try {
+        if (persistConfiguration != null) await persistConfiguration();
+        if (_disposed) return false;
         configure();
       } catch (_) {
-        // 配置回调只应用预先验证的内存状态；异常不含凭证或调用方原文。
+        // 安全存储或内存配置失败都只记录固定提示，不记录异常或调用方原文。
         status = QuoteSyncStatus.failed;
         logger?.warning('参考行情来源配置更新失败', source: 'investment_quote');
         return false;

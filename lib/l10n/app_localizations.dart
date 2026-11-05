@@ -14040,7 +14040,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionQuoteConfigured.
   ///
   /// In zh, this message translates to:
-  /// **'已配置 · 仅本次运行'**
+  /// **'已保存到本机'**
   String get optionQuoteConfigured;
 
   /// No description provided for @optionQuoteNotConfigured.
@@ -14076,7 +14076,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionQuoteReplaceHint.
   ///
   /// In zh, this message translates to:
-  /// **'本次运行已配置。填写两项凭证可替换现有配置，留空则保持不变。'**
+  /// **'本机已保存。填写两项凭证可替换现有配置，留空则保持不变。'**
   String get optionQuoteReplaceHint;
 
   /// No description provided for @optionQuoteSetupHint.
@@ -14085,23 +14085,29 @@ abstract class AppLocalizations {
   /// **'填写两项凭证后保存。'**
   String get optionQuoteSetupHint;
 
-  /// No description provided for @optionQuoteSessionOnly.
+  /// No description provided for @optionQuoteLocalStorage.
   ///
   /// In zh, this message translates to:
-  /// **'凭证仅在本次运行中保留，用于读取行情，不写入备份或日志。重启应用后需重新设置。'**
-  String get optionQuoteSessionOnly;
+  /// **'凭证在本机加密保存，重启后自动恢复，不进入账目备份和日志。卸载或换机后需重新配置。'**
+  String get optionQuoteLocalStorage;
 
   /// No description provided for @optionQuoteClear.
   ///
   /// In zh, this message translates to:
-  /// **'清除本次配置'**
+  /// **'清除已保存凭证'**
   String get optionQuoteClear;
 
   /// No description provided for @optionQuoteSaveFailed.
   ///
   /// In zh, this message translates to:
-  /// **'未保存，请检查凭证后重试。'**
+  /// **'未保存，请稍后重试。'**
   String get optionQuoteSaveFailed;
+
+  /// No description provided for @optionQuoteLoadFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'本机凭证读取失败，请重新配置或清除已保存凭证。'**
+  String get optionQuoteLoadFailed;
 
   /// No description provided for @optionQuoteCredentialInvalid.
   ///

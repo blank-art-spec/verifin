@@ -352,8 +352,16 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 `AlpacaOptionQuoteAdapter` / `AlpacaHttpOptionQuoteTransport` 只查询固定官方 OPRA 快照；
 `MarketQuoteRequest` 提取到期日、权利、行权价及公开标的身份，不带交割备注或账务。
-`OptionQuoteSettingsPage(configured, onSave)` 复用标准编辑草稿及退出保护，凭证仅本次运行有效；
-`InvestmentQuoteSync.reconfigureSource(sourceId, configure, affectedPortfolios)` 先清该来源缓存再
-应用内存配置，撤销旧结果，不清其他来源缓存。工厂新增该适配器，未配置时不支持任何请求。
+`OptionQuoteSettingsPage(configured, onSave, loadFailed)` 复用标准编辑草稿及退出保护，
+不回显旧凭证；读取失败时保留明确提示并允许替换或清除，安全存储成功才退页。
+`OptionQuoteCredentialStore` / `PlatformOptionQuoteCredentialStore`（`investments/option_quote_credential_store.dart`）
+经现有 `AppSecurityBridge` 调用 Android Keystore 加密存储，独立密文放在 `noBackupFilesDir`。
+原生 `OptionQuoteCredentialStore.kt` 使用 AES-256/GCM 与 `AtomicFile`，读失败不销毁旧文件，
+清除同时删除旧密文及临时文件；不增加第三方插件依赖。
+`VeriFinController.saveOptionQuoteCredentials` 串行清来源缓存、完成安全存储后更新内存，
+启动时恢复；`optionQuoteCredentialsLoadFailed` 区分读取失败与真正未配置。设备级凭证
+不进 KV、SQLite、账目备份或日志，不随账户/账本删除；显式清除或卸载才删除。
+`InvestmentQuoteSync.reconfigureSource` 先清该来源缓存，再等待可选的 `persistConfiguration`
+成功后应用配置；过程中暂停刷新并撤销旧结果，不清其他来源缓存。工厂新增该适配器，未配置时不支持任何请求。
 `InvestmentQuoteSync.refresh` 处理全部持仓，每批最多 20 项串行，失败继续、取消撤销整轮；
 内存保留全部有效报价，磁盘继续限定最新 100 条及 512 KiB。详见[期权来源说明](us-option-quote-source.md)。

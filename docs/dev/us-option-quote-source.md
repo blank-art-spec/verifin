@@ -30,11 +30,20 @@
 
 ## 配置与隔离
 
-“参考行情 → 美股期权行情”录入 Key ID 和 Secret Key。只保留本次应用运行内存，
-不写 SharedPreferences、SQLite、报价缓存、账目备份或日志；退出进程后须重填。
-编辑页不回显旧凭证，两个字段均需填写，清除使用独立操作，取消不修改配置。
+“参考行情 → 美股期权行情”录入 Key ID 和 Secret Key，保存后在本机加密保留，
+重启应用自动恢复。Android 使用 Android Keystore 保护加密密钥，独立密文放在
+`noBackupFilesDir/option_quote_credentials.v1`，不写 SharedPreferences、SQLite、报价缓存、账目备份或日志，
+不增加第三方插件依赖。卸载或换机后须重新配置，不修改 SQLite/JSON 备份版本。
+原生 `OptionQuoteCredentialStore.kt` 使用不可导出的 AES-256/GCM 密钥及随机 IV，
+整对凭证通过 `AtomicFile` 原子更新；读失败不重建密钥或降级明文。清除删除密文及
+临时文件；若存在旧版原子文件备份，先恢复到主文件再删除，后续删除失败仍保留有效凭证。
+保留设备密钥，避免删除失败后使原数据不可读；现有 `allowBackup=false` 保持。
+编辑页不回显旧凭证，填写两项才能替换，留空保持不变；取消不写入，只有安全存储
+完成后才显示保存成功。读取失败显示明确错误，允许重新配置或主动清除，不把失败
+当作未配置，也不自动删除旧密文。清除使用独立操作，成功后不再于重启恢复。
+凭证属于设备配置，删除账户、账本或恢复账目不会清除；显式清除或卸载才删除。
 更换或清除前取消旧请求结果，清除此来源的旧缓存；股票和基金缓存不清除。
-缓存清理失败不应用新凭证，输入留在页面供重试。网络失败只记录来源及数量，
+缓存清理或安全存储失败不应用新凭证，输入留在页面供重试。网络失败只记录来源及数量，
 不得记录认证头、请求原文或可能携带凭证的异常。
 
 ## 身份、价格与估值
@@ -56,15 +65,32 @@
 
 ## 验证状态
 
-2026-11-05 本地验证：`dart format lib test scripts` 检查 507 文件，最终无格式变化；
+2026-11-05 首版内存凭证实现的历史验证：`dart format lib test scripts` 检查 507 文件，最终无格式变化；
 `flutter analyze --no-pub lib test scripts` 无问题；完整
 `flutter test --no-pub --concurrency 4 --timeout 2m` 为 2220 通过、6 项既有跳过、0 失败。
 完整日志保存在 `build/validation/us-options-20261105/full-test.log`。
 覆盖来源身份与时间、精度、传输限制、凭证配置/清除/失败、旧响应隔离、45/102 项持仓、
 生产工厂接线及逐项采用；100/10 两种乘数只在估值中应用一次，账务事实不变。
+以上结果早于凭证本机加密保存，新增路径的结果另记于下方。
+
+2026-11-05 本机加密保存回归：
+
+- `dart format --output=none --set-exit-if-changed .` 检查 904 文件，无格式变化；
+  `flutter analyze --no-pub lib test scripts` 无问题。
+- 完整 `flutter test --no-pub --concurrency 4 --timeout 2m` 为 2231 通过、6 项既有跳过、
+  0 失败，日志为 `build/validation/option-credentials-20261105/full-test.log`。
+  新增覆盖设备存储协议、Controller 重建模拟冷启动、读取/写入/清除失败、并发保存、
+  保存期间阻止刷新、缓存先清理及凭证不进入普通偏好和账目备份。
+- 修复清除顺序后，`:app:compileGithubDebugKotlin` 与 `:app:compileDiagnosticDebugKotlin`
+  均通过；显式排除对应 `compileFlutterBuild` 任务，只验证原生编译，未生成 APK。
+  日志为 `build/validation/option-credentials-20261105/kotlin-final.log`。
+- 原生诊断检查使用独立随机目录与密钥别名，覆盖密文、随机 IV、中断恢复、损坏、
+  清除失败保留权威备份及密钥丢失；代码不接入启动或平台通道，尚未在 Android 执行。
 
 官方 OpenAPI 与腾讯、Nasdaq、Cboe 调查响应保存在本地
 `build/validation/us-options-20261105`；这些文件不包含用户凭证。
 期权适配器测试使用明确标记的官方文档示例及本地构造响应，不能称为实盘验证。
 当前没有用户的 Alpaca 凭证，未执行认证后的真实期权请求，也未替用户开通权限。
-本轮没有构建或安装 Android 应用，设备验收仍待用户手动构建后执行。
+本轮未生成 APK、未安装或启动应用；`adb devices -l` 没有已连接设备。
+真实 Android Keystore 读写、结束进程后重启恢复和清除后的冷启动仍待设备验收，
+不能以模拟存储的 Dart 测试或 Kotlin 编译替代。

@@ -6,14 +6,14 @@
 
 已实现参考报价协议、来源分发门禁、设备短缓存、持续手填覆盖、应用前台会话刷新、按账户独立的自动计时、生命周期和旧响应隔离；接入投资页及当前账户资产读取。手动刷新取消应用本地五分钟等待，自动刷新默认仍为每五分钟一次。
 
-**主应用可直接使用腾讯股票与指定招商基金参考行情，无需诊断包、debug 或额外研究参数。** 联网和自动刷新仍默认关闭，用户开启联网并逐证券选择采用后，合格报价才影响参考估值。腾讯范围包括既有沪深 CNY、港股 HKD 与 1–5 位美股字母代码及 .A/.B 类股；招商只接受已核对的 `HK0001039582`、USD、B 类单位净值，不扩展其他基金或收益指标。美股期权另接需用户凭证与 OPRA 权限的 Alpaca 来源，配置仅本次运行有效；TEST 合约不发请求。详情及尚未实盘认证的限制见[期权来源记录](us-option-quote-source.md)。各来源保留 `approved: false`、`researchOnly: true`，应用可用性不等于供应方正式许可或全品种覆盖。完整范围与历史证据见[股票来源记录](public-quote-research.md)和[基金来源记录](cms-fund-api-research.md)。手填参考价和离线账务继续可用；Android 编译及设备结果见[本轮验证记录](public-quote-research.md#2026-11-04-主应用验证)。
+**主应用可直接使用腾讯股票与指定招商基金参考行情，无需诊断包、debug 或额外研究参数。** 联网和自动刷新仍默认关闭，用户开启联网并逐证券选择采用后，合格报价才影响参考估值。腾讯范围包括既有沪深 CNY、港股 HKD 与 1–5 位美股字母代码及 .A/.B 类股；招商只接受已核对的 `HK0001039582`、USD、B 类单位净值，不扩展其他基金或收益指标。美股期权另接需用户凭证与 OPRA 权限的 Alpaca 来源，凭证经 Android Keystore 加密保存到 noBackupFilesDir，重启自动恢复，不进入账目备份或日志；读取失败明示并保留旧密文供重新配置或主动清除，TEST 合约不发请求。详情及尚未实盘认证的限制见[期权来源记录](us-option-quote-source.md)。各来源保留 `approved: false`、`researchOnly: true`，应用可用性不等于供应方正式许可或全品种覆盖。完整范围与历史证据见[股票来源记录](public-quote-research.md)和[基金来源记录](cms-fund-api-research.md)。手填参考价和离线账务继续可用；Android 编译及设备结果见[本轮验证记录](public-quote-research.md#2026-11-04-主应用验证)。
 
 2026-10-24 复核依据：
 
 - [Nasdaq Legal Information](https://www.nasdaq.com/legal)，页面标注 2026-05-11 更新，职责/使用限制包含对自动或人工捕获内容的限制。当时期权响应同时缺各报价字段时间，不能直接升级为应用自动估值来源。
 - [Yahoo API 条款](https://legal.yahoo.com/us/en/yahoo/terms/product-atos/apitnc/index.html)及[服务条款](https://legal.yahoo.com/us/en/yahoo/terms/otos/index.html)，存在 API 数据使用与访问限制；当时没有确认 chart 端点适用于本应用自动使用的依据。
 
-2026-10-27 已删除这两个候选的旧博通验证页、查询客户端、专用夹具和 `pendingSources` 配置，页面只展示当前实际装配的来源；历史调查和当次验证结果仍可通过本文、阶段 0–2 记录及 Git 历史追溯。`QuoteSourceCapability.approved` 只表达正式评审后的发布准入，不接受缓存、网页响应、导入 JSON 或用户填写的“授权标记”。既有公开来源通过 `researchOnly` 与工厂的 `allowResearchSources` 配合参与来源选择；2026-11-04 起工厂固定装配两项来源，不再判断构建模式、flavor 或研究参数，不修改 `approved`。该历史版本没有个人 API Key；2026-11-05 新增 Alpaca 的本次运行内存凭证入口，不引入后台服务或任意 URL 接口。供应方使用条件及新增来源仍须独立核对；Android 编译及设备结果见[本轮验证记录](public-quote-research.md#2026-11-04-主应用验证)。
+2026-10-27 已删除这两个候选的旧博通验证页、查询客户端、专用夹具和 `pendingSources` 配置，页面只展示当前实际装配的来源；历史调查和当次验证结果仍可通过本文、阶段 0–2 记录及 Git 历史追溯。`QuoteSourceCapability.approved` 只表达正式评审后的发布准入，不接受缓存、网页响应、导入 JSON 或用户填写的“授权标记”。既有公开来源通过 `researchOnly` 与工厂的 `allowResearchSources` 配合参与来源选择；2026-11-04 起工厂固定装配两项来源，不再判断构建模式、flavor 或研究参数，不修改 `approved`。该历史版本没有个人 API Key；2026-11-05 首版新增 Alpaca 的内存凭证入口，随后按用户要求改为本机加密保存、重启自动恢复；不引入后台服务或任意 URL 接口，旧验证结果不代表新增安全存储路径已验收。供应方使用条件及新增来源仍须独立核对；Android 编译及设备结果见[本轮验证记录](public-quote-research.md#2026-11-04-主应用验证)。
 
 ## 数据与估值
 
