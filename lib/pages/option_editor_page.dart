@@ -5,6 +5,7 @@ import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter/material.dart';
+import '../app/app_theme.dart';
 import '../app/calendar_days.dart';
 import '../app/common_widgets.dart';
 import '../app/currency_catalog.dart';
@@ -398,18 +399,99 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     }
   }
 
-  /// 统一折叠入口；[id] 是测试和无障碍定位键，[onTap] 只切换展示，不修改草稿。
+  /// 以整行分组标题提供展开入口；[id] 保留字段定位和测试使用的稳定键。
+  /// [label] 是短标题，[description] 解释收起的内容或显示当前合约摘要；长文字自然换行。
+  /// [expanded] 同时控制状态文字、箭头及读屏语义；[onTap] 只切换展示，不修改草稿。
+  /// 必填组传入空 [onTap]，只显示静态标题，避免内容始终可见却仍显示“收起”。
+  /// [separated] 在卡片内子分组上方增加细分隔线，作为整张卡片标题时关闭。
   Widget _detailsToggle(
     String id,
     String label,
     bool expanded,
-    VoidCallback onTap,
-  ) => TextButton.icon(
-    key: ValueKey('option-$id-toggle'),
-    onPressed: _busy ? null : onTap,
-    icon: Icon(expanded ? Icons.expand_less : Icons.expand_more),
-    label: Text(label),
-  );
+    VoidCallback? onTap, {
+    required String description,
+    bool separated = true,
+  }) {
+    final theme = Theme.of(context), l = AppLocalizations.of(context);
+    final toggleable = onTap != null;
+    final action = _busy ? null : onTap;
+    // 展开状态属于辅助操作，沿用次级文字色，避免与查询、保存等主操作争抢注意力。
+    final actionColor = _busy
+        ? theme.disabledColor
+        : theme.colorScheme.onSurfaceVariant;
+    final content = ConstrainedBox(
+      constraints: const BoxConstraints(minHeight: 52),
+      child: Padding(
+        padding: EdgeInsets.symmetric(vertical: separated ? 12 : 4),
+        child: Row(
+          children: [
+            Expanded(
+              child: Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(
+                    label,
+                    style: theme.textTheme.titleMedium?.copyWith(
+                      fontWeight: FontWeight.w800,
+                    ),
+                  ),
+                  const SizedBox(height: 4),
+                  Text(
+                    description,
+                    style: theme.textTheme.bodySmall?.copyWith(
+                      color: theme.colorScheme.onSurfaceVariant,
+                      height: 1.4,
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            if (toggleable) ...[
+              const SizedBox(width: 12),
+              Text(
+                expanded ? l.optionCollapse : l.optionExpand,
+                style: theme.textTheme.bodySmall?.copyWith(
+                  color: actionColor,
+                  fontWeight: FontWeight.w600,
+                ),
+              ),
+              const SizedBox(width: 4),
+              Icon(
+                expanded ? Icons.expand_less : Icons.expand_more,
+                size: 20,
+                color: actionColor,
+              ),
+            ],
+          ],
+        ),
+      ),
+    );
+    return Column(
+      crossAxisAlignment: CrossAxisAlignment.stretch,
+      children: [
+        if (separated) const Divider(height: 1),
+        Semantics(
+          key: ValueKey('option-$id-toggle'),
+          container: true,
+          label: label,
+          value: description,
+          button: toggleable ? true : null,
+          expanded: toggleable ? expanded : null,
+          enabled: toggleable ? !_busy : null,
+          onTap: action,
+          excludeSemantics: true,
+          child: toggleable
+              ? InkWell(
+                  onTap: action,
+                  excludeFromSemantics: true,
+                  borderRadius: BorderRadius.circular(veriRadiusSm),
+                  child: content,
+                )
+              : content,
+        ),
+      ],
+    );
+  }
 
   /// 选择器和复选框也有明确错误位置，不能只在页尾汇总后让用户猜测。
   Widget _choiceError(String field) => _fieldErrors[field] == null
@@ -1952,19 +2034,20 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                         ],
                         _field('symbol', l.optionCode, locked: locked),
                         if (!widget.specificationOnly) _contractLookup(p),
-                        if (!_detailsExpanded &&
-                            _fields['name']!.text.trim().isNotEmpty)
-                          Text(
-                            _fields['name']!.text,
-                            style: Theme.of(context).textTheme.bodySmall,
-                          ),
                         _detailsToggle(
                           'details',
                           l.optionContractDetails,
-                          _detailsExpanded,
-                          () => setState(
-                            () => _detailsExpanded = !_detailsExpanded,
-                          ),
+                          _detailsExpanded || widget.specificationOnly,
+                          widget.specificationOnly
+                              ? null
+                              : () => setState(
+                                  () => _detailsExpanded = !_detailsExpanded,
+                                ),
+                          description:
+                              !_detailsExpanded &&
+                                  _fields['name']!.text.trim().isNotEmpty
+                              ? _fields['name']!.text.trim()
+                              : l.optionContractDetailsHint,
                         ),
                         if (_detailsExpanded || widget.specificationOnly) ...[
                           if (!locked)
@@ -2077,21 +2160,29 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                           ),
                         ],
                       ),
-                    if (!widget.specificationOnly && !requiresSpecification)
-                      _detailsToggle(
+                    if (_detailsExpanded || widget.specificationOnly)
+                      const SizedBox(height: 12),
+                    InvestmentSection(
+                      title: l.optionSettlementDetails,
+                      header: _detailsToggle(
                         'settlement',
                         l.optionSettlementDetails,
-                        _settlementExpanded,
-                        () => setState(
-                          () => _settlementExpanded = !_settlementExpanded,
-                        ),
+                        _settlementExpanded ||
+                            requiresSpecification ||
+                            widget.specificationOnly,
+                        requiresSpecification || widget.specificationOnly
+                            ? null
+                            : () => setState(
+                                () =>
+                                    _settlementExpanded = !_settlementExpanded,
+                              ),
+                        description: l.optionSettlementDetailsHint,
+                        separated: false,
                       ),
-                    if (_settlementExpanded ||
-                        requiresSpecification ||
-                        widget.specificationOnly)
-                      InvestmentSection(
-                        title: l.optionSettlementDetails,
-                        children: [
+                      children: [
+                        if (_settlementExpanded ||
+                            requiresSpecification ||
+                            widget.specificationOnly) ...[
                           VeriAnchoredChoice<OptionSettlement>(
                             values: OptionSettlement.values,
                             selected: _settlement,
@@ -2143,7 +2234,8 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                           ),
                           _choiceError('specConfirmed'),
                         ],
-                      ),
+                      ],
+                    ),
                     const SizedBox(height: 12),
                     if (_opening) ...[
                       InvestmentSection(
@@ -2171,6 +2263,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                             () => setState(
                               () => _extrasExpanded = !_extrasExpanded,
                             ),
+                            description: l.optionOpeningMoreFieldsHint,
                           ),
                           if (_extrasExpanded) ...[
                             _field('margin', l.optionMargin, number: true),
@@ -2278,10 +2371,14 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                           _detailsToggle(
                             'extras',
                             l.optionMoreFields,
-                            _extrasExpanded,
-                            () => setState(
-                              () => _extrasExpanded = !_extrasExpanded,
-                            ),
+                            _extrasExpanded ||
+                                _kind == StockEventKind.optionMargin,
+                            _kind == StockEventKind.optionMargin
+                                ? null
+                                : () => setState(
+                                    () => _extrasExpanded = !_extrasExpanded,
+                                  ),
+                            description: l.optionMoreFieldsHint,
                           ),
                           if (_extrasExpanded ||
                               _kind == StockEventKind.optionMargin) ...[

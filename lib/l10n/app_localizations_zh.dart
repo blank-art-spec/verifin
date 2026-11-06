@@ -7898,13 +7898,31 @@ class AppLocalizationsZh extends AppLocalizations {
   String get optionLookupUsePrice => '填入参考价';
 
   @override
-  String get optionContractDetails => '合约资料（查看或修改）';
+  String get optionContractDetails => '合约资料';
 
   @override
-  String get optionSettlementDetails => '行权与交割资料';
+  String get optionSettlementDetails => '行权与交割';
 
   @override
-  String get optionMoreFields => '更多信息（参考价、保证金、备注）';
+  String get optionMoreFields => '更多信息';
+
+  @override
+  String get optionContractDetailsHint => '名称、标的与合约条款';
+
+  @override
+  String get optionSettlementDetailsHint => '结算方式、交割数量与核对依据';
+
+  @override
+  String get optionMoreFieldsHint => '参考价、冻结金额与备注';
+
+  @override
+  String get optionOpeningMoreFieldsHint => '冻结保证金';
+
+  @override
+  String get optionExpand => '展开';
+
+  @override
+  String get optionCollapse => '收起';
 
   @override
   String get optionMultiplierHelp =>

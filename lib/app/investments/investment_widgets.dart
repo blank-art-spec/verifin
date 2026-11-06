@@ -133,13 +133,17 @@ ButtonStyle investmentOutlineButtonStyle(BuildContext context) =>
 /// 用现有实色卡片统一证券表单、行情和观察点的分组。
 class InvestmentSection extends StatelessWidget {
   /// [title] 是本地化分组标题，[children] 按业务顺序排列；外部控制组间距离。
+  /// [header] 可用整行交互标题替换默认文字标题，供折叠分组复用同一张实色卡片。
+  /// 折叠状态仍由页面持有；无内容时不预留标题到正文的空隙。
   const InvestmentSection({
     super.key,
     required this.title,
     required this.children,
+    this.header,
   });
   final String title;
   final List<Widget> children;
+  final Widget? header;
 
   /// 标题与内容共享左边界，内容占满卡片，字段长度决定实际高度。
   @override
@@ -150,13 +154,14 @@ class InvestmentSection extends StatelessWidget {
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.stretch,
         children: [
-          Text(
-            title,
-            style: Theme.of(
-              context,
-            ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
-          ),
-          const SizedBox(height: 12),
+          header ??
+              Text(
+                title,
+                style: Theme.of(
+                  context,
+                ).textTheme.titleMedium?.copyWith(fontWeight: FontWeight.w800),
+              ),
+          if (children.isNotEmpty) const SizedBox(height: 12),
           ...children,
         ],
       ),

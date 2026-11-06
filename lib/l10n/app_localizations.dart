@@ -14345,20 +14345,56 @@ abstract class AppLocalizations {
   /// No description provided for @optionContractDetails.
   ///
   /// In zh, this message translates to:
-  /// **'合约资料（查看或修改）'**
+  /// **'合约资料'**
   String get optionContractDetails;
 
   /// No description provided for @optionSettlementDetails.
   ///
   /// In zh, this message translates to:
-  /// **'行权与交割资料'**
+  /// **'行权与交割'**
   String get optionSettlementDetails;
 
   /// No description provided for @optionMoreFields.
   ///
   /// In zh, this message translates to:
-  /// **'更多信息（参考价、保证金、备注）'**
+  /// **'更多信息'**
   String get optionMoreFields;
+
+  /// No description provided for @optionContractDetailsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'名称、标的与合约条款'**
+  String get optionContractDetailsHint;
+
+  /// No description provided for @optionSettlementDetailsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'结算方式、交割数量与核对依据'**
+  String get optionSettlementDetailsHint;
+
+  /// No description provided for @optionMoreFieldsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'参考价、冻结金额与备注'**
+  String get optionMoreFieldsHint;
+
+  /// No description provided for @optionOpeningMoreFieldsHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'冻结保证金'**
+  String get optionOpeningMoreFieldsHint;
+
+  /// No description provided for @optionExpand.
+  ///
+  /// In zh, this message translates to:
+  /// **'展开'**
+  String get optionExpand;
+
+  /// No description provided for @optionCollapse.
+  ///
+  /// In zh, this message translates to:
+  /// **'收起'**
+  String get optionCollapse;
 
   /// No description provided for @optionMultiplierHelp.
   ///

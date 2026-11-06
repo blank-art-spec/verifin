@@ -8215,13 +8215,32 @@ class AppLocalizationsEn extends AppLocalizations {
   String get optionLookupUsePrice => 'Fill reference price';
 
   @override
-  String get optionContractDetails => 'Contract details (view or edit)';
+  String get optionContractDetails => 'Contract details';
 
   @override
-  String get optionSettlementDetails => 'Exercise and settlement details';
+  String get optionSettlementDetails => 'Exercise and settlement';
 
   @override
-  String get optionMoreFields => 'More (valuation, margin, note)';
+  String get optionMoreFields => 'More information';
+
+  @override
+  String get optionContractDetailsHint => 'Name, underlying and contract terms';
+
+  @override
+  String get optionSettlementDetailsHint =>
+      'Settlement method, deliverables and verification';
+
+  @override
+  String get optionMoreFieldsHint => 'Reference price, reserved cash and note';
+
+  @override
+  String get optionOpeningMoreFieldsHint => 'Reserved margin';
+
+  @override
+  String get optionExpand => 'Expand';
+
+  @override
+  String get optionCollapse => 'Collapse';
 
   @override
   String get optionMultiplierHelp =>
