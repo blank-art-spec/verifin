@@ -31,6 +31,7 @@ import 'investments/market_quote.dart';
 import 'investments/alpaca_option_quote_adapter.dart';
 import 'investments/option_quote_credential_store.dart';
 import 'investments/security_search.dart';
+import 'investments/fund_security_search.dart';
 import 'investments/investment_quote_sync.dart';
 import 'investments/investment_valuation.dart';
 import 'investments/fund_reference_history.dart';
@@ -208,6 +209,7 @@ class VeriFinController extends ChangeNotifier
         _CreditHierarchyOps {
   /// 注入设备 KV、账目仓储及网络客户端；构造仅载入本地状态，联网须后续显式操作。
   /// [securitySearchClient] 仅检索公开证券身份，不参与报价估值或账务持久化。
+  /// [fundSecuritySearchClient] 仅在主动查询时核对基金公开资料，构造不联网。
   VeriFinController._(
     this._store,
     this._repository,
@@ -216,6 +218,7 @@ class VeriFinController extends ChangeNotifier
     MarketQuoteClient marketQuoteClient = const MarketQuoteClient(),
     OptionQuoteCredentialStore? optionQuoteCredentialStore,
     SecuritySearchClient? securitySearchClient,
+    FundSecuritySearchClient? fundSecuritySearchClient,
     bool systemIsEnglish = false,
     // ignore: prefer_initializing_formals
   }) : _systemIsEnglish = systemIsEnglish,
@@ -227,7 +230,9 @@ class VeriFinController extends ChangeNotifier
        // 保留与 create 一致的公开注入参数名，内部字段不进入调用方接口。
        // ignore: prefer_initializing_formals
        _optionQuoteCredentialStore = optionQuoteCredentialStore,
-       _securitySearchClient = securitySearchClient ?? SecuritySearchClient() {
+       _securitySearchClient = securitySearchClient ?? SecuritySearchClient(),
+       _fundSecuritySearchClient =
+           fundSecuritySearchClient ?? FundSecuritySearchClient() {
     _loadPreferences();
     themePreferenceListenable = ValueNotifier<ThemePreference>(
       _themePreference,
@@ -244,6 +249,7 @@ class VeriFinController extends ChangeNotifier
   /// （全新数据库首启动写入默认数据）。账目类数据只以 SQLite 为准。
   /// [workdayCalendarClient] 允许测试注入公开日历响应；创建阶段只读缓存，不自动联网。
   /// [securitySearchClient] 允许测试注入证券身份响应；仅用户点击搜索时查询，不自动联网。
+  /// [fundSecuritySearchClient] 注入基金资料查询客户端；结果不写账目、不启用净值刷新。
   /// [optionQuoteCredentialStore] 由生产入口显式注入；为空时不调用原生凭证存储。
   static Future<VeriFinController> create(
     LocalKeyValueStore store, {
@@ -254,6 +260,7 @@ class VeriFinController extends ChangeNotifier
     MarketQuoteClient marketQuoteClient = const MarketQuoteClient(),
     OptionQuoteCredentialStore? optionQuoteCredentialStore,
     SecuritySearchClient? securitySearchClient,
+    FundSecuritySearchClient? fundSecuritySearchClient,
   }) async {
     final controller = VeriFinController._(
       store,
@@ -263,6 +270,7 @@ class VeriFinController extends ChangeNotifier
       marketQuoteClient: marketQuoteClient,
       optionQuoteCredentialStore: optionQuoteCredentialStore,
       securitySearchClient: securitySearchClient,
+      fundSecuritySearchClient: fundSecuritySearchClient,
       systemIsEnglish: systemIsEnglish,
     );
     // 凭证先于任何延迟创建的行情缓存恢复；这里只读设备，不启动行情请求。
@@ -294,6 +302,30 @@ class VeriFinController extends ChangeNotifier
   @override
   final OptionQuoteCredentialStore? _optionQuoteCredentialStore;
   final SecuritySearchClient _securitySearchClient;
+  final FundSecuritySearchClient _fundSecuritySearchClient;
+
+  /// 主动查询 [query] 基金代码，按 [market] 和账户实际 [currencyCode] 核对公开身份。
+  /// 只返回待用户选择的资料，不发送账户或金额，不改变行情开关或持仓。
+  /// 失败只记录错误类型，避免将请求地址、搜索内容或账目写入日志；界面负责保留草稿并反馈。
+  Future<List<StockSecurity>> searchInvestmentFunds(
+    String query, {
+    required StockMarket market,
+    required String currencyCode,
+  }) async {
+    try {
+      return await _fundSecuritySearchClient.search(
+        query,
+        market: market,
+        currencyCode: currencyCode,
+      );
+    } catch (error) {
+      _logger?.warning(
+        '基金资料查询失败，错误类型：${error.runtimeType}',
+        source: 'fund-security-search',
+      );
+      rethrow;
+    }
+  }
 
   /// 显式查询 [query] 对应的公开股票资料，按 [market] 和 [currencyCode] 本地过滤。
   /// 页面必须由用户点击触发；不传账户、账本或金额，不落库、不改变行情联网偏好。

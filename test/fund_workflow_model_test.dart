@@ -417,7 +417,8 @@ void main() {
         throwsFormatException,
       );
     }
-    for (final market in [StockMarket.us, StockMarket.cn]) {
+    // 香港与内地已共用 UTC+8 基金日期流程，美国基金仍不能复用这一日历边界。
+    for (final market in [StockMarket.us]) {
       final unsupported = StockSecurity(
         symbol: 'FUND',
         name: '非香港基金',

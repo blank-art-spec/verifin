@@ -1,5 +1,14 @@
 # 组件清单（Component Registry）
 
+2026-11-06 基金手动资料与主动查询，范围及 Android 待验收项见[基金金额与结算](fund-amount-settlement.md)：
+
+| 组件或函数 | 位置与约定 |
+| --- | --- |
+| `FundSecurityEditorPage` | `pages/fund_security_editor_page.dart`；当前实际币种账户的基金身份草稿，复用 `InvestmentSecurityAutocomplete`、`EntryEditorSurface` 与返回保护；香港/内地市场手填代码和名称，币种只读，主动点选查询结果后补全。只返回 `StockSecurity`，最终由 `FundEntryPage` 随申购/已有持仓基准保存；取消零落库，异步响应按草稿、账本及页面上下文作废 |
+| `searchInvestmentFunds(query, {market, currencyCode})` | `app/veri_fin_controller.dart`；主动查询基金身份的公共入口，可经 `create(fundSecuritySearchClient:)` 注入；不传账户或持仓、不写账目/行情缓存/偏好，失败只记录错误类型，由页面反馈并保留手填资料 |
+| `FundSecuritySearchClient` / `FundSecuritySearchTransport` | `app/investments/fund_security_search.dart`；复用 `SecuritySearchTransport` / `SecuritySearchResponse`，从白名单官方 HTTPS 资料页精确匹配 ISIN 和份额币种。当前仅核对招商美元/港元货币基金与惠理 `vpmm` 美元货币基金的已核对份额，不代表全市场搜索；匿名有界请求、不重定向、不执行脚本、不读取净值/收益率，查询 ISIN 留本机筛选 |
+| `supportsFundAmountWorkflow` | `app/investments/fund_workflow_math.dart`；判断明确基金品种、无期权规格及香港/内地市场，复用两地 UTC+8 纯日期边界；调用方仍校验账户币种。与 `supportsCmsDealNavAccrual` 的指定 CMS B 类规则、行情适配器的净值覆盖分别判断 |
+
 2026-11-05 多项证券期初，行为见[股票阶段记录](securities-stage02-implementation.md)
 及[期权阶段记录](securities-stage03-implementation.md)：
 

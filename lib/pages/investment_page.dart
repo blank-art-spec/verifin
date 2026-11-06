@@ -6,6 +6,7 @@ import 'package:flutter/material.dart';
 import '../app/app_theme.dart';
 import '../app/common_widgets.dart';
 import '../app/investments/investment_widgets.dart';
+import '../app/investments/fund_workflow_math.dart';
 import '../app/investments/investment_security_autocomplete.dart';
 import '../app/investments/investment_security_suggestions.dart';
 import '../app/currency_catalog.dart';
@@ -884,7 +885,8 @@ class _StockPositionCard extends StatelessWidget {
           Wrap(
             spacing: 4,
             children: [
-              if (security.isFund && security.market == StockMarket.hk)
+              // 基金金额流程共用 UTC+8 日期，只向已支持的香港/内地基金开放。
+              if (supportsFundAmountWorkflow(security))
                 FundOperationsButton(
                   accountId: accountId,
                   securityId: security.id,

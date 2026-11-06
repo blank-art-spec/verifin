@@ -7333,7 +7333,48 @@ class AppLocalizationsZh extends AppLocalizations {
   String get fundCmsUsdName => '招商美元货币市场基金 B 类';
 
   @override
-  String get fundNoEligible => '当前账户没有可选香港基金。已核对的新增基金为美元账户下的招商美元货币市场基金 B 类。';
+  String get fundNoEligible => '当前账户还没有可选基金，可手动新增同币种的香港或内地基金。';
+
+  @override
+  String get fundAddManually => '手动新增基金';
+
+  @override
+  String get fundEditIdentity => '编辑基金资料';
+
+  @override
+  String get fundCode => '基金代码 / ISIN';
+
+  @override
+  String get fundName => '基金名称（含份额类别）';
+
+  @override
+  String get fundIdentityDraftHint =>
+      '填写基金代码、名称及市场，币种与当前账户一致。这里先保留为草稿，回到申购或已有持仓页面保存后才录入。';
+
+  @override
+  String get fundIdentityInvalid =>
+      '请填写有效的基金代码和名称。代码限 64 位字母、数字、点、下划线或短横线，名称不超过 160 字。';
+
+  @override
+  String get fundSearchOnline => '按代码联网查基金';
+
+  @override
+  String get fundSearchConsent =>
+      '点击后访问招商证券资产管理及惠理的官方基金资料页，服务方可见 IP；代码和账户币种仅用于本机匹配，不发送持仓或金额。目前覆盖这些来源已核对的部分香港货币基金，结果须核对份额类别与币种。';
+
+  @override
+  String get fundSearchNoResults =>
+      '已支持的资料来源中未找到匹配当前市场和币种的代码，可继续手动填写。查询不覆盖全部基金。';
+
+  @override
+  String get fundSearchChooseResult => '已找到基金资料，请从代码候选中选择并核对名称与份额类别。';
+
+  @override
+  String get fundSearchFailed => '基金资料查询失败，请稍后重试或继续手动填写。';
+
+  @override
+  String get fundManualNavHint =>
+      '资料查询不提供成交净值或自动收益。净值、实际份额与收益起算请按券商记录填写；万份收益和七日年化不能当作单位净值。';
 
   @override
   String get fundCashAmount => '总扣款金额（含费用）';

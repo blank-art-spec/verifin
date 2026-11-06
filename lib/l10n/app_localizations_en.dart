@@ -7612,7 +7612,50 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get fundNoEligible =>
-      'No Hong Kong fund is available in this account. The verified additional fund is CMS USD Money Market Fund Class B in a USD account.';
+      'No fund is available in this account yet. Manually add a Hong Kong or mainland China fund in the same currency.';
+
+  @override
+  String get fundAddManually => 'Add fund manually';
+
+  @override
+  String get fundEditIdentity => 'Edit fund details';
+
+  @override
+  String get fundCode => 'Fund code / ISIN';
+
+  @override
+  String get fundName => 'Fund name (including share class)';
+
+  @override
+  String get fundIdentityDraftHint =>
+      'Enter the fund code, name and market. The currency follows this account. Details remain a draft until you save the subscription or existing holding on the previous page.';
+
+  @override
+  String get fundIdentityInvalid =>
+      'Enter a valid fund code and name. Use up to 64 letters, digits, dots, underscores or hyphens for the code, and up to 160 characters for the name.';
+
+  @override
+  String get fundSearchOnline => 'Look up fund code online';
+
+  @override
+  String get fundSearchConsent =>
+      'Tapping accesses official fund pages from CMS Asset Management and Value Partners. Providers can see your IP address; code and account currency are matched locally, and no holdings or amounts are sent. Coverage is limited to verified Hong Kong money market fund classes from these sources. Check the share class and currency.';
+
+  @override
+  String get fundSearchNoResults =>
+      'No code matching this market and currency was found in supported sources. Continue entering details manually. Lookup does not cover all funds.';
+
+  @override
+  String get fundSearchChooseResult =>
+      'Fund details found. Select a code suggestion and check the name and share class.';
+
+  @override
+  String get fundSearchFailed =>
+      'Fund lookup failed. Try again later or continue entering details manually.';
+
+  @override
+  String get fundManualNavHint =>
+      'Lookup does not supply transaction NAV or automatic returns. Enter NAV, actual units and the earning start date from broker records. Income per 10,000 units and seven-day annualized yield are not unit NAV.';
 
   @override
   String get fundCashAmount => 'Total cash payment, including fees';

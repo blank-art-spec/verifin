@@ -1,0 +1,16 @@
+{
+  "httpStatus": 200,
+  "expectedIsins": [
+    "HK0000945037",
+    "HK0000945029",
+    "HK0000961919",
+    "HK0000961927",
+    "HK0000945045"
+  ],
+  "originalCharacters": 529958,
+  "notes": "惠理美元货币基金为Value Partners Fund Series子基金，该trust根据香港法律成立；只证明该货币基金，不据基金列表中其他产品ISIN推断市场。",
+  "source": "https://www.valuepartners-group.com/en/products-services/funds/",
+  "extraction": "原响应中 data-id=vpmm 的完整 h1 及对应 fund-list-table；未改写身份、币种或其他原表格单元格。测试仅用于身份，不采用表内行情。",
+  "retrievedAt": "2026-11-06",
+  "legalDomicileSource": "https://www.valuepartners-group.com/ftp/files/reports/vpmm/006_kfs/eng/vpmm_kfs_2025-08-11_en.pdf"
+}

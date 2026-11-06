@@ -1,17 +1,17 @@
 part of 'veri_fin_controller.dart';
 
-/// 香港基金申请、实际扣款、确认及已有持仓的原子命令；不向普通收支表复制投资事实。
+/// 香港及内地基金申请、实际扣款、确认及已有持仓的原子命令；不向普通收支表复制投资事实。
 mixin _FundOps on _InvestmentOps {
-  /// 检查 [security] 是当前 [portfolio] 的同币种香港基金，拒绝跨账户、股票及期权复用身份。
+  /// 检查 [security] 是当前 [portfolio] 的同币种香港或内地基金，拒绝跨账户、股票及期权身份。
+  /// 两地基金共用 UTC+8 日期边界；美国等未支持市场不能通过手工新增绕过收益起算限制。
+  /// 新身份直到整个命令保存成功才进入账户，已有身份不能被改成另一币种或期权合约。
   void _requireFundSecurity(
     InvestmentPortfolio portfolio,
     StockSecurity security,
   ) {
-    if (!security.isFund ||
-        security.option != null ||
-        security.market != StockMarket.hk ||
+    if (!supportsFundAmountWorkflow(security) ||
         security.currencyCode != portfolio.currencyCode) {
-      throw const FormatException('请选择同币种的香港基金');
+      throw const FormatException('请选择同币种的香港或内地基金');
     }
     final existing = portfolio.securities
         .where((s) => s.id == security.id)

@@ -1,4 +1,4 @@
-/// 香港基金申购的阶段校验及资金、在途资产纯计算；不联网、不落账、不推测确认日期。
+/// 香港及内地基金申购的阶段校验及资金、在途资产纯计算；不联网、不落账、不推测确认日期。
 library;
 
 import '../currency_catalog.dart';
@@ -13,6 +13,15 @@ export '../models/fund_subscription.dart'
         hongKongFundDayStart,
         hongKongFundDayEnd,
         isCanonicalFundDate;
+
+/// 判断 [security] 能否使用按金额申购及已有持仓基准流程，不检查它属于哪个账户。
+/// 香港与内地均按 UTC+8 解释基金日期，因此可沿用现有纯日期及日初/日末边界；美国基金
+/// 尚无独立时区规则，不能直接套用此流程。这里只读取明确品种与市场，不从代码或名称猜测。
+/// 调用方仍须校验基金与实际账户币种一致，也不能把支持手填误当成支持联网净值或每日结转。
+bool supportsFundAmountWorkflow(StockSecurity security) =>
+    security.isFund &&
+    security.option == null &&
+    (security.market == StockMarket.hk || security.market == StockMarket.cn);
 
 /// 判断 [security] 是否为已核实成交净值归属规则的招商美元货币基金 B 类。
 /// 同时核对真实品种、市场、币种及 ISIN，不按名称、相似代码或其他类别扩大规则覆盖。
@@ -126,7 +135,8 @@ InvestmentDecimal fundSubscriptionPendingValue(
 }
 
 /// 完整校验 [portfolio] 的基金阶段事实和唯一持仓事件；失败抛出中文 FormatException。
-/// 本流程只支持同币种香港基金，避免把香港日历强加于美国或内地基金。实际时刻必须有先后依据，
+/// 本流程支持同币种香港及内地基金，两者按 UTC+8 解释纯日期，不将该边界强加于美国基金。
+/// 实际时刻必须有先后依据，
 /// 预计日期只作提示；旧规则保留独立起算日，新规则只允许已核实基金并以成交净值日为基准。
 /// 每笔确认必须关联唯一零现金 fundAcquire，总成本保留实际总扣款，不能用舍入后的量价替代。
 /// 该函数不读取当前时间、不重放持仓、不修改数据；Controller 可在原子保存或备份恢复前调用。
@@ -142,7 +152,7 @@ void validateFundSubscriptions(InvestmentPortfolio portfolio) {
       throw const FormatException('基金申购 ID 为空或重复');
     }
     subscriptions[subscription.id] = subscription;
-    _requireHongKongFund(securities[subscription.securityId], portfolio);
+    _requireSupportedFund(securities[subscription.securityId], portfolio);
     final cash = _cashValue(subscription.cashAmount, digits, '申购总扣款');
     final fee = _cashValue(subscription.fee, digits, '申购费用');
     if (cash.units <= BigInt.zero ||
@@ -234,7 +244,7 @@ void validateFundSubscriptions(InvestmentPortfolio portfolio) {
       }
       continue;
     }
-    _requireHongKongFund(securities[event.securityId], portfolio);
+    _requireSupportedFund(securities[event.securityId], portfolio);
     final quantity = _positiveValue(event.quantity, '基金持仓份额');
     final nav = _positiveValue(event.price, '基金持仓净值');
     final costText = event.carriedCost;
@@ -317,17 +327,16 @@ void validateFundSubscriptions(InvestmentPortfolio portfolio) {
   }
 }
 
-/// 校验 [security] 为聚合 [portfolio] 内的同币种香港基金；不会按名字或代码猜基金类型。
-void _requireHongKongFund(
+/// 校验 [security] 为聚合 [portfolio] 内同币种的香港或内地基金。
+/// 市场范围统一由 [supportsFundAmountWorkflow] 判断；不会按名称或代码猜品种、币种或收益规则。
+void _requireSupportedFund(
   StockSecurity? security,
   InvestmentPortfolio portfolio,
 ) {
   if (security == null ||
-      !security.isFund ||
-      security.option != null ||
-      security.market != StockMarket.hk ||
+      !supportsFundAmountWorkflow(security) ||
       security.currencyCode != portfolio.currencyCode) {
-    throw const FormatException('基金申购和持仓基准只支持账户内同币种香港基金');
+    throw const FormatException('基金申购和持仓基准只支持账户内同币种的香港或内地基金');
   }
 }
 
@@ -357,7 +366,8 @@ InvestmentDecimal _positiveValue(String text, String label) {
   return value;
 }
 
-/// 校验 [day] 为香港年月日的规范 UTC 零点载体；[label] 用于指出哪个日期需要用户修正。
+/// 校验 [day] 为 UTC+8 基金年月日的规范 UTC 零点载体；[label] 用于指出待修正日期。
+/// UTC 零点仅是保存年月日的载体，不代表香港或内地基金实际公布净值的时刻。
 void _requireCalendarDay(DateTime day, String label) {
-  if (!isCanonicalFundDate(day)) throw FormatException('$label 必须是有效的香港纯日期');
+  if (!isCanonicalFundDate(day)) throw FormatException('$label 必须是有效的基金纯日期');
 }

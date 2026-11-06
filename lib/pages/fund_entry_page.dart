@@ -18,6 +18,7 @@ import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
 import 'entry_editor_session.dart';
+import 'fund_security_editor_page.dart';
 
 /// 两个入口分别表达新申购与已经持有的资产；已有持仓不会伪装成一次新的现金买入。
 enum FundEntryMode { purchase, holdingBaseline }
@@ -274,6 +275,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
       _reviewed = false,
       _refundReceived = false;
   String? _securityId, _error;
+  StockSecurity? _draftSecurity;
   late String _bookId, _currency, _id;
   late DateTime _requestedAt,
       _paidAt,
@@ -301,6 +303,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
     fields: _fields,
     values: [
       _securityId,
+      _draftSecurity?.toJson(),
       _paid,
       _expected,
       _reviewed,
@@ -421,8 +424,8 @@ class _FundEntryPageState extends State<FundEntryPage> {
     super.dispose();
   }
 
-  /// [portfolio] 限定当前账户原有香港同币种基金；美元账户额外列出唯一已核对的 CMS B 类。
-  /// 这套录入流程使用香港日期，其他市场基金继续沿用原有手工交易入口。
+  /// [portfolio] 限定当前账户同币种的香港/内地基金，并合并尚未落库的手填草稿。
+  /// [l] 提供预置 CMS B 类的名称；只有最终保存申购/持仓时才创建所选基金。
   List<StockSecurity> _securities(
     InvestmentPortfolio portfolio,
     AppLocalizations l,
@@ -430,11 +433,17 @@ class _FundEntryPageState extends State<FundEntryPage> {
     final result = portfolio.securities
         .where(
           (security) =>
-              security.isFund &&
-              security.market == StockMarket.hk &&
+              supportsFundAmountWorkflow(security) &&
               security.currencyCode == _currency,
         )
         .toList();
+    final draft = _draftSecurity;
+    if (draft != null &&
+        draft.currencyCode == _currency &&
+        supportsFundAmountWorkflow(draft) &&
+        !result.any((security) => security.id == draft.id)) {
+      result.add(draft);
+    }
     if (_currency == 'USD' &&
         !result.any((security) => security.id == 'hk:fund:HK0001039582')) {
       result.add(
@@ -536,7 +545,7 @@ class _FundEntryPageState extends State<FundEntryPage> {
     });
   }
 
-  /// [securities] 是随账户变化的可选香港基金，因此使用共享动态单选弹窗；取消不预选基金。
+  /// [securities] 是账户基金与本页草稿，因此使用共享动态单选弹窗；取消不预选基金。
   Future<void> _chooseSecurity(List<StockSecurity> securities) async {
     final selected = await showOptionSheet<String?>(
       context: context,
@@ -554,6 +563,45 @@ class _FundEntryPageState extends State<FundEntryPage> {
       _accrualRule = _defaultAccrualRule(
         securities.firstWhere((value) => value.id == selected),
       );
+      _reviewed = false;
+      _error = null;
+    });
+  }
+
+  /// 打开只返回身份的子表单；取消保留原选择，成功只改变本页草稿并撤销已核对标记。
+  /// 原有订单和持仓基准不能借此改换基金，账本或账户失效时也不能接收异步返回值。
+  Future<void> _editSecurity() async {
+    if (_saving ||
+        _submitted ||
+        widget.subscriptionId != null ||
+        widget.baselineEvent != null) {
+      return;
+    }
+    FocusManager.instance.primaryFocus?.unfocus();
+    final result = await Navigator.of(context).push<StockSecurity>(
+      MaterialPageRoute(
+        builder: (_) => FundSecurityEditorPage(
+          accountId: widget.accountId,
+          initial: _draftSecurity?.id == _securityId ? _draftSecurity : null,
+        ),
+      ),
+    );
+    if (!mounted || result == null) return;
+    final c = VeriFinScope.of(context);
+    if (c.activeBook.id != _bookId ||
+        c.investmentFor(widget.accountId) == null ||
+        result.currencyCode != _currency) {
+      return;
+    }
+    final alreadySaved = c
+        .investmentFor(widget.accountId)!
+        .securities
+        .any((security) => security.id == result.id);
+    setState(() {
+      // 已存身份仅选中，不提供会被复用规则忽略的“编辑新资料”入口。
+      _draftSecurity = alreadySaved ? null : result;
+      _securityId = result.id;
+      _accrualRule = _defaultAccrualRule(result);
       _reviewed = false;
       _error = null;
     });
@@ -1076,6 +1124,20 @@ class _FundEntryPageState extends State<FundEntryPage> {
               InvestmentSection(
                 title: l.investSecurityDetails,
                 children: [
+                  if (widget.subscriptionId == null &&
+                      widget.baselineEvent == null)
+                    OutlinedButton.icon(
+                      key: const Key('fund-add-manually'),
+                      style: investmentOutlineButtonStyle(context),
+                      onPressed: _saving ? null : _editSecurity,
+                      icon: const Icon(Icons.add),
+                      label: Text(
+                        _draftSecurity?.id == _securityId &&
+                                _draftSecurity != null
+                            ? l.fundEditIdentity
+                            : l.fundAddManually,
+                      ),
+                    ),
                   if (securities.isNotEmpty)
                     SettingsRow(
                       icon: Icons.account_balance_outlined,

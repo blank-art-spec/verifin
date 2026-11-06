@@ -13320,8 +13320,80 @@ abstract class AppLocalizations {
   /// No description provided for @fundNoEligible.
   ///
   /// In zh, this message translates to:
-  /// **'当前账户没有可选香港基金。已核对的新增基金为美元账户下的招商美元货币市场基金 B 类。'**
+  /// **'当前账户还没有可选基金，可手动新增同币种的香港或内地基金。'**
   String get fundNoEligible;
+
+  /// No description provided for @fundAddManually.
+  ///
+  /// In zh, this message translates to:
+  /// **'手动新增基金'**
+  String get fundAddManually;
+
+  /// No description provided for @fundEditIdentity.
+  ///
+  /// In zh, this message translates to:
+  /// **'编辑基金资料'**
+  String get fundEditIdentity;
+
+  /// No description provided for @fundCode.
+  ///
+  /// In zh, this message translates to:
+  /// **'基金代码 / ISIN'**
+  String get fundCode;
+
+  /// No description provided for @fundName.
+  ///
+  /// In zh, this message translates to:
+  /// **'基金名称（含份额类别）'**
+  String get fundName;
+
+  /// No description provided for @fundIdentityDraftHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写基金代码、名称及市场，币种与当前账户一致。这里先保留为草稿，回到申购或已有持仓页面保存后才录入。'**
+  String get fundIdentityDraftHint;
+
+  /// No description provided for @fundIdentityInvalid.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写有效的基金代码和名称。代码限 64 位字母、数字、点、下划线或短横线，名称不超过 160 字。'**
+  String get fundIdentityInvalid;
+
+  /// No description provided for @fundSearchOnline.
+  ///
+  /// In zh, this message translates to:
+  /// **'按代码联网查基金'**
+  String get fundSearchOnline;
+
+  /// No description provided for @fundSearchConsent.
+  ///
+  /// In zh, this message translates to:
+  /// **'点击后访问招商证券资产管理及惠理的官方基金资料页，服务方可见 IP；代码和账户币种仅用于本机匹配，不发送持仓或金额。目前覆盖这些来源已核对的部分香港货币基金，结果须核对份额类别与币种。'**
+  String get fundSearchConsent;
+
+  /// No description provided for @fundSearchNoResults.
+  ///
+  /// In zh, this message translates to:
+  /// **'已支持的资料来源中未找到匹配当前市场和币种的代码，可继续手动填写。查询不覆盖全部基金。'**
+  String get fundSearchNoResults;
+
+  /// No description provided for @fundSearchChooseResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'已找到基金资料，请从代码候选中选择并核对名称与份额类别。'**
+  String get fundSearchChooseResult;
+
+  /// No description provided for @fundSearchFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'基金资料查询失败，请稍后重试或继续手动填写。'**
+  String get fundSearchFailed;
+
+  /// No description provided for @fundManualNavHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'资料查询不提供成交净值或自动收益。净值、实际份额与收益起算请按券商记录填写；万份收益和七日年化不能当作单位净值。'**
+  String get fundManualNavHint;
 
   /// No description provided for @fundCashAmount.
   ///

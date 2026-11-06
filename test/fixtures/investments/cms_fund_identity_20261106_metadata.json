@@ -1,0 +1,19 @@
+{
+  "retrievedDate": "2026-11-06",
+  "sources": [
+    {
+      "observedCurrency": "USD",
+      "httpStatus": 200,
+      "url": "https://www.cmschina.com.hk/en/AM/FundProduct?view=NPCF",
+      "file": "cms_fund_identity_20261106.html"
+    },
+    {
+      "observedCurrency": "HKD",
+      "httpStatus": 200,
+      "url": "https://www.cmschina.com.hk/en/AM/FundProduct?view=CMMF",
+      "file": "cms_hkd_fund_identity_20261106.html"
+    }
+  ],
+  "privacy": "匿名公开GET，无账户、持仓、凭证或用户数据。",
+  "scope": "仅保存官方当前选中基金名称、历史价格表的份额币种、基金资料和ISIN表HTML片段；移除导航、脚本、viewstate及其他非身份内容，仅统一换行和行尾空白；历史价格仅作币种佐证，客户端不读取净值。"
+}
