@@ -384,32 +384,56 @@ InvestmentDecimal? stockAverageUnitCost(
   }
 }
 
-/// 按手填参考价估算所有多空持仓；缺价返回 null，未知成本只影响盈亏完整性。
+/// 按当前选定参考价估算一项持仓，返回原币市值和未实现盈亏。
+///
+/// [portfolio] 提供该账户的证券资料、币种精度和有效参考价；联网报价的采用
+/// 由调用方提前完成，本函数不联网、不选择来源，也不修改手填价格。
+/// [position] 必须是同一组合重放得到的持仓，数量为非负股数、份额或期权张数。
+/// 市值使用 [securityPositionValue]，期权先乘明确的权利金乘数再按币种舍入。
+/// 空头的市值表示正的回补义务，盈亏为净开仓所得减义务；多头为市值减总成本。
+/// 缺价时两项均为 null；仅成本未知时仍返回市值，盈亏为 null，绝不视作零成本。
+({InvestmentDecimal? marketValue, InvestmentDecimal? unrealized})
+valueStockPosition(InvestmentPortfolio portfolio, StockPosition position) {
+  final price = portfolio.manualPrices[position.securityId];
+  if (price == null) return (marketValue: null, unrealized: null);
+  final security = portfolio.securities.firstWhere(
+    (s) => s.id == position.securityId,
+  );
+  final value = securityPositionValue(
+    security,
+    position.quantity,
+    InvestmentDecimal.parse(price),
+    CurrencyCatalog.require(portfolio.currencyCode).minorUnit,
+  );
+  final cost = position.cost;
+  return (
+    marketValue: value,
+    unrealized: cost == null
+        ? null
+        : position.short
+        ? cost - value
+        : value - cost,
+  );
+}
+
+/// 按选定参考价估算所有多空持仓；缺价返回 null，未知成本只影响盈亏完整性。
 /// [projection] 是同一 [portfolio] 的重放结果，避免 UI 与资产汇总各写一套公式。
+/// 单项复用 [valueStockPosition]；汇总市值再按多空方向加减，单项空头义务仍为正数。
 ({InvestmentDecimal? marketValue, InvestmentDecimal? unrealized}) valueStocks(
   InvestmentPortfolio portfolio,
   StockProjection projection,
 ) {
-  final digits = CurrencyCatalog.require(portfolio.currencyCode).minorUnit;
   var market = InvestmentDecimal.zero, unrealized = InvestmentDecimal.zero;
   var knownCost = true;
   for (final p in projection.positions) {
-    final price = portfolio.manualPrices[p.securityId];
-    if (price == null) return (marketValue: null, unrealized: null);
-    final security = portfolio.securities.firstWhere(
-      (s) => s.id == p.securityId,
-    );
-    final value = securityPositionValue(
-      security,
-      p.quantity,
-      InvestmentDecimal.parse(price),
-      digits,
-    );
+    final valuation = valueStockPosition(portfolio, p);
+    final value = valuation.marketValue, pnl = valuation.unrealized;
+    if (value == null) return (marketValue: null, unrealized: null);
     market = market + (p.short ? -value : value);
-    if (p.cost == null) {
+    if (pnl == null) {
       knownCost = false;
     } else {
-      unrealized = unrealized + (p.short ? p.cost! - value : value - p.cost!);
+      unrealized = unrealized + pnl;
     }
   }
   return (marketValue: market, unrealized: knownCost ? unrealized : null);

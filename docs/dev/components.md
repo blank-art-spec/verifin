@@ -319,6 +319,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 ## 维护约定
 
+- 持仓排序：`investments/investment_position_sort.dart` 的 `InvestmentPositionSortOrder` 提供默认顺序、市值与未实现盈亏金额的升降序；`sortedInvestmentPositions(portfolio, positions, order)` 返回稳定排序副本，精确比较金额、未知置后，不修改投影。`stock_projection.dart` 的 `valueStockPosition(portfolio, position)` 为持仓卡、排序和 `valueStocks` 共用单项估值，空头市值为正义务金额、盈亏为净开仓所得减回补价值。`InvestmentPage` 复用 `VeriAnchoredChoice`，排序仅在当前账本/账户的页面会话中保留。
+
 - 持仓删除：Controller 的 `previewInvestmentHoldingRemoval` 返回只读 `InvestmentHoldingRemovalPreview`（范围、条数、现金前后及 `InvestmentHoldingRemovalIssue`），`removeInvestmentHolding` 验证原组合和资金事实摘要后原子保存。`sheets.dart` 的 `showInvestmentHoldingRemovalConfirmation(context:, accountId:, securityId:, openingOnly:, short:)` 共用破坏性确认、阻塞进度及根反馈；持仓卡清除该证券全部方向，期初成本页仅删指定方向期初。`showConfirmDialog(scrollable: true)` 为这类长说明提供窄屏/大字号滚动，默认 false 保持其他确认行为。
 
 - 股票期初持仓更正：`StockOpeningCostPage`（`pages/stock_opening_cost_page.dart`）复用 `EntryEditorSurface`、`InvestmentSection` 和 `InvestmentInputField`，可填写期初股数、每股成本并预览总额；`setStockOpeningHolding` 原子修改数量/成本，完整重放后续交易并检查跨账户转移，`expectedPortfolio` 拒绝过期草稿。旧 `setStockOpeningCost` 保留原签名和数量不变的语义。`stock_projection.dart` 的 `stockAverageUnitCost(totalCost, quantity, cashDigits: ...)` 为持仓卡和编辑预填共用的均价函数，取能反乘还原总成本的最短精度，最多八位；不适用于期权乘数，也不能反乘回写未修改的总成本。

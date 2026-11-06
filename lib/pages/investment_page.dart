@@ -14,6 +14,7 @@ import '../app/currency_math.dart';
 import '../app/feedback.dart';
 import '../app/investments/investment_decimal.dart';
 import '../app/investments/investment_opening_draft.dart';
+import '../app/investments/investment_position_sort.dart';
 import '../app/investments/stock_projection.dart';
 import '../app/investments/quote_format.dart';
 import '../app/investments/market_quote.dart';
@@ -41,10 +42,70 @@ String _investmentShareText(AppLocalizations l, double? share) =>
     share == null ? l.investUnknown : l.investAllocationPercent(share);
 
 /// 指定币种账户的持仓与记录；父账户通过既有子账户列表进入。
-class InvestmentPage extends StatelessWidget {
+class InvestmentPage extends StatefulWidget {
   /// [accountId] 必须是真实账户 ID；账户被删除时显示空态，不回退其他账户。
   const InvestmentPage({super.key, required this.accountId});
   final String accountId;
+
+  /// 创建本页面的排序状态；编辑页返回时保留，退出持仓页后随页面一起释放。
+  @override
+  State<InvestmentPage> createState() => _InvestmentPageState();
+}
+
+class _InvestmentPageState extends State<InvestmentPage> {
+  InvestmentPositionSortOrder _positionSort =
+      InvestmentPositionSortOrder.original;
+  String? _sortBookId;
+
+  /// 读取当前实际账户 ID，供原有交易、转仓和资料导航共用，不回退到其他账户。
+  String get accountId => widget.accountId;
+
+  /// 账本切换时恢复默认顺序；普通行情刷新仍保留当前页面选择。
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final bookId = VeriFinScope.of(context).activeBook.id;
+    if (_sortBookId != bookId) {
+      _sortBookId = bookId;
+      _positionSort = InvestmentPositionSortOrder.original;
+    }
+  }
+
+  /// 同一页面实例更换实际账户时清除旧排序，避免两个账户共享展示偏好。
+  /// [oldWidget] 是更新前的页面配置，只有账户 ID 改变才重置。
+  @override
+  void didUpdateWidget(covariant InvestmentPage oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (oldWidget.accountId != accountId) {
+      _positionSort = InvestmentPositionSortOrder.original;
+    }
+  }
+
+  /// 用共享单选菜单切换排序，并在按钮上显示当前选择。
+  /// [context] 提供本地化与实色样式；盈亏选项明确标注未实现盈亏。
+  /// 选择只更新本页面状态，不修改账目、保存偏好或触发联网请求。
+  Widget _buildPositionSort(BuildContext context) {
+    final l = AppLocalizations.of(context);
+    return VeriAnchoredChoice<InvestmentPositionSortOrder>(
+      key: const Key('investment-position-sort'),
+      values: InvestmentPositionSortOrder.values,
+      selected: _positionSort,
+      idOf: (value) => 'investment_position_sort_${value.name}',
+      labelOf: (value) => value.label(l),
+      subtitleOf: (value) => switch (value) {
+        InvestmentPositionSortOrder.unrealizedDesc ||
+        InvestmentPositionSortOrder.unrealizedAsc => l.investUnrealized,
+        _ => null,
+      },
+      onSelected: (value) => setState(() => _positionSort = value),
+      semanticLabel: l.sortTitle,
+      builder: (context, openMenu, menuOpen) => TextButton.icon(
+        onPressed: openMenu,
+        icon: const Icon(Icons.sort_rounded),
+        label: Text(_positionSort.label(l)),
+      ),
+    );
+  }
 
   /// 从证券账户内新增时固定本次目标账本并预填实际币种账户。
   /// [account] 是当前已初始化投资组合的账户，不传聚合主账户或“无账户”。
@@ -163,6 +224,7 @@ class InvestmentPage extends StatelessWidget {
   /// 净值为主信息，现金/多头用实色面板，次级明细与盈亏分组排列；
   /// 窄屏与大字号允许完整换行。申购在途资产单独披露，净值采用统一估值结果。
   /// 已有基金清仓后仍提供按原身份新增交易的入口，再次买入不会误建成同代码股票。
+  /// 持仓分区按账本和账户隔离页面内排序状态，行情更新时沿用选择并重新排序。
   @override
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
@@ -521,12 +583,30 @@ class InvestmentPage extends StatelessWidget {
                     ],
                 ],
                 const SizedBox(height: 16),
-                SectionTitle(title: l.investPositions),
+                // 选择器在空间不足时换行，持仓卡仍由外层列表逐项按需构建。
+                Wrap(
+                  alignment: WrapAlignment.spaceBetween,
+                  crossAxisAlignment: WrapCrossAlignment.center,
+                  spacing: 12,
+                  runSpacing: 8,
+                  children: [
+                    SectionTitle(title: l.investPositions),
+                    if (projection.positions.isNotEmpty)
+                      _buildPositionSort(context),
+                  ],
+                ),
                 const SizedBox(height: 8),
                 if (projection.positions.isEmpty)
                   VeriCard(child: Text(l.investEmpty)),
-                for (final position in projection.positions) ...[
+                for (final position in sortedInvestmentPositions(
+                  portfolio,
+                  projection.positions,
+                  _positionSort,
+                )) ...[
                   _StockPositionCard(
+                    key: ValueKey(
+                      'investment-position-${position.securityId}-${position.short}',
+                    ),
                     accountId: accountId,
                     portfolio: portfolio,
                     position: position,
@@ -648,7 +728,9 @@ class _StockPositionCard extends StatelessWidget {
   /// [accountId] 指向当前币种账户；[portfolio] 与 [position] 共享当前有效参考价。
   /// [accountValuation] 为顶部概览使用的同一估值，保证所有持仓采用同一占比分母。
   /// [onTransfer] 进入两端原子转移表单，价格与成本补齐分别走 Controller。
+  /// [key] 保留证券与多空方向身份，排序后操作和显示仍绑定同一项持仓。
   const _StockPositionCard({
+    super.key,
     required this.accountId,
     required this.portfolio,
     required this.position,
@@ -664,6 +746,7 @@ class _StockPositionCard extends StatelessWidget {
 
   /// 展示方向、数量、每股成本、总成本、参考价、市值及占总资产比例；未知成本不显示成零。
   /// 多头以市值计算持仓占比，空头以回补义务单列，期权沿用显式权利金乘数。
+  /// 市值与盈亏复用排序所用的单项估值函数，避免显示值与排序金额不一致。
   @override
   Widget build(BuildContext context) {
     final c = VeriFinScope.of(context), l = AppLocalizations.of(context);
@@ -681,19 +764,9 @@ class _StockPositionCard extends StatelessWidget {
     final referenceDay = security.isFund
         ? c.fundReferenceHistoryFor(accountId, security.id).lastOrNull
         : null;
-    final value = price == null
-        ? null
-        : securityPositionValue(
-            security,
-            position.quantity,
-            InvestmentDecimal.parse(price),
-            CurrencyCatalog.require(portfolio.currencyCode).minorUnit,
-          );
-    final pnl = value == null || position.cost == null
-        ? null
-        : position.short
-        ? position.cost! - value
-        : value - position.cost!;
+    final positionValuation = valueStockPosition(portfolio, position);
+    final value = positionValuation.marketValue;
+    final pnl = positionValuation.unrealized;
     final ordinaryStock = !security.isFund && security.option == null;
     final averageCost = ordinaryStock
         ? stockAverageUnitCost(

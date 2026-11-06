@@ -12110,6 +12110,36 @@ abstract class AppLocalizations {
   /// **'持仓'**
   String get investPositions;
 
+  /// No description provided for @investSortOriginal.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认顺序'**
+  String get investSortOriginal;
+
+  /// No description provided for @investSortMarketValueDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'市值降序'**
+  String get investSortMarketValueDesc;
+
+  /// No description provided for @investSortMarketValueAsc.
+  ///
+  /// In zh, this message translates to:
+  /// **'市值升序'**
+  String get investSortMarketValueAsc;
+
+  /// No description provided for @investSortUnrealizedDesc.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈亏金额降序'**
+  String get investSortUnrealizedDesc;
+
+  /// No description provided for @investSortUnrealizedAsc.
+  ///
+  /// In zh, this message translates to:
+  /// **'盈亏金额升序'**
+  String get investSortUnrealizedAsc;
+
   /// No description provided for @investRecords.
   ///
   /// In zh, this message translates to:

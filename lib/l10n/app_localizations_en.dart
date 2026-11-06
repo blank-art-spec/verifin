@@ -6936,6 +6936,21 @@ class AppLocalizationsEn extends AppLocalizations {
   String get investPositions => 'Holdings';
 
   @override
+  String get investSortOriginal => 'Default order';
+
+  @override
+  String get investSortMarketValueDesc => 'Market value: high to low';
+
+  @override
+  String get investSortMarketValueAsc => 'Market value: low to high';
+
+  @override
+  String get investSortUnrealizedDesc => 'P&L: high to low';
+
+  @override
+  String get investSortUnrealizedAsc => 'P&L: low to high';
+
+  @override
   String get investRecords => 'Investment records';
 
   @override

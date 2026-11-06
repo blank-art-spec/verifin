@@ -6701,6 +6701,21 @@ class AppLocalizationsZh extends AppLocalizations {
   String get investPositions => '持仓';
 
   @override
+  String get investSortOriginal => '默认顺序';
+
+  @override
+  String get investSortMarketValueDesc => '市值降序';
+
+  @override
+  String get investSortMarketValueAsc => '市值升序';
+
+  @override
+  String get investSortUnrealizedDesc => '盈亏金额降序';
+
+  @override
+  String get investSortUnrealizedAsc => '盈亏金额升序';
+
+  @override
   String get investRecords => '投资记录';
 
   @override
