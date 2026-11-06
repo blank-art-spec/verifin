@@ -32,7 +32,7 @@
 ## 构建与启用边界
 
 正式入口在 `main.dart` 调用 `buildProductionMarketQuoteClient()`，固定装配腾讯股票及
-指定招商基金，以及未配置不请求的 Alpaca OPRA 期权适配器；github、play、diagnostic 及 debug/release 不再使用不同的来源集合，
+指定招商基金，以及未配置不请求的 Alpaca OPRA 延迟历史成交适配器；github、play、diagnostic 及 debug/release 不再使用不同的来源集合，
 无需 `PUBLIC_QUOTE_RESEARCH`。`allowResearchSources` 允许固定装配来源参与请求
 与缓存校验，不把 `approved` 改为 true，也不允许设备偏好、导入 JSON 或响应新增来源。
 联网和自动刷新仍默认关闭，用户开关与逐证券采用继续独立控制实际请求及估值。
@@ -276,7 +276,7 @@ Android 已通过 github flavor、release/R8、arm64 的本地编译，
 在 `test/fixtures/investments/tencent_stocks_20261105.*`，未将其他后缀或基金/期权当股票接受。
 这证明所列样例可解析，不保证所有满足代码语法的证券均有报价；不新增实时性承诺。
 
-当前生产工厂另提供需单独配置的 Alpaca OPRA 期权来源；股票依然不需要凭证。
+当前生产工厂另提供需单独配置免费 Basic 凭证的 Alpaca OPRA 延迟期权成交来源；股票依然不需要凭证。
 超过 20 项持仓分批刷新，批次失败保留旧值并继续；超过 24 小时的参考报价会提示，
 不把抓取成功当作报价更新。完整期权边界见[期权来源记录](us-option-quote-source.md)。
 

@@ -7414,7 +7414,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketResearchNote =>
-      'Reference prices for supported stocks and daily NAV for CMS USD Money Market Fund Class B are available. Choose separately for each security whether to use quotes for valuation. Stock quotes may be delayed; fund NAV has date precision only. Manual fallback prices are retained; reference returns do not create income entries.';
+      'Reference prices for supported stocks, daily NAV for CMS USD Money Market Fund Class B, and configured US option delayed trades are available. Choose separately for each security whether to use quotes for valuation. Option prices are at least 15 minutes delayed; trades may be older. Fund NAV has date precision only. Manual fallback prices are retained; reference returns do not create income entries.';
 
   @override
   String get marketSourceResearch => 'Public reference source';
@@ -8046,7 +8046,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionQuoteIntro =>
-      'Uses Alpaca OPRA quotes. An Alpaca account with OPRA data access is required.';
+      'Uses delayed option trades from a free Alpaca Basic account. No real-time subscription is required. You can enter credentials later. Prices are at least 15 minutes delayed; the actual trade may be older.';
 
   @override
   String get optionQuoteCredentials => 'Quote credentials';
@@ -8087,7 +8087,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupHint =>
-      'Supports standard US option symbols. Lookup sends the public underlying symbol to Tencent for its name; quotes use Alpaca when quote networking and credentials are configured. The symbol can fill the name, expiry, right and strike. Verify delivery terms separately.';
+      'Supports standard US option symbols. Lookup sends the public underlying symbol to Tencent for its name. Enable quote networking and configure free Alpaca account credentials to fetch delayed trades. The symbol can fill the name, expiry, right and strike. Verify delivery terms separately.';
 
   @override
   String optionLookupName(
@@ -8113,7 +8113,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupCredentials =>
-      'Option prices require Alpaca credentials with OPRA data access.';
+      'Delayed option trades require free Alpaca Basic account credentials. You can configure them later; no real-time subscription is required.';
 
   @override
   String get optionLookupUnavailable =>
@@ -8121,11 +8121,16 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupNoQuote =>
-      'No quote with a valid source time was found. Check the symbol or enter a reference price manually.';
+      'No valid trade was found in the lookup window. Check the symbol or enter a reference price manually. Contracts with no recent trades may have no price.';
 
   @override
   String get optionLookupFailed =>
-      'The option quote lookup failed. Check the network, Alpaca credentials and OPRA access, then retry or enter a price manually.';
+      'The delayed option lookup failed. Check the network and Alpaca credentials, then retry or enter a price manually.';
+
+  @override
+  String optionLookupDelayHint(int minutes) {
+    return 'At least $minutes minutes delayed. Shows the latest available trade, which may be older.';
+  }
 
   @override
   String get optionLookupRetry =>

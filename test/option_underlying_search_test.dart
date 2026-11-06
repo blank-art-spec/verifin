@@ -210,8 +210,9 @@ Future<void> _contractAction(WidgetTester tester, String action) async {
 }
 
 /// 只构造本地期权报价，买卖中间价与最新成交价刻意不同以验证采用口径。
-MarketQuote _contractQuote(MarketQuoteRequest request) {
-  final time = DateTime.now().subtract(const Duration(minutes: 2));
+/// [delayed] 为 true 时只有至少延迟二十分钟的成交，用于验证免费模式提示与采用口径。
+MarketQuote _contractQuote(MarketQuoteRequest request, {bool delayed = false}) {
+  final time = DateTime.now().subtract(Duration(minutes: delayed ? 20 : 2));
   return MarketQuote(
     securityId: request.securityId,
     source: '本地测试夹具',
@@ -220,10 +221,11 @@ MarketQuote _contractQuote(MarketQuoteRequest request) {
     fetchedAt: DateTime.now(),
     last: '2.9',
     lastAt: time,
-    bid: '3',
-    bidAt: time,
-    ask: '3.4',
-    askAt: time,
+    bid: delayed ? null : '3',
+    bidAt: delayed ? null : time,
+    ask: delayed ? null : '3.4',
+    askAt: delayed ? null : time,
+    delayMinutes: delayed ? 15 : null,
   );
 }
 
@@ -451,10 +453,12 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('英文窄屏大字号能显示合约查询结果并采用报价，无布局溢出', (tester) async {
+  testWidgets('英文窄屏大字号显示延迟成交说明并采用成交价，无布局溢出', (tester) async {
     final search = _SearchClient();
     final adapter = FixtureQuoteAdapter(
-      (requests) async => requests.map(_contractQuote).toList(),
+      (requests) async => requests
+          .map((request) => _contractQuote(request, delayed: true))
+          .toList(),
       support: (request) => request.option,
     );
     final c = await _ready(
@@ -472,10 +476,11 @@ void main() {
     await _enter(tester, 'symbol', 'AVGO261218P00300000');
     await _completeContractSearch(tester, search, adopt: false);
     expect(find.textContaining('本地测试夹具'), findsWidgets);
+    expect(find.textContaining('At least 15 minutes delayed.'), findsOneWidget);
     expect(tester.takeException(), isNull);
     await _contractAction(tester, 'use-price');
     await tester.pumpAndSettle();
-    expect((await _field(tester, 'reference')).text, '3.2');
+    expect((await _field(tester, 'reference')).text, '2.9');
     expect((await _field(tester, 'name', up: true)).text, contains('Put'));
     expect(tester.takeException(), isNull);
   });

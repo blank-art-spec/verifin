@@ -83,10 +83,12 @@ class _PreferenceStore extends LocalKeyValueStore {
   }
 }
 
-/// 生产适配器仍执行字段校验，底层只返回本地合成的每单位期权快照。
+/// 生产适配器仍执行字段校验，底层只返回本地合成的每单位期权延迟成交。
 class _OptionTransport implements AlpacaOptionQuoteTransport {
   final keys = <String>[];
 
+  /// [uri] 使用实际单合约请求，返回其免费查询截止时间前一分钟的成交。
+  /// [keyId] 记录到内存供凭证恢复断言使用，[secretKey] 不写入输出或偏好。
   @override
   Future<AlpacaOptionQuoteResponse> get(
     Uri uri, {
@@ -94,16 +96,18 @@ class _OptionTransport implements AlpacaOptionQuoteTransport {
     required String secretKey,
   }) async {
     keys.add(keyId);
-    final time = DateTime.now().toUtc().toIso8601String();
+    final time = DateTime.parse(
+      uri.queryParameters['end']!,
+    ).subtract(const Duration(minutes: 1)).toIso8601String();
     return AlpacaOptionQuoteResponse(
       statusCode: 200,
       body: Stream.value(
         utf8.encode(
           jsonEncode({
-            'snapshots': {
-              _option.symbol: {
-                'latestQuote': {'bp': 4, 'ap': 6, 't': time},
-              },
+            'trades': {
+              _option.symbol: [
+                {'p': 5, 't': time, 'c': 'I', 's': 1, 'x': 'B'},
+              ],
             },
             'next_page_token': null,
           }),

@@ -127,6 +127,7 @@ class InvestmentQuoteSync {
   }
 
   /// 恢复偏好和小缓存；损坏缓存允许丢弃并明确记日志，不回退或重置权威账目。
+  /// 来源标识变更表示报价口径变化：已移除来源的缓存不恢复，但保留联网偏好。
   void _restore() {
     try {
       final raw = store.read(_settingsKey);
@@ -183,18 +184,22 @@ class InvestmentQuoteSync {
           }
         }
         if (rows.length > 100) throw const FormatException('行情缓存条目超过上限');
+        final availableSources = client.adapters
+            .where(client.allowsAdapter)
+            .map((adapter) => adapter.capability.id)
+            .toSet();
         for (final raw in rows) {
           final row = raw as Map;
           final key = row['key'] as String;
           if (key.lastIndexOf('|') < 1) {
             throw const FormatException('行情缓存账户键无效');
           }
-          _cache[key] = (
-            digest: row['digest'] as String,
-            quote: MarketQuote.fromJson(
-              Map<String, Object?>.from(row['quote'] as Map),
-            ),
+          final quote = MarketQuote.fromJson(
+            Map<String, Object?>.from(row['quote'] as Map),
           );
+          // 例如实时快照改为延迟成交价后，旧来源仍可能比新报价更新，不能混用。
+          if (!availableSources.contains(quote.source)) continue;
+          _cache[key] = (digest: row['digest'] as String, quote: quote);
         }
       }
     } catch (_) {
@@ -713,7 +718,10 @@ class InvestmentQuoteSync {
         isCurrent();
     try {
       final quotes = await adapter
-          .fetch(List<MarketQuoteRequest>.unmodifiable([request]))
+          .fetchCancellable(
+            List<MarketQuoteRequest>.unmodifiable([request]),
+            isCurrent: current,
+          )
           .timeout(const Duration(seconds: 15));
       if (!current()) {
         return const DraftOptionQuoteResult(DraftOptionQuoteStatus.cancelled);
@@ -818,7 +826,7 @@ class InvestmentQuoteSync {
           final requested = {for (final q in batch) q.securityId: q};
           try {
             final quotes = await group.key
-                .fetch(batch)
+                .fetchCancellable(batch, isCurrent: current)
                 .timeout(const Duration(seconds: 15));
             if (!current()) return false;
             if (!client.allowsAdapter(group.key)) {
@@ -836,11 +844,14 @@ class InvestmentQuoteSync {
                 failed = true;
                 continue;
               }
-              final key = '$owner|${quote.securityId}',
-                  old = (updates[key] ?? _cache[key])?.quote.reference(
-                    request,
-                    clock(),
-                  );
+              final key = '$owner|${quote.securityId}';
+              final previous = updates[key] ?? _cache[key];
+              // 只在同一来源、同一账务上下文内比较时间；来源切换不能被旧快照挡住。
+              final old =
+                  previous?.digest == digest &&
+                      previous?.quote.source == quote.source
+                  ? previous?.quote.reference(request, clock())
+                  : null;
               if (old != null && reference.time.isBefore(old.time)) continue;
               updates[key] = (digest: digest, quote: quote);
             }

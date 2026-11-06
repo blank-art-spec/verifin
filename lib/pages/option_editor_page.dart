@@ -641,7 +641,8 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     }
   }
 
-  /// 结果按来源价格时间展示；保留历史期初提醒，不将可用报价称为实时成交。
+  /// 结果按来源价格时间展示；明确来源的最低延迟及成交可能更早。
+  /// 保留历史期初提醒，不将可用报价称为实时成交，也不改动用户成本。
   Widget _contractLookup(InvestmentPortfolio p) {
     final l = AppLocalizations.of(context),
         sync = VeriFinScope.of(context).investmentQuoteSync,
@@ -714,6 +715,8 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
               includeSeconds: true,
             ),
           ),
+          if (quote.delayMinutes != null && quote.delayMinutes! > 0)
+            InvestmentHint(l.optionLookupDelayHint(quote.delayMinutes!)),
           if (quote.isOlderThanOneDay(request, sync.clock()))
             InvestmentHint(l.marketQuoteOlderThanOneDay),
           if (_opening) InvestmentHint(l.optionLookupOpeningHint),

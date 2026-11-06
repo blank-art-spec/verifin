@@ -12966,7 +12966,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketResearchNote.
   ///
   /// In zh, this message translates to:
-  /// **'可获取已支持股票的参考价及招商美元货币市场基金 B 类日净值；每只证券需单独选择是否用于估值。股票报价可能延迟，基金只提供净值日期；手填后备价继续保留，参考收益不生成收入流水。'**
+  /// **'可获取已支持股票的参考价、招商美元货币市场基金 B 类日净值，以及配置后的美股期权延迟成交价；每只证券需单独选择是否用于估值。期权价格至少延迟 15 分钟，实际成交可能更早；基金只提供净值日期。手填后备价继续保留，参考收益不生成收入流水。'**
   String get marketResearchNote;
 
   /// No description provided for @marketSourceResearch.
@@ -14064,7 +14064,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionQuoteIntro.
   ///
   /// In zh, this message translates to:
-  /// **'使用 Alpaca 的 OPRA 行情，需要 Alpaca 账户及 OPRA 数据权限。'**
+  /// **'使用 Alpaca 免费 Basic 账户的延迟期权成交价，无需订阅实时行情。保留凭证输入，可稍后配置；价格至少延迟 15 分钟，实际成交可能更早。'**
   String get optionQuoteIntro;
 
   /// No description provided for @optionQuoteCredentials.
@@ -14136,7 +14136,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupHint.
   ///
   /// In zh, this message translates to:
-  /// **'支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 后查询该期权报价，仅发送公开代码。代码可补全名称、到期日、类型和行权价，交割规格仍须核对。'**
+  /// **'支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 免费账户凭证后查询延迟成交价。代码可补全名称、到期日、类型和行权价，交割规格仍须核对。'**
   String get optionLookupHint;
 
   /// No description provided for @optionLookupName.
@@ -14171,7 +14171,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupCredentials.
   ///
   /// In zh, this message translates to:
-  /// **'查询期权价格需要配置 Alpaca 凭证，并具备 OPRA 行情权限。'**
+  /// **'查询延迟期权成交价需要配置 Alpaca 免费 Basic 账户凭证，可稍后配置，无需订阅实时行情。'**
   String get optionLookupCredentials;
 
   /// No description provided for @optionLookupUnavailable.
@@ -14183,14 +14183,20 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupNoQuote.
   ///
   /// In zh, this message translates to:
-  /// **'没有找到带有效来源时间的报价，请核对合约代码或手动填写参考价。'**
+  /// **'查询范围内没有找到有效成交价，请核对合约代码或手动填写参考价。无近期成交的合约可能没有价格。'**
   String get optionLookupNoQuote;
 
   /// No description provided for @optionLookupFailed.
   ///
   /// In zh, this message translates to:
-  /// **'期权报价查询失败，请检查网络、Alpaca 凭证及 OPRA 权限，稍后重试或手动填写。'**
+  /// **'延迟期权行情查询失败，请检查网络及 Alpaca 凭证，稍后重试或手动填写。'**
   String get optionLookupFailed;
+
+  /// No description provided for @optionLookupDelayHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'至少延迟 {minutes} 分钟；显示最近可用成交，实际成交时间可能更早。'**
+  String optionLookupDelayHint(int minutes);
 
   /// No description provided for @optionLookupRetry.
   ///

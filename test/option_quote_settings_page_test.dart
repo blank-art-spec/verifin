@@ -77,7 +77,8 @@ void main() {
       tester.widget<SaveHeaderAction>(find.byType(SaveHeaderAction)).onPressed,
       isNull,
     );
-    expect(find.textContaining('OPRA 数据权限'), findsOneWidget);
+    expect(find.textContaining('免费 Basic 账户'), findsOneWidget);
+    expect(find.textContaining('可稍后配置'), findsOneWidget);
     expect(find.textContaining('重启后自动恢复'), findsOneWidget);
     expect(find.textContaining('本机已保存。填写两项凭证'), findsOneWidget);
     expect(calls, 0);

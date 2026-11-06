@@ -42,15 +42,39 @@ MarketQuoteRequest _request({
 
 /// 原封提取的官方 OpenAPI 示例，只验证字段协议，不表示已做真实凭证联网验收。
 String _example() => File(
-  'test/fixtures/investments/alpaca_option_snapshots_official_example.json',
+  'test/fixtures/investments/alpaca_option_trades_official_example.json',
 ).readAsStringSync();
 
-/// 官方示例带分页token；单页测试明确移除此字段，仅构造协议边界输入。
-String _unpagedExample() => _example().replaceFirst(
-  RegExp(r'"next_page_token":\s*"[^"]+"'),
-  '"next_page_token": null',
-);
+/// 构造本地的单笔成交；[price]/[time]/[condition]/[size] 可以传非法值验证拒绝路径。
+Map<String, Object?> _trade({
+  Object? price = '4.1',
+  Object? time = '2024-04-22T19:40:00Z',
+  Object? condition = 'I',
+  Object? size = 1,
+}) => {'p': price, 't': time, 'c': condition, 's': size, 'x': 'B'};
 
+/// 生成明确标记为测试数据的成交响应；[next] 是下一页游标，不代表真实市场返回。
+String _trades({String symbol = _symbol, List<Object?>? rows, Object? next}) =>
+    jsonEncode({
+      'trades': {
+        symbol: rows ?? [_trade()],
+      },
+      'next_page_token': next,
+    });
+
+/// 使用测试时钟建立实际适配器允许的查询地址，供传输层边界验证复用。
+Uri _historyUri({String symbol = _symbol}) {
+  final end = _now.subtract(const Duration(minutes: 16));
+  return Uri.https('data.alpaca.markets', '/v1beta1/options/trades', {
+    'symbols': symbol,
+    'start': end.subtract(const Duration(hours: 168)).toIso8601String(),
+    'end': end.toIso8601String(),
+    'sort': 'desc',
+    'limit': '100',
+  });
+}
+
+/// 返回可流式读取的测试响应；[contentLength] 独立覆盖声明大小边界。
 AlpacaOptionQuoteResponse _response({
   String? body,
   int status = 200,
@@ -58,7 +82,7 @@ AlpacaOptionQuoteResponse _response({
 }) => AlpacaOptionQuoteResponse(
   statusCode: status,
   contentLength: contentLength,
-  body: Stream.value(utf8.encode(body ?? _unpagedExample())),
+  body: Stream.value(utf8.encode(body ?? _trades())),
 );
 
 /// 仅在内存捕获测试凭证及请求，不访问网络或写日志。
@@ -87,6 +111,7 @@ class _Transport implements AlpacaOptionQuoteTransport {
   }
 }
 
+/// 为 [transport] 配置虚构凭证及固定时钟；不读取任何用户配置。
 AlpacaOptionQuoteAdapter _adapter(_Transport transport) =>
     AlpacaOptionQuoteAdapter(
       transportFactory: () => transport,
@@ -95,16 +120,10 @@ AlpacaOptionQuoteAdapter _adapter(_Transport transport) =>
 
 /// 在文档结构上注入边界条件；此函数生成的值始终只是测试输入。
 String _changed(void Function(Map<String, Object?>) mutate) {
-  final map = jsonDecode(_unpagedExample()) as Map<String, Object?>;
+  final map = jsonDecode(_trades()) as Map<String, Object?>;
   mutate(map);
   return jsonEncode(map);
 }
-
-Map<String, Object?> _child(Map<String, Object?> map, String key) =>
-    map[key]! as Map<String, Object?>;
-
-Map<String, Object?> _snapshot(Map<String, Object?> map) =>
-    _child(_child(map, 'snapshots'), _symbol);
 
 class _Headers implements HttpHeaders {
   final values = <String, Object>{
@@ -199,7 +218,7 @@ void main() {
     expect(adapter.supports(_request()), isFalse);
     expect(await adapter.fetch([_request()]), isEmpty);
     expect(created, 0);
-    expect(adapter.capability.id, 'Alpaca OPRA');
+    expect(adapter.capability.id, 'Alpaca OPRA Delayed');
     expect(adapter.capability.approved, isFalse);
     expect(adapter.capability.researchOnly, isTrue);
     adapter.configure(keyId: 'key', secretKey: 'secret');
@@ -257,45 +276,59 @@ void main() {
     );
   });
 
-  test('官方文档示例的单页变体解析为权利金中间价，保留字段时间和未知延迟', () async {
+  test('延迟成交使用单合约倒序时间窗，保留源时间且不生成买卖中间价', () async {
     final transport = _Transport((_) => _response());
     final adapter = _adapter(transport);
     final request = _request();
     final quote = (await adapter.fetch([request, request])).single;
-    expect(quote.bid, '4.15');
-    expect(quote.ask, '4.3');
+    expect(quote.source, 'Alpaca OPRA Delayed');
+    expect(quote.bid, isNull);
+    expect(quote.ask, isNull);
     expect(quote.last, '4.1');
-    expect(quote.bidAt, DateTime.parse('2024-04-22T19:59:59.992734Z'));
-    expect(quote.askAt, quote.bidAt);
-    expect(quote.lastAt, DateTime.parse('2024-04-22T19:57:32.589554Z'));
-    expect(quote.reference(request, _now)?.price, '4.225');
+    expect(quote.lastAt, DateTime.parse('2024-04-22T19:40:00Z'));
+    expect(quote.reference(request, _now)?.price, '4.1');
+    expect(quote.reference(request, _now)?.midpoint, isFalse);
     expect(quote.unit, QuotePriceUnit.premiumUnit);
-    expect(quote.delayMinutes, isNull);
+    expect(quote.delayMinutes, 15);
     expect(quote.tradeState, QuoteTradeState.unknown);
     expect(quote.fetchedAt, _now);
     expect(transport.closed, isTrue);
-    expect(
-      transport.uris.single.toString(),
-      'https://data.alpaca.markets/v1beta1/options/snapshots?symbols=$_symbol&feed=opra',
-    );
+    expect(transport.uris, [_historyUri()]);
     expect(transport.key, 'test-key');
     expect(transport.secret, 'test-secret');
     expect(transport.uris.single.toString(), isNot(contains('test-secret')));
-    expect(
-      transport.uris.single.queryParameters.keys,
-      unorderedEquals(['symbols', 'feed']),
+    expect(transport.uris.single.queryParameters.containsKey('feed'), isFalse);
+  });
+
+  test('官方成交示例的倒序单页变体验证协议，不冒充真实账户验证', () async {
+    final data = jsonDecode(_example()) as Map<String, Object?>;
+    final trades = data['trades']! as Map<String, Object?>;
+    final symbol = trades.keys.single;
+    trades[symbol] = (trades[symbol]! as List).reversed.toList();
+    data['next_page_token'] = null;
+    final transport = _Transport((_) => _response(body: jsonEncode(data)));
+    final now = DateTime.utc(2024, 1, 18, 17);
+    final adapter = AlpacaOptionQuoteAdapter(
+      transportFactory: () => transport,
+      clock: () => now,
+    )..configure(keyId: 'test-key', secretKey: 'test-secret');
+    final request = _request(
+      symbol: symbol,
+      expiry: '2024-01-12',
+      strike: '182.5',
     );
+    final quote = (await adapter.fetch([request])).single;
+    expect(quote.last, '0.34');
+    expect(quote.lastAt, DateTime.parse('2024-01-18T16:02:38.994758144Z'));
+    expect(quote.reference(request, now)?.midpoint, isFalse);
   });
 
   test('保持数值token八位精度和尾零，不经过double或修改字符串转义', () async {
-    final body = _unpagedExample()
-        .replaceFirst('4.15', '123456789012.12345678')
-        .replaceFirst('4.3,', '123456789012.12345680,');
-    final transport = _Transport((_) => _response(body: body));
-    final quote = (await _adapter(transport).fetch([_request()])).single;
-    expect(quote.bid, '123456789012.12345678');
-    expect(quote.ask, '123456789012.12345680');
-    expect(quote.reference(_request(), _now)?.price, '123456789012.12345679');
+    final body = _trades().replaceFirst('"4.1"', '123456789012.12345680');
+    final quote = (await _adapter(
+      _Transport((_) => _response(body: body)),
+    ).fetch([_request()])).single;
+    expect(quote.last, '123456789012.12345680');
     final escaped = _changed((map) {
       map['unused'] = 'escaped \\" quote 1234 \\n';
     });
@@ -307,64 +340,240 @@ void main() {
     );
   });
 
-  test('非匹配合约键不成为请求证券的报价', () async {
-    final body = _changed((map) {
-      final snapshots = _child(map, 'snapshots');
-      snapshots['AAPL240426P00162500'] = snapshots.remove(_symbol);
-    });
+  test('二十只合约逐只查询，不被首合约的分页条数截断', () async {
+    final requests = [
+      for (final prefix in 'ABCDEFGHIJKLMNOPQRST'.split(''))
+        _request(
+          symbol: '${prefix}240426C00162500',
+          underlying: 'us:stock:$prefix',
+        ),
+    ];
+    final transport = _Transport(
+      (uri) =>
+          _response(body: _trades(symbol: uri.queryParameters['symbols']!)),
+    );
+    expect(await _adapter(transport).fetch(requests), hasLength(20));
+    expect(transport.uris, hasLength(20));
     expect(
-      await _adapter(
-        _Transport((_) => _response(body: body)),
-      ).fetch([_request()]),
-      isEmpty,
+      transport.uris.map((uri) => uri.queryParameters['symbols']),
+      requests.map((request) => request.symbol),
+    );
+    expect(
+      transport.uris.every(
+        (uri) => !uri.queryParameters['symbols']!.contains(','),
+      ),
+      isTrue,
     );
   });
 
-  test('缺时间、无时区、溢出日期或未来报价不会用抓取时刻补造', () async {
-    for (final time in [
-      null,
-      '2024-04-22T19:59:59',
-      '2024-02-31T19:59:59Z',
-      '2024-04-22T24:00:00Z',
-      '2024-04-22T19:59:59+25:00',
-      '2024-04-23T19:59:59Z',
+  test('不匹配合约与空数据不会成为零价', () async {
+    for (final body in [
+      _trades(symbol: 'AAPL240426P00162500'),
+      _trades(rows: []),
+      '{"trades":{}}',
     ]) {
-      final body = _changed((map) {
-        final snapshot = _snapshot(map);
-        _child(snapshot, 'latestQuote')['t'] = time;
-        _child(snapshot, 'latestTrade')['t'] = time;
-      });
       expect(
         await _adapter(
           _Transport((_) => _response(body: body)),
         ).fetch([_request()]),
         isEmpty,
-        reason: '$time',
       );
     }
   });
 
-  test('无效双边价只允许回退到有源时间的正成交价', () async {
-    for (final bid in [0, -1, 4.4, 1.123456789, 'NaN', '1e-8']) {
-      final body = _changed((map) {
-        _child(_snapshot(map), 'latestQuote')['bp'] = bid;
-      });
+  test('取消迟报及未知条件均跳过，采用下一笔可信成交', () async {
+    for (final condition in [
+      'A',
+      'B',
+      'C',
+      'D',
+      'E',
+      'F',
+      'G',
+      't',
+      'u',
+      'Z',
+      '',
+      null,
+    ]) {
+      final body = _trades(
+        rows: [
+          _trade(
+            condition: condition,
+            price: '999',
+            time: '2024-04-22T19:43:00Z',
+          ),
+          _trade(),
+        ],
+      );
       final quote = (await _adapter(
         _Transport((_) => _response(body: body)),
       ).fetch([_request()])).single;
-      expect(quote.reference(_request(), _now)?.price, '4.1');
-      expect(quote.reference(_request(), _now)?.midpoint, isFalse);
+      expect(quote.last, '4.1', reason: '$condition');
     }
-    final body = _changed((map) {
-      _snapshot(map).remove('latestTrade');
-      _child(_snapshot(map), 'latestQuote')['bp'] = 0;
-    });
-    expect(
-      await _adapter(
-        _Transport((_) => _response(body: body)),
-      ).fetch([_request()]),
-      isEmpty,
+    for (final condition in 'HIJSabcdefghijklmnopqrsv'.split('')) {
+      final quote = (await _adapter(
+        _Transport(
+          (_) => _response(
+            body: _trades(rows: [_trade(condition: condition)]),
+          ),
+        ),
+      ).fetch([_request()])).single;
+      expect(quote.last, '4.1', reason: condition);
+    }
+  });
+
+  test('缺时间非法时区和窗口外成交不补造抓取时刻，区间两端均包含', () async {
+    for (final time in [
+      null,
+      '2024-04-22T19:40:00',
+      '2024-02-31T19:40:00Z',
+      '2024-04-22T24:00:00Z',
+      '2024-04-22T19:40:00+25:00',
+      '2024-04-23T19:40:00Z',
+      '2024-04-22T19:44:00.000001Z',
+      '2024-04-15T19:43:59.999999Z',
+    ]) {
+      expect(
+        await _adapter(
+          _Transport(
+            (_) => _response(
+              body: _trades(rows: [_trade(time: time)]),
+            ),
+          ),
+        ).fetch([_request()]),
+        isEmpty,
+        reason: '$time',
+      );
+    }
+    for (final time in ['2024-04-22T19:44:00Z', '2024-04-15T19:44:00Z']) {
+      expect(
+        await _adapter(
+          _Transport(
+            (_) => _response(
+              body: _trades(rows: [_trade(time: time)]),
+            ),
+          ),
+        ).fetch([_request()]),
+        hasLength(1),
+      );
+    }
+  });
+
+  test('周一仍能读取周五的真实旧成交，并提示超过二十四小时', () async {
+    final transport = _Transport(
+      (_) => _response(
+        body: _trades(rows: [_trade(time: '2024-04-19T19:59:00Z')]),
+      ),
     );
+    final quote = (await _adapter(transport).fetch([_request()])).single;
+    expect(quote.lastAt, DateTime.utc(2024, 4, 19, 19, 59));
+    expect(quote.isOlderThanOneDay(_request(), _now), isTrue);
+    expect(
+      transport.uris.single.queryParameters['start'],
+      '2024-04-15T19:44:00.000Z',
+    );
+  });
+
+  test('零价负价非法精度及非正成交数量均不能进入估值', () async {
+    for (final price in [0, -1, 1.123456789, 'NaN', '1e-8', null]) {
+      expect(
+        await _adapter(
+          _Transport(
+            (_) => _response(
+              body: _trades(rows: [_trade(price: price)]),
+            ),
+          ),
+        ).fetch([_request()]),
+        isEmpty,
+        reason: '$price',
+      );
+    }
+    for (final size in [0, -1, 1.5, 'NaN', null]) {
+      expect(
+        await _adapter(
+          _Transport(
+            (_) => _response(
+              body: _trades(rows: [_trade(size: size)]),
+            ),
+          ),
+        ).fetch([_request()]),
+        isEmpty,
+        reason: '$size',
+      );
+    }
+  });
+
+  test('无合格成交才读下一页，找到首个可信成交后停止', () async {
+    var calls = 0;
+    final transport = _Transport((uri) {
+      calls++;
+      return _response(
+        body: calls == 1
+            ? _trades(
+                rows: [_trade(condition: 'A', time: '2024-04-22T19:43:00Z')],
+                next: 'page+/=2',
+              )
+            : _trades(next: 'unused-page'),
+      );
+    });
+    expect((await _adapter(transport).fetch([_request()])).single.last, '4.1');
+    expect(calls, 2);
+    expect(transport.uris.last.queryParameters['page_token'], 'page+/=2');
+    expect(transport.uris.last.host, 'data.alpaca.markets');
+  });
+
+  test('响应时间乱序不能假装已取得最近可信成交', () async {
+    final transport = _Transport(
+      (_) => _response(
+        body: _trades(
+          rows: [
+            _trade(),
+            _trade(time: '2024-04-22T19:43:00Z'),
+          ],
+        ),
+      ),
+    );
+    await expectLater(
+      _adapter(transport).fetch([_request()]),
+      throwsA(isA<AlpacaOptionQuoteException>()),
+    );
+  });
+
+  test('分页游标须为有界文本，循环和超过三页均停止', () async {
+    for (final next in [42, [], 'x' * 2049, 'bad\nvalue']) {
+      final transport = _Transport(
+        (_) => _response(
+          body: _trades(rows: [], next: next),
+        ),
+      );
+      await expectLater(
+        _adapter(transport).fetch([_request()]),
+        throwsA(isA<AlpacaOptionQuoteException>()),
+      );
+      expect(transport.uris, hasLength(1));
+    }
+    final repeating = _Transport(
+      (_) => _response(
+        body: _trades(rows: [], next: 'same'),
+      ),
+    );
+    await expectLater(
+      _adapter(repeating).fetch([_request()]),
+      throwsA(isA<AlpacaOptionQuoteException>()),
+    );
+    expect(repeating.uris, hasLength(2));
+    var count = 0;
+    final endless = _Transport(
+      (_) => _response(
+        body: _trades(rows: [], next: 'page-${++count}'),
+      ),
+    );
+    await expectLater(
+      _adapter(endless).fetch([_request()]),
+      throwsA(isA<AlpacaOptionQuoteException>()),
+    );
+    expect(endless.uris, hasLength(3));
   });
 
   test('HTTP拒绝和跳转不重试、不改indicative，异常不带正文或凭证', () async {
@@ -400,14 +609,15 @@ void main() {
     );
   });
 
-  test('损坏JSON、声明大小及流式累计超限均失败并关闭连接', () async {
+  test('损坏JSON错误币种声明大小及流式超限均失败并关闭连接', () async {
     for (final body in [
       '{',
-      '{"snapshots":[]}',
-      '{"snapshots":{},"x":01}',
-      '{"snapshots":{},"x":1e}',
-      '{"snapshots":{},1:"invalid numeric key"}',
-      _example(),
+      '{"trades":[]}',
+      '{"trades":{},"x":01}',
+      '{"trades":{},"x":1e}',
+      '{"trades":{},1:"invalid numeric key"}',
+      '{"trades":{},"currency":"HKD"}',
+      _trades(rows: List.filled(101, _trade())),
     ]) {
       final transport = _Transport((_) => _response(body: body));
       await expectLater(
@@ -441,19 +651,43 @@ void main() {
     expect(streaming.closed, isTrue);
   });
 
-  testWidgets('整批十五秒超时会实际关闭连接', (tester) async {
+  test('五百一十二KiB预算由所有合约共享，不会每次请求重新计算', () async {
+    final transport = _Transport((uri) {
+      final map =
+          jsonDecode(_trades(symbol: uri.queryParameters['symbols']!)) as Map;
+      map['padding'] = 'x' * (300 * 1024);
+      return _response(body: jsonEncode(map));
+    });
+    await expectLater(
+      _adapter(transport).fetch([
+        _request(),
+        _request(symbol: 'AAPL240426P00162500', right: OptionRight.put),
+      ]),
+      throwsA(isA<AlpacaOptionQuoteException>()),
+    );
+    expect(transport.uris, hasLength(2));
+    expect(transport.closed, isTrue);
+  });
+
+  testWidgets('整批超时关闭连接，晚响应不能再发下一合约请求', (tester) async {
     final pending = Completer<AlpacaOptionQuoteResponse>();
     final transport = _Transport((_) => pending.future);
     final expectation = expectLater(
-      _adapter(transport).fetch([_request()]),
+      _adapter(transport).fetch([
+        _request(),
+        _request(symbol: 'AAPL240426P00162500', right: OptionRight.put),
+      ]),
       throwsA(isA<AlpacaOptionQuoteException>()),
     );
     await tester.pump(const Duration(seconds: 16));
     await expectation;
     expect(transport.closed, isTrue);
+    pending.complete(_response());
+    await tester.pump();
+    expect(transport.uris, hasLength(1));
   });
 
-  test('批次上限及全部不支持都不创建请求，配置变化使旧结果失效', () async {
+  test('配置变化使旧结果及后续合约请求失效，超过批量上限不联网', () async {
     final pending = Completer<AlpacaOptionQuoteResponse>();
     final transport = _Transport((_) => pending.future);
     final adapter = _adapter(transport);
@@ -463,21 +697,45 @@ void main() {
     );
     expect(await adapter.fetch([_request(option: false)]), isEmpty);
     expect(transport.uris, isEmpty);
-    final oldResult = adapter.fetch([_request()]);
+    final oldResult = adapter.fetch([
+      _request(),
+      _request(symbol: 'AAPL240426P00162500', right: OptionRight.put),
+    ]);
     adapter.configure(keyId: 'new-key', secretKey: 'new-secret');
     expect(transport.closed, isTrue);
     pending.complete(_response());
     expect(await oldResult, isEmpty);
-    expect(adapter.configured, isTrue);
+    expect(transport.uris, hasLength(1));
   });
 
-  test('真实HTTP传输固定地址、feed与头，禁重定向、代理及旧会话', () async {
+  test('外部会话取消后不继续分页，也不产生旧结果', () async {
+    var active = true;
+    final pending = Completer<AlpacaOptionQuoteResponse>();
+    final transport = _Transport((_) => pending.future);
+    final adapter = _adapter(transport);
+    final result = adapter.fetchCancellable([
+      _request(),
+    ], isCurrent: () => active);
+    active = false;
+    pending.complete(
+      _response(
+        body: _trades(rows: [], next: 'next'),
+      ),
+    );
+    expect(await result, isEmpty);
+    expect(transport.uris, hasLength(1));
+    expect(transport.closed, isTrue);
+    expect(
+      await adapter.fetchCancellable([_request()], isCurrent: () => false),
+      isEmpty,
+    );
+    expect(transport.uris, hasLength(1));
+  });
+
+  test('真实HTTP传输固定历史地址和参数，禁重定向代理及旧会话', () async {
     final client = _HttpClient();
     final transport = AlpacaHttpOptionQuoteTransport(client: client);
-    final uri = Uri.https('data.alpaca.markets', '/v1beta1/options/snapshots', {
-      'symbols': _symbol,
-      'feed': 'opra',
-    });
+    final uri = _historyUri();
     await transport.get(uri, keyId: 'test-key', secretKey: 'test-secret');
     expect(client.uris, [uri]);
     expect(client.connectionTimeout, const Duration(seconds: 10));
@@ -496,10 +754,40 @@ void main() {
       uri.replace(port: 8443),
       uri.replace(userInfo: 'user:pass'),
       uri.replace(fragment: 'x'),
-      uri.replace(path: '/v1beta1/options/quotes/latest'),
-      uri.replace(query: 'symbols=$_symbol&feed=indicative'),
-      uri.replace(query: 'symbols=$_symbol&feed=opra&feed=indicative'),
-      uri.replace(query: 'symbols=$_symbol&feed=opra&proxy=example.com'),
+      uri.replace(path: '/v1beta1/options/snapshots'),
+      uri.replace(
+        queryParameters: {...uri.queryParameters, 'feed': 'indicative'},
+      ),
+      uri.replace(
+        queryParameters: {
+          ...uri.queryParameters,
+          'symbols': '$_symbol,$_symbol',
+        },
+      ),
+      uri.replace(queryParameters: {...uri.queryParameters, 'sort': 'asc'}),
+      uri.replace(queryParameters: {...uri.queryParameters, 'limit': '10000'}),
+      uri.replace(
+        queryParameters: {
+          ...uri.queryParameters,
+          'start': '2024-02-31T00:00:00.000Z',
+        },
+      ),
+      uri.replace(
+        queryParameters: {
+          ...uri.queryParameters,
+          'start': '2024-01-01T00:00:00.000Z',
+        },
+      ),
+      uri.replace(
+        queryParameters: {
+          ...uri.queryParameters,
+          'end': DateTime.now().toUtc().toIso8601String(),
+        },
+      ),
+      uri.replace(
+        queryParameters: {...uri.queryParameters, 'page_token': 'bad\nvalue'},
+      ),
+      uri.replace(query: '${uri.query}&sort=desc'),
     ]) {
       await expectLater(
         transport.get(forbidden, keyId: 'test-key', secretKey: 'test-secret'),

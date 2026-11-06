@@ -331,7 +331,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与来源门禁；`MarketQuoteClient.allowsAdapter` 统一来源、请求和缓存判断，`hasApprovedSources` 与 `hasAvailableSources`/`hasResearchSources` 区分正式许可状态和当前可用的公开参考来源。`InvestmentQuoteSync.refresh` 区分手动和自动：手动不受本地五分钟等待限制，自动按账本及币种账户独立计时，取默认五分钟与来源更严格间隔；请求中仍防重复。状态、尝试时间及下次自动刷新时间随当前账户切换，设备缓存 v2 保存账户计时，兼容 v1 报价但不沿用旧全局冷却。`MarketQuotesPage` 只负责当前账户显示和手动操作，不再拥有应用级自动调度。`formatQuoteTime(includeSeconds: true)` 在行情页显示到秒，便于辨别同一分钟内的手动抓取；持仓信息区传 `compact: true`，以应用语言的带年份短日期代替完整日期和星期，时间精度及设备时区仍保留。两参数默认均为 false，历史等既有调用保持完整日期及分钟级时间。主应用提供固定的腾讯股票与指定招商基金来源，`approved` 仍为 false；不能将测试夹具当作真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
 
-- 公开股票研究：`investments/tencent_quote_adapter.dart` 的 `TencentQuoteAdapter` / `TencentHttpQuoteTransport` 实现固定 HTTPS、每批 20 个身份/15 秒/512 KiB、GBK 及源时间校验；支持沪深 CNY、港股 HKD，以及 1–5 位美股字母代码和 .A/.B 类股，响应须匹配原代码及 .OQ/.N；腾讯适配器不查询期权和 TEST，`approved: false`/`researchOnly: true`。`production_market_quotes.dart` 的 `buildProductionMarketQuoteClient` 由 `main.dart` 固定装配腾讯股票、指定招商基金及未配置不请求的 Alpaca OPRA 期权，启用 `allowResearchSources` 只表达应用允许使用固定装配来源，不改写 `approved`；不再依赖 debug、flavor 或额外编译参数。构造不联网，通用 Controller 默认空客户端，用户联网/自动刷新仍默认关闭。范围与历史证据见[来源记录](public-quote-research.md)。
+- 公开股票研究：`investments/tencent_quote_adapter.dart` 的 `TencentQuoteAdapter` / `TencentHttpQuoteTransport` 实现固定 HTTPS、每批 20 个身份/15 秒/512 KiB、GBK 及源时间校验；支持沪深 CNY、港股 HKD，以及 1–5 位美股字母代码和 .A/.B 类股，响应须匹配原代码及 .OQ/.N；腾讯适配器不查询期权和 TEST，`approved: false`/`researchOnly: true`。`production_market_quotes.dart` 的 `buildProductionMarketQuoteClient` 由 `main.dart` 固定装配腾讯股票、指定招商基金及未配置不请求的 Alpaca OPRA 延迟期权成交，启用 `allowResearchSources` 只表达应用允许使用固定装配来源，不改写 `approved`；不再依赖 debug、flavor 或额外编译参数。构造不联网，通用 Controller 默认空客户端，用户联网/自动刷新仍默认关闭。范围与历史证据见[来源记录](public-quote-research.md)。
 
 - 证券行情前台会话：`investments/investment_quote_session.dart` 的 `InvestmentQuoteSession` 负责当前账本全部证券账户已支持持仓的到期检查与自动排程，沿用 `InvestmentQuoteSync` 的逐账户计时、缓存、请求防重及旧结果校验；不依赖详情页可见，不在构造时发请求。`pages/market_quote_session_gate.dart` 的 `MarketQuoteSessionGate` 将根级前后台、应用锁及通过隐私同意/首次引导后的可用状态连接到会话。打开软件、回前台及解锁时检查，到期才查询；退后台、锁屏、退出、关闭授权或切换账本会停止旧会话的后续请求。联网和自动开关仍为设备全局偏好且默认关闭，不注册后台服务。
 
@@ -361,11 +361,17 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 和 `MarketQuote.reference`。`DraftOptionQuoteStatus` / `DraftOptionQuoteResult` 表达可用、
 未联网、缺凭证、不支持、缺价、失败或撤销，不保存报价缓存、采用选择或轮询时间。
 `InvestmentQuoteSync.draftQuoteRevision` 供页面在采用前核对设置及会话变更。
-结果显示来源、对应字段时间、中间价／成交价口径及旧价提示；“填入参考价”
+结果显示来源、实际成交时间、延迟成交价口径、至少 15 分钟延迟及旧价提示；“填入参考价”
 只修改当前草稿，不改成本或成交价，历史期初仍明确提示这是最新可用行情。
 隐藏、切账本、切账户及改身份输入使旧结果失效，未配置或查不到仍可手填。
 
-`AlpacaOptionQuoteAdapter` / `AlpacaHttpOptionQuoteTransport` 只查询固定官方 OPRA 快照；
+`AlpacaOptionQuoteAdapter` / `AlpacaHttpOptionQuoteTransport` 只查询固定官方历史成交接口
+`/v1beta1/options/trades`，供免费 Basic 账户使用，不请求实时快照或 Indicative 数据。
+每个合约分别按时间倒序、有界分页，时间窗为本批开始前 16 分钟至其前 168 小时；
+`MarketQuoteAdapter.fetchCancellable` 由同步层传入会话检查，多页来源在每次等待后和
+下一请求前复核，关闭联网、退后台或切账本后不继续请求其余页或合约。
+整批沿用 20 合约、15 秒、累计 512 KiB 预算。只接受条件合格且有真实时间的正成交价，
+填 `last` / `lastAt` / `delayMinutes: 15`；来源标识为 `Alpaca OPRA Delayed`，旧快照缓存不沿用。
 `MarketQuoteRequest` 提取到期日、权利、行权价及公开标的身份，不带交割备注或账务。
 `OptionQuoteSettingsPage(configured, onSave, loadFailed)` 复用标准编辑草稿及退出保护，
 不回显旧凭证；读取失败时保留明确提示并允许替换或清除，安全存储成功才退页。

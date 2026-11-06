@@ -460,6 +460,15 @@ abstract class MarketQuoteAdapter {
 
   /// 获取不超过20个公开身份；实现不得读取 Controller 或用户账目。
   Future<List<MarketQuote>> fetch(List<MarketQuoteRequest> requests);
+
+  /// 带会话撤销检查的查询入口；[requests] 仍只含公开证券身份。
+  /// [isCurrent] 由同步层核对联网、前后台及账本状态，禁止向来源传入账务信息。
+  /// 单请求来源默认沿用 [fetch]，响应仍由同步层复核；会发多页或多合约请求的
+  /// 来源必须覆写本方法，在每次等待后及下一次发请求前再次检查会话。
+  Future<List<MarketQuote>> fetchCancellable(
+    List<MarketQuoteRequest> requests, {
+    required bool Function() isCurrent,
+  }) async => isCurrent() ? fetch(requests) : const [];
 }
 
 /// 来源分发器；通用入口默认空来源，主应用工厂显式接入固定公开来源。

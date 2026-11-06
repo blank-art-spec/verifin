@@ -1,3 +1,4 @@
+import 'dart:async';
 import 'dart:convert';
 
 import 'package:flutter_test/flutter_test.dart';
@@ -60,35 +61,43 @@ InvestmentPortfolio _holding({bool includePut = false}) {
   );
 }
 
-/// 按官方 snapshots 字段结构合成固定双边价；不是来源原始响应或实时行情。
-/// [time] 是测试时钟，[symbols] 只从实际生产适配器传来的公开查询中提取。
-String _snapshotBody(Iterable<String> symbols, DateTime time) => jsonEncode({
-  'snapshots': {
+/// 按官方历史成交结构合成固定延迟价；不是来源原始响应或实时行情。
+/// [time] 是抓取测试时钟，成交固定早二十分钟，确保落在免费查询截止时间前；
+/// [symbols] 只从实际生产适配器传来的公开查询中提取，条件 I 表示正常自动成交。
+String _tradesBody(Iterable<String> symbols, DateTime time) => jsonEncode({
+  'trades': {
     for (final symbol in symbols)
-      symbol: {
-        'latestQuote': {
-          'bp': symbol == _callSymbol ? 4 : 9,
-          'ap': symbol == _callSymbol ? 6 : 11,
-          't': time.toUtc().toIso8601String(),
+      symbol: [
+        {
+          'p': symbol == _callSymbol ? 5 : 10,
+          't': time
+              .toUtc()
+              .subtract(const Duration(minutes: 20))
+              .toIso8601String(),
+          'c': 'I',
+          's': 1,
+          'x': 'B',
         },
-        'latestTrade': {
-          'p': symbol == _callSymbol ? 4.5 : 9.5,
-          't': time.toUtc().toIso8601String(),
-        },
-      },
+      ],
   },
   'next_page_token': null,
 });
 
-/// 只替换网络边界，仍通过生产来源选择、凭证门禁、OCC 校验与快照解析器。
+/// 只替换网络边界，仍通过生产来源选择、凭证门禁、OCC 校验与历史成交解析器。
 class _OptionTransport implements AlpacaOptionQuoteTransport {
-  _OptionTransport(this.time);
+  /// [time] 固定成交时间基准；[firstResponseGate] 可阻塞首个响应以模拟请求中退后台。
+  _OptionTransport(this.time, {this.firstResponseGate});
 
   final DateTime time;
+  final Completer<void>? firstResponseGate;
+  final firstRequest = Completer<void>();
   final uris = <Uri>[];
   String? key, secret;
   bool closed = false;
 
+  /// 记录实际请求及认证字段，并按 [uri] 中的单合约身份返回本地延迟成交。
+  /// [keyId]/[secretKey] 仅保留在测试内存中，用于确认传输仍使用原有凭证。
+  /// 首次请求通知 [firstRequest]，并可等待门闩释放，以便精确插入生命周期取消。
   @override
   Future<AlpacaOptionQuoteResponse> get(
     Uri uri, {
@@ -98,8 +107,12 @@ class _OptionTransport implements AlpacaOptionQuoteTransport {
     uris.add(uri);
     key = keyId;
     secret = secretKey;
+    if (!firstRequest.isCompleted) firstRequest.complete();
+    if (uris.length == 1 && firstResponseGate != null) {
+      await firstResponseGate!.future;
+    }
     final body = utf8.encode(
-      _snapshotBody(uri.queryParameters['symbols']!.split(','), time),
+      _tradesBody(uri.queryParameters['symbols']!.split(','), time),
     );
     return AlpacaOptionQuoteResponse(
       statusCode: 200,
@@ -108,6 +121,7 @@ class _OptionTransport implements AlpacaOptionQuoteTransport {
     );
   }
 
+  /// 标记本次查询传输已释放，便于检查取消后的连接清理。
   @override
   void close() => closed = true;
 }
@@ -125,7 +139,7 @@ MarketQuoteClient _client(List<_OptionTransport> transports, DateTime time) =>
       clock: () => time,
     );
 
-/// 验证正式入口的期权接线与账务隔离；所有快照和凭证均为内存合成输入。
+/// 验证正式入口的期权接线与账务隔离；所有历史成交和凭证均为内存合成输入。
 void main() {
   test('生产期权来源配置与联网各自授权，获取和清除缓存均不改账务', () async {
     final time = DateTime.utc(2026, 11, 5, 4);
@@ -184,10 +198,14 @@ void main() {
     expect(transport.key, _testKey);
     expect(transport.secret, _testSecret);
     expect(transport.uris.single.host, 'data.alpaca.markets');
-    expect(transport.uris.single.queryParameters, {
-      'symbols': _callSymbol,
-      'feed': 'opra',
-    });
+    expect(transport.uris.single.path, '/v1beta1/options/trades');
+    final query = transport.uris.single.queryParameters;
+    expect(query['symbols'], _callSymbol);
+    expect(query['sort'], 'desc');
+    expect(query, isNot(contains('feed')));
+    final cutoff = DateTime.parse(query['end']!);
+    expect(cutoff.isAfter(time.subtract(const Duration(minutes: 15))), isFalse);
+    expect(DateTime.parse(query['start']!).isBefore(cutoff), isTrue);
     final address = transport.uris.single.toString();
     for (final private in [
       _testKey,
@@ -201,16 +219,20 @@ void main() {
       expect(address, isNot(contains(private)));
     }
     final quote = sync.quotesFor(portfolio)[option.id]!;
-    expect(quote.source, 'Alpaca OPRA');
+    expect(quote.source, 'Alpaca OPRA Delayed');
     expect(quote.unit, QuotePriceUnit.premiumUnit);
     expect(quote.currency, 'USD');
     expect(quote.reference(request, time)?.price, '5');
-    expect(quote.bidAt, time);
+    expect(quote.reference(request, time)?.midpoint, isFalse);
+    expect(quote.lastAt, time.subtract(const Duration(minutes: 20)));
+    expect(quote.bid, isNull);
+    expect(quote.ask, isNull);
+    expect(quote.delayMinutes, 15);
     expect(quote.fetchedAt, time);
     expect(sync.state.value.changed, 1);
     expect(sync.state.value.status, QuoteSyncStatus.ready);
     final cached = store.read('investment_quote_cache_v1')!;
-    expect(cached, contains('Alpaca OPRA'));
+    expect(cached, contains('Alpaca OPRA Delayed'));
     expect(cached, isNot(contains(_testKey)));
     expect(cached, isNot(contains(_testSecret)));
     expect(jsonEncode(portfolio.toJson()), original);
@@ -350,5 +372,55 @@ void main() {
     );
     expect(transports, hasLength(2));
     expect(transports.every((transport) => transport.closed), isTrue);
+    for (final transport in transports) {
+      // 单合约分别请求才能保证两个合约都取到各自最近成交，不会被整页条数限制吞掉。
+      expect(
+        transport.uris.map((uri) => uri.queryParameters['symbols']),
+        containsAllInOrder([_callSymbol, _putSymbol]),
+      );
+      expect(transport.uris, hasLength(2));
+    }
+  });
+
+  test('持仓退后台后首个成交响应迟到，不再查询下一合约或写入缓存', () async {
+    final time = DateTime.utc(2026, 11, 5, 4);
+    final gate = Completer<void>();
+    final transport = _OptionTransport(time, firstResponseGate: gate);
+    final client = buildProductionMarketQuoteClient(
+      tencentTransportFactory: () => throw StateError('期权持仓不应连接股票来源'),
+      cmsTransportFactory: () => throw StateError('期权持仓不应连接基金来源'),
+      alpacaTransportFactory: () => transport,
+      clock: () => time,
+    );
+    client.adapters.whereType<AlpacaOptionQuoteAdapter>().single.configure(
+      keyId: _testKey,
+      secretKey: _testSecret,
+    );
+    final store = LocalKeyValueStore();
+    final sync = InvestmentQuoteSync(
+      store: store,
+      client: client,
+      clock: () => time,
+    );
+    addTearDown(sync.dispose);
+    final portfolio = _holding(includePut: true);
+    sync.reconcile([portfolio]);
+    sync.setForegroundPortfolios([portfolio]);
+    expect(await sync.configure(enabled: true, automatic: false), isTrue);
+    // 等待初始化的缓存写入队列完成，避免把正常空缓存落盘误判为迟到报价写入。
+    await sync.clearCache();
+    final cachedBefore = store.read('investment_quote_cache_v1');
+
+    final refreshing = sync.refresh(portfolio, isCurrent: () => true);
+    await transport.firstRequest.future;
+    // 取消发生在来源请求内部；必须阻止第二合约，不能仅在整批返回后丢弃缓存。
+    sync.setForegroundPortfolios(null);
+    gate.complete();
+
+    expect(await refreshing, isFalse);
+    expect(transport.uris, hasLength(1));
+    expect(transport.closed, isTrue);
+    expect(sync.quotesFor(portfolio), isEmpty);
+    expect(store.read('investment_quote_cache_v1'), cachedBefore);
   });
 }
