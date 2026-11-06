@@ -4,8 +4,10 @@ import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_scope.dart';
 import 'package:verifin/pages/option_editor_page.dart';
 import 'support/investment_fixture.dart';
+import 'support/option_editor_harness.dart';
 import 'support/test_harness.dart';
 
+/// 通过真实编辑页面验证预览、失效与保存边界；点击前等待滚动布局稳定。
 void main() {
   useTestDatabases();
   testWidgets('期权窄屏编辑预览零落库，改字段后重新预览才可保存', (tester) async {
@@ -43,27 +45,20 @@ void main() {
       ),
     );
     await tester.pumpAndSettle();
-    final scroll = find
-        .descendant(
-          of: find.byType(OptionEditorPage),
-          matching: find.byType(Scrollable),
-        )
-        .first;
     final quantity = find.byKey(const ValueKey('option-quantity'));
-    await tester.scrollUntilVisible(quantity, 300, scrollable: scroll);
+    await revealOptionEditorTarget(tester, quantity);
     await tester.enterText(quantity, '2');
     tester.testTextInput.hide();
     await tester.pumpAndSettle();
     final preview = find.widgetWithText(OutlinedButton, '预览结算后现金与持仓');
-    await tester.scrollUntilVisible(preview, 300, scrollable: scroll);
+    await revealOptionEditorTarget(tester, preview);
     await tester.tap(preview);
     await tester.pumpAndSettle();
     expect(c.accountBalance(account), 9800);
     expect(find.textContaining('9600'), findsWidgets);
-    await tester.scrollUntilVisible(
+    await revealOptionEditorTarget(
+      tester,
       find.widgetWithText(FilledButton, '保存'),
-      200,
-      scrollable: scroll,
     );
     expect(
       tester
@@ -71,15 +66,13 @@ void main() {
           .onPressed,
       isNotNull,
     );
-    await tester.scrollUntilVisible(quantity, -300, scrollable: scroll);
+    await revealOptionEditorTarget(tester, quantity);
     await tester.enterText(quantity, '3');
     tester.testTextInput.hide();
     await tester.pumpAndSettle();
-    await tester.scrollUntilVisible(preview, 300, scrollable: scroll);
-    await tester.scrollUntilVisible(
+    await revealOptionEditorTarget(
+      tester,
       find.widgetWithText(FilledButton, '保存'),
-      200,
-      scrollable: scroll,
     );
     expect(
       tester
@@ -87,10 +80,12 @@ void main() {
           .onPressed,
       isNull,
     );
+    await revealOptionEditorTarget(tester, preview);
     await tester.tap(preview);
     await tester.pumpAndSettle();
     final save = find.widgetWithText(FilledButton, '保存');
-    await tester.scrollUntilVisible(save, 200, scrollable: scroll);
+    await revealOptionEditorTarget(tester, save);
+    expect(save.hitTestable(), findsOneWidget);
     await tester.tap(save);
     await tester.pumpAndSettle();
     expect(c.accountBalance(account), 9400);

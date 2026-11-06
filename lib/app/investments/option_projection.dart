@@ -26,7 +26,10 @@ void _validateOptionContract(
       o.settlement == OptionSettlement.physical &&
       (InvestmentDecimal.parse(o.deliverableShares).units <= BigInt.zero ||
           InvestmentDecimal.parse(o.exerciseCash).units <= BigInt.zero)) {
-    throw const FormatException('实物交割须确认每张交割股数和行权现金');
+    throw const InvestmentValidationException(
+      InvestmentValidationIssue.specificationRequired,
+      '实物交割须确认每张交割股数和行权现金',
+    );
   }
 }
 
@@ -101,38 +104,72 @@ _applyOptionEvent(
   }
   final p = position(security.id, short);
   if (trade) {
-    if (optionExpired(o, e.occurredAt) ||
-        needsReview ||
-        price.units <= BigInt.zero) {
-      throw const FormatException('到期、规格待处理或无效价格不能记录开平仓');
+    if (optionExpired(o, e.occurredAt)) {
+      throw InvestmentValidationException(
+        InvestmentValidationIssue.expiredContract,
+        '交易时间已超过合约到期日',
+        eventId: e.id,
+      );
+    }
+    if (needsReview) {
+      throw InvestmentValidationException(
+        InvestmentValidationIssue.adjustedContract,
+        '标的调整后须先核对期权规格',
+        eventId: e.id,
+      );
+    }
+    if (price.units <= BigInt.zero) {
+      throw const FormatException('开平仓权利金必须大于零');
     }
     final gross = securityPositionValue(security, q, price, digits);
     if (opening) {
       cash = short ? gross - fee : -gross - fee;
       if (short && cash.units < BigInt.zero) {
-        throw const FormatException('开仓费用超过权利金');
+        throw InvestmentValidationException(
+          InvestmentValidationIssue.feesExceedPremium,
+          '开仓费用超过权利金',
+          eventId: e.id,
+        );
       }
       p.quantity = p.quantity + q;
       if (p.cost != null) p.cost = p.cost! + (short ? cash : -cash);
       return (cash: cash, realized: realized, complete: complete);
     }
   } else {
-    if (!e.settlementConfirmed) throw const FormatException('请明确确认实际到期或结算结果');
+    if (!e.settlementConfirmed) {
+      throw InvestmentValidationException(
+        InvestmentValidationIssue.settlementConfirmationRequired,
+        '请明确确认实际到期或结算结果',
+        eventId: e.id,
+      );
+    }
     if (e.kind == StockEventKind.optionExpire &&
         DateTime.utc(
           e.occurredAt.year,
           e.occurredAt.month,
           e.occurredAt.day,
         ).isBefore(DateTime.parse('${o.expiry}T00:00:00Z'))) {
-      throw const FormatException('到期日前不能确认无价值到期');
+      throw InvestmentValidationException(
+        InvestmentValidationIssue.beforeExpiry,
+        '到期日前不能确认无价值到期',
+        eventId: e.id,
+      );
     }
     if (e.kind != StockEventKind.optionExpire &&
         (!o.confirmed || o.settlement == OptionSettlement.unsupported)) {
-      throw const FormatException('规格待补全，保留持仓等待实际结算资料');
+      throw InvestmentValidationException(
+        InvestmentValidationIssue.specificationRequired,
+        '规格待补全，保留持仓等待实际结算资料',
+        eventId: e.id,
+      );
     }
   }
   if (q.compareTo(p.quantity) > 0) {
-    throw const FormatException('平仓或交割张数超过指定方向持仓');
+    throw InvestmentValidationException(
+      InvestmentValidationIssue.positionExceeded,
+      '平仓或交割张数超过指定方向持仓',
+      eventId: e.id,
+    );
   }
   final released = p.cost == null
       ? null
@@ -143,10 +180,26 @@ _applyOptionEvent(
     if (price.units != BigInt.zero) {
       throw const FormatException('实物交割现金由确认的每张规格计算，不能重复填写现金交割额');
     }
-    if (o.settlement != OptionSettlement.physical ||
-        needsReview ||
-        released == null) {
-      throw const FormatException('实物交割需要已核对的单股规格及完整权利金成本');
+    if (o.settlement != OptionSettlement.physical) {
+      throw InvestmentValidationException(
+        InvestmentValidationIssue.specificationRequired,
+        '实物交割需要已核对的单股规格',
+        eventId: e.id,
+      );
+    }
+    if (needsReview) {
+      throw InvestmentValidationException(
+        InvestmentValidationIssue.adjustedContract,
+        '标的调整后须先核对期权规格',
+        eventId: e.id,
+      );
+    }
+    if (released == null) {
+      throw InvestmentValidationException(
+        InvestmentValidationIssue.unknownCost,
+        '实物交割需要先补齐期权持仓成本',
+        eventId: e.id,
+      );
     }
     final shares = InvestmentDecimal.parse(
       o.deliverableShares,
@@ -177,7 +230,13 @@ _applyOptionEvent(
           !(short &&
               o.right == OptionRight.call &&
               e.allowUncoveredAssignment)) {
-        throw const FormatException('交割股票不足；裸认购指派须另行确认股票空头义务');
+        throw InvestmentValidationException(
+          short && o.right == OptionRight.call
+              ? InvestmentValidationIssue.uncoveredAssignmentNotConfirmed
+              : InvestmentValidationIssue.underlyingSharesInsufficient,
+          '交割股票不足；裸认购指派须另行确认股票空头义务',
+          eventId: e.id,
+        );
       }
       final coveredNet = covered.compareTo(shares) == 0
           ? net

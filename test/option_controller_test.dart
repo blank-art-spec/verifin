@@ -2,6 +2,7 @@ import 'dart:convert';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:sqflite_common_ffi/sqflite_ffi.dart';
 import 'package:verifin/app/models.dart';
+import 'package:verifin/app/investments/investment_validation_issue.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 import 'package:verifin/data/app_database.dart';
 import 'package:verifin/data/ledger_repository.dart';
@@ -52,6 +53,187 @@ void main() {
     referencePrice: reference,
     underlyingReferencePrice: '50',
   );
+
+  /// 通过新的只读结果入口检查草稿；[security] 可替换规格，[target] 可指定未启用账户。
+  /// 固定参考价与标的参考价，保证失败来自待验证的业务规则而非无关数字输入。
+  OptionEventPreviewResult preview(
+    StockEvent event, {
+    StockSecurity? security,
+    String? target,
+  }) => c.previewOptionEventResult(
+    accountId: target ?? account.id,
+    security: security ?? s,
+    underlying: avgoFixture,
+    event: event,
+    referencePrice: '3',
+    underlyingReferencePrice: '50',
+  );
+
+  test('预览明确区分账户失效、期初时间、现金和持仓问题且零写入', () async {
+    final before = c.investmentFor(account.id)!.toJson();
+    final ordinary = optionEventFixture(s, StockEventKind.optionBuyOpen);
+    expect(
+      preview(ordinary, target: 'missing').issue,
+      InvestmentValidationIssue.accountUnavailable,
+    );
+    expect(
+      preview(
+        optionEventFixture(
+          s,
+          StockEventKind.optionBuyOpen,
+          date: DateTime(2026, 9, 22),
+        ),
+      ).issue,
+      InvestmentValidationIssue.beforeOpening,
+    );
+    expect(
+      preview(
+        optionEventFixture(s, StockEventKind.optionBuyOpen, quantity: '100'),
+      ).issue,
+      InvestmentValidationIssue.insufficientCash,
+    );
+    expect(
+      preview(optionEventFixture(s, StockEventKind.optionSellClose)).issue,
+      InvestmentValidationIssue.positionExceeded,
+    );
+    final success = preview(ordinary);
+    expect(success.issue, isNull);
+    expect(success.preview!.cash, 9800);
+    expect(c.investmentFor(account.id)!.toJson(), before);
+    expect((await repo.loadInvestmentPortfolios()).single.toJson(), before);
+  });
+
+  test('预览分别说明过期、到期过早、未确认结算和规格未核对', () {
+    expect(
+      preview(
+        optionEventFixture(
+          s,
+          StockEventKind.optionBuyOpen,
+          date: DateTime(2026, 12, 19),
+        ),
+      ).issue,
+      InvestmentValidationIssue.expiredContract,
+    );
+    expect(
+      preview(
+        optionEventFixture(s, StockEventKind.optionExpire, price: '0'),
+      ).issue,
+      InvestmentValidationIssue.settlementConfirmationRequired,
+    );
+    expect(
+      preview(
+        optionEventFixture(
+          s,
+          StockEventKind.optionExpire,
+          price: '0',
+          settled: true,
+        ),
+      ).issue,
+      InvestmentValidationIssue.beforeExpiry,
+    );
+    final pending = optionFixture(confirmed: false);
+    expect(
+      preview(
+        optionEventFixture(
+          pending,
+          StockEventKind.optionPhysicalSettle,
+          price: '0',
+          settled: true,
+        ),
+        security: pending,
+      ).issue,
+      InvestmentValidationIssue.specificationRequired,
+    );
+  });
+
+  test('预览区分期初成本未知与交割股票不足', () async {
+    final unknownAccount = investmentAccountFixture(id: 'unknown-cost');
+    c.addAccount(unknownAccount);
+    await c.waitForPendingWrites();
+    expect(
+      await c.enableInvestment(
+        accountId: unknownAccount.id,
+        openingCash: '10000',
+        openedAt: DateTime(2026, 10, 1),
+        securities: [avgoFixture, s],
+        openingHoldings: [
+          StockHolding(securityId: s.id, short: false, quantity: '1'),
+        ],
+        manualPrices: {s.id: '3'},
+      ),
+      isTrue,
+    );
+    expect(
+      preview(
+        optionEventFixture(
+          s,
+          StockEventKind.optionPhysicalSettle,
+          price: '0',
+          settled: true,
+        ),
+        target: unknownAccount.id,
+      ).issue,
+      InvestmentValidationIssue.unknownCost,
+    );
+    final put = optionFixture(right: OptionRight.put);
+    expect(
+      await save(
+        optionEventFixture(put, StockEventKind.optionBuyOpen),
+        security: put,
+      ),
+      isTrue,
+    );
+    expect(
+      preview(
+        optionEventFixture(
+          put,
+          StockEventKind.optionPhysicalSettle,
+          id: 'put-delivery',
+          sequence: 2,
+          price: '0',
+          settled: true,
+        ),
+        security: put,
+      ).issue,
+      InvestmentValidationIssue.underlyingSharesInsufficient,
+    );
+  });
+
+  test('编辑影响后续平仓时给出后续记录冲突，旧预览契约仍返回空', () async {
+    expect(
+      await save(
+        optionEventFixture(s, StockEventKind.optionBuyOpen, quantity: '2'),
+      ),
+      isTrue,
+    );
+    expect(
+      await save(
+        optionEventFixture(
+          s,
+          StockEventKind.optionSellClose,
+          id: 'close',
+          quantity: '2',
+          sequence: 2,
+        ),
+      ),
+      isTrue,
+    );
+    final edited = optionEventFixture(s, StockEventKind.optionBuyOpen);
+    final result = preview(edited);
+    expect(result.preview, isNull);
+    expect(result.issue, InvestmentValidationIssue.subsequentEventConflict);
+    expect(
+      c.previewOptionEvent(
+        accountId: account.id,
+        security: s,
+        underlying: avgoFixture,
+        event: edited,
+        referencePrice: '3',
+      ),
+      isNull,
+    );
+    expect(c.investmentFor(account.id)!.events.first.quantity, '2');
+  });
 
   test('实物交割预览零写入，保存失败全部不变，重试幂等且冷启动一致', () async {
     final open = optionEventFixture(s, StockEventKind.optionBuyOpen);

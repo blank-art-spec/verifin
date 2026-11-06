@@ -2756,7 +2756,7 @@
   "optionUnderlyingName": "Underlying stock name",
   "optionExpiry": "Contract expiry date",
   "optionStrike": "Strike price (contract identity)",
-  "optionMultiplier": "Premium multiplier per unit",
+  "optionMultiplier": "Premium multiplier per contract",
   "optionDeliverableShares": "Actual shares delivered per contract",
   "optionExerciseCash": "Total exercise cash per contract",
   "optionSpecification": "Specification source / missing details",
@@ -3008,6 +3008,90 @@
   "optionLookupMidpoint": "Reference price (bid/ask midpoint)",
   "optionLookupLast": "Reference price (last trade)",
   "optionLookupOpeningHint": "This is the latest available quote, not a historical opening price. Check it against the opening date before using it for past holdings.",
-  "optionLookupIdentityConflict": "The underlying, expiry, right or strike does not match the complete symbol. Review these fields before using this quote.",
-  "optionLookupUsePrice": "Fill reference price"
+  "optionLookupIdentityConflict": "The underlying, expiry, right or strike does not match the complete symbol. Check that these fields match before continuing.",
+  "optionLookupUsePrice": "Fill reference price",
+  "optionContractDetails": "Contract details (view or edit)",
+  "optionSettlementDetails": "Exercise and settlement details",
+  "optionMoreFields": "More (valuation, margin, note)",
+  "optionMultiplierHelp": "Total premium = contracts × trade price × multiplier. Use the multiplier in your broker’s contract specification, not the trade price.",
+  "optionLookupCompactHint": "A full US symbol fills identity locally. Lookup sends the public symbol and your IP; delayed quotes require enabled market data and credentials.",
+  "optionUseTradePrice": "Use trade price as a provisional valuation",
+  "optionEnterReference": "Enter a reference price or adopt a quote",
+  "optionReferenceSummary": "Valuation basis: {price} per unit",
+  "@optionReferenceSummary": {
+    "placeholders": {
+      "price": {
+        "type": "String"
+      }
+    }
+  },
+  "optionPremiumCalculation": "Total premium before fees: {quantity} contracts × {price} × {multiplier} = {total}",
+  "@optionPremiumCalculation": {
+    "placeholders": {
+      "quantity": {
+        "type": "String"
+      },
+      "price": {
+        "type": "String"
+      },
+      "multiplier": {
+        "type": "String"
+      },
+      "total": {
+        "type": "String"
+      }
+    }
+  },
+  "optionFixFields": "Not saved. Correct the highlighted fields, then try again.",
+  "optionRequiredField": "Enter {field}.",
+  "@optionRequiredField": {
+    "placeholders": {
+      "field": {
+        "type": "String"
+      }
+    }
+  },
+  "optionQuantityError": "Enter a positive whole number of contracts, such as 1 or 2.",
+  "optionMultiplierError": "Enter a premium multiplier greater than 0, checked against the contract specification.",
+  "optionPositiveNumberError": "Enter a valid number greater than 0 (up to eight decimal places).",
+  "optionNonNegativeNumberError": "Enter a valid number of 0 or greater (up to eight decimal places).",
+  "optionSourceRequiredError": "Enter the verification source, such as your broker’s contract details or settlement statement.",
+  "optionReferenceRequiredError": "Enter a reference price, or select “Use trade price as a provisional valuation”.",
+  "optionOpeningReferenceRequiredError": "Enter the reference premium at that time to value the holding.",
+  "optionAccountUnavailableError": "This account is unavailable or the ledger has changed. Go back and reopen the editor.",
+  "optionBeforeOpeningError": "The trade is before the investment opening time ({date} {time}). Check the actual trade time; contracts already held at opening belong in opening holdings.",
+  "@optionBeforeOpeningError": {
+    "placeholders": {
+      "date": {
+        "type": "String"
+      },
+      "time": {
+        "type": "String"
+      }
+    }
+  },
+  "optionCashInsufficientError": "Cash is insufficient at this trade or a later trade. Check opening cash, actual deposits and their dates; financing is not enabled for this account.",
+  "optionPositionExceededError": "The closing or settlement quantity exceeds the available position. Check the quantity and long/short side.",
+  "optionExpiredContractError": "The trade is after expiration. Check the date or choose the actual expiry/settlement operation.",
+  "optionBeforeExpiryError": "Worthless expiration cannot be confirmed before the expiration date. Check the operation date.",
+  "optionSpecificationRequiredError": "Before settlement, select the actual settlement method, complete the specification and confirm it.",
+  "optionSettlementConfirmationError": "Check the broker’s result and confirm the actual settlement or worthless expiration.",
+  "optionUnknownCostError": "Physical settlement requires the full option cost. Fill in the unknown opening cost in the holding first.",
+  "optionUnderlyingSharesError": "There are not enough underlying shares for put exercise. Check the shares held and contracts to settle.",
+  "optionUncoveredError": "There are not enough shares to cover call assignment. Check the holding; continuing requires explicit consent to create a short stock position for the uncovered part.",
+  "optionIdentityLockedError": "This contract has existing records. Its expiration, right, underlying or multiplier cannot be changed. Check that you selected the correct contract.",
+  "optionAdjustedContractError": "The underlying has been adjusted and the contract needs review. Verify the adjusted contract specification first.",
+  "optionFeesExceedError": "Fees exceed the premium received for this opening sale. Check fees, trade price and multiplier.",
+  "optionSubsequentEventError": "This change would invalidate a later trade or settlement. Review the dates, quantities and costs of later records first.",
+  "optionOtherValidationError": "The portfolio could not be validated. Check contract details, amount limits and existing trades. Your draft is preserved and has not been saved.",
+  "optionPreviewStaleError": "Account data has changed. Preview cash and positions again before saving.",
+  "optionSaveFailedError": "Saving failed and your draft is preserved. Preview again and retry; if it still fails, check the app log.",
+  "optionCashPrecisionError": "Use the account currency precision: at most {digits} decimal places.",
+  "@optionCashPrecisionError": {
+    "placeholders": {
+      "digits": {
+        "type": "int"
+      }
+    }
+  }
 }

@@ -11,6 +11,7 @@ import 'package:verifin/pages/investment_history_page.dart';
 import 'package:verifin/pages/market_quotes_page.dart';
 import 'package:verifin/pages/option_editor_page.dart';
 import 'support/investment_fixture.dart';
+import 'support/option_editor_harness.dart';
 import 'support/test_harness.dart';
 
 /// 检查真实页面在窄屏、大字号和两种主题下的全部滚动内容，不构造替代演示页面。
@@ -70,9 +71,11 @@ void main() {
                   matching: find.byType(Scrollable),
                 )
                 .first;
+            await expandOptionEditorSection(tester, 'settlement');
+            await expandOptionEditorSection(tester, 'extras');
             for (final pair in [
               (l.optionAdjustmentHint, l.optionSpecification, 'source'),
-              (l.optionMarginHint, l.investReference, 'reference'),
+              (l.optionMarginHint, l.investNote, 'note'),
               (l.investTradeDetails, l.optionContracts, 'quantity'),
             ]) {
               await tester.scrollUntilVisible(

@@ -7073,7 +7073,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get optionStrike => '行权价（身份资料）';
 
   @override
-  String get optionMultiplier => '每单位权利金乘数';
+  String get optionMultiplier => '权利金乘数（每张）';
 
   @override
   String get optionDeliverableShares => '每张实际交割股数';
@@ -7877,8 +7877,141 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get optionLookupIdentityConflict =>
-      '已填标的、到期日、类型或行权价与完整代码不一致，核对一致后才能采用此报价。';
+      '已填标的、到期日、类型或行权价与完整代码不一致，请核对一致后再继续。';
 
   @override
   String get optionLookupUsePrice => '填入参考价';
+
+  @override
+  String get optionContractDetails => '合约资料（查看或修改）';
+
+  @override
+  String get optionSettlementDetails => '行权与交割资料';
+
+  @override
+  String get optionMoreFields => '更多信息（参考价、保证金、备注）';
+
+  @override
+  String get optionMultiplierHelp => '总权利金 = 张数 × 成交价 × 乘数。乘数请按券商合约规格填写，不是成交价。';
+
+  @override
+  String get optionLookupCompactHint =>
+      '完整美股代码在本地补全资料。点击查询会发送公开代码和 IP；获取延迟价格需开启行情联网并配置凭证。';
+
+  @override
+  String get optionUseTradePrice => '用成交价暂估持仓';
+
+  @override
+  String get optionEnterReference => '填写参考价，或查询后采用价格';
+
+  @override
+  String optionReferenceSummary(String price) {
+    return '本次估值依据：$price／单位';
+  }
+
+  @override
+  String optionPremiumCalculation(
+    String quantity,
+    String price,
+    String multiplier,
+    String total,
+  ) {
+    return '权利金总额（不含费用）：$quantity 张 × $price × $multiplier = $total';
+  }
+
+  @override
+  String get optionFixFields => '尚未保存，请修正标出的项目后重试。';
+
+  @override
+  String optionRequiredField(String field) {
+    return '请填写$field。';
+  }
+
+  @override
+  String get optionQuantityError => '请输入正整数张数，例如 1、2。';
+
+  @override
+  String get optionMultiplierError => '请填写大于 0 的权利金乘数，按券商合约规格核对。';
+
+  @override
+  String get optionPositiveNumberError => '请输入大于 0 的有效数字（最多八位小数）。';
+
+  @override
+  String get optionNonNegativeNumberError => '请输入不小于 0 的有效数字（最多八位小数）。';
+
+  @override
+  String get optionSourceRequiredError => '请填写核对依据，例如券商合约详情或结算单。';
+
+  @override
+  String get optionReferenceRequiredError => '请填写参考价，或勾选“用成交价暂估持仓”。';
+
+  @override
+  String get optionOpeningReferenceRequiredError => '请填写该时点的参考权利金，用于估算持仓价值。';
+
+  @override
+  String get optionAccountUnavailableError => '当前账户已失效或账本已切换，请返回后重新进入录入。';
+
+  @override
+  String optionBeforeOpeningError(String date, String time) {
+    return '成交时间早于证券期初（$date $time）。请核对真实成交时间；期初已持有的合约应录入期初持仓。';
+  }
+
+  @override
+  String get optionCashInsufficientError =>
+      '该交易或后续交易发生时现金不足。请核对期初现金、实际入金及其时间；当前账户未允许融资。';
+
+  @override
+  String get optionPositionExceededError => '平仓或交割张数超过该方向的可用持仓，请核对张数和多空方向。';
+
+  @override
+  String get optionExpiredContractError =>
+      '成交时间晚于合约到期日，不能记录开平仓。请核对日期，或选择实际到期／结算操作。';
+
+  @override
+  String get optionBeforeExpiryError => '尚未到合约到期日，不能确认无价值到期。请核对操作日期。';
+
+  @override
+  String get optionSpecificationRequiredError => '结算前请选择实际结算方式，补齐规格并勾选“已核对”。';
+
+  @override
+  String get optionSettlementConfirmationError =>
+      '请核对券商结果，并勾选“已确认实际结算／无价值到期结果”。';
+
+  @override
+  String get optionUnknownCostError => '实物交割需要完整期权成本。请先在持仓中补齐未知的期初成本。';
+
+  @override
+  String get optionUnderlyingSharesError => '用于认沽行权的股票持仓不足，请核对股票数量与交割张数。';
+
+  @override
+  String get optionUncoveredError => '认购指派的股票覆盖不足；请核对持仓，只有明确接受不足部分形成股票空头后才能继续。';
+
+  @override
+  String get optionIdentityLockedError =>
+      '该合约已有记录，不能改写到期日、方向、标的或乘数。请核对是否选择了正确合约。';
+
+  @override
+  String get optionAdjustedContractError => '标的发生调整，当前合约规格待核对。请先核实调整后的合约资料。';
+
+  @override
+  String get optionFeesExceedError => '费用超过本次卖出开仓收到的权利金，请核对费用、成交价与乘数。';
+
+  @override
+  String get optionSubsequentEventError =>
+      '本次修改会使后续交易或交割不成立。请先核对后续记录的时间、数量和成本。';
+
+  @override
+  String get optionOtherValidationError =>
+      '当前组合无法通过校验。请核对合约资料、金额范围及既有交易；草稿已保留，尚未保存。';
+
+  @override
+  String get optionPreviewStaleError => '账户数据已变化，请重新预览现金与持仓后保存。';
+
+  @override
+  String get optionSaveFailedError => '保存未成功，草稿已保留。请重新预览后重试；若仍失败，请查看应用日志。';
+
+  @override
+  String optionCashPrecisionError(int digits) {
+    return '请按账户币种填写，最多保留 $digits 位小数。';
+  }
 }

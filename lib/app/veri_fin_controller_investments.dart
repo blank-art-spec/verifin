@@ -1,5 +1,20 @@
 part of 'veri_fin_controller.dart';
 
+/// 期权草稿的只读预览结果；成功保留原预览数据，失败仅提供稳定原因码。
+class OptionEventPreviewResult {
+  /// [preview] 为当前组合完整重放的结果；[issue] 非空时预览无效，不能用来保存。
+  /// 私有构造保证界面只能消费 Controller 的校验结果，不能自行拼造成功状态。
+  const OptionEventPreviewResult._({this.preview, this.issue});
+
+  final ({
+    InvestmentPortfolio portfolio,
+    StockProjection projection,
+    double cash,
+  })?
+  preview;
+  final InvestmentValidationIssue? issue;
+}
+
 /// 删除持仓时不能单独拆开的关联事实，或删除后不再成立的历史账务。
 enum InvestmentHoldingRemovalIssue {
   /// 跨账户转移必须同时处理两端，不能从单个账户删除一边。
@@ -814,7 +829,32 @@ mixin _InvestmentOps on _ControllerOps {
     required StockEvent event,
     required String referencePrice,
     String? underlyingReferencePrice,
+  }) => previewOptionEventResult(
+    accountId: accountId,
+    security: security,
+    underlying: underlying,
+    event: event,
+    referencePrice: referencePrice,
+    underlyingReferencePrice: underlyingReferencePrice,
+  ).preview;
+
+  /// 返回可解释的零写入预览，供表单定位日期、现金、持仓或结算资料问题。
+  /// [accountId] 为当前账本币种账户；[security] 与 [underlying] 为草稿合约和标的。
+  /// [event] 为待新增或替换的事实；两个参考价只用于候选估值，不改真实成交。
+  /// 仍完整重放全部关联数据；若失败发生在另一条事件，明确标为后续记录冲突。
+  OptionEventPreviewResult previewOptionEventResult({
+    required String accountId,
+    required StockSecurity security,
+    required StockSecurity underlying,
+    required StockEvent event,
+    required String referencePrice,
+    String? underlyingReferencePrice,
   }) {
+    if (investmentFor(accountId) == null) {
+      return const OptionEventPreviewResult._(
+        issue: InvestmentValidationIssue.accountUnavailable,
+      );
+    }
     try {
       final next = _optionCandidate(
         accountId: accountId,
@@ -834,10 +874,21 @@ mixin _InvestmentOps on _ControllerOps {
         anchor: latestBalanceAnchor(accountId),
         rejectUnfundedHistory: !next.allowFinancing,
       );
-      return (portfolio: next, projection: projectStocks(next), cash: cash);
+      return OptionEventPreviewResult._(
+        preview: (portfolio: next, projection: projectStocks(next), cash: cash),
+      );
+    } on InvestmentValidationException catch (error) {
+      // 明确的字段/业务校验无需写日志；只返回原因码，不将底层文案或事件 ID 暴露给界面。
+      return OptionEventPreviewResult._(
+        issue: error.eventId != null && error.eventId != event.id
+            ? InvestmentValidationIssue.subsequentEventConflict
+            : error.issue,
+      );
     } on FormatException {
-      // 草稿预览失败是可接受的字段校验，页面显示本地化错误且不产生保存日志。
-      return null;
+      // 其余格式错误由界面逐字段校验兜底；保持旧入口失败返回 null 的契约。
+      return const OptionEventPreviewResult._(
+        issue: InvestmentValidationIssue.invalidInput,
+      );
     }
   }
 
@@ -899,7 +950,10 @@ mixin _InvestmentOps on _ControllerOps {
     if (old.option == null ||
         old.market != security.market ||
         old.currencyCode != security.currencyCode) {
-      throw const FormatException('已有证券身份不能修改');
+      throw const InvestmentValidationException(
+        InvestmentValidationIssue.contractIdentityLocked,
+        '已有证券身份不能修改',
+      );
     }
     final a = old.option!.toJson(), b = security.option!.toJson();
     final settled = p.events.any(
@@ -918,7 +972,12 @@ mixin _InvestmentOps on _ControllerOps {
       'premiumMultiplier',
       if (settled) ...['settlement', 'deliverableShares', 'exerciseCash'],
     ]) {
-      if (a[field] != b[field]) throw const FormatException('已有合约定价及已结算规格不能改写');
+      if (a[field] != b[field]) {
+        throw const InvestmentValidationException(
+          InvestmentValidationIssue.contractIdentityLocked,
+          '已有合约定价及已结算规格不能改写',
+        );
+      }
     }
   }
 

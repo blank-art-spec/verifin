@@ -16,6 +16,7 @@ import 'package:verifin/pages/option_editor_page.dart';
 import 'support/in_memory_ledger_repository.dart';
 import 'support/investment_fixture.dart';
 import 'support/market_quote_fixture.dart';
+import 'support/option_editor_harness.dart';
 import 'support/test_harness.dart';
 
 /// 只记录公开标的检索参数；测试明确完成请求，不访问真实网络。
@@ -84,19 +85,13 @@ Finder _scroll() => find
     )
     .first;
 
+/// 先展开实际字段分组再读取控制器；[up] 保留旧调用语义，定位统一从页首开始。
 Future<TextEditingController> _field(
   WidgetTester tester,
   String field, {
   bool up = false,
 }) async {
-  final input = find.byKey(ValueKey('option-$field'));
-  await tester.scrollUntilVisible(
-    input,
-    up ? -220 : 220,
-    scrollable: _scroll(),
-  );
-  await tester.ensureVisible(input);
-  await tester.pumpAndSettle();
+  final input = await revealOptionEditorField(tester, field);
   return tester.widget<TextField>(input).controller!;
 }
 
@@ -112,10 +107,11 @@ Future<void> _enter(
   await tester.pumpAndSettle();
 }
 
+/// 标的搜索位于合约详情内，必须先通过展开入口才能主动联网。
 Future<void> _search(WidgetTester tester) async {
+  await expandOptionEditorSection(tester, 'details');
   final button = find.byKey(const Key('option-underlying-search-online'));
-  await tester.scrollUntilVisible(button, 180, scrollable: _scroll());
-  await tester.ensureVisible(button);
+  await revealOptionEditorTarget(tester, button);
   await tester.tap(button);
   await tester.pumpAndSettle();
 }
@@ -201,9 +197,7 @@ Future<void> _save(WidgetTester tester, {bool preview = false}) async {
 /// 合约查询与采用分别由用户触发，未完成的响应仍由用例控制。
 Future<void> _contractAction(WidgetTester tester, String action) async {
   final button = find.byKey(ValueKey('option-contract-$action'));
-  await tester.scrollUntilVisible(button, -220, scrollable: _scroll());
-  await tester.ensureVisible(button);
-  await tester.pumpAndSettle();
+  await revealOptionEditorTarget(tester, button);
   expect(button.hitTestable(), findsOneWidget);
   await tester.tap(button);
   await tester.pump();
@@ -285,7 +279,10 @@ void main() {
       await _enter(tester, 'quantity', '2');
       await _enter(tester, opening ? 'cost' : 'price', opening ? '175' : '2');
       await _enter(tester, 'reference', '1.25');
-      await _enter(tester, 'underlyingPrice', '50');
+      expect(
+        find.byKey(const ValueKey('option-underlyingPrice')),
+        findsNothing,
+      );
       expect(search.requests, isEmpty);
       expect(adapter.requests, 0);
 
@@ -312,6 +309,7 @@ void main() {
       expect((await _field(tester, 'underlyingName')).text, '博通');
       expect((await _field(tester, 'strike')).text, '300');
       expect((await _field(tester, 'multiplier')).text, '10');
+      await expandOptionEditorSection(tester, 'settlement');
       expect(find.text('非标准 / 待补全'), findsOneWidget);
       expect(
         tester
@@ -327,7 +325,10 @@ void main() {
         opening ? '175' : '2',
       );
       expect((await _field(tester, 'reference')).text, '1.25');
-      expect((await _field(tester, 'underlyingPrice')).text, '50');
+      expect(
+        find.byKey(const ValueKey('option-underlyingPrice')),
+        findsNothing,
+      );
 
       await _contractAction(tester, 'use-price');
       await tester.pumpAndSettle();
@@ -583,7 +584,7 @@ void main() {
     }
   });
 
-  testWidgets('独立期权交易显式查询股票身份，选中不复制价格或推断合约', (tester) async {
+  testWidgets('标的搜索保留完整代码解析的身份，选中不复制股票价格或合约乘数', (tester) async {
     final search = _SearchClient();
     final actual = await _ready(search, local: true);
     final before = actual.investmentFor('stock-usd')!.toJson();
@@ -616,25 +617,24 @@ void main() {
     await tester.pumpAndSettle();
     await _select(tester, avgoFixture);
     expect((await _field(tester, 'underlyingName')).text, '博通');
-    expect((await _field(tester, 'strike')).text, isEmpty);
+    expect((await _field(tester, 'strike')).text, '300');
     expect((await _field(tester, 'multiplier')).text, isEmpty);
-    await _enter(tester, 'strike', '99', up: true);
     await _enter(tester, 'multiplier', '10');
     await _enter(tester, 'quantity', '2');
     await _enter(tester, 'price', '2');
     expect((await _field(tester, 'reference')).text, isEmpty);
     await _enter(tester, 'reference', '3');
-    expect((await _field(tester, 'underlyingPrice')).text, isEmpty);
+    expect(find.byKey(const ValueKey('option-underlyingPrice')), findsNothing);
     expect(actual.investmentFor('stock-usd')!.toJson(), before);
     await _save(tester, preview: true);
     final saved = actual.investmentFor('stock-usd')!;
     final option = saved.securities.singleWhere(
       (security) => security.option != null,
     );
-    expect(option.symbol, 'avgo261218p00300000');
+    expect(option.symbol.toUpperCase(), 'AVGO261218P00300000');
     expect(option.option!.underlyingId, avgoFixture.id);
-    expect(option.option!.strike, '99');
-    expect(option.option!.right, OptionRight.call);
+    expect(option.option!.strike, '300');
+    expect(option.option!.right, OptionRight.put);
     expect(saved.manualPrices[avgoFixture.id], '330');
     expect(saved.events, hasLength(1));
     expect(projectStocks(saved).positions.single.securityId, option.id);
@@ -690,7 +690,6 @@ void main() {
     search.requests.single.result.complete([avgoFixture]);
     await tester.pumpAndSettle();
     await _select(tester, avgoFixture);
-    await _enter(tester, 'strike', '50');
     await _enter(tester, 'multiplier', '10');
     await _enter(tester, 'quantity', '2');
     await _enter(tester, 'cost', '175');
@@ -699,9 +698,9 @@ void main() {
     await _save(tester);
     expect(result, isNotNull);
     expect(result!.underlying!.toJson(), avgoFixture.toJson());
-    expect(result!.security.option!.right, OptionRight.call);
-    expect(result!.security.option!.expiry, '2026-10-31');
-    expect(result!.security.option!.strike, '50');
+    expect(result!.security.option!.right, OptionRight.put);
+    expect(result!.security.option!.expiry, '2026-12-18');
+    expect(result!.security.option!.strike, '300');
     expect(result!.security.option!.premiumMultiplier, '10');
     expect(result!.holding.cost, '175');
     expect(result!.underlyingPrice, isNull);

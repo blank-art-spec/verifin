@@ -21,6 +21,7 @@ import 'package:verifin/pages/option_editor_page.dart';
 
 import 'support/in_memory_ledger_repository.dart';
 import 'support/investment_fixture.dart';
+import 'support/option_editor_harness.dart';
 import 'support/test_harness.dart';
 
 const _goog = StockSecurity(
@@ -127,6 +128,7 @@ Future<void> _tapKey(WidgetTester tester, String key) async {
   await tester.pumpAndSettle();
 }
 
+/// 在对应品种的真实表单内填写 [key]；期权的选填和详情分组先显式展开。
 Future<void> _enter(
   WidgetTester tester,
   Type page,
@@ -134,7 +136,11 @@ Future<void> _enter(
   String value,
 ) async {
   final field = find.byKey(Key(key));
-  await tester.scrollUntilVisible(field, 220, scrollable: _scroll(page));
+  if (page == OptionEditorPage) {
+    await revealOptionEditorField(tester, key.substring('option-'.length));
+  } else {
+    await tester.scrollUntilVisible(field, 220, scrollable: _scroll(page));
+  }
   await tester.enterText(field, value);
   await tester.pumpAndSettle();
 }

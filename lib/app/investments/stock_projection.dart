@@ -5,6 +5,7 @@ import '../currency_catalog.dart';
 import '../models/investment.dart';
 import '../models/option_contract.dart';
 import 'investment_decimal.dart';
+import 'investment_validation_issue.dart';
 part 'option_projection.dart';
 
 /// 单个证券方向的重放结果；成本未知时不制造零成本盈利。
@@ -116,9 +117,15 @@ StockProjection projectStocks(InvestmentPortfolio portfolio, {DateTime? at}) {
         !sequences.add(event.sequence) ||
         event.sequence < 0 ||
         event.id.isEmpty ||
-        !securities.containsKey(event.securityId) ||
-        event.occurredAt.isBefore(portfolio.openedAt)) {
+        !securities.containsKey(event.securityId)) {
       throw const FormatException('成交身份、顺序或期初边界不合法');
+    }
+    if (event.occurredAt.isBefore(portfolio.openedAt)) {
+      throw InvestmentValidationException(
+        InvestmentValidationIssue.beforeOpening,
+        '成交时间早于证券账户启用时间',
+        eventId: event.id,
+      );
     }
     final q = InvestmentDecimal.parse(event.quantity),
         p = InvestmentDecimal.parse(event.price),

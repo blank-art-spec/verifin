@@ -24,6 +24,7 @@ import 'credit_hierarchy.dart';
 import 'statistics_currency.dart';
 import 'frankfurter_client.dart';
 import 'investments/investment_decimal.dart';
+import 'investments/investment_validation_issue.dart';
 import 'investments/investment_opening_draft.dart';
 import 'investments/stock_projection.dart';
 import 'investments/stock_cash_math.dart';

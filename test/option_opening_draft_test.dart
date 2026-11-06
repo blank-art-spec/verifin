@@ -9,6 +9,7 @@ import 'package:verifin/local_storage/local_storage.dart';
 import 'package:verifin/pages/option_editor_page.dart';
 
 import 'support/investment_fixture.dart';
+import 'support/option_editor_harness.dart';
 import 'support/test_harness.dart';
 
 Finder _scroll() => find
@@ -66,9 +67,9 @@ Future<void> _open(
   await tester.pumpAndSettle();
 }
 
+/// 展开并填写真实期初字段；[value] 为本用例要验证的原始输入文本。
 Future<void> _enter(WidgetTester tester, String field, String value) async {
-  final input = find.byKey(ValueKey('option-$field'));
-  await tester.scrollUntilVisible(input, 240, scrollable: _scroll());
+  final input = await revealOptionEditorField(tester, field);
   await tester.enterText(input, value);
   tester.testTextInput.hide();
   await tester.pumpAndSettle();

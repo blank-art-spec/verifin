@@ -12822,7 +12822,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionMultiplier.
   ///
   /// In zh, this message translates to:
-  /// **'每单位权利金乘数'**
+  /// **'权利金乘数（每张）'**
   String get optionMultiplier;
 
   /// No description provided for @optionDeliverableShares.
@@ -14303,7 +14303,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupIdentityConflict.
   ///
   /// In zh, this message translates to:
-  /// **'已填标的、到期日、类型或行权价与完整代码不一致，核对一致后才能采用此报价。'**
+  /// **'已填标的、到期日、类型或行权价与完整代码不一致，请核对一致后再继续。'**
   String get optionLookupIdentityConflict;
 
   /// No description provided for @optionLookupUsePrice.
@@ -14311,6 +14311,233 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'填入参考价'**
   String get optionLookupUsePrice;
+
+  /// No description provided for @optionContractDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'合约资料（查看或修改）'**
+  String get optionContractDetails;
+
+  /// No description provided for @optionSettlementDetails.
+  ///
+  /// In zh, this message translates to:
+  /// **'行权与交割资料'**
+  String get optionSettlementDetails;
+
+  /// No description provided for @optionMoreFields.
+  ///
+  /// In zh, this message translates to:
+  /// **'更多信息（参考价、保证金、备注）'**
+  String get optionMoreFields;
+
+  /// No description provided for @optionMultiplierHelp.
+  ///
+  /// In zh, this message translates to:
+  /// **'总权利金 = 张数 × 成交价 × 乘数。乘数请按券商合约规格填写，不是成交价。'**
+  String get optionMultiplierHelp;
+
+  /// No description provided for @optionLookupCompactHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'完整美股代码在本地补全资料。点击查询会发送公开代码和 IP；获取延迟价格需开启行情联网并配置凭证。'**
+  String get optionLookupCompactHint;
+
+  /// No description provided for @optionUseTradePrice.
+  ///
+  /// In zh, this message translates to:
+  /// **'用成交价暂估持仓'**
+  String get optionUseTradePrice;
+
+  /// No description provided for @optionEnterReference.
+  ///
+  /// In zh, this message translates to:
+  /// **'填写参考价，或查询后采用价格'**
+  String get optionEnterReference;
+
+  /// No description provided for @optionReferenceSummary.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次估值依据：{price}／单位'**
+  String optionReferenceSummary(String price);
+
+  /// No description provided for @optionPremiumCalculation.
+  ///
+  /// In zh, this message translates to:
+  /// **'权利金总额（不含费用）：{quantity} 张 × {price} × {multiplier} = {total}'**
+  String optionPremiumCalculation(
+    String quantity,
+    String price,
+    String multiplier,
+    String total,
+  );
+
+  /// No description provided for @optionFixFields.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未保存，请修正标出的项目后重试。'**
+  String get optionFixFields;
+
+  /// No description provided for @optionRequiredField.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写{field}。'**
+  String optionRequiredField(String field);
+
+  /// No description provided for @optionQuantityError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入正整数张数，例如 1、2。'**
+  String get optionQuantityError;
+
+  /// No description provided for @optionMultiplierError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写大于 0 的权利金乘数，按券商合约规格核对。'**
+  String get optionMultiplierError;
+
+  /// No description provided for @optionPositiveNumberError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入大于 0 的有效数字（最多八位小数）。'**
+  String get optionPositiveNumberError;
+
+  /// No description provided for @optionNonNegativeNumberError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入不小于 0 的有效数字（最多八位小数）。'**
+  String get optionNonNegativeNumberError;
+
+  /// No description provided for @optionSourceRequiredError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写核对依据，例如券商合约详情或结算单。'**
+  String get optionSourceRequiredError;
+
+  /// No description provided for @optionReferenceRequiredError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写参考价，或勾选“用成交价暂估持仓”。'**
+  String get optionReferenceRequiredError;
+
+  /// No description provided for @optionOpeningReferenceRequiredError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请填写该时点的参考权利金，用于估算持仓价值。'**
+  String get optionOpeningReferenceRequiredError;
+
+  /// No description provided for @optionAccountUnavailableError.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前账户已失效或账本已切换，请返回后重新进入录入。'**
+  String get optionAccountUnavailableError;
+
+  /// No description provided for @optionBeforeOpeningError.
+  ///
+  /// In zh, this message translates to:
+  /// **'成交时间早于证券期初（{date} {time}）。请核对真实成交时间；期初已持有的合约应录入期初持仓。'**
+  String optionBeforeOpeningError(String date, String time);
+
+  /// No description provided for @optionCashInsufficientError.
+  ///
+  /// In zh, this message translates to:
+  /// **'该交易或后续交易发生时现金不足。请核对期初现金、实际入金及其时间；当前账户未允许融资。'**
+  String get optionCashInsufficientError;
+
+  /// No description provided for @optionPositionExceededError.
+  ///
+  /// In zh, this message translates to:
+  /// **'平仓或交割张数超过该方向的可用持仓，请核对张数和多空方向。'**
+  String get optionPositionExceededError;
+
+  /// No description provided for @optionExpiredContractError.
+  ///
+  /// In zh, this message translates to:
+  /// **'成交时间晚于合约到期日，不能记录开平仓。请核对日期，或选择实际到期／结算操作。'**
+  String get optionExpiredContractError;
+
+  /// No description provided for @optionBeforeExpiryError.
+  ///
+  /// In zh, this message translates to:
+  /// **'尚未到合约到期日，不能确认无价值到期。请核对操作日期。'**
+  String get optionBeforeExpiryError;
+
+  /// No description provided for @optionSpecificationRequiredError.
+  ///
+  /// In zh, this message translates to:
+  /// **'结算前请选择实际结算方式，补齐规格并勾选“已核对”。'**
+  String get optionSpecificationRequiredError;
+
+  /// No description provided for @optionSettlementConfirmationError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请核对券商结果，并勾选“已确认实际结算／无价值到期结果”。'**
+  String get optionSettlementConfirmationError;
+
+  /// No description provided for @optionUnknownCostError.
+  ///
+  /// In zh, this message translates to:
+  /// **'实物交割需要完整期权成本。请先在持仓中补齐未知的期初成本。'**
+  String get optionUnknownCostError;
+
+  /// No description provided for @optionUnderlyingSharesError.
+  ///
+  /// In zh, this message translates to:
+  /// **'用于认沽行权的股票持仓不足，请核对股票数量与交割张数。'**
+  String get optionUnderlyingSharesError;
+
+  /// No description provided for @optionUncoveredError.
+  ///
+  /// In zh, this message translates to:
+  /// **'认购指派的股票覆盖不足；请核对持仓，只有明确接受不足部分形成股票空头后才能继续。'**
+  String get optionUncoveredError;
+
+  /// No description provided for @optionIdentityLockedError.
+  ///
+  /// In zh, this message translates to:
+  /// **'该合约已有记录，不能改写到期日、方向、标的或乘数。请核对是否选择了正确合约。'**
+  String get optionIdentityLockedError;
+
+  /// No description provided for @optionAdjustedContractError.
+  ///
+  /// In zh, this message translates to:
+  /// **'标的发生调整，当前合约规格待核对。请先核实调整后的合约资料。'**
+  String get optionAdjustedContractError;
+
+  /// No description provided for @optionFeesExceedError.
+  ///
+  /// In zh, this message translates to:
+  /// **'费用超过本次卖出开仓收到的权利金，请核对费用、成交价与乘数。'**
+  String get optionFeesExceedError;
+
+  /// No description provided for @optionSubsequentEventError.
+  ///
+  /// In zh, this message translates to:
+  /// **'本次修改会使后续交易或交割不成立。请先核对后续记录的时间、数量和成本。'**
+  String get optionSubsequentEventError;
+
+  /// No description provided for @optionOtherValidationError.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前组合无法通过校验。请核对合约资料、金额范围及既有交易；草稿已保留，尚未保存。'**
+  String get optionOtherValidationError;
+
+  /// No description provided for @optionPreviewStaleError.
+  ///
+  /// In zh, this message translates to:
+  /// **'账户数据已变化，请重新预览现金与持仓后保存。'**
+  String get optionPreviewStaleError;
+
+  /// No description provided for @optionSaveFailedError.
+  ///
+  /// In zh, this message translates to:
+  /// **'保存未成功，草稿已保留。请重新预览后重试；若仍失败，请查看应用日志。'**
+  String get optionSaveFailedError;
+
+  /// No description provided for @optionCashPrecisionError.
+  ///
+  /// In zh, this message translates to:
+  /// **'请按账户币种填写，最多保留 {digits} 位小数。'**
+  String optionCashPrecisionError(int digits);
 }
 
 class _AppLocalizationsDelegate

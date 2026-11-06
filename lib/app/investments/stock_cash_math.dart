@@ -4,6 +4,7 @@ library;
 import '../ledger_math.dart';
 import '../models.dart';
 import 'investment_decimal.dart';
+import 'investment_validation_issue.dart';
 import 'stock_projection.dart';
 import 'fund_workflow_math.dart';
 
@@ -88,12 +89,18 @@ double investmentCashBalance({
     return time != 0 ? time : a.$2.compareTo(b.$2);
   });
   if (rejectUnfundedHistory && cash.units < BigInt.zero) {
-    throw const FormatException('期初现金不足，需确认真实融资');
+    throw const InvestmentValidationException(
+      InvestmentValidationIssue.insufficientCash,
+      '期初现金不足，需确认真实融资',
+    );
   }
   for (final point in timeline) {
     cash = cash + point.$3;
     if (rejectUnfundedHistory && cash.units < BigInt.zero) {
-      throw const FormatException('历史成交时现金不足，需确认真实融资');
+      throw const InvestmentValidationException(
+        InvestmentValidationIssue.insufficientCash,
+        '历史成交时现金不足，需确认真实融资',
+      );
     }
   }
   return cash.toDouble();

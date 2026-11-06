@@ -7329,7 +7329,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get optionStrike => 'Strike price (contract identity)';
 
   @override
-  String get optionMultiplier => 'Premium multiplier per unit';
+  String get optionMultiplier => 'Premium multiplier per contract';
 
   @override
   String get optionDeliverableShares => 'Actual shares delivered per contract';
@@ -8194,8 +8194,162 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupIdentityConflict =>
-      'The underlying, expiry, right or strike does not match the complete symbol. Review these fields before using this quote.';
+      'The underlying, expiry, right or strike does not match the complete symbol. Check that these fields match before continuing.';
 
   @override
   String get optionLookupUsePrice => 'Fill reference price';
+
+  @override
+  String get optionContractDetails => 'Contract details (view or edit)';
+
+  @override
+  String get optionSettlementDetails => 'Exercise and settlement details';
+
+  @override
+  String get optionMoreFields => 'More (valuation, margin, note)';
+
+  @override
+  String get optionMultiplierHelp =>
+      'Total premium = contracts × trade price × multiplier. Use the multiplier in your broker’s contract specification, not the trade price.';
+
+  @override
+  String get optionLookupCompactHint =>
+      'A full US symbol fills identity locally. Lookup sends the public symbol and your IP; delayed quotes require enabled market data and credentials.';
+
+  @override
+  String get optionUseTradePrice =>
+      'Use trade price as a provisional valuation';
+
+  @override
+  String get optionEnterReference => 'Enter a reference price or adopt a quote';
+
+  @override
+  String optionReferenceSummary(String price) {
+    return 'Valuation basis: $price per unit';
+  }
+
+  @override
+  String optionPremiumCalculation(
+    String quantity,
+    String price,
+    String multiplier,
+    String total,
+  ) {
+    return 'Total premium before fees: $quantity contracts × $price × $multiplier = $total';
+  }
+
+  @override
+  String get optionFixFields =>
+      'Not saved. Correct the highlighted fields, then try again.';
+
+  @override
+  String optionRequiredField(String field) {
+    return 'Enter $field.';
+  }
+
+  @override
+  String get optionQuantityError =>
+      'Enter a positive whole number of contracts, such as 1 or 2.';
+
+  @override
+  String get optionMultiplierError =>
+      'Enter a premium multiplier greater than 0, checked against the contract specification.';
+
+  @override
+  String get optionPositiveNumberError =>
+      'Enter a valid number greater than 0 (up to eight decimal places).';
+
+  @override
+  String get optionNonNegativeNumberError =>
+      'Enter a valid number of 0 or greater (up to eight decimal places).';
+
+  @override
+  String get optionSourceRequiredError =>
+      'Enter the verification source, such as your broker’s contract details or settlement statement.';
+
+  @override
+  String get optionReferenceRequiredError =>
+      'Enter a reference price, or select “Use trade price as a provisional valuation”.';
+
+  @override
+  String get optionOpeningReferenceRequiredError =>
+      'Enter the reference premium at that time to value the holding.';
+
+  @override
+  String get optionAccountUnavailableError =>
+      'This account is unavailable or the ledger has changed. Go back and reopen the editor.';
+
+  @override
+  String optionBeforeOpeningError(String date, String time) {
+    return 'The trade is before the investment opening time ($date $time). Check the actual trade time; contracts already held at opening belong in opening holdings.';
+  }
+
+  @override
+  String get optionCashInsufficientError =>
+      'Cash is insufficient at this trade or a later trade. Check opening cash, actual deposits and their dates; financing is not enabled for this account.';
+
+  @override
+  String get optionPositionExceededError =>
+      'The closing or settlement quantity exceeds the available position. Check the quantity and long/short side.';
+
+  @override
+  String get optionExpiredContractError =>
+      'The trade is after expiration. Check the date or choose the actual expiry/settlement operation.';
+
+  @override
+  String get optionBeforeExpiryError =>
+      'Worthless expiration cannot be confirmed before the expiration date. Check the operation date.';
+
+  @override
+  String get optionSpecificationRequiredError =>
+      'Before settlement, select the actual settlement method, complete the specification and confirm it.';
+
+  @override
+  String get optionSettlementConfirmationError =>
+      'Check the broker’s result and confirm the actual settlement or worthless expiration.';
+
+  @override
+  String get optionUnknownCostError =>
+      'Physical settlement requires the full option cost. Fill in the unknown opening cost in the holding first.';
+
+  @override
+  String get optionUnderlyingSharesError =>
+      'There are not enough underlying shares for put exercise. Check the shares held and contracts to settle.';
+
+  @override
+  String get optionUncoveredError =>
+      'There are not enough shares to cover call assignment. Check the holding; continuing requires explicit consent to create a short stock position for the uncovered part.';
+
+  @override
+  String get optionIdentityLockedError =>
+      'This contract has existing records. Its expiration, right, underlying or multiplier cannot be changed. Check that you selected the correct contract.';
+
+  @override
+  String get optionAdjustedContractError =>
+      'The underlying has been adjusted and the contract needs review. Verify the adjusted contract specification first.';
+
+  @override
+  String get optionFeesExceedError =>
+      'Fees exceed the premium received for this opening sale. Check fees, trade price and multiplier.';
+
+  @override
+  String get optionSubsequentEventError =>
+      'This change would invalidate a later trade or settlement. Review the dates, quantities and costs of later records first.';
+
+  @override
+  String get optionOtherValidationError =>
+      'The portfolio could not be validated. Check contract details, amount limits and existing trades. Your draft is preserved and has not been saved.';
+
+  @override
+  String get optionPreviewStaleError =>
+      'Account data has changed. Preview cash and positions again before saving.';
+
+  @override
+  String get optionSaveFailedError =>
+      'Saving failed and your draft is preserved. Preview again and retry; if it still fails, check the app log.';
+
+  @override
+  String optionCashPrecisionError(int digits) {
+    return 'Use the account currency precision: at most $digits decimal places.';
+  }
 }
