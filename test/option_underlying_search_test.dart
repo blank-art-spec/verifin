@@ -48,6 +48,41 @@ class _SearchClient extends SecuritySearchClient {
   }
 }
 
+/// 规格与报价分别受控的本地来源；所有数据仅供离线测试，不代表真实合约已核验。
+class _SpecificationAdapter extends FixtureQuoteAdapter {
+  /// [specification] 决定本次规格结果或延迟；[withQuote] 用于验证缺价不影响乘数查询。
+  _SpecificationAdapter(this.specification, {bool withQuote = false})
+    : super(
+        (requests) async =>
+            withQuote ? requests.map(_contractQuote).toList() : [],
+        support: (request) => request.option,
+      );
+
+  final Future<OptionContractSpecification?> Function(MarketQuoteRequest)
+  specification;
+  final specificationRequests = <MarketQuoteRequest>[];
+
+  /// 记录来源收到的公开身份；故意允许迟到响应，由真实页面及同步器拒绝失效结果。
+  @override
+  Future<OptionContractSpecification?> fetchOptionSpecification(
+    MarketQuoteRequest request, {
+    required bool Function() isCurrent,
+  }) {
+    specificationRequests.add(request);
+    return specification(request);
+  }
+}
+
+/// 按 [request] 原样构造本地规格，乘数由用例显式指定，避免夹具隐含默认 100。
+OptionContractSpecification _specification(
+  MarketQuoteRequest request,
+  String multiplier,
+) => OptionContractSpecification(
+  request: request,
+  premiumMultiplier: multiplier,
+  source: '本地测试夹具',
+);
+
 Future<VeriFinController> _ready(
   _SearchClient search, {
   bool opening = false,
@@ -240,6 +275,330 @@ Future<void> _completeContractSearch(
 
 void main() {
   useTestDatabases();
+
+  for (final opening in [false, true]) {
+    testWidgets('${opening ? '期初' : '交易'}查询 SOFX 自动填来源乘数，缺报价仍可补齐且不写账', (
+      tester,
+    ) async {
+      final search = _SearchClient();
+      final adapter = _SpecificationAdapter(
+        (request) async => _specification(request, '100'),
+      );
+      final c = await _ready(
+        search,
+        opening: opening,
+        quotes: MarketQuoteClient(adapters: [adapter]),
+      );
+      await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+      final before = c.investmentFor('stock-usd')?.toJson();
+      await _pump(
+        tester,
+        c,
+        openingPortfolio: opening
+            ? InvestmentPortfolio(
+                accountId: 'stock-usd',
+                bookId: c.activeBook.id,
+                currencyCode: 'USD',
+                openedAt: DateTime(2026, 10, 1),
+                openingCash: '10000',
+              )
+            : null,
+      );
+      await _enter(tester, 'symbol', 'SOFX261218P00009000');
+      await _enter(tester, opening ? 'cost' : 'price', '2.15');
+      expect((await _field(tester, 'multiplier')).text, isEmpty);
+      expect(adapter.specificationRequests, isEmpty);
+      await _completeContractSearch(tester, search, adopt: false);
+
+      expect(
+        adapter.specificationRequests.single.symbol,
+        'SOFX261218P00009000',
+      );
+      expect((await _field(tester, 'multiplier')).text, '100');
+      expect((await _field(tester, opening ? 'cost' : 'price')).text, '2.15');
+      expect((await _field(tester, 'reference')).text, isEmpty);
+      expect(
+        find.byKey(const ValueKey('option-contract-use-price')),
+        findsNothing,
+      );
+      await expandOptionEditorSection(tester, 'settlement');
+      expect(
+        tester
+            .widget<CheckboxListTile>(
+              find.widgetWithText(CheckboxListTile, '已核对结算方式、交割规格及原币金额'),
+            )
+            .value,
+        isFalse,
+      );
+      expect(c.investmentFor('stock-usd')?.toJson(), before);
+      expect(c.investmentQuoteSync.state.value.automatic, isFalse);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('来源给出小数乘数原样采用，重新查询可更新未手改的自动值', (tester) async {
+    final search = _SearchClient();
+    var multiplier = '12.5';
+    final adapter = _SpecificationAdapter(
+      (request) async => _specification(request, multiplier),
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'SOFX261218P00009000');
+    await _completeContractSearch(tester, search, adopt: false);
+    expect((await _field(tester, 'multiplier')).text, '12.5');
+    multiplier = '10';
+    await _completeContractSearch(tester, search, adopt: false);
+    expect((await _field(tester, 'multiplier')).text, '10');
+    expect(adapter.specificationRequests, hasLength(2));
+    expect(c.investmentFor('stock-usd')!.securities, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('英文窄屏大字号保留手填乘数并可采用查询结果，成交价保持不变', (tester) async {
+    final search = _SearchClient();
+    final adapter = _SpecificationAdapter(
+      (request) async => _specification(request, '100'),
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(
+      tester,
+      c,
+      locale: const Locale('en'),
+      scale: 1.6,
+      size: const Size(360, 852),
+    );
+    await _enter(tester, 'symbol', 'SOFX261218P00009000');
+    await _enter(tester, 'multiplier', '2.15');
+    await _enter(tester, 'price', '2.15');
+    await _completeContractSearch(tester, search, adopt: false);
+    expect((await _field(tester, 'multiplier')).text, '2.15');
+    await _contractAction(tester, 'use-multiplier');
+    await tester.pumpAndSettle();
+    expect((await _field(tester, 'multiplier')).text, '100');
+    expect((await _field(tester, 'price')).text, '2.15');
+    expect(c.investmentFor('stock-usd')!.securities, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('手动重新输入相同乘数后，重查不会将其当作未改的自动值', (tester) async {
+    final search = _SearchClient();
+    var multiplier = '100';
+    final adapter = _SpecificationAdapter(
+      (request) async => _specification(request, multiplier),
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'SOFX261218P00009000');
+    await _completeContractSearch(tester, search, adopt: false);
+    expect((await _field(tester, 'multiplier')).text, '100');
+    // 通过真实输入先删除再重填，证明该值已由用户接管，不能再按自动值覆盖。
+    await _enter(tester, 'multiplier', '');
+    await _enter(tester, 'multiplier', '100');
+    multiplier = '10';
+    await _completeContractSearch(tester, search, adopt: false);
+    expect((await _field(tester, 'multiplier')).text, '100');
+    expect(
+      find.byKey(const ValueKey('option-contract-use-multiplier')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('没有报价但查到规格时，手填身份冲突提示原因且不自动填乘数', (tester) async {
+    final search = _SearchClient();
+    final adapter = _SpecificationAdapter(
+      (request) async => _specification(request, '100'),
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'SOFX261218P00009000');
+    await _enter(tester, 'strike', '10');
+    await _completeContractSearch(tester, search, adopt: false);
+    expect((await _field(tester, 'multiplier')).text, isEmpty);
+    expect(find.text('已填标的、到期日、类型或行权价与完整代码不一致，请核对一致后再继续。'), findsOneWidget);
+    expect(
+      find.byKey(const ValueKey('option-contract-use-multiplier')),
+      findsNothing,
+    );
+    expect(
+      find.byKey(const ValueKey('option-contract-use-price')),
+      findsNothing,
+    );
+    expect((await _field(tester, 'strike')).text, '10');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('查询期间手填的乘数不会被迟到规格自动覆盖', (tester) async {
+    final search = _SearchClient();
+    final release = Completer<void>();
+    final adapter = _SpecificationAdapter((request) async {
+      await release.future;
+      return _specification(request, '100');
+    });
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'SOFX261218P00009000');
+    await _contractAction(tester, 'search');
+    await _enter(tester, 'multiplier', '10');
+    search.requests.single.result.complete([]);
+    release.complete();
+    await tester.pumpAndSettle();
+    expect((await _field(tester, 'multiplier')).text, '10');
+    expect(
+      find.byKey(const ValueKey('option-contract-use-multiplier')),
+      findsOneWidget,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('换代码和改行权价清除自动乘数，手改乘数则保留', (tester) async {
+    final search = _SearchClient();
+    final adapter = _SpecificationAdapter(
+      (request) async => _specification(request, '100'),
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'SOFX261218P00009000');
+    await _completeContractSearch(tester, search, adopt: false);
+    expect((await _field(tester, 'multiplier')).text, '100');
+    await _enter(tester, 'strike', '10');
+    expect((await _field(tester, 'multiplier')).text, isEmpty);
+    await _enter(tester, 'strike', '9');
+    await _completeContractSearch(tester, search, adopt: false);
+    expect((await _field(tester, 'multiplier')).text, '100');
+    await _enter(tester, 'symbol', 'SOFX261218P00010000');
+    expect((await _field(tester, 'multiplier')).text, isEmpty);
+    await _enter(tester, 'strike', '10');
+    await _completeContractSearch(tester, search, adopt: false);
+    await _enter(tester, 'multiplier', '12.5');
+    await _enter(tester, 'symbol', 'SOFX261218P00011000');
+    expect((await _field(tester, 'multiplier')).text, '12.5');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('换合约后旧规格迟到不回填新合约', (tester) async {
+    final search = _SearchClient();
+    final release = Completer<void>();
+    final adapter = _SpecificationAdapter((request) async {
+      await release.future;
+      return _specification(request, '100');
+    });
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'SOFX261218P00009000');
+    await _contractAction(tester, 'search');
+    await _enter(tester, 'symbol', 'AVGO261218P00300000');
+    search.requests.single.result.complete([]);
+    release.complete();
+    await tester.pumpAndSettle();
+    expect((await _field(tester, 'multiplier')).text, isEmpty);
+    expect(
+      find.byKey(const ValueKey('option-contract-use-multiplier')),
+      findsNothing,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final fail in [false, true]) {
+    testWidgets('规格${fail ? '查询失败' : '缺少乘数'}不会默认填写 100', (tester) async {
+      final search = _SearchClient();
+      final adapter = _SpecificationAdapter((request) async {
+        if (fail) throw StateError('本地模拟规格查询失败');
+        return null;
+      });
+      final c = await _ready(
+        search,
+        quotes: MarketQuoteClient(adapters: [adapter]),
+      );
+      await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+      await _pump(tester, c);
+      await _enter(tester, 'symbol', 'SOFX261218P00009000');
+      await _completeContractSearch(tester, search, adopt: false);
+      expect((await _field(tester, 'multiplier')).text, isEmpty);
+      expect(
+        find.byKey(const ValueKey('option-contract-use-multiplier')),
+        findsNothing,
+      );
+      expect(adapter.specificationRequests, hasLength(1));
+      expect(c.investmentFor('stock-usd')!.securities, isEmpty);
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('已有合约乘数锁定，查询结果不会修改历史定价身份', (tester) async {
+    final search = _SearchClient();
+    final adapter = _SpecificationAdapter(
+      (request) async => _specification(request, '100'),
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    final option = StockSecurity(
+      symbol: 'AVGO261218C00050000',
+      name: '本地合约锁定夹具',
+      market: StockMarket.us,
+      currencyCode: 'USD',
+      option: optionFixture(multiplier: '10').option,
+    );
+    expect(
+      await c.saveOptionEvent(
+        accountId: 'stock-usd',
+        security: option,
+        underlying: avgoFixture,
+        event: optionEventFixture(option, StockEventKind.optionBuyOpen),
+        referencePrice: '3',
+        underlyingReferencePrice: '50',
+      ),
+      isTrue,
+    );
+    final before = c.investmentFor('stock-usd')!.toJson();
+    await _pump(tester, c, securityId: option.id);
+    await _completeContractSearch(tester, search, adopt: false);
+    expect((await _field(tester, 'multiplier')).text, '10');
+    expect(
+      tester
+          .widget<TextField>(find.byKey(const ValueKey('option-multiplier')))
+          .readOnly,
+      isTrue,
+    );
+    expect(
+      find.byKey(const ValueKey('option-contract-use-multiplier')),
+      findsNothing,
+    );
+    expect(c.investmentFor('stock-usd')!.toJson(), before);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final opening in [false, true]) {
     testWidgets('${opening ? '期初' : '交易'}期权显式查询完整代码，报价须另行采用且不改持仓事实', (

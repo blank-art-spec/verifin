@@ -128,6 +128,69 @@ class DraftOptionQuoteResult {
   final MarketQuote? quote;
 }
 
+/// 精确合约的公开规格观察；只提供权利金乘数，不替用户确认交割或行权规则。
+class OptionContractSpecification {
+  /// [request] 是来源实际核对的公开合约身份，[premiumMultiplier] 是来源明确返回的
+  /// 权利金乘数文本，[source] 是适配器标识；不接受以交割股数代替乘数的推断。
+  /// 构造允许测试边界输入，使用前必须通过 [matches] 及同步层的来源一致性校验。
+  const OptionContractSpecification({
+    required this.request,
+    required this.premiumMultiplier,
+    required this.source,
+  });
+
+  final MarketQuoteRequest request;
+  final String premiumMultiplier, source;
+
+  /// 核对观察与当前草稿 [candidate] 是否为同一标准美元美股合约，且乘数为受支持
+  /// 精度的正数；不依赖 securityId、名称或默认一百推断身份或金额。
+  bool matches(MarketQuoteRequest candidate) {
+    if (source.trim().isEmpty ||
+        !RegExp(r'^\d{1,12}(\.\d{1,8})?$').hasMatch(premiumMultiplier)) {
+      return false;
+    }
+    try {
+      if (InvestmentDecimal.parse(premiumMultiplier).units <= BigInt.zero) {
+        return false;
+      }
+      final identity = MarketQuoteRequest.usOptionSymbol(request.symbol);
+      for (final current in [request, candidate]) {
+        if (!current.option ||
+            current.fund ||
+            current.market != StockMarket.us ||
+            current.currency != 'USD' ||
+            current.symbol != identity.symbol ||
+            current.optionUnderlyingSymbol != identity.optionUnderlyingSymbol ||
+            current.optionExpiry != identity.optionExpiry ||
+            current.optionRight != identity.optionRight ||
+            current.optionStrike == null ||
+            InvestmentDecimal.parse(
+                  current.optionStrike!,
+                ).compareTo(InvestmentDecimal.parse(identity.optionStrike!)) !=
+                0) {
+          return false;
+        }
+      }
+      return true;
+    } on FormatException {
+      // 不完整或来源不一致的公开资料属于预期拒绝；由查询页面提示保留手填。
+      return false;
+    }
+  }
+}
+
+/// 草稿规格查询复用行情的联网/凭证/失败状态；noQuote 表示未取得有效乘数。
+class DraftOptionSpecificationResult {
+  /// [status] 只有 available 时携带 [specification]，其他状态不得带旧合约结果。
+  const DraftOptionSpecificationResult(this.status, {this.specification})
+    : assert(
+        (status == DraftOptionQuoteStatus.available) == (specification != null),
+      );
+
+  final DraftOptionQuoteStatus status;
+  final OptionContractSpecification? specification;
+}
+
 /// 一条公开基金净值观察；只有日期和每份净值，没有持仓、收益流水或账户信息。
 class FundNavPoint {
   /// [date] 为 UTC 零点承载的来源公历日，[price] 保留来源的正数净值文本和尾随零。
@@ -469,6 +532,14 @@ abstract class MarketQuoteAdapter {
     List<MarketQuoteRequest> requests, {
     required bool Function() isCurrent,
   }) async => isCurrent() ? fetch(requests) : const [];
+
+  /// 用户主动查询 [request] 的公开规格；[isCurrent] 检查联网和草稿会话是否有效。
+  /// 默认来源没有合约规格能力，返回 null 且不请求；不得用行情成交量或交割数量
+  /// 推断权利金乘数，也不在定时价格刷新时调用本入口。
+  Future<OptionContractSpecification?> fetchOptionSpecification(
+    MarketQuoteRequest request, {
+    required bool Function() isCurrent,
+  }) async => null;
 }
 
 /// 来源分发器；通用入口默认空来源，主应用工厂显式接入固定公开来源。

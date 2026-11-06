@@ -7818,7 +7818,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get optionLookupHint =>
-      '支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 免费账户凭证后查询延迟成交价。代码可补全名称、到期日、类型和行权价，交割规格仍须核对。';
+      '支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 免费账户凭证后查询延迟成交价及权利金乘数。可靠乘数会填入空白字段，交割规格仍须核对。';
 
   @override
   String optionLookupName(
@@ -7838,11 +7838,11 @@ class AppLocalizationsZh extends AppLocalizations {
   String get optionLookupNameFallback => '未查到标的名称，可保留代码生成的名称或自行修改。';
 
   @override
-  String get optionLookupNetworkDisabled => '合约资料已解析。开启参考行情联网后可查询期权价格。';
+  String get optionLookupNetworkDisabled => '合约资料已解析。开启参考行情联网后可查询期权价格和权利金乘数。';
 
   @override
   String get optionLookupCredentials =>
-      '查询延迟期权成交价需要配置 Alpaca 免费 Basic 账户凭证，可稍后配置，无需订阅实时行情。';
+      '查询延迟成交价和权利金乘数需要配置 Alpaca 免费 Basic 账户凭证，可稍后配置，无需订阅实时行情。';
 
   @override
   String get optionLookupUnavailable => '此合约暂无可用行情来源，请手动填写参考价。';
@@ -7860,7 +7860,7 @@ class AppLocalizationsZh extends AppLocalizations {
   }
 
   @override
-  String get optionLookupRetry => '查询条件或行情设置已变化，请重新查询后采用价格。';
+  String get optionLookupRetry => '查询条件或行情设置已变化，请重新查询。';
 
   @override
   String get optionLookupEnable => '开启行情联网并重查';
@@ -7892,11 +7892,32 @@ class AppLocalizationsZh extends AppLocalizations {
   String get optionMoreFields => '更多信息（参考价、保证金、备注）';
 
   @override
-  String get optionMultiplierHelp => '总权利金 = 张数 × 成交价 × 乘数。乘数请按券商合约规格填写，不是成交价。';
+  String get optionMultiplierHelp =>
+      '总权利金 = 张数 × 成交价 × 乘数。查询可自动补全乘数；未查到时按券商合约规格填写。';
 
   @override
   String get optionLookupCompactHint =>
-      '完整美股代码在本地补全资料。点击查询会发送公开代码和 IP；获取延迟价格需开启行情联网并配置凭证。';
+      '完整美股代码在本地补全资料。点击查询会发送公开代码和 IP；查询乘数与延迟价格需开启行情联网并配置凭证。';
+
+  @override
+  String optionMultiplierLookupResult(String multiplier, String source) {
+    return '查询到权利金乘数：$multiplier（$source）';
+  }
+
+  @override
+  String get optionMultiplierLookupMissing => '未查到可靠的权利金乘数，请按券商合约资料填写。';
+
+  @override
+  String get optionMultiplierLookupFailed => '权利金乘数查询失败，请重试或按券商合约资料填写。';
+
+  @override
+  String get optionMultiplierLookupPreserved => '已保留你填写的乘数，可核对后采用查询值。';
+
+  @override
+  String get optionMultiplierLookupLocked => '已保留已有合约的乘数；查询不会修改已保存的合约。';
+
+  @override
+  String get optionMultiplierLookupUse => '采用查询乘数';
 
   @override
   String get optionUseTradePrice => '用成交价暂估持仓';

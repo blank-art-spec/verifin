@@ -125,6 +125,32 @@ String _changed(void Function(Map<String, Object?>) mutate) {
   return jsonEncode(map);
 }
 
+/// 按官方合约协议构造本地夹具；不是已认证账户或当前市场返回。
+/// [change] 可覆盖 multiplier/size 或身份字段，以检查不能用交割股数替代乘数。
+String _specification({void Function(Map<String, Object?>)? change}) {
+  final value = <String, Object?>{
+    'symbol': _symbol,
+    'underlying_symbol': 'AAPL',
+    'root_symbol': 'AAPL',
+    'expiration_date': '2024-04-26',
+    'type': 'call',
+    'strike_price': '162.50',
+    'multiplier': '100',
+    'size': '20',
+  };
+  change?.call(value);
+  return jsonEncode(value);
+}
+
+/// [key] 是明确虚构的环境提示，用于验证 PK/AK 单一主机选择，不接触真实凭证。
+AlpacaOptionQuoteAdapter _specificationAdapter(
+  _Transport transport, {
+  String key = 'PK-local-test',
+}) => AlpacaOptionQuoteAdapter(
+  transportFactory: () => transport,
+  clock: () => _now,
+)..configure(keyId: key, secretKey: 'test-secret');
+
 class _Headers implements HttpHeaders {
   final values = <String, Object>{
     HttpHeaders.cookieHeader: 'old-cookie',
@@ -730,6 +756,247 @@ void main() {
       isEmpty,
     );
     expect(transport.uris, hasLength(1));
+  });
+
+  test('规格采用明确乘数并核对精确合约，交割股数不影响乘数', () async {
+    for (final multiplier in ['100', '10', '12.50000000']) {
+      final transport = _Transport(
+        (_) => _response(
+          body: _specification(change: (row) => row['multiplier'] = multiplier),
+        ),
+      );
+      final result = await _specificationAdapter(
+        transport,
+      ).fetchOptionSpecification(_request(), isCurrent: () => true);
+      expect(result?.premiumMultiplier, multiplier);
+      expect(result?.source, 'Alpaca OPRA Delayed');
+      expect(result?.matches(_request()), isTrue);
+      expect(result?.matches(_request(strike: '162.500')), isTrue);
+      expect(result?.matches(_request(right: OptionRight.put)), isFalse);
+      expect(result?.matches(_request(currency: 'HKD')), isFalse);
+      expect(transport.uris, [
+        Uri.https('paper-api.alpaca.markets', '/v2/options/contracts/$_symbol'),
+      ]);
+      expect(transport.closed, isTrue);
+    }
+  });
+
+  test('缺失或非法乘数不拿size或一百兜底，响应身份逐字段一致才可用', () async {
+    final changes = <void Function(Map<String, Object?>)>[
+      (row) => row.remove('multiplier'),
+      for (final value in [null, '', 100, '0', '-1', '1e2', '1.123456789'])
+        (row) => row['multiplier'] = value,
+      (row) => row['symbol'] = 'AAPL240426P00162500',
+      (row) => row['underlying_symbol'] = 'MSFT',
+      (row) => row['expiration_date'] = '2024-04-27',
+      (row) => row['type'] = 'put',
+      (row) => row['strike_price'] = '162.501',
+      (row) => row['strike_price'] = 'invalid',
+      (row) => row['strike_price'] = 162.5,
+      (row) => row['root_symbol'] = 'AAPL1',
+      (row) => row['currency'] = 'HKD',
+    ];
+    for (final change in changes) {
+      final transport = _Transport(
+        (_) => _response(body: _specification(change: change)),
+      );
+      expect(
+        await _specificationAdapter(
+          transport,
+        ).fetchOptionSpecification(_request(), isCurrent: () => true),
+        isNull,
+      );
+      expect(transport.closed, isTrue);
+    }
+    for (final multiplier in ['', '0', '-1', 'NaN', '1e2', '100.123456789']) {
+      final observed = OptionContractSpecification(
+        request: _request(),
+        premiumMultiplier: multiplier,
+        source: 'test',
+      );
+      expect(observed.matches(_request()), isFalse);
+    }
+  });
+
+  test('规格未知环境或无凭证不创建连接，只按已知前缀选一个官方主机', () async {
+    var created = 0;
+    final adapter = AlpacaOptionQuoteAdapter(
+      transportFactory: () {
+        created++;
+        return _Transport((_) => _response(body: _specification()));
+      },
+    );
+    expect(
+      await adapter.fetchOptionSpecification(_request(), isCurrent: () => true),
+      isNull,
+    );
+    for (final key in ['unknown', 'PK', 'AK']) {
+      adapter.configure(keyId: key, secretKey: 'test-secret');
+      expect(
+        await adapter.fetchOptionSpecification(
+          _request(),
+          isCurrent: () => true,
+        ),
+        isNull,
+      );
+    }
+    expect(created, 0);
+    final transport = _Transport((_) => _response(body: _specification()));
+    await _specificationAdapter(
+      transport,
+      key: 'AK-local-test',
+    ).fetchOptionSpecification(_request(), isCurrent: () => true);
+    expect(transport.uris.single.host, 'api.alpaca.markets');
+  });
+
+  test('规格404明确缺失，权限失败不切换环境或泄露响应', () async {
+    for (final status in [301, 400, 401, 403, 404, 429, 500]) {
+      final transport = _Transport(
+        (_) => _response(status: status, body: 'test-secret response'),
+      );
+      final result = _specificationAdapter(
+        transport,
+      ).fetchOptionSpecification(_request(), isCurrent: () => true);
+      if (status == 404) {
+        expect(await result, isNull);
+      } else {
+        await expectLater(
+          result,
+          throwsA(
+            isA<AlpacaOptionQuoteException>().having(
+              (e) => '$e',
+              '安全状态',
+              'Alpaca 合约规格请求失败：HTTP $status',
+            ),
+          ),
+        );
+      }
+      expect(transport.uris, hasLength(1));
+      expect(transport.closed, isTrue);
+    }
+  });
+
+  test('规格响应坏格式、声明和流式超限都关闭连接', () async {
+    for (final respond in <AlpacaOptionQuoteResponse Function()>[
+      () => _response(body: '{'),
+      () => _response(body: '[]'),
+      () => _response(
+        body: _specification(),
+        contentLength: AlpacaOptionQuoteAdapter.maximumSpecificationBytes + 1,
+      ),
+      () => AlpacaOptionQuoteResponse(
+        statusCode: 200,
+        body: Stream.fromIterable([
+          List.filled(AlpacaOptionQuoteAdapter.maximumSpecificationBytes, 32),
+          [32],
+        ]),
+      ),
+      () => throw StateError('test-secret APCA-API-SECRET-KEY'),
+    ]) {
+      final transport = _Transport((_) => respond());
+      await expectLater(
+        _specificationAdapter(
+          transport,
+        ).fetchOptionSpecification(_request(), isCurrent: () => true),
+        throwsA(
+          isA<AlpacaOptionQuoteException>().having(
+            (e) => '$e',
+            '脱敏异常',
+            isNot(contains('test-secret')),
+          ),
+        ),
+      );
+      expect(transport.closed, isTrue);
+    }
+  });
+
+  test('规格取消与凭证重配使旧响应失效，开始前取消不联网', () async {
+    for (final reconfigure in [false, true]) {
+      var active = true;
+      final pending = Completer<AlpacaOptionQuoteResponse>();
+      final transport = _Transport((_) => pending.future);
+      final adapter = _specificationAdapter(transport);
+      final result = adapter.fetchOptionSpecification(
+        _request(),
+        isCurrent: () => active,
+      );
+      if (reconfigure) {
+        adapter.configure(keyId: 'PK-new-test', secretKey: 'new-secret');
+        expect(transport.closed, isTrue);
+      } else {
+        active = false;
+      }
+      pending.complete(_response(body: _specification()));
+      expect(await result, isNull);
+      expect(transport.closed, isTrue);
+      expect(transport.uris, hasLength(1));
+      expect(
+        await adapter.fetchOptionSpecification(
+          _request(),
+          isCurrent: () => false,
+        ),
+        isNull,
+      );
+      expect(transport.uris, hasLength(1));
+    }
+  });
+
+  testWidgets('规格十五秒超时关闭连接，晚响应不形成乘数观察', (tester) async {
+    final pending = Completer<AlpacaOptionQuoteResponse>();
+    final transport = _Transport((_) => pending.future);
+    final expectation = expectLater(
+      _specificationAdapter(
+        transport,
+      ).fetchOptionSpecification(_request(), isCurrent: () => true),
+      throwsA(isA<AlpacaOptionQuoteException>()),
+    );
+    await tester.pump(const Duration(seconds: 16));
+    await expectation;
+    expect(transport.closed, isTrue);
+    pending.complete(_response(body: _specification()));
+    await tester.pump();
+    expect(transport.uris, hasLength(1));
+  });
+
+  test('规格HTTP传输只允许对应环境的单一合约GET路径', () async {
+    final client = _HttpClient();
+    final transport = AlpacaHttpOptionQuoteTransport(client: client);
+    final uri = Uri.https(
+      'paper-api.alpaca.markets',
+      '/v2/options/contracts/$_symbol',
+    );
+    await transport.get(uri, keyId: 'PK-local-test', secretKey: 'test-secret');
+    expect(client.request.followRedirects, isFalse);
+    expect(client.request.persistentConnection, isFalse);
+    expect(client.request.cookies, isEmpty);
+    for (final forbidden in [
+      uri.replace(scheme: 'http'),
+      uri.replace(host: 'api.alpaca.markets'),
+      uri.replace(host: 'data.alpaca.markets'),
+      uri.replace(host: 'example.com'),
+      uri.replace(port: 8443),
+      uri.replace(userInfo: 'user:pass'),
+      uri.replace(fragment: 'x'),
+      uri.replace(queryParameters: {'symbols': _symbol}),
+      uri.replace(path: '/v2/account'),
+      uri.replace(path: '/v2/orders'),
+      uri.replace(path: '/v2/options/contracts'),
+      uri.replace(path: '/v2/options/contracts/TEST-$_symbol'),
+      uri.replace(path: '/v2/options/contracts/AAPL1240426C00162500'),
+      uri.replace(path: '/v2/options/contracts/$_symbol/'),
+    ]) {
+      await expectLater(
+        transport.get(
+          forbidden,
+          keyId: 'PK-local-test',
+          secretKey: 'test-secret',
+        ),
+        throwsFormatException,
+      );
+    }
+    expect(client.uris, [uri]);
+    transport.close();
+    expect(client.forceClosed, isTrue);
   });
 
   test('真实HTTP传输固定历史地址和参数，禁重定向代理及旧会话', () async {

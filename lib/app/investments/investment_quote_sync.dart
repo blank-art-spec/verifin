@@ -759,6 +759,101 @@ class InvestmentQuoteSync {
     }
   }
 
+  /// 显式查询 [request] 的公开合约规格，与报价独立，缺价不妨碍取得乘数。
+  /// [isCurrent] 由 Controller 核对账本与生命周期；本层复核联网、前台及来源修订。
+  /// 仅返回当前草稿观察，不落库、不更新行情缓存、采用设置或自动刷新时间。
+  Future<DraftOptionSpecificationResult> fetchDraftOptionSpecification(
+    MarketQuoteRequest request, {
+    required bool Function() isCurrent,
+  }) async {
+    if (_disposed ||
+        _sourceReconfiguring ||
+        (_applicationManaged && !_applicationActive) ||
+        !isCurrent()) {
+      return const DraftOptionSpecificationResult(
+        DraftOptionQuoteStatus.cancelled,
+      );
+    }
+    if (!_enabled) {
+      return const DraftOptionSpecificationResult(
+        DraftOptionQuoteStatus.networkDisabled,
+      );
+    }
+    if (!request.option || request.fund) {
+      return const DraftOptionSpecificationResult(
+        DraftOptionQuoteStatus.unsupported,
+      );
+    }
+    final adapter = client.adapterFor(request);
+    if (adapter == null) {
+      return const DraftOptionSpecificationResult(
+        DraftOptionQuoteStatus.unsupported,
+      );
+    }
+    // 规格与报价允许同次点击并行；同一规格的重复点击仍被去重。
+    final key = jsonEncode([
+      'specification',
+      adapter.capability.id,
+      request.securityId,
+    ]);
+    if (!_runningDraftRequests.add(key)) {
+      return const DraftOptionSpecificationResult(
+        DraftOptionQuoteStatus.cancelled,
+      );
+    }
+    final revision = _generation;
+    var active = true;
+
+    /// 超时、撤销或任何会话变化后都返回 false，来源不能继续请求或采用迟到结果。
+    bool current() =>
+        active &&
+        !_disposed &&
+        !_sourceReconfiguring &&
+        _enabled &&
+        revision == _generation &&
+        (!_applicationManaged || _applicationActive) &&
+        identical(client.adapterFor(request), adapter) &&
+        isCurrent();
+    try {
+      final specification = await adapter
+          .fetchOptionSpecification(request, isCurrent: current)
+          .timeout(const Duration(seconds: 15));
+      if (!current()) {
+        return const DraftOptionSpecificationResult(
+          DraftOptionQuoteStatus.cancelled,
+        );
+      }
+      if (specification == null ||
+          specification.source != adapter.capability.id ||
+          !specification.matches(request)) {
+        return const DraftOptionSpecificationResult(
+          DraftOptionQuoteStatus.noQuote,
+        );
+      }
+      return DraftOptionSpecificationResult(
+        DraftOptionQuoteStatus.available,
+        specification: specification,
+      );
+    } catch (_) {
+      if (!current()) {
+        return const DraftOptionSpecificationResult(
+          DraftOptionQuoteStatus.cancelled,
+        );
+      }
+      // 固定来源及请求数量足够排错，不记录可能带有凭证的异常或响应原文。
+      logger?.warning(
+        '期权草稿规格来源 ${adapter.capability.id} 失败，数量 1',
+        source: 'investment_quote',
+      );
+      return const DraftOptionSpecificationResult(
+        DraftOptionQuoteStatus.failed,
+      );
+    } finally {
+      active = false;
+      _runningDraftRequests.remove(key);
+    }
+  }
+
   /// 同来源按每批最多20个身份串行请求，每批15秒上限；不抓全市场再筛持仓。
   /// [isCurrent] 在请求前及提交前重读账本、持仓和手填修订，旧响应不会跨上下文生效。
   /// [automatic] 默认为 false，表示用户手动刷新，不等待本地五分钟间隔。

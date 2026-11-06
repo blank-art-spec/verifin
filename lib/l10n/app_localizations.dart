@@ -14208,7 +14208,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupHint.
   ///
   /// In zh, this message translates to:
-  /// **'支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 免费账户凭证后查询延迟成交价。代码可补全名称、到期日、类型和行权价，交割规格仍须核对。'**
+  /// **'支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 免费账户凭证后查询延迟成交价及权利金乘数。可靠乘数会填入空白字段，交割规格仍须核对。'**
   String get optionLookupHint;
 
   /// No description provided for @optionLookupName.
@@ -14237,13 +14237,13 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupNetworkDisabled.
   ///
   /// In zh, this message translates to:
-  /// **'合约资料已解析。开启参考行情联网后可查询期权价格。'**
+  /// **'合约资料已解析。开启参考行情联网后可查询期权价格和权利金乘数。'**
   String get optionLookupNetworkDisabled;
 
   /// No description provided for @optionLookupCredentials.
   ///
   /// In zh, this message translates to:
-  /// **'查询延迟期权成交价需要配置 Alpaca 免费 Basic 账户凭证，可稍后配置，无需订阅实时行情。'**
+  /// **'查询延迟成交价和权利金乘数需要配置 Alpaca 免费 Basic 账户凭证，可稍后配置，无需订阅实时行情。'**
   String get optionLookupCredentials;
 
   /// No description provided for @optionLookupUnavailable.
@@ -14273,7 +14273,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupRetry.
   ///
   /// In zh, this message translates to:
-  /// **'查询条件或行情设置已变化，请重新查询后采用价格。'**
+  /// **'查询条件或行情设置已变化，请重新查询。'**
   String get optionLookupRetry;
 
   /// No description provided for @optionLookupEnable.
@@ -14333,14 +14333,50 @@ abstract class AppLocalizations {
   /// No description provided for @optionMultiplierHelp.
   ///
   /// In zh, this message translates to:
-  /// **'总权利金 = 张数 × 成交价 × 乘数。乘数请按券商合约规格填写，不是成交价。'**
+  /// **'总权利金 = 张数 × 成交价 × 乘数。查询可自动补全乘数；未查到时按券商合约规格填写。'**
   String get optionMultiplierHelp;
 
   /// No description provided for @optionLookupCompactHint.
   ///
   /// In zh, this message translates to:
-  /// **'完整美股代码在本地补全资料。点击查询会发送公开代码和 IP；获取延迟价格需开启行情联网并配置凭证。'**
+  /// **'完整美股代码在本地补全资料。点击查询会发送公开代码和 IP；查询乘数与延迟价格需开启行情联网并配置凭证。'**
   String get optionLookupCompactHint;
+
+  /// No description provided for @optionMultiplierLookupResult.
+  ///
+  /// In zh, this message translates to:
+  /// **'查询到权利金乘数：{multiplier}（{source}）'**
+  String optionMultiplierLookupResult(String multiplier, String source);
+
+  /// No description provided for @optionMultiplierLookupMissing.
+  ///
+  /// In zh, this message translates to:
+  /// **'未查到可靠的权利金乘数，请按券商合约资料填写。'**
+  String get optionMultiplierLookupMissing;
+
+  /// No description provided for @optionMultiplierLookupFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'权利金乘数查询失败，请重试或按券商合约资料填写。'**
+  String get optionMultiplierLookupFailed;
+
+  /// No description provided for @optionMultiplierLookupPreserved.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保留你填写的乘数，可核对后采用查询值。'**
+  String get optionMultiplierLookupPreserved;
+
+  /// No description provided for @optionMultiplierLookupLocked.
+  ///
+  /// In zh, this message translates to:
+  /// **'已保留已有合约的乘数；查询不会修改已保存的合约。'**
+  String get optionMultiplierLookupLocked;
+
+  /// No description provided for @optionMultiplierLookupUse.
+  ///
+  /// In zh, this message translates to:
+  /// **'采用查询乘数'**
+  String get optionMultiplierLookupUse;
 
   /// No description provided for @optionUseTradePrice.
   ///

@@ -363,13 +363,21 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 真实到期日期、方向和千分行权价解析。`OptionEditorPage` 先在本地用完整代码补充
 未手改的草稿身份，“查询合约与行情”再按明确操作查询公开资料，并结合标的查询结果
 生成可编辑期权名称；保留用户名称及
-已锁定身份，不推断权利金乘数、交割资料或规格确认。原标的候选继续复用
+已锁定身份，本地解析不推断权利金乘数、交割资料或规格确认。原标的候选继续复用
 `InvestmentSecurityAutocomplete` 和 `SecuritySearchClient`；输入不自动联网。
 `MarketQuoteRequest.usOptionSymbol` 从完整代码构造公开报价身份，不创建临时证券或
 猜测乘数；`VeriFinController.fetchDraftOptionQuote` 委托
 `InvestmentQuoteSync.fetchDraftOptionQuote` 执行单次只读查询，沿用联网、前台、来源门禁
 和 `MarketQuote.reference`。`DraftOptionQuoteStatus` / `DraftOptionQuoteResult` 表达可用、
 未联网、缺凭证、不支持、缺价、失败或撤销，不保存报价缓存、采用选择或轮询时间。
+`OptionContractSpecification(request, premiumMultiplier, source)` 只表达精确公开合约的
+权利金乘数，`matches` 复核身份与有效正数；不是完整交割规格确认。
+`MarketQuoteAdapter.fetchOptionSpecification` 默认为空，Alpaca 适配器按明确的
+`multiplier` 字段实现；`VeriFinController.fetchDraftOptionSpecification` 委托同步器同名
+只读方法，沿用联网、来源、前台及修订保护，与报价独立并行。
+`DraftOptionSpecificationResult` 复用 `DraftOptionQuoteStatus`，其中 `noQuote` 在规格
+场景表示未查到有效乘数。空白或未手改的自动字段可直接带入，手填冲突仅在用户明确采用时替换；
+锁定乘数保留，换合约身份清除旧自动值。不会改交割资料、确认状态、账目或报价缓存。
 `InvestmentQuoteSync.draftQuoteRevision` 供页面在采用前核对设置及会话变更。
 结果显示来源、实际成交时间、延迟成交价口径、至少 15 分钟延迟及旧价提示；“填入参考价”
 只修改当前草稿，不改成本或成交价，并取消开平仓的显式“用成交价暂估持仓”选择；
@@ -377,8 +385,12 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 仍明确提示查询结果是最新可用行情，用户须按期初时点核对参考价。
 隐藏、切账本、切账户及改身份输入使旧结果失效，未配置或查不到仍可手填。
 
-`AlpacaOptionQuoteAdapter` / `AlpacaHttpOptionQuoteTransport` 只查询固定官方历史成交接口
+`AlpacaOptionQuoteAdapter` / `AlpacaHttpOptionQuoteTransport` 查询固定官方历史成交接口
 `/v1beta1/options/trades`，供免费 Basic 账户使用，不请求实时快照或 Indicative 数据。
+录入页另可主动 GET `/v2/options/contracts/{symbol}` 查询乘数：`PK` 前缀固定使用
+`paper-api.alpaca.markets`，`AK` 前缀固定使用 `api.alpaca.markets`，未知前缀不猜主机，
+失败不换环境重试；仅允许单一公开合约路径，不访问账户或订单。响应逐字段匹配身份，
+不把 `size` 当作乘数；规格请求独立限制为 15 秒、64 KiB，不接入普通持仓行情轮询。
 每个合约分别按时间倒序、有界分页，时间窗为本批开始前 16 分钟至其前 168 小时；
 `MarketQuoteAdapter.fetchCancellable` 由同步层传入会话检查，多页来源在每次等待后和
 下一请求前复核，关闭联网、退后台或切账本后不继续请求其余页或合约。

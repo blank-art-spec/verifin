@@ -1,4 +1,4 @@
-/// Alpaca 免费 OPRA 延迟成交行情；凭证只留当前进程，未配置时不发请求。
+/// Alpaca 免费 OPRA 延迟成交与主动合约规格查询；未配置凭证时不发请求。
 library;
 
 import 'dart:async';
@@ -37,7 +37,7 @@ abstract class AlpacaOptionQuoteTransport {
 typedef AlpacaOptionQuoteTransportFactory =
     AlpacaOptionQuoteTransport Function();
 
-/// 固定官方历史成交地址与有界查询参数，不跟随重定向或向其他主机发送凭证。
+/// 固定官方历史成交和只读规格地址，不跟随重定向或向其他主机发送凭证。
 class AlpacaHttpOptionQuoteTransport implements AlpacaOptionQuoteTransport {
   /// [client] 仅用于验证 HTTP 配置；生产创建独立且没有历史会话的客户端。
   AlpacaHttpOptionQuoteTransport({HttpClient? client})
@@ -48,8 +48,9 @@ class AlpacaHttpOptionQuoteTransport implements AlpacaOptionQuoteTransport {
 
   final HttpClient _client;
 
-  /// [uri] 只能包含一个标准合约、明确起止时间、倒序及受控分页参数。
-  /// [keyId]/[secretKey] 只写认证头；历史成交接口没有 feed 参数，不能误接 indicative。
+  /// [uri] 仅允许既定历史成交查询，或凭证环境对应的单一合约规格 GET 地址。
+  /// [keyId]/[secretKey] 只写认证头；不开放下单、账户或任意 Trading API 路径。
+  /// 历史成交接口没有 feed 参数，不能误接 indicative；规格失败不切换另一环境。
   @override
   Future<AlpacaOptionQuoteResponse> get(
     Uri uri, {
@@ -57,12 +58,10 @@ class AlpacaHttpOptionQuoteTransport implements AlpacaOptionQuoteTransport {
     required String secretKey,
   }) async {
     if (uri.scheme != 'https' ||
-        uri.host != 'data.alpaca.markets' ||
         uri.port != 443 ||
         uri.userInfo.isNotEmpty ||
         uri.hasFragment ||
-        uri.path != '/v1beta1/options/trades' ||
-        !_validHistoryQuery(uri.queryParametersAll) ||
+        !_validAlpacaReadOnlyUri(uri, keyId) ||
         !_validCredential(keyId) ||
         !_validCredential(secretKey)) {
       throw const FormatException('Alpaca 行情地址、参数或凭证格式不合法');
@@ -122,6 +121,9 @@ class AlpacaOptionQuoteAdapter extends MarketQuoteAdapter {
   static const minimumDelay = Duration(minutes: 15);
   static const cutoffSafetyMargin = Duration(minutes: 1);
 
+  /// 单一规格没有成交数组，独立限制为六十四 KiB，避免无界下载无关资料。
+  static const maximumSpecificationBytes = 64 * 1024;
+
   /// 查询的是滚动的绝对时间窗口，并非“七个本地日历日”；用小时明确其含义。
   /// 一百六十八小时可以覆盖普通周末及短假期，无近期成交时不无界追溯。
   static const historyLookback = Duration(hours: 168);
@@ -171,6 +173,129 @@ class AlpacaOptionQuoteAdapter extends MarketQuoteAdapter {
     List<MarketQuoteRequest> requests, {
     required bool Function() isCurrent,
   }) => _fetch(requests, isCurrent: isCurrent);
+
+  /// 查询 [request] 的精确官方合约规格，只有响应明确提供 multiplier 才返回。
+  /// [isCurrent] 与凭证修订共同撤销旧观察；本入口独立于报价，没成交也可读规格。
+  /// PK/AK 仅用于选择已知官方环境，真正身份验证由服务端完成；未知前缀不猜环境。
+  /// 官方字段说明明确禁止把 size 当乘数：
+  /// https://docs.alpaca.markets/us/reference/get-options-contracts
+  @override
+  Future<OptionContractSpecification?> fetchOptionSpecification(
+    MarketQuoteRequest request, {
+    required bool Function() isCurrent,
+  }) async {
+    if (!configured || !isCurrent()) return null;
+    final symbol = _contractSymbol(request);
+    final host = _optionSpecificationHost(_keyId);
+    if (symbol == null || host == null) return null;
+    final revision = _revision;
+    var active = true;
+
+    /// await 后复核同一凭证及草稿会话，超时后即使响应到达也不得应用。
+    bool current() => active && revision == _revision && isCurrent();
+
+    AlpacaOptionQuoteTransport? transport;
+    try {
+      final currentTransport =
+          transportFactory?.call() ?? AlpacaHttpOptionQuoteTransport();
+      transport = currentTransport;
+      _active.add(currentTransport);
+      final result = await _readSpecification(
+        currentTransport,
+        request,
+        Uri.https(host, '/v2/options/contracts/$symbol'),
+        keyId: _keyId,
+        secretKey: _secretKey,
+        isCurrent: current,
+      ).timeout(requestTimeout);
+      return current() ? result : null;
+    } on AlpacaOptionQuoteException {
+      if (!current()) return null;
+      rethrow;
+    } catch (_) {
+      // 原始网络异常可能带认证头或响应正文，只向同步层提供可安全记录的原因。
+      if (!current()) return null;
+      throw const AlpacaOptionQuoteException('Alpaca 合约规格读取失败或超过十五秒');
+    } finally {
+      active = false;
+      if (transport != null) {
+        _active.remove(transport);
+        transport.close();
+      }
+    }
+  }
+
+  /// 从 [uri] 有界读取单一合约，仅传 [keyId]/[secretKey] 和公开身份，不发送账目。
+  /// [request] 用于逐字段复核来源身份；[isCurrent] 在每次等待后取消过期观察。
+  /// 404 或缺少有效乘数返回 null；权限、跳转、超限与损坏响应不静默当作成功。
+  Future<OptionContractSpecification?> _readSpecification(
+    AlpacaOptionQuoteTransport transport,
+    MarketQuoteRequest request,
+    Uri uri, {
+    required String keyId,
+    required String secretKey,
+    required bool Function() isCurrent,
+  }) async {
+    if (!isCurrent()) return null;
+    final response = await transport.get(
+      uri,
+      keyId: keyId,
+      secretKey: secretKey,
+    );
+    if (!isCurrent()) return null;
+    if (response.statusCode == HttpStatus.notFound) return null;
+    if (response.statusCode != HttpStatus.ok) {
+      throw AlpacaOptionQuoteException(
+        'Alpaca 合约规格请求失败：HTTP ${response.statusCode}',
+      );
+    }
+    if (response.contentLength > maximumSpecificationBytes) {
+      throw const AlpacaOptionQuoteException('Alpaca 合约规格响应超过大小上限');
+    }
+    final bytes = <int>[];
+    await for (final chunk in response.body) {
+      if (!isCurrent()) return null;
+      if (chunk.length > maximumSpecificationBytes - bytes.length) {
+        throw const AlpacaOptionQuoteException('Alpaca 合约规格响应超过大小上限');
+      }
+      bytes.addAll(chunk);
+    }
+    if (!isCurrent()) return null;
+    final decoded = jsonDecode(utf8.decode(bytes));
+    if (decoded is! Map<String, Object?>) {
+      throw const AlpacaOptionQuoteException('Alpaca 合约规格响应格式不合法');
+    }
+    final multiplier = decoded['multiplier'];
+    final strike = decoded['strike_price'];
+    if (decoded['symbol'] != request.symbol ||
+        decoded['underlying_symbol'] != request.optionUnderlyingSymbol ||
+        decoded['expiration_date'] != request.optionExpiry ||
+        decoded['type'] != request.optionRight?.name ||
+        (decoded['root_symbol'] != null &&
+            decoded['root_symbol'] != request.optionUnderlyingSymbol) ||
+        (decoded['currency'] != null && decoded['currency'] != 'USD') ||
+        multiplier is! String ||
+        strike is! String) {
+      return null;
+    }
+    try {
+      if (InvestmentDecimal.parse(
+            strike,
+          ).compareTo(InvestmentDecimal.parse(request.optionStrike!)) !=
+          0) {
+        return null;
+      }
+    } on FormatException {
+      // 来源行权价无效时不采用其乘数；页面保留可编辑字段并提示未查询到。
+      return null;
+    }
+    final specification = OptionContractSpecification(
+      request: request,
+      premiumMultiplier: multiplier,
+      source: capability.id,
+    );
+    return specification.matches(request) ? specification : null;
+  }
 
   /// 统一两种入口的执行生命周期；[isCurrent] 与本地超时、凭证修订共同决定有效性。
   Future<List<MarketQuote>> _fetch(
@@ -366,6 +491,34 @@ class AlpacaOptionQuoteAdapter extends MarketQuoteAdapter {
     }
     return request.symbol;
   }
+}
+
+/// 只识别官方常见 PK/AK 环境提示；未知前缀返回 null，不尝试向不同环境发送凭证。
+/// 前缀本身不证明有效性，服务器认证失败后仍直接失败，不绕过权限边界。
+/// https://alpaca.markets/learn/api-key-security-best-practices-for-alpaca-builders
+String? _optionSpecificationHost(String keyId) {
+  if (keyId.length <= 2) return null;
+  if (keyId.startsWith('PK')) return 'paper-api.alpaca.markets';
+  if (keyId.startsWith('AK')) return 'api.alpaca.markets';
+  return null;
+}
+
+/// [uri] 的公共身份路径须精确匹配唯一允许的读取端点；[keyId] 限定规格查询环境。
+/// 历史成交仍只访问 data 主机，规格没有查询参数，也不允许账户、订单或批量路径。
+bool _validAlpacaReadOnlyUri(Uri uri, String keyId) {
+  if (uri.host == 'data.alpaca.markets') {
+    return uri.path == '/v1beta1/options/trades' &&
+        _validHistoryQuery(uri.queryParametersAll);
+  }
+  final segments = uri.pathSegments;
+  return uri.host == _optionSpecificationHost(keyId) &&
+      !uri.hasQuery &&
+      segments.length == 4 &&
+      segments[0] == 'v2' &&
+      segments[1] == 'options' &&
+      segments[2] == 'contracts' &&
+      parseUsOptionSymbol(segments[3]) != null &&
+      uri.path == '/v2/options/contracts/${segments[3]}';
 }
 
 /// [query] 仅允许历史成交端点的六种已核对参数，每个参数最多出现一次。

@@ -8130,7 +8130,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupHint =>
-      'Supports standard US option symbols. Lookup sends the public underlying symbol to Tencent for its name. Enable quote networking and configure free Alpaca account credentials to fetch delayed trades. The symbol can fill the name, expiry, right and strike. Verify delivery terms separately.';
+      'Supports standard US option symbols. Lookup sends the underlying symbol to Tencent for its name. Enable quote networking and configure free Alpaca account credentials to fetch delayed trades and the premium multiplier. A verified multiplier fills an empty field. Verify delivery terms separately.';
 
   @override
   String optionLookupName(
@@ -8152,11 +8152,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupNetworkDisabled =>
-      'Contract details parsed. Enable quote networking to look up the option price.';
+      'Contract details parsed. Enable quote networking to look up the option price and premium multiplier.';
 
   @override
   String get optionLookupCredentials =>
-      'Delayed option trades require free Alpaca Basic account credentials. You can configure them later; no real-time subscription is required.';
+      'Delayed trades and premium multipliers require free Alpaca Basic account credentials. You can configure them later; no real-time subscription is required.';
 
   @override
   String get optionLookupUnavailable =>
@@ -8177,7 +8177,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupRetry =>
-      'Lookup details or quote settings changed. Look up the contract again before using its price.';
+      'Lookup details or quote settings changed. Look up the contract again.';
 
   @override
   String get optionLookupEnable => 'Enable quote networking and retry';
@@ -8210,11 +8210,35 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionMultiplierHelp =>
-      'Total premium = contracts × trade price × multiplier. Use the multiplier in your broker’s contract specification, not the trade price.';
+      'Total premium = contracts × trade price × multiplier. Lookup can fill the multiplier. If unavailable, use your broker’s contract specification.';
 
   @override
   String get optionLookupCompactHint =>
-      'A full US symbol fills identity locally. Lookup sends the public symbol and your IP; delayed quotes require enabled market data and credentials.';
+      'A full US symbol fills identity locally. Lookup sends the public symbol and your IP; multipliers and delayed quotes require enabled market data and credentials.';
+
+  @override
+  String optionMultiplierLookupResult(String multiplier, String source) {
+    return 'Premium multiplier found: $multiplier ($source)';
+  }
+
+  @override
+  String get optionMultiplierLookupMissing =>
+      'No reliable premium multiplier was found. Enter it from your broker’s contract details.';
+
+  @override
+  String get optionMultiplierLookupFailed =>
+      'The premium multiplier lookup failed. Retry or enter it from your broker’s contract details.';
+
+  @override
+  String get optionMultiplierLookupPreserved =>
+      'Your multiplier has been kept. Review the result before applying it.';
+
+  @override
+  String get optionMultiplierLookupLocked =>
+      'The existing contract multiplier has been kept. Lookup does not change saved contracts.';
+
+  @override
+  String get optionMultiplierLookupUse => 'Use lookup multiplier';
 
   @override
   String get optionUseTradePrice =>
