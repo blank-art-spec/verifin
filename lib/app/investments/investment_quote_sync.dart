@@ -101,7 +101,6 @@ class InvestmentQuoteSync {
   Future<void> Function()? _scheduledRefresh;
   int _generation = 0;
   bool _disposed = false, _enabled = false, _automatic = false;
-  bool _sourceReconfiguring = false;
   String? _visible;
   bool _applicationManaged = false, _applicationActive = false;
   final _foregroundOwners = <String>{};
@@ -254,8 +253,7 @@ class InvestmentQuoteSync {
     return QuoteSyncState(
       enabled: _enabled,
       automatic: _automatic,
-      status:
-          _enabled && (_sourceReconfiguring || _runningOwners.contains(owner))
+      status: _enabled && _runningOwners.contains(owner)
           ? QuoteSyncStatus.loading
           : account?.status ?? fallback,
       changed: account?.changed ?? 0,
@@ -350,78 +348,6 @@ class InvestmentQuoteSync {
     _scheduledRefresh = null;
     _publish(QuoteSyncStatus.idle);
     return true;
-  }
-
-  /// 更新 [sourceId] 的内存配置前，撤销旧请求并持久清除该来源的全部账户缓存。
-  /// [affectedPortfolios] 是调用方确认可能使用新配置的账户；它们与旧来源缓存所属
-  /// 账户的自动冷却会重置，其他来源价格及独立账户计时保留。此方法不读取或保存凭证。
-  /// [configure] 必须同步、原子地应用已验证的配置，只在清理持久缓存成功后调用；
-  /// [persistConfiguration] 可将配置保存到独立安全存储；它成功前不调用 configure，
-  /// 等待期间仍拦截刷新，失败只记录固定提示，不接触或记录凭证内容。
-  /// 返回 false 时调用方保留草稿。清理失败也撤销内存旧价，并明确显示未缓存状态。
-  Future<bool> reconfigureSource({
-    required String sourceId,
-    required void Function() configure,
-    required Iterable<InvestmentPortfolio> affectedPortfolios,
-    Future<void> Function()? persistConfiguration,
-  }) async {
-    if (_disposed || _sourceReconfiguring) return false;
-    final owners = affectedPortfolios.map(_owner).toSet();
-    final removedKeys = _cache.entries
-        .where((entry) => entry.value.quote.source == sourceId)
-        .map((entry) => entry.key)
-        .toList();
-    for (final key in removedKeys) {
-      owners.add(key.substring(0, key.lastIndexOf('|')));
-    }
-    final accounts = <String, _AccountRefreshState>{};
-    _sourceReconfiguring = true;
-    _generation++;
-    _timer?.cancel();
-    _timer = null;
-    _scheduledRefresh = null;
-    for (final key in removedKeys) {
-      _cache.remove(key);
-    }
-    for (final owner in owners) {
-      final account = _accounts.putIfAbsent(owner, _AccountRefreshState.new);
-      account.automaticAt = null;
-      account.status = QuoteSyncStatus.idle;
-      account.changed = 0;
-      accounts[owner] = account;
-    }
-    _publishVisible();
-    if (removedKeys.isNotEmpty) onPricesChanged?.call();
-    var status = QuoteSyncStatus.notCached;
-    try {
-      // 新请求在保存期间统一暂停；已排队的旧快照写完后再写此清理结果，不能复活旧价。
-      if (!await _persistCache() || _disposed) return false;
-      try {
-        if (persistConfiguration != null) await persistConfiguration();
-        if (_disposed) return false;
-        configure();
-      } catch (_) {
-        // 安全存储或内存配置失败都只记录固定提示，不记录异常或调用方原文。
-        status = QuoteSyncStatus.failed;
-        logger?.warning('参考行情来源配置更新失败', source: 'investment_quote');
-        return false;
-      }
-      status = QuoteSyncStatus.idle;
-      return true;
-    } finally {
-      // 保存期间发生的旧响应及会话变化都不能把上一份来源配置带回新配置。
-      _generation++;
-      _sourceReconfiguring = false;
-      if (!_disposed) {
-        for (final entry in accounts.entries) {
-          if (identical(_accounts[entry.key], entry.value)) {
-            entry.value.status = status;
-            entry.value.changed = 0;
-          }
-        }
-        _publishVisible(fallback: status);
-      }
-    }
   }
 
   /// 账户、事件、恢复或初始化后核对上下文；不匹配缓存不能复活到新账目。
@@ -699,7 +625,6 @@ class InvestmentQuoteSync {
     required bool Function() isCurrent,
   }) async {
     if (_disposed ||
-        _sourceReconfiguring ||
         (_applicationManaged && !_applicationActive) ||
         !isCurrent()) {
       return const DraftOptionQuoteResult(DraftOptionQuoteStatus.cancelled);
@@ -723,7 +648,6 @@ class InvestmentQuoteSync {
     final revision = _generation;
     bool current() =>
         !_disposed &&
-        !_sourceReconfiguring &&
         _enabled &&
         revision == _generation &&
         (!_applicationManaged || _applicationActive) &&
@@ -774,101 +698,6 @@ class InvestmentQuoteSync {
     }
   }
 
-  /// 显式查询 [request] 的公开合约规格，与报价独立，缺价不妨碍取得乘数。
-  /// [isCurrent] 由 Controller 核对账本与生命周期；本层复核联网、前台及来源修订。
-  /// 仅返回当前草稿观察，不落库、不更新行情缓存、采用设置或自动刷新时间。
-  Future<DraftOptionSpecificationResult> fetchDraftOptionSpecification(
-    MarketQuoteRequest request, {
-    required bool Function() isCurrent,
-  }) async {
-    if (_disposed ||
-        _sourceReconfiguring ||
-        (_applicationManaged && !_applicationActive) ||
-        !isCurrent()) {
-      return const DraftOptionSpecificationResult(
-        DraftOptionQuoteStatus.cancelled,
-      );
-    }
-    if (!_enabled) {
-      return const DraftOptionSpecificationResult(
-        DraftOptionQuoteStatus.networkDisabled,
-      );
-    }
-    if (!request.option || request.fund) {
-      return const DraftOptionSpecificationResult(
-        DraftOptionQuoteStatus.unsupported,
-      );
-    }
-    final adapter = client.adapterFor(request);
-    if (adapter == null) {
-      return const DraftOptionSpecificationResult(
-        DraftOptionQuoteStatus.unsupported,
-      );
-    }
-    // 规格与报价允许同次点击并行；同一规格的重复点击仍被去重。
-    final key = jsonEncode([
-      'specification',
-      adapter.capability.id,
-      request.securityId,
-    ]);
-    if (!_runningDraftRequests.add(key)) {
-      return const DraftOptionSpecificationResult(
-        DraftOptionQuoteStatus.cancelled,
-      );
-    }
-    final revision = _generation;
-    var active = true;
-
-    /// 超时、撤销或任何会话变化后都返回 false，来源不能继续请求或采用迟到结果。
-    bool current() =>
-        active &&
-        !_disposed &&
-        !_sourceReconfiguring &&
-        _enabled &&
-        revision == _generation &&
-        (!_applicationManaged || _applicationActive) &&
-        identical(client.adapterFor(request), adapter) &&
-        isCurrent();
-    try {
-      final specification = await adapter
-          .fetchOptionSpecification(request, isCurrent: current)
-          .timeout(const Duration(seconds: 15));
-      if (!current()) {
-        return const DraftOptionSpecificationResult(
-          DraftOptionQuoteStatus.cancelled,
-        );
-      }
-      if (specification == null ||
-          specification.source != adapter.capability.id ||
-          !specification.matches(request)) {
-        return const DraftOptionSpecificationResult(
-          DraftOptionQuoteStatus.noQuote,
-        );
-      }
-      return DraftOptionSpecificationResult(
-        DraftOptionQuoteStatus.available,
-        specification: specification,
-      );
-    } catch (_) {
-      if (!current()) {
-        return const DraftOptionSpecificationResult(
-          DraftOptionQuoteStatus.cancelled,
-        );
-      }
-      // 固定来源及请求数量足够排错，不记录可能带有凭证的异常或响应原文。
-      logger?.warning(
-        '期权草稿规格来源 ${adapter.capability.id} 失败，数量 1',
-        source: 'investment_quote',
-      );
-      return const DraftOptionSpecificationResult(
-        DraftOptionQuoteStatus.failed,
-      );
-    } finally {
-      active = false;
-      _runningDraftRequests.remove(key);
-    }
-  }
-
   /// 同来源按每批最多20个身份串行请求，每批15秒上限；不抓全市场再筛持仓。
   /// [isCurrent] 在请求前及提交前重读账本、持仓和手填修订，旧响应不会跨上下文生效。
   /// [automatic] 默认为 false，表示用户手动刷新，不等待本地五分钟间隔。
@@ -879,11 +708,7 @@ class InvestmentQuoteSync {
     required bool Function() isCurrent,
     bool automatic = false,
   }) async {
-    if (_disposed ||
-        _sourceReconfiguring ||
-        !_enabled ||
-        !_allowsRequest(_owner(p)) ||
-        !isCurrent()) {
+    if (_disposed || !_enabled || !_allowsRequest(_owner(p)) || !isCurrent()) {
       return false;
     }
     final owner = _owner(p);
@@ -918,7 +743,6 @@ class InvestmentQuoteSync {
     // 每批前后及持久化等待后都重新核对会话，不因前一批失败跳过取消检查。
     bool current() =>
         !_disposed &&
-        !_sourceReconfiguring &&
         revision == _generation &&
         _enabled &&
         _allowsRequest(owner) &&

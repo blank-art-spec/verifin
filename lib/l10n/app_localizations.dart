@@ -14151,101 +14151,11 @@ abstract class AppLocalizations {
   /// **'请填写不小于 0 的期初现金'**
   String get securitiesOpeningCashRequired;
 
-  /// No description provided for @optionQuoteTitle.
-  ///
-  /// In zh, this message translates to:
-  /// **'美股期权行情'**
-  String get optionQuoteTitle;
-
-  /// No description provided for @optionQuoteConfigured.
-  ///
-  /// In zh, this message translates to:
-  /// **'已保存到本机'**
-  String get optionQuoteConfigured;
-
-  /// No description provided for @optionQuoteNotConfigured.
-  ///
-  /// In zh, this message translates to:
-  /// **'未配置'**
-  String get optionQuoteNotConfigured;
-
-  /// No description provided for @optionQuoteIntro.
-  ///
-  /// In zh, this message translates to:
-  /// **'使用 Alpaca 免费 Basic 账户的延迟期权成交价，无需订阅实时行情。保留凭证输入，可稍后配置；价格至少延迟 15 分钟，实际成交可能更早。'**
-  String get optionQuoteIntro;
-
-  /// No description provided for @optionQuoteCredentials.
-  ///
-  /// In zh, this message translates to:
-  /// **'行情凭证'**
-  String get optionQuoteCredentials;
-
-  /// No description provided for @optionQuoteKeyId.
-  ///
-  /// In zh, this message translates to:
-  /// **'Alpaca Key ID'**
-  String get optionQuoteKeyId;
-
-  /// No description provided for @optionQuoteSecretKey.
-  ///
-  /// In zh, this message translates to:
-  /// **'Alpaca Secret Key'**
-  String get optionQuoteSecretKey;
-
-  /// No description provided for @optionQuoteReplaceHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'本机已保存。填写两项凭证可替换现有配置，留空则保持不变。'**
-  String get optionQuoteReplaceHint;
-
-  /// No description provided for @optionQuoteSetupHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'填写两项凭证后保存。'**
-  String get optionQuoteSetupHint;
-
-  /// No description provided for @optionQuoteLocalStorage.
-  ///
-  /// In zh, this message translates to:
-  /// **'凭证在本机加密保存，重启后自动恢复，不进入账目备份和日志。卸载或换机后需重新配置。'**
-  String get optionQuoteLocalStorage;
-
-  /// No description provided for @optionQuoteClear.
-  ///
-  /// In zh, this message translates to:
-  /// **'清除已保存凭证'**
-  String get optionQuoteClear;
-
-  /// No description provided for @optionQuoteSaveFailed.
-  ///
-  /// In zh, this message translates to:
-  /// **'未保存，请稍后重试。'**
-  String get optionQuoteSaveFailed;
-
-  /// No description provided for @optionQuoteLoadFailed.
-  ///
-  /// In zh, this message translates to:
-  /// **'本机凭证读取失败，请重新配置或清除已保存凭证。'**
-  String get optionQuoteLoadFailed;
-
-  /// No description provided for @optionQuoteCredentialInvalid.
-  ///
-  /// In zh, this message translates to:
-  /// **'请使用 1–512 个英文字母、数字或英文符号，不含空白。'**
-  String get optionQuoteCredentialInvalid;
-
   /// No description provided for @optionLookup.
   ///
   /// In zh, this message translates to:
   /// **'查询合约与行情'**
   String get optionLookup;
-
-  /// No description provided for @optionLookupHint.
-  ///
-  /// In zh, this message translates to:
-  /// **'支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网后从 Nasdaq 查询参考价，无需密钥。报价时间未知时会明确标注；权利金乘数和交割规格请按券商资料填写核对。'**
-  String get optionLookupHint;
 
   /// No description provided for @optionLookupName.
   ///
@@ -14275,12 +14185,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'合约资料已解析。开启参考行情联网后可免密钥查询期权参考价；权利金乘数请按券商资料填写。'**
   String get optionLookupNetworkDisabled;
-
-  /// No description provided for @optionLookupCredentials.
-  ///
-  /// In zh, this message translates to:
-  /// **'查询延迟成交价和权利金乘数需要配置 Alpaca 免费 Basic 账户凭证，可稍后配置，无需订阅实时行情。'**
-  String get optionLookupCredentials;
 
   /// No description provided for @optionLookupUnavailable.
   ///
@@ -14413,42 +14317,6 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'完整美股代码在本地补全资料。开启行情联网后可免密钥查询 Nasdaq 参考价；会发送公开标的、合约代码和到期日，服务方可见 IP。乘数与交割规格请按券商资料核对。'**
   String get optionLookupCompactHint;
-
-  /// No description provided for @optionMultiplierLookupResult.
-  ///
-  /// In zh, this message translates to:
-  /// **'查询到权利金乘数：{multiplier}（{source}）'**
-  String optionMultiplierLookupResult(String multiplier, String source);
-
-  /// No description provided for @optionMultiplierLookupMissing.
-  ///
-  /// In zh, this message translates to:
-  /// **'未查到可靠的权利金乘数，请按券商合约资料填写。'**
-  String get optionMultiplierLookupMissing;
-
-  /// No description provided for @optionMultiplierLookupFailed.
-  ///
-  /// In zh, this message translates to:
-  /// **'权利金乘数查询失败，请重试或按券商合约资料填写。'**
-  String get optionMultiplierLookupFailed;
-
-  /// No description provided for @optionMultiplierLookupPreserved.
-  ///
-  /// In zh, this message translates to:
-  /// **'已保留你填写的乘数，可核对后采用查询值。'**
-  String get optionMultiplierLookupPreserved;
-
-  /// No description provided for @optionMultiplierLookupLocked.
-  ///
-  /// In zh, this message translates to:
-  /// **'已保留已有合约的乘数；查询不会修改已保存的合约。'**
-  String get optionMultiplierLookupLocked;
-
-  /// No description provided for @optionMultiplierLookupUse.
-  ///
-  /// In zh, this message translates to:
-  /// **'采用查询乘数'**
-  String get optionMultiplierLookupUse;
 
   /// No description provided for @optionUseTradePrice.
   ///

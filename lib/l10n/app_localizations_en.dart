@@ -8097,58 +8097,7 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter an opening cash amount of 0 or more';
 
   @override
-  String get optionQuoteTitle => 'US option quotes';
-
-  @override
-  String get optionQuoteConfigured => 'Saved on this device';
-
-  @override
-  String get optionQuoteNotConfigured => 'Not configured';
-
-  @override
-  String get optionQuoteIntro =>
-      'Uses delayed option trades from a free Alpaca Basic account. No real-time subscription is required. You can enter credentials later. Prices are at least 15 minutes delayed; the actual trade may be older.';
-
-  @override
-  String get optionQuoteCredentials => 'Quote credentials';
-
-  @override
-  String get optionQuoteKeyId => 'Alpaca Key ID';
-
-  @override
-  String get optionQuoteSecretKey => 'Alpaca Secret Key';
-
-  @override
-  String get optionQuoteReplaceHint =>
-      'Saved on this device. Enter both credentials to replace the current configuration, or leave them blank to keep it.';
-
-  @override
-  String get optionQuoteSetupHint => 'Enter both credentials, then save.';
-
-  @override
-  String get optionQuoteLocalStorage =>
-      'Credentials are encrypted on this device and restored automatically after restarting. They are excluded from ledger backups and logs. Set them again after uninstalling or moving to another device.';
-
-  @override
-  String get optionQuoteClear => 'Clear saved credentials';
-
-  @override
-  String get optionQuoteSaveFailed => 'Not saved. Try again later.';
-
-  @override
-  String get optionQuoteLoadFailed =>
-      'Saved credentials could not be read. Set them again or clear the saved credentials.';
-
-  @override
-  String get optionQuoteCredentialInvalid =>
-      'Use 1–512 ASCII letters, numbers or symbols, without whitespace.';
-
-  @override
   String get optionLookup => 'Look up contract and quote';
-
-  @override
-  String get optionLookupHint =>
-      'Supports standard US option symbols. Lookup sends the underlying symbol to Tencent for its name. Enable quote networking to fetch a Nasdaq reference price without a key. Unknown quote times are labeled. Enter and verify the premium multiplier and delivery terms using broker records.';
 
   @override
   String optionLookupName(
@@ -8171,10 +8120,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get optionLookupNetworkDisabled =>
       'Contract details parsed. Enable quote networking to look up an option reference price without a key. Enter the premium multiplier from broker records.';
-
-  @override
-  String get optionLookupCredentials =>
-      'Delayed trades and premium multipliers require free Alpaca Basic account credentials. You can configure them later; no real-time subscription is required.';
 
   @override
   String get optionLookupUnavailable =>
@@ -8252,30 +8197,6 @@ class AppLocalizationsEn extends AppLocalizations {
   @override
   String get optionLookupCompactHint =>
       'A full US symbol fills identity locally. Enable quote networking for Nasdaq reference prices without a key. Public underlying symbols, contract codes and expiry dates are sent; the provider can see your IP. Verify multipliers and delivery terms using broker records.';
-
-  @override
-  String optionMultiplierLookupResult(String multiplier, String source) {
-    return 'Premium multiplier found: $multiplier ($source)';
-  }
-
-  @override
-  String get optionMultiplierLookupMissing =>
-      'No reliable premium multiplier was found. Enter it from your broker’s contract details.';
-
-  @override
-  String get optionMultiplierLookupFailed =>
-      'The premium multiplier lookup failed. Retry or enter it from your broker’s contract details.';
-
-  @override
-  String get optionMultiplierLookupPreserved =>
-      'Your multiplier has been kept. Review the result before applying it.';
-
-  @override
-  String get optionMultiplierLookupLocked =>
-      'The existing contract multiplier has been kept. Lookup does not change saved contracts.';
-
-  @override
-  String get optionMultiplierLookupUse => 'Use lookup multiplier';
 
   @override
   String get optionUseTradePrice =>

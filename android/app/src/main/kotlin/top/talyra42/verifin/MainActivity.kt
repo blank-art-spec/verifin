@@ -12,8 +12,6 @@ import android.net.Uri
 import android.os.Build
 import android.os.Bundle
 import android.os.Environment
-import android.os.Handler
-import android.os.Looper
 import android.provider.MediaStore
 import android.provider.Settings
 import android.util.Base64
@@ -32,7 +30,6 @@ import java.io.ByteArrayOutputStream
 import java.io.File
 import java.io.FileOutputStream
 import java.io.IOException
-import java.lang.ref.WeakReference
 import java.net.HttpURLConnection
 import java.net.URL
 import java.security.MessageDigest
@@ -48,7 +45,6 @@ class MainActivity : FlutterFragmentActivity() {
     private var pendingDownloadsWrite: PendingDownloadsWrite? = null
     private var pendingSmsPermissionResult: MethodChannel.Result? = null
     private var pendingDirectoryPick: MethodChannel.Result? = null
-    private var optionCredentialChannelGeneration = 0
 
     override fun onCreate(savedInstanceState: Bundle?) {
         rememberAccountReminderAction(intent)
@@ -70,12 +66,9 @@ class MainActivity : FlutterFragmentActivity() {
      */
     override fun configureFlutterEngine(flutterEngine: FlutterEngine) {
         super.configureFlutterEngine(flutterEngine)
-        optionCredentialChannelGeneration++
         channel = MethodChannel(flutterEngine.dartExecutor.binaryMessenger, CHANNEL_NAME)
         channel?.setMethodCallHandler { call, result ->
             when (call.method) {
-                "readOptionQuoteCredentials", "writeOptionQuoteCredentials", "clearOptionQuoteCredentials" ->
-                    handleOptionQuoteCredentials(call, result)
                 "getAccountReminderDeliveryStatus", "openAccountReminderSettings" -> {
                     try {
                         if (call.method == "getAccountReminderDeliveryStatus") {
@@ -1454,69 +1447,10 @@ class MainActivity : FlutterFragmentActivity() {
     }
 
     override fun onDestroy() {
-        optionCredentialChannelGeneration++
         AutoCaptureBridge.onQueueAvailable = null
         pendingSmsPermissionResult?.success(false)
         pendingSmsPermissionResult = null
         super.onDestroy()
-    }
-
-    /** 通道解绑后丢弃旧回调，不向已经分离的 Flutter engine 写结果。 */
-    override fun cleanUpFlutterEngine(flutterEngine: FlutterEngine) {
-        optionCredentialChannelGeneration++
-        super.cleanUpFlutterEngine(flutterEngine)
-    }
-
-    /** 本地凭证串行后台 I/O；平台错误只含固定文本，永不记录原始异常或参数。 */
-    private fun handleOptionQuoteCredentials(
-        call: io.flutter.plugin.common.MethodCall,
-        result: MethodChannel.Result,
-    ) {
-        val owner = WeakReference(this)
-        val generation = optionCredentialChannelGeneration
-        val appContext = applicationContext
-        val method = call.method
-        val arguments = call.arguments as? Map<*, *>
-        val keyId = arguments?.get("keyId") as? String
-        val secretKey = arguments?.get("secretKey") as? String
-        OptionQuoteCredentialStore.execute {
-            var value: Any? = null
-            var errorCode: String? = null
-            var errorMessage: String? = null
-            try {
-                val store = OptionQuoteCredentialStore(appContext)
-                value = when (method) {
-                    "readOptionQuoteCredentials" -> store.read()
-                    "writeOptionQuoteCredentials" -> {
-                        store.write(requireNotNull(keyId), requireNotNull(secretKey))
-                        true
-                    }
-                    else -> {
-                        store.clear()
-                        true
-                    }
-                }
-            } catch (_: Exception) {
-                errorCode = when (method) {
-                    "readOptionQuoteCredentials" -> "OPTION_QUOTE_CREDENTIALS_READ_FAILED"
-                    "writeOptionQuoteCredentials" -> "OPTION_QUOTE_CREDENTIALS_WRITE_FAILED"
-                    else -> "OPTION_QUOTE_CREDENTIALS_CLEAR_FAILED"
-                }
-                errorMessage = when (method) {
-                    "readOptionQuoteCredentials" -> "无法读取本地期权行情凭证"
-                    "writeOptionQuoteCredentials" -> "无法保存本地期权行情凭证"
-                    else -> "无法清除本地期权行情凭证"
-                }
-            }
-            Handler(Looper.getMainLooper()).post {
-                val activity = owner.get()
-                if (activity == null || activity.isDestroyed ||
-                    activity.optionCredentialChannelGeneration != generation
-                ) return@post
-                if (errorCode != null) result.error(errorCode, errorMessage, null)
-                else result.success(value)
-            }
-        }
     }
 
     private fun writeTextToDownloads(

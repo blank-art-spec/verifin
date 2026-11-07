@@ -7788,55 +7788,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get securitiesOpeningCashRequired => '请填写不小于 0 的期初现金';
 
   @override
-  String get optionQuoteTitle => '美股期权行情';
-
-  @override
-  String get optionQuoteConfigured => '已保存到本机';
-
-  @override
-  String get optionQuoteNotConfigured => '未配置';
-
-  @override
-  String get optionQuoteIntro =>
-      '使用 Alpaca 免费 Basic 账户的延迟期权成交价，无需订阅实时行情。保留凭证输入，可稍后配置；价格至少延迟 15 分钟，实际成交可能更早。';
-
-  @override
-  String get optionQuoteCredentials => '行情凭证';
-
-  @override
-  String get optionQuoteKeyId => 'Alpaca Key ID';
-
-  @override
-  String get optionQuoteSecretKey => 'Alpaca Secret Key';
-
-  @override
-  String get optionQuoteReplaceHint => '本机已保存。填写两项凭证可替换现有配置，留空则保持不变。';
-
-  @override
-  String get optionQuoteSetupHint => '填写两项凭证后保存。';
-
-  @override
-  String get optionQuoteLocalStorage =>
-      '凭证在本机加密保存，重启后自动恢复，不进入账目备份和日志。卸载或换机后需重新配置。';
-
-  @override
-  String get optionQuoteClear => '清除已保存凭证';
-
-  @override
-  String get optionQuoteSaveFailed => '未保存，请稍后重试。';
-
-  @override
-  String get optionQuoteLoadFailed => '本机凭证读取失败，请重新配置或清除已保存凭证。';
-
-  @override
-  String get optionQuoteCredentialInvalid => '请使用 1–512 个英文字母、数字或英文符号，不含空白。';
-
-  @override
   String get optionLookup => '查询合约与行情';
-
-  @override
-  String get optionLookupHint =>
-      '支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网后从 Nasdaq 查询参考价，无需密钥。报价时间未知时会明确标注；权利金乘数和交割规格请按券商资料填写核对。';
 
   @override
   String optionLookupName(
@@ -7858,10 +7810,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get optionLookupNetworkDisabled =>
       '合约资料已解析。开启参考行情联网后可免密钥查询期权参考价；权利金乘数请按券商资料填写。';
-
-  @override
-  String get optionLookupCredentials =>
-      '查询延迟成交价和权利金乘数需要配置 Alpaca 免费 Basic 账户凭证，可稍后配置，无需订阅实时行情。';
 
   @override
   String get optionLookupUnavailable => '此合约暂无可用行情来源，请手动填写参考价。';
@@ -7934,26 +7882,6 @@ class AppLocalizationsZh extends AppLocalizations {
   @override
   String get optionLookupCompactHint =>
       '完整美股代码在本地补全资料。开启行情联网后可免密钥查询 Nasdaq 参考价；会发送公开标的、合约代码和到期日，服务方可见 IP。乘数与交割规格请按券商资料核对。';
-
-  @override
-  String optionMultiplierLookupResult(String multiplier, String source) {
-    return '查询到权利金乘数：$multiplier（$source）';
-  }
-
-  @override
-  String get optionMultiplierLookupMissing => '未查到可靠的权利金乘数，请按券商合约资料填写。';
-
-  @override
-  String get optionMultiplierLookupFailed => '权利金乘数查询失败，请重试或按券商合约资料填写。';
-
-  @override
-  String get optionMultiplierLookupPreserved => '已保留你填写的乘数，可核对后采用查询值。';
-
-  @override
-  String get optionMultiplierLookupLocked => '已保留已有合约的乘数；查询不会修改已保存的合约。';
-
-  @override
-  String get optionMultiplierLookupUse => '采用查询乘数';
 
   @override
   String get optionUseTradePrice => '用成交价暂估持仓';

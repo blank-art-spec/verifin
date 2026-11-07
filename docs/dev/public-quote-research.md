@@ -1,6 +1,6 @@
 # 公开股票参考行情：主应用接入与历史验证
 
-更新日期：2026-11-05。本文记录主应用来源范围，以及 2026-10-27 起免账号、免 API Key、无自有后台的真实股票查询验证，
+更新日期：2026-11-07。本文记录主应用来源范围，以及 2026-10-27 起免账号、免 API Key、无自有后台的真实股票查询验证，
 配套机制见[参考行情阶段 4](securities-stage04-implementation.md)。
 
 天天基金的货币基金接口与指定香港基金 `HK0001039582` 的独立验证见
@@ -19,7 +19,7 @@
 | 沪深 A 股 | CNY 股票代码；沪市 6 开头、深市 0/3 开头 | 中远海能 `600026`，来源代码 `sh600026` |
 | 港股 | HKD 普通股票代码，保留五位前导零 | 腾讯控股 `00700`，来源代码 `hk00700` |
 | 美股 | 1–5 位大写字母，可附 .A/.B 类别后缀；响应须为原代码加 .OQ 或 .N，不声明全部个股都可用 | 原 AVGO/GOOG；新增真实采样 AAPL/MSFT/NVDA、IBM/JPM、BRK.A/BRK.B |
-| 期权及本地测试证券 | 腾讯适配器不支持；美股期权另见[Alpaca 接入](us-option-quote-source.md) | `TEST-TCH…` 等合约始终保留手填参考价 |
+| 期权及本地测试证券 | 腾讯适配器不支持；美股期权另见[Nasdaq 接入](us-option-quote-source.md) | `TEST-TCH…` 等合约始终保留手填参考价 |
 
 沪深、香港代码协议可接受的范围，不代表所有个股都已在 Android 上逐一验收。
 不接入港股人民币柜台，不把 GOOG 与 GOOGL、A 股 `600026` 与港股 `01138` 混用。
@@ -32,7 +32,8 @@
 ## 构建与启用边界
 
 正式入口在 `main.dart` 调用 `buildProductionMarketQuoteClient()`，固定装配腾讯股票及
-指定招商基金，以及未配置不请求的 Alpaca OPRA 延迟历史成交适配器；github、play、diagnostic 及 debug/release 不再使用不同的来源集合，
+指定招商基金及匿名 Nasdaq 期权详情；旧 Alpaca 接口和凭证设置已删除。
+github、play、diagnostic 及 debug/release 不再使用不同的来源集合，
 无需 `PUBLIC_QUOTE_RESEARCH`。`allowResearchSources` 允许固定装配来源参与请求
 与缓存校验，不把 `approved` 改为 true，也不允许设备偏好、导入 JSON 或响应新增来源。
 联网和自动刷新仍默认关闭，用户开关与逐证券采用继续独立控制实际请求及估值。
@@ -276,9 +277,9 @@ Android 已通过 github flavor、release/R8、arm64 的本地编译，
 在 `test/fixtures/investments/tencent_stocks_20261105.*`，未将其他后缀或基金/期权当股票接受。
 这证明所列样例可解析，不保证所有满足代码语法的证券均有报价；不新增实时性承诺。
 
-当前生产工厂另提供需单独配置免费 Basic 凭证的 Alpaca OPRA 延迟期权成交来源；股票依然不需要凭证。
-超过 20 项持仓分批刷新，批次失败保留旧值并继续；超过 24 小时的参考报价会提示，
-不把抓取成功当作报价更新。完整期权边界见[期权来源记录](us-option-quote-source.md)。
+当时的股票扩展仍按每批最多 20 项刷新，失败保留旧值并继续；已知源时间的报价
+超过 24 小时会提示，不把抓取成功当作报价更新。当前期权另使用匿名 Nasdaq，
+报价时间未知、失败回手填的口径见[期权来源记录](us-option-quote-source.md)。
 
 ## 2026-11-05 ETF 后缀与标的隔离核对
 

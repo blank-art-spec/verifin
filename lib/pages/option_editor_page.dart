@@ -12,7 +12,6 @@ import '../app/currency_catalog.dart';
 import '../app/investments/investment_decimal.dart';
 import '../app/investments/investment_opening_draft.dart';
 import '../app/investments/investment_validation_issue.dart';
-import '../app/investments/alpaca_option_quote_adapter.dart';
 import '../app/investments/market_quote.dart';
 import '../app/investments/quote_format.dart';
 import '../app/investments/investment_security_autocomplete.dart';
@@ -26,7 +25,6 @@ import '../app/veri_fin_scope.dart';
 import '../l10n/app_localizations.dart';
 import 'sheets.dart';
 import 'entry_editor_session.dart';
-import 'option_quote_settings_page.dart';
 
 /// 可取消的完整期权草稿；从持仓或既有投资记录进入时复用相同界面。
 class OptionEditorPage extends StatefulWidget {
@@ -110,9 +108,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   (String, String)? _observedUnderlyingInputs;
   bool _searchingContract = false, _fillingContract = false;
   bool _expiryEdited = false, _rightEdited = false;
-  int _contractSearchGeneration = 0,
-      _quoteRevision = 0,
-      _specificationRevision = 0;
+  int _contractSearchGeneration = 0, _quoteRevision = 0;
   final _generatedFields = <String, String>{};
   DateTime? _generatedExpiry;
   OptionRight? _generatedRight;
@@ -120,8 +116,6 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   MarketQuoteRequest? _contractRequest;
   MarketQuote? _contractQuote;
   DraftOptionQuoteStatus? _contractQuoteStatus;
-  DraftOptionQuoteStatus? _contractSpecificationStatus;
-  OptionContractSpecification? _contractSpecification;
   _OptionDraft? _draft;
   InvestmentOpeningHolding? _openingResult;
   String? _previewInputSnapshot;
@@ -361,8 +355,6 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       onChanged: (_) => setState(() {
         if (key == 'strike') _clearContractLookup(identityChanged: true);
         if (key == 'reference') _adoptedQuotePrice = null;
-        // 用户主动修改后解除自动填充标记，即使新值恰好相同也保留手填优先权。
-        if (key == 'multiplier') _generatedFields.remove('multiplier');
         _fieldErrors.remove(key);
         if (key == 'symbol') _parseContractLocally();
         _invalidate();
@@ -849,16 +841,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     _contractRequest = null;
     _contractQuote = null;
     _contractQuoteStatus = null;
-    _contractSpecificationStatus = null;
-    _contractSpecification = null;
     _contractLookupMessage = null;
-    if (identityChanged) {
-      final generatedMultiplier = _generatedFields.remove('multiplier');
-      if (generatedMultiplier != null &&
-          _fields['multiplier']?.text == generatedMultiplier) {
-        _fields['multiplier']!.clear();
-      }
-    }
     if (identityChanged &&
         _adoptedQuotePrice != null &&
         _fields['reference']?.text == _adoptedQuotePrice) {
@@ -959,8 +942,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     }
   }
 
-  /// 显式单次查询：名称、报价与乘数规格独立返回，只有公开身份会传给来源。
-  /// 规格缺失不阻止报价展示，无近期成交也不阻止可靠乘数自动填入草稿。
+  /// 显式单次查询名称和参考报价，只有公开身份会传给来源；乘数始终由用户核对填写。
   Future<void> _lookupContract() async {
     final c = VeriFinScope.of(context), p = _portfolio;
     if (_busy ||
@@ -1049,133 +1031,18 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       });
     }
 
-    /// 只采用来源明确给出的乘数；身份不一致、已有合约或手填值均不会静默覆盖。
-    Future<void> lookupSpecification() async {
-      final result = await c.fetchDraftOptionSpecification(request);
-      if (!current()) return;
-      setState(() {
-        _contractSpecificationStatus = result.status;
-        _contractSpecification = result.specification;
-        _specificationRevision = c.investmentQuoteSync.draftQuoteRevision;
-        if (result.specification != null &&
-            _matchesContractRequest(request) &&
-            (_opening || _selected == null)) {
-          _fillContractField(
-            'multiplier',
-            result.specification!.premiumMultiplier,
-          );
-          _invalidate();
-        }
-      });
-    }
-
-    await Future.wait([lookupName(), lookupQuote(), lookupSpecification()]);
+    await Future.wait([lookupName(), lookupQuote()]);
     if (current()) setState(() => _searchingContract = false);
   }
 
-  /// 展示乘数输入及本次查询依据；[locked] 表示已有合约身份，禁止改动其账务乘数。
-  /// 自动查询只填空白或未改的生成值；与手填不同则提供独立采用按钮供用户决定。
-  Widget _multiplierField({required bool locked}) {
-    final l = AppLocalizations.of(context);
-    final specification = _contractSpecification;
-    final request = _contractRequest;
-    final matches =
-        specification != null &&
-        request != null &&
-        _matchesContractRequest(request) &&
-        specification.matches(request);
-    final sameValue =
-        matches &&
-        _sameMultiplier(
-          _fields['multiplier']!.text,
-          specification.premiumMultiplier,
-        );
-    final status = switch (_contractSpecificationStatus) {
-      DraftOptionQuoteStatus.noQuote ||
-      DraftOptionQuoteStatus.unsupported => l.optionMultiplierLookupMissing,
-      DraftOptionQuoteStatus.failed => l.optionMultiplierLookupFailed,
-      _ => null,
-    };
-    return Column(
-      crossAxisAlignment: CrossAxisAlignment.stretch,
-      children: [
-        _field(
-          'multiplier',
-          l.optionMultiplier,
-          number: true,
-          locked: locked,
-          hint: l.optionMultiplierHelp,
-        ),
-        if (matches) ...[
-          InvestmentHint(
-            l.optionMultiplierLookupResult(
-              specification.premiumMultiplier,
-              specification.source,
-            ),
-          ),
-          if (!sameValue)
-            InvestmentHint(
-              locked
-                  ? l.optionMultiplierLookupLocked
-                  : l.optionMultiplierLookupPreserved,
-            ),
-          if (!sameValue && !locked)
-            TextButton(
-              key: const Key('option-contract-use-multiplier'),
-              onPressed: _busy || _submitted ? null : _useContractMultiplier,
-              child: Text(l.optionMultiplierLookupUse),
-            ),
-        ] else if (specification != null)
-          // 即使没有成交报价，也要解释为何查到规格后没有自动回填。
-          InvestmentHint(l.optionLookupIdentityConflict)
-        else if (status != null)
-          InvestmentHint(status),
-      ],
-    );
-  }
-
-  /// 按十进制值比较 [input] 与来源 [expected]，避免 100.0 被误报为与 100 冲突。
-  /// 空白或非法输入保留原样，由字段校验或用户显式采用查询值修正。
-  bool _sameMultiplier(String input, String expected) {
-    try {
-      return InvestmentDecimal.parse(
-            input,
-          ).compareTo(InvestmentDecimal.parse(expected)) ==
-          0;
-    } on FormatException {
-      return false;
-    }
-  }
-
-  /// 用户显式采用当前合约的查询乘数；不修改交割股数、行权现金或规格确认状态。
-  /// 来源信息已显示在字段旁；这里只改草稿，保存前仍需重新预览实际权利金总额。
-  void _useContractMultiplier() {
-    final specification = _contractSpecification, request = _contractRequest;
-    if (_busy ||
-        _submitted ||
-        (!_opening && _selected != null) ||
-        specification == null ||
-        request == null ||
-        !_matchesContractRequest(request) ||
-        !specification.matches(request)) {
-      return;
-    }
-    final sync = VeriFinScope.of(context).investmentQuoteSync;
-    if (_specificationRevision != sync.draftQuoteRevision ||
-        !sync.state.value.enabled) {
-      setState(() {
-        _clearContractLookup();
-        _contractLookupMessage = AppLocalizations.of(context).optionLookupRetry;
-      });
-      return;
-    }
-    setState(() {
-      _fields['multiplier']!.text = specification.premiumMultiplier;
-      _generatedFields['multiplier'] = specification.premiumMultiplier;
-      _fieldErrors.remove('multiplier');
-      _invalidate();
-    });
-  }
+  /// 权利金乘数只接受用户核对后的输入，已有合约保持锁定。
+  Widget _multiplierField({required bool locked}) => _field(
+    'multiplier',
+    AppLocalizations.of(context).optionMultiplier,
+    number: true,
+    locked: locked,
+    hint: AppLocalizations.of(context).optionMultiplierHelp,
+  );
 
   /// 最新报价仅在用户点选后写入参考价草稿，不触碰成交、成本、数量或账户。
   void _useContractQuote() {
@@ -1199,25 +1066,6 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       _adoptedQuotePrice = reference.price;
       _invalidate();
     });
-  }
-
-  /// 期初组合尚未保存也可进入现有凭证编辑器；不回显凭证、不自动开启联网。
-  Future<void> _configureContractQuotes() async {
-    final c = VeriFinScope.of(context);
-    final adapter = c.investmentQuoteSync.client.adapters
-        .whereType<AlpacaOptionQuoteAdapter>()
-        .firstOrNull;
-    if (adapter == null) return;
-    setState(_clearContractLookup);
-    await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => OptionQuoteSettingsPage(
-          configured: adapter.configured,
-          loadFailed: c.optionQuoteCredentialsLoadFailed,
-          onSave: c.saveOptionQuoteCredentials,
-        ),
-      ),
-    );
   }
 
   /// 独立启用既有参考行情偏好，不开启自动刷新；成功后重查当前草稿。
@@ -1251,7 +1099,6 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
         : quote.reference(request, sync.clock());
     final statusMessage = switch (_contractQuoteStatus) {
       DraftOptionQuoteStatus.networkDisabled => l.optionLookupNetworkDisabled,
-      DraftOptionQuoteStatus.credentialsRequired => l.optionLookupCredentials,
       DraftOptionQuoteStatus.unsupported => l.optionLookupUnavailable,
       DraftOptionQuoteStatus.noQuote => l.optionLookupNoQuote,
       DraftOptionQuoteStatus.failed => l.optionLookupFailed,
@@ -1284,13 +1131,6 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                 ? null
                 : _enableContractQuotes,
             child: Text(l.optionLookupEnable),
-          ),
-        if (_contractQuoteStatus == DraftOptionQuoteStatus.credentialsRequired)
-          TextButton(
-            onPressed: _busy || _searchingContract
-                ? null
-                : _configureContractQuotes,
-            child: Text(l.optionQuoteTitle),
           ),
         if (reference != null && request != null && quote != null) ...[
           const SizedBox(height: 8),

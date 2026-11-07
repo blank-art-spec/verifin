@@ -8,7 +8,6 @@ import '../app/investments/investment_widgets.dart';
 import '../app/currency_math.dart';
 import '../app/feedback.dart';
 import '../app/investments/investment_quote_sync.dart';
-import '../app/investments/alpaca_option_quote_adapter.dart';
 import '../app/investments/market_quote.dart';
 import '../app/investments/stock_projection.dart';
 import '../app/investments/quote_format.dart';
@@ -17,7 +16,6 @@ import '../app/veri_fin_scope.dart';
 import '../app/models.dart';
 import '../l10n/app_localizations.dart';
 import 'app_lock_gate.dart';
-import 'option_quote_settings_page.dart';
 
 class MarketQuotesPage extends StatefulWidget {
   /// [accountId] 为当前可见的原币账户，页面只展示该账户的持仓及已装配来源。
@@ -139,24 +137,6 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
     _activate(force: true);
   }
 
-  /// 期权认证独立于账目，交由 Controller 加密保存；更换前撤销旧请求和旧缓存。
-  /// 不回显已存秘密、不自动开启联网，保存失败时由编辑页保留尚未提交的输入。
-  Future<void> _configureOptions(AlpacaOptionQuoteAdapter adapter) async {
-    final c = _controller!;
-    final changed = await Navigator.of(context).push<bool>(
-      MaterialPageRoute(
-        builder: (_) => OptionQuoteSettingsPage(
-          configured: adapter.configured,
-          loadFailed: c.optionQuoteCredentialsLoadFailed,
-          onSave: c.saveOptionQuoteCredentials,
-        ),
-      ),
-    );
-    if (!mounted) return;
-    if (changed == true) setState(() {});
-    _activate(force: true);
-  }
-
   /// 离开路由清理页面选择；应用级前台自动刷新不依赖本页是否仍然打开。
   /// 页面手动请求仍由 isCurrent 拒绝离页后的旧结果，缓存可继续供离线估值。
   @override
@@ -218,9 +198,6 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
         .toList();
     // 只展示当前构建实际装配的来源；已移除的研究候选不再形成空配置项。
     final sources = sync.client.adapters.map((adapter) => adapter.capability);
-    final optionSource = sync.client.adapters
-        .whereType<AlpacaOptionQuoteAdapter>()
-        .firstOrNull;
     return Scaffold(
       body: SafeArea(
         child: VeriPage(
@@ -275,18 +252,6 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                               ? l.marketResearchConsent
                               : l.marketConsent,
                         ),
-                        if (optionSource != null)
-                          SettingsRow(
-                            icon: Icons.vpn_key_outlined,
-                            title: l.optionQuoteTitle,
-                            trailing: c.optionQuoteCredentialsLoadFailed
-                                ? l.optionQuoteLoadFailed
-                                : optionSource.configured
-                                ? l.optionQuoteConfigured
-                                : l.optionQuoteNotConfigured,
-                            trailingMaxLines: null,
-                            onTap: () => _configureOptions(optionSource),
-                          ),
                         const SizedBox(height: 8),
                         FilledButton(
                           onPressed:
@@ -331,13 +296,7 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                             DetailInfoRow(
                               inline: true,
                               label: source.id,
-                              value:
-                                  source.id == optionSource?.capability.id &&
-                                      !optionSource!.configured
-                                  ? c.optionQuoteCredentialsLoadFailed
-                                        ? l.optionQuoteLoadFailed
-                                        : l.optionQuoteNotConfigured
-                                  : source.approved
+                              value: source.approved
                                   ? l.marketSourceConnected
                                   : source.researchOnly &&
                                         sync.client.allowResearchSources

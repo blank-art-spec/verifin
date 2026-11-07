@@ -12,7 +12,7 @@
 ///   一键固定；
 /// - [AppStorageBridge]（platform_bridge_storage.dart）：系统下载目录写出、
 ///   备份目录 SAF 读写；
-/// - [AppSecurityBridge]（本文件）：FLAG_SECURE 防截屏与期权行情凭证安全存储。
+/// - [AppSecurityBridge]（本文件）：FLAG_SECURE 防截屏。
 ///
 /// 入站调用（原生 → Flutter）受「一个 channel 只能挂一个 MethodCall 处理器」
 /// 约束，统一由本文件的 [_ensureInboundDispatcher] 分发到各域注册的回调。
@@ -74,23 +74,6 @@ void _ensureInboundDispatcher() {
 /// 应用安全相关的原生能力。
 class AppSecurityBridge {
   AppSecurityBridge._();
-
-  /// 读取设备加密凭证；缺少原生实现或解密失败必须交调用方反馈，不能伪装未配置。
-  static Future<Map<Object?, Object?>?> readOptionQuoteCredentials() =>
-      _channel.invokeMapMethod<Object?, Object?>('readOptionQuoteCredentials');
-
-  /// 保存成对凭证；只有原生明确返回 true 才视为持久成功，不写普通 Flutter 偏好。
-  static Future<bool?> writeOptionQuoteCredentials({
-    required String keyId,
-    required String secretKey,
-  }) => _channel.invokeMethod<bool>('writeOptionQuoteCredentials', {
-    'keyId': keyId,
-    'secretKey': secretKey,
-  });
-
-  /// 清除设备保存的期权凭证；失败继续抛给安全存储层，由页面保留原草稿。
-  static Future<bool?> clearOptionQuoteCredentials() =>
-      _channel.invokeMethod<bool>('clearOptionQuoteCredentials');
 
   /// 开关 FLAG_SECURE：开启后应用内容不可截屏/录屏、且从最近任务缩略图中隐藏。
   /// 启用应用锁时打开，保护账户余额等敏感信息。非 Android 平台静默忽略。
