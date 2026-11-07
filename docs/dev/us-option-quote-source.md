@@ -1,6 +1,34 @@
 # 美股期权参考行情接入
 
-更新：2026-11-06。
+更新：2026-11-07。
+
+## 2026-11-07 Yahoo 免凭证验证：未通过，未接入
+
+本轮目标是先确认 Yahoo 能否在不配置账号、API Key 或用户浏览器登录态的情况下
+返回真实美股期权报价，成功后再接入所有已配置合约的刷新及手填后备。当前未取得
+成功报价，故没有替换 Alpaca、删除已有凭证或放开没有可用来源的行情开关。
+
+通过当前电脑网络执行了少量只读请求，使用明确标识的 `VeriFin-QuoteProbe/1.0`
+客户端；未使用登录 Cookie、代理轮换、浏览器身份伪装或第三方转发服务：
+
+| 请求阶段 | 实际结果 | 可以得出的结论 |
+| --- | --- | --- |
+| 无会话请求 `query2.finance.yahoo.com/v7/finance/options/AVGO` | HTTP 401，`Invalid Crumb` | 不能直接作为无状态匿名 URL 查询 |
+| 按 yfinance 的正常匿名会话流程请求 `fc.yahoo.com` | HTTP 404，同时发放 1 个 Cookie | 取得匿名会话，不代表取得行情或账号授权 |
+| 同一会话请求 `query1.finance.yahoo.com/v1/test/getcrumb` | HTTP 429 | 会话校验阶段被限流，停止请求，没有继续请求期权链 |
+
+会话流程依据 [yfinance 的请求实现](https://github.com/ranaroussi/yfinance/blob/main/yfinance/data.py)，
+行情字段依据[期权链实现](https://github.com/ranaroussi/yfinance/blob/main/yfinance/ticker.py)。
+验证仅说明本轮普通客户端的匿名流程未能取得报价，不能据此断言 Yahoo 永久不能
+免 Key 使用，也不能声称完整 yfinance 客户端、Android 直连或全部合约已经验证。
+Cookie 与校验信息未写入报告、日志或账目数据；没有修改应用网络配置。
+
+后续接入仍须先获得真实响应，核对完整合约代码、币种、价格及其实际成交时间，
+并验证多标的、多到期日和逐合约失败隔离。`lastTradeDate` 不能充当买卖报价时间，
+`contractSize` 不能直接代替数字乘数。取价失败须保留手填价格和合约资料，不能用
+零价补缺；用户要求的全部已配置合约刷新本轮尚未实现。
+
+本轮只更新验证记录，没有改动应用代码、运行 Flutter 功能测试、生成安装包或发版。
 
 ## 来源选择与边界
 
