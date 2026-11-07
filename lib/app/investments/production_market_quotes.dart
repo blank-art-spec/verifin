@@ -4,9 +4,9 @@ library;
 import 'market_quote.dart';
 import 'tencent_quote_adapter.dart';
 import 'cms_fund_quote_adapter.dart';
-import 'alpaca_option_quote_adapter.dart';
+import 'nasdaq_option_quote_adapter.dart';
 
-/// 装配腾讯股票、招商指定基金与需单独配置的 Alpaca 美股期权来源。
+/// 装配腾讯股票、招商指定基金与免凭证的 Nasdaq 美股期权来源。
 ///
 /// 构造不联网；同步器仍须用户主动授权，逐证券采用选择和响应校验保持不变。
 /// 沿用历史 [MarketQuoteClient.allowResearchSources] 标记接入固定公开来源，
@@ -16,7 +16,7 @@ import 'alpaca_option_quote_adapter.dart';
 MarketQuoteClient buildProductionMarketQuoteClient({
   TencentQuoteTransportFactory? tencentTransportFactory,
   CmsFundQuoteTransportFactory? cmsTransportFactory,
-  AlpacaOptionQuoteTransportFactory? alpacaTransportFactory,
+  NasdaqOptionQuoteTransportFactory? nasdaqTransportFactory,
   DateTime Function()? clock,
 }) {
   return MarketQuoteClient(
@@ -26,8 +26,8 @@ MarketQuoteClient buildProductionMarketQuoteClient({
         clock: clock,
       ),
       CmsFundQuoteAdapter(transportFactory: cmsTransportFactory, clock: clock),
-      AlpacaOptionQuoteAdapter(
-        transportFactory: alpacaTransportFactory,
+      NasdaqOptionQuoteAdapter(
+        transportFactory: nasdaqTransportFactory,
         clock: clock,
       ),
     ],

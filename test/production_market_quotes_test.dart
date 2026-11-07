@@ -7,6 +7,7 @@ import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/investments/cms_fund_quote_adapter.dart';
 import 'package:verifin/app/investments/investment_quote_sync.dart';
 import 'package:verifin/app/investments/market_quote.dart';
+import 'package:verifin/app/investments/nasdaq_option_quote_adapter.dart';
 import 'package:verifin/app/investments/production_market_quotes.dart';
 import 'package:verifin/app/investments/tencent_quote_adapter.dart';
 import 'package:verifin/app/models.dart';
@@ -107,6 +108,12 @@ void main() {
       isA<CmsFundQuoteAdapter>(),
     );
     expect(client.adapterFor(MarketQuoteRequest(optionFixture())), isNull);
+    expect(
+      client.adapterFor(
+        MarketQuoteRequest.usOptionSymbol('AVGO261109C00265000'),
+      ),
+      isA<NasdaqOptionQuoteAdapter>(),
+    );
     expect(client.hasApprovedSources, isFalse);
     expect(const MarketQuoteClient().adapters, isEmpty);
     final controller = await makeController();

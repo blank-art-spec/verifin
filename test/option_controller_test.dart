@@ -327,7 +327,7 @@ void main() {
     );
     final original = c.investmentFor(account.id)!.toJson(),
         raw = c.exportDataJson();
-    expect((jsonDecode(raw) as Map)['version'], 17);
+    expect((jsonDecode(raw) as Map)['version'], 18);
     c.importDataJson(raw, dryRun: true);
     expect(c.investmentFor(account.id)!.toJson(), original);
     c.importDataJson(raw);

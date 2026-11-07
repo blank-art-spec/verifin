@@ -7,7 +7,6 @@ import 'package:verifin/app/investments/alpaca_option_quote_adapter.dart';
 import 'package:verifin/app/investments/investment_quote_sync.dart';
 import 'package:verifin/app/investments/market_quote.dart';
 import 'package:verifin/app/investments/option_quote_credential_store.dart';
-import 'package:verifin/app/investments/production_market_quotes.dart';
 import 'package:verifin/app/logging/app_logger.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
@@ -120,13 +119,11 @@ class _OptionTransport implements AlpacaOptionQuoteTransport {
   void close() {}
 }
 
-/// 创建实际生产来源组合，但所有网络路径都由测试传输或立即失败保护。
-MarketQuoteClient _client(_OptionTransport transport) =>
-    buildProductionMarketQuoteClient(
-      alpacaTransportFactory: () => transport,
-      tencentTransportFactory: () => throw StateError('本测试不允许股票网络请求'),
-      cmsTransportFactory: () => throw StateError('本测试不允许基金网络请求'),
-    );
+/// 显式注入旧 Alpaca 来源，保留凭证恢复回归；生产工厂已改用匿名 Nasdaq。
+MarketQuoteClient _client(_OptionTransport transport) => MarketQuoteClient(
+  allowResearchSources: true,
+  adapters: [AlpacaOptionQuoteAdapter(transportFactory: () => transport)],
+);
 
 /// 在真实 Controller 命令路径中创建期权期初持仓，不直接改内部状态。
 Future<InvestmentPortfolio> _holding(VeriFinController controller) async {

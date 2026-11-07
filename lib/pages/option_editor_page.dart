@@ -1239,7 +1239,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
     }
   }
 
-  /// 结果按来源价格时间展示；明确来源的最低延迟及成交可能更早。
+  /// 来源时间未知时明确展示未知，抓取时刻单列；仅显示来源明确提供的延迟。
   /// 保留历史期初提醒，不将可用报价称为实时成交，也不改动用户成本。
   Widget _contractLookup(InvestmentPortfolio p) {
     final l = AppLocalizations.of(context),
@@ -1306,9 +1306,21 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
           DetailInfoRow(
             inline: true,
             label: l.marketQuoteTime,
+            value: reference.time == null
+                ? l.marketQuoteTimeUnknown
+                : formatQuoteTime(
+                    context,
+                    reference.time!,
+                    compact: true,
+                    includeSeconds: true,
+                  ),
+          ),
+          DetailInfoRow(
+            inline: true,
+            label: l.investFetchedAt,
             value: formatQuoteTime(
               context,
-              reference.time,
+              quote.fetchedAt,
               compact: true,
               includeSeconds: true,
             ),

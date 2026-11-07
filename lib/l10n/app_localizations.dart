@@ -12540,7 +12540,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketHoldings.
   ///
   /// In zh, this message translates to:
-  /// **'持仓参考行情'**
+  /// **'证券参考行情'**
   String get marketHoldings;
 
   /// No description provided for @marketEmptyHoldings.
@@ -12978,7 +12978,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketConsent.
   ///
   /// In zh, this message translates to:
-  /// **'开启后仅向已通过评审的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。开启自动刷新后，打开应用或回前台检查当前账本持仓；退后台或锁屏暂停。'**
+  /// **'开启后仅向已装配的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。自动刷新在应用前台且解锁时检查当前账本持仓及已保存美股期权，退后台或锁屏暂停。'**
   String get marketConsent;
 
   /// No description provided for @marketGatePending.
@@ -12990,13 +12990,13 @@ abstract class AppLocalizations {
   /// No description provided for @marketResearchConsent.
   ///
   /// In zh, this message translates to:
-  /// **'开启后向腾讯发送股票代码，向招商发送公开基金标识和页面语言；配置期权来源后向 Alpaca 发送合约代码与认证凭证。服务方可见 IP；不发送持仓数量、成本、账本账户、余额或备注。自动刷新仅在应用前台且已解锁时检查当前账本持仓。'**
+  /// **'开启后向腾讯发送股票代码，向招商发送公开基金标识和页面语言，向 Nasdaq 发送期权标的、合约代码和到期日，无需账户或密钥。服务方可见 IP；不发送持仓数量、成本、账本账户、余额或备注。自动刷新仅在应用前台且已解锁时检查当前账本持仓及已保存美股期权。'**
   String get marketResearchConsent;
 
   /// No description provided for @marketResearchNote.
   ///
   /// In zh, this message translates to:
-  /// **'可获取已支持股票的参考价、招商美元货币市场基金 B 类日净值，以及配置后的美股期权延迟成交价；每只证券需单独选择是否用于估值。期权价格至少延迟 15 分钟，实际成交可能更早；基金只提供净值日期。手填后备价继续保留，参考收益不生成收入流水。'**
+  /// **'可获取已支持股票参考价、招商美元货币市场基金 B 类日净值及 Nasdaq 美股期权参考价；每只证券单独选择是否用于估值。期权报价时间未知时会明确标注，抓取时刻不代表成交时刻；不能保证所有合约都有价格。期权查询失败或无价时使用原手填后备价，参考收益不生成收入流水。'**
   String get marketResearchNote;
 
   /// No description provided for @marketSourceResearch.
@@ -13026,7 +13026,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketOptionUnsupported.
   ///
   /// In zh, this message translates to:
-  /// **'请先配置美股期权行情，并核对完整合约代码与合约资料。暂不支持的合约继续手填；TEST 示例不会联网查询。'**
+  /// **'请核对完整美股合约代码与合约资料，无需配置密钥。暂不支持的合约继续手填；TEST 示例不会联网查询。'**
   String get marketOptionUnsupported;
 
   /// No description provided for @marketSourceReview.
@@ -13074,7 +13074,7 @@ abstract class AppLocalizations {
   /// No description provided for @marketFailed.
   ///
   /// In zh, this message translates to:
-  /// **'来源失败或字段无效，保留旧缓存及其原时间'**
+  /// **'部分行情获取失败或无有效价格；期权使用手填后备价，其他来源保留有效缓存。'**
   String get marketFailed;
 
   /// No description provided for @marketCooldown.
@@ -13112,6 +13112,12 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'来源报价时间'**
   String get marketQuoteTime;
+
+  /// No description provided for @marketQuoteTimeUnknown.
+  ///
+  /// In zh, this message translates to:
+  /// **'报价时间未知'**
+  String get marketQuoteTimeUnknown;
 
   /// No description provided for @marketNavDate.
   ///
@@ -14238,7 +14244,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupHint.
   ///
   /// In zh, this message translates to:
-  /// **'支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 免费账户凭证后查询延迟成交价及权利金乘数。可靠乘数会填入空白字段，交割规格仍须核对。'**
+  /// **'支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网后从 Nasdaq 查询参考价，无需密钥。报价时间未知时会明确标注；权利金乘数和交割规格请按券商资料填写核对。'**
   String get optionLookupHint;
 
   /// No description provided for @optionLookupName.
@@ -14267,7 +14273,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupNetworkDisabled.
   ///
   /// In zh, this message translates to:
-  /// **'合约资料已解析。开启参考行情联网后可查询期权价格和权利金乘数。'**
+  /// **'合约资料已解析。开启参考行情联网后可免密钥查询期权参考价；权利金乘数请按券商资料填写。'**
   String get optionLookupNetworkDisabled;
 
   /// No description provided for @optionLookupCredentials.
@@ -14285,13 +14291,13 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupNoQuote.
   ///
   /// In zh, this message translates to:
-  /// **'查询范围内没有找到有效成交价，请核对合约代码或手动填写参考价。无近期成交的合约可能没有价格。'**
+  /// **'没有查到有效参考价，请核对合约代码或手动填写。来源可能未覆盖该标的、到期日或合约。'**
   String get optionLookupNoQuote;
 
   /// No description provided for @optionLookupFailed.
   ///
   /// In zh, this message translates to:
-  /// **'延迟期权行情查询失败，请检查网络及 Alpaca 凭证，稍后重试或手动填写。'**
+  /// **'期权参考价查询失败，请稍后重试或手动填写。原手填价格和合约资料保留。'**
   String get optionLookupFailed;
 
   /// No description provided for @optionLookupDelayHint.
@@ -14327,7 +14333,7 @@ abstract class AppLocalizations {
   /// No description provided for @optionLookupOpeningHint.
   ///
   /// In zh, this message translates to:
-  /// **'这是最新可用报价，并非历史期初价格。录入过去的持仓时，请按期初时点核对后再采用。'**
+  /// **'这是本次查询返回的参考价，不能作为历史期初价格。录入过去的持仓时，请按期初时点核对后再采用。'**
   String get optionLookupOpeningHint;
 
   /// No description provided for @optionLookupIdentityConflict.
@@ -14399,13 +14405,13 @@ abstract class AppLocalizations {
   /// No description provided for @optionMultiplierHelp.
   ///
   /// In zh, this message translates to:
-  /// **'总权利金 = 张数 × 成交价 × 乘数。查询可自动补全乘数；未查到时按券商合约规格填写。'**
+  /// **'总权利金 = 张数 × 成交价 × 乘数。Nasdaq 参考行情不提供已核实的权利金乘数，请按券商合约规格手动填写。'**
   String get optionMultiplierHelp;
 
   /// No description provided for @optionLookupCompactHint.
   ///
   /// In zh, this message translates to:
-  /// **'完整美股代码在本地补全资料。点击查询会发送公开代码和 IP；查询乘数与延迟价格需开启行情联网并配置凭证。'**
+  /// **'完整美股代码在本地补全资料。开启行情联网后可免密钥查询 Nasdaq 参考价；会发送公开标的、合约代码和到期日，服务方可见 IP。乘数与交割规格请按券商资料核对。'**
   String get optionLookupCompactHint;
 
   /// No description provided for @optionMultiplierLookupResult.

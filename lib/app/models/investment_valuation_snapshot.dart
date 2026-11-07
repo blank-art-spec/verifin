@@ -10,28 +10,41 @@ class InvestmentPriceFact {
     this.source = '',
     this.manual = true,
     this.dateOnly = false,
+    this.sourceTimeUnknown = false,
+    this.fetchedAt,
   });
   final String price, source;
-  final DateTime quotedAt;
-  final bool manual, dateOnly;
+  final DateTime? quotedAt;
+
+  /// 仅源时间未知的联网期权依据保存抓取时刻；它不代表成交发生时间。
+  final DateTime? fetchedAt;
+  final bool manual, dateOnly, sourceTimeUnknown;
 
   /// 精确价格以文本保存，不复制网络原始响应。
   Map<String, Object?> toJson() => {
     'price': price,
-    'quotedAt': quotedAt.toIso8601String(),
+    'quotedAt': quotedAt?.toIso8601String(),
     'source': source,
     'manual': manual,
     if (dateOnly) 'dateOnly': true,
+    if (sourceTimeUnknown) 'sourceTimeUnknown': true,
+    if (fetchedAt != null) 'fetchedAt': fetchedAt!.toIso8601String(),
   };
 
   /// 读取价格事实；完整性约束在聚合校验中统一检查。
   factory InvestmentPriceFact.fromJson(Map<String, Object?> json) =>
       InvestmentPriceFact(
         price: json['price'] as String,
-        quotedAt: DateTime.parse(json['quotedAt'] as String),
+        quotedAt: json['quotedAt'] == null
+            ? null
+            : DateTime.parse(json['quotedAt'] as String),
         source: json['source'] as String,
         manual: json['manual'] as bool,
         dateOnly: json['dateOnly'] as bool? ?? false,
+        sourceTimeUnknown: json['sourceTimeUnknown'] as bool? ?? false,
+        fetchedAt: json['fetchedAt'] == null
+            ? null
+            : DateTime.parse(json['fetchedAt'] as String),
       );
 }
 

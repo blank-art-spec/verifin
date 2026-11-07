@@ -13,6 +13,12 @@ import 'market_quote.dart';
 import 'stock_projection.dart';
 import 'fund_workflow_math.dart';
 
+/// 已保存的美元美股期权即使零持仓也可刷新；来源仍单独校验完整合约身份。
+bool isConfiguredUsOptionQuoteTarget(StockSecurity security) =>
+    security.option != null &&
+    security.market == StockMarket.us &&
+    security.currencyCode == 'USD';
+
 enum QuoteSyncStatus {
   idle,
   loading,
@@ -548,9 +554,11 @@ class InvestmentQuoteSync {
 
   /// 返回该账户已验证的缓存；关闭联网不会抹除已有参考价，也不会接受撤销准入来源。
   /// [includeFundHistory] 供行情和参考历史页读取已清仓基金的公开观察，不让零持仓进入资产。
+  /// [includeConfiguredOptions] 供行情页读取已保存但没有持仓的美股期权；资产读取仍只含持仓。
   Map<String, MarketQuote> quotesFor(
     InvestmentPortfolio p, {
     bool includeFundHistory = false,
+    bool includeConfiguredOptions = false,
   }) {
     final result = <String, MarketQuote>{},
         owner = _owner(p),
@@ -560,7 +568,10 @@ class InvestmentQuoteSync {
       at: clock(),
     ).positions.map((p) => p.securityId).toSet();
     for (final s in p.securities.where(
-      (s) => held.contains(s.id) || (includeFundHistory && s.isFund),
+      (s) =>
+          held.contains(s.id) ||
+          (includeFundHistory && s.isFund) ||
+          (includeConfiguredOptions && isConfiguredUsOptionQuoteTarget(s)),
     )) {
       final request = MarketQuoteRequest(s),
           adapter = client.adapterFor(MarketQuoteRequest(s));
@@ -651,7 +662,7 @@ class InvestmentQuoteSync {
     return history == null || history.points.last.date.isBefore(requiredDate);
   }
 
-  /// 返回当前持有或尚需补齐清仓历史、且来源明确支持的全部公开请求。
+  /// 返回当前持有、全部已保存美股期权或尚需补齐基金历史的受支持公开请求。
   /// 所有账户信息只用于本地选择，实际传给适配器的对象仍仅含公开证券身份。
   Map<MarketQuoteAdapter, List<MarketQuoteRequest>> _requestGroups(
     InvestmentPortfolio portfolio,
@@ -663,7 +674,9 @@ class InvestmentQuoteSync {
     ).positions.map((position) => position.securityId).toSet();
     for (final security in portfolio.securities.where(
       (security) =>
-          held.contains(security.id) || _needsFundHistory(portfolio, security),
+          held.contains(security.id) ||
+          isConfiguredUsOptionQuoteTarget(security) ||
+          _needsFundHistory(portfolio, security),
     )) {
       final request = MarketQuoteRequest(security);
       final adapter = client.adapterFor(request);
@@ -674,7 +687,7 @@ class InvestmentQuoteSync {
     return groups;
   }
 
-  /// [portfolio] 有可请求的真实持仓时才参与应用级排程，避免空账户或不支持品种空转。
+  /// [portfolio] 有可请求的持仓、已保存美股期权或基金历史时才参与应用级排程。
   bool hasSupportedHoldings(InvestmentPortfolio portfolio) =>
       _requestGroups(portfolio).isNotEmpty;
 
@@ -731,12 +744,14 @@ class InvestmentQuoteSync {
       for (final quote in quotes.take(20)) {
         if (quote.source != adapter.capability.id) continue;
         final reference = quote.reference(request, clock());
-        if (reference == null ||
-            (latest != null && reference.time.isBefore(latest))) {
+        if (reference == null) continue;
+        // 未知源时间只比较观察抓取顺序，不把它写成成交时间。
+        final observedAt = reference.time ?? quote.fetchedAt;
+        if (latest != null && observedAt.isBefore(latest)) {
           continue;
         }
         selected = quote;
-        latest = reference.time;
+        latest = observedAt;
       }
       return selected == null
           ? const DraftOptionQuoteResult(DraftOptionQuoteStatus.noQuote)
@@ -898,6 +913,7 @@ class InvestmentQuoteSync {
     final revision = _generation, digest = _digest(p);
     _publish(QuoteSyncStatus.loading, owner: owner);
     final updates = <String, ({String digest, MarketQuote quote})>{};
+    final invalidated = <String>{};
     var failed = false;
     // 每批前后及持久化等待后都重新核对会话，不因前一批失败跳过取消检查。
     bool current() =>
@@ -919,6 +935,9 @@ class InvestmentQuoteSync {
             group.value.skip(offset).take(20),
           );
           final requested = {for (final q in batch) q.securityId: q};
+          final failedKeys = group.key.retainQuotesOnFailure
+              ? <String>{}
+              : {for (final q in batch) '$owner|${q.securityId}'};
           try {
             final quotes = await group.key
                 .fetchCancellable(batch, isCurrent: current)
@@ -940,6 +959,7 @@ class InvestmentQuoteSync {
                 continue;
               }
               final key = '$owner|${quote.securityId}';
+              failedKeys.remove(key);
               final previous = updates[key] ?? _cache[key];
               // 只在同一来源、同一账务上下文内比较时间；来源切换不能被旧快照挡住。
               final old =
@@ -947,7 +967,12 @@ class InvestmentQuoteSync {
                       previous?.quote.source == quote.source
                   ? previous?.quote.reference(request, clock())
                   : null;
-              if (old != null && reference.time.isBefore(old.time)) continue;
+              if (old != null &&
+                  (reference.time ?? quote.fetchedAt).isBefore(
+                    old.time ?? previous!.quote.fetchedAt,
+                  )) {
+                continue;
+              }
               updates[key] = (digest: digest, quote: quote);
             }
           } catch (_) {
@@ -958,10 +983,18 @@ class InvestmentQuoteSync {
               source: 'investment_quote',
             );
           }
+          if (failedKeys.isNotEmpty) {
+            failed = true;
+            invalidated.addAll(failedKeys);
+          }
         }
       }
       if (!current()) return false;
-      // 整轮取消时不留下未通知的部分新价格；失败批的原缓存保留，成功批统一接受。
+      // 整轮取消不落部分结果；要求手填回退的来源只清本轮缺价合约，其余来源保留旧缓存。
+      final removedQuotes = invalidated.any(_cache.containsKey);
+      for (final key in invalidated) {
+        _cache.remove(key);
+      }
       _cache.addAll(updates);
       final changed = updates.length;
       final persisted = await _persistCache();
@@ -977,7 +1010,7 @@ class InvestmentQuoteSync {
         changed: changed,
         owner: owner,
       );
-      if (changed > 0) onPricesChanged?.call();
+      if (changed > 0 || removedQuotes) onPricesChanged?.call();
       return changed > 0;
     } finally {
       // 即使离页已撤销结果，也要等真实请求退出后才解除该账户的防重复保护。

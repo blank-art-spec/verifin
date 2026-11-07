@@ -1,10 +1,12 @@
 import 'dart:async';
 import 'dart:convert';
+import 'dart:io';
 
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/investments/alpaca_option_quote_adapter.dart';
 import 'package:verifin/app/investments/investment_quote_sync.dart';
 import 'package:verifin/app/investments/market_quote.dart';
+import 'package:verifin/app/investments/nasdaq_option_quote_adapter.dart';
 import 'package:verifin/app/investments/production_market_quotes.dart';
 import 'package:verifin/app/investments/stock_cash_math.dart';
 import 'package:verifin/app/investments/stock_projection.dart';
@@ -126,22 +128,239 @@ class _OptionTransport implements AlpacaOptionQuoteTransport {
   void close() => closed = true;
 }
 
-/// 未持有的股票及基金若意外创建连接，立刻使测试失败，绝不触达真实网络。
+/// 旧来源显式注入，保留凭证隔离与逐项采用的回归覆盖；生产工厂已不用 Alpaca。
 MarketQuoteClient _client(List<_OptionTransport> transports, DateTime time) =>
-    buildProductionMarketQuoteClient(
-      tencentTransportFactory: () => throw StateError('期权持仓不应连接股票来源'),
-      cmsTransportFactory: () => throw StateError('期权持仓不应连接基金来源'),
-      alpacaTransportFactory: () {
-        final transport = _OptionTransport(time);
+    MarketQuoteClient(
+      allowResearchSources: true,
+      adapters: [
+        AlpacaOptionQuoteAdapter(
+          transportFactory: () {
+            final transport = _OptionTransport(time);
+            transports.add(transport);
+            return transport;
+          },
+          clock: () => time,
+        ),
+      ],
+    );
+
+class _NasdaqTransport implements NasdaqOptionQuoteTransport {
+  _NasdaqTransport({this.available = true});
+  bool available;
+  final uris = <Uri>[];
+  bool closed = false;
+
+  @override
+  Future<NasdaqOptionQuoteResponse> get(Uri uri) async {
+    uris.add(uri);
+    return NasdaqOptionQuoteResponse(
+      statusCode: 200,
+      body: Stream.value(
+        available
+            ? File(
+                'test/fixtures/investments/nasdaq_option_detail_20261107.json',
+              ).readAsBytesSync()
+            : utf8.encode('{"data":null,"status":{"rCode":200}}'),
+      ),
+    );
+  }
+
+  @override
+  void close() => closed = true;
+}
+
+/// 对应已保存的真实行情身份；数量、成本、乘数和后备价始终只是本地测试事实。
+InvestmentPortfolio _nasdaqHolding() {
+  final options = [
+    for (final right in OptionRight.values)
+      StockSecurity(
+        symbol: right == OptionRight.call
+            ? 'AVGO261109C00265000'
+            : 'AVGO261109P00265000',
+        name: '私有期权持仓',
+        market: StockMarket.us,
+        currencyCode: 'USD',
+        option: OptionContract(
+          underlyingId: avgoFixture.id,
+          expiry: '2026-11-09',
+          right: right,
+          strike: '265',
+          premiumMultiplier: right == OptionRight.call ? '100' : '10',
+          settlement: OptionSettlement.unsupported,
+          specification: '私有规格不发送',
+        ),
+      ),
+  ];
+  return InvestmentPortfolio(
+    accountId: 'private-option-account',
+    bookId: defaultLedgerBookId,
+    currencyCode: 'USD',
+    openedAt: DateTime.utc(2026, 10, 1),
+    openingCash: '43210',
+    securities: [avgoFixture, ...options],
+    openingHoldings: [
+      for (final option in options)
+        StockHolding(
+          securityId: option.id,
+          short: false,
+          quantity: '2',
+          cost: '1111',
+        ),
+    ],
+    manualPrices: {for (final option in options) option.id: '2'},
+  );
+}
+
+/// 正式来源用真实公开响应，旧 Alpaca 回归仍用本地合成数据，均不触达网络。
+void main() {
+  test('生产期权无需凭证，联网授权后查询并保留手填和真实账务', () async {
+    final time = DateTime.utc(2026, 11, 7, 14);
+    final transports = <_NasdaqTransport>[];
+    final client = buildProductionMarketQuoteClient(
+      tencentTransportFactory: () => throw StateError('不应连接股票来源'),
+      cmsTransportFactory: () => throw StateError('不应连接基金来源'),
+      nasdaqTransportFactory: () {
+        final transport = _NasdaqTransport();
         transports.add(transport);
         return transport;
       },
       clock: () => time,
     );
+    final portfolio = _nasdaqHolding();
+    final before = portfolio.toJson();
+    final call = portfolio.securities[1], put = portfolio.securities[2];
+    expect(
+      client.adapterFor(MarketQuoteRequest(call)),
+      isA<NasdaqOptionQuoteAdapter>(),
+    );
+    expect(client.adapters.whereType<AlpacaOptionQuoteAdapter>(), isEmpty);
+    final store = LocalKeyValueStore();
+    final sync = InvestmentQuoteSync(
+      store: store,
+      client: client,
+      clock: () => time,
+    );
+    addTearDown(sync.dispose);
+    sync.reconcile([portfolio]);
+    sync.setVisible(portfolio);
+    expect(await sync.refresh(portfolio, isCurrent: () => true), isFalse);
+    expect(transports, isEmpty);
+    expect(await sync.configure(enabled: true, automatic: false), isTrue);
+    expect(transports, isEmpty);
+    expect(await sync.refresh(portfolio, isCurrent: () => true), isTrue);
+    expect(transports.single.uris, hasLength(1));
+    expect(transports.single.closed, isTrue);
+    final quotes = sync.quotesFor(portfolio);
+    expect(quotes[call.id]!.last, '32.66');
+    expect(quotes[put.id]!.last, '0.38');
+    for (final quote in quotes.values) {
+      expect(quote.source, 'Nasdaq Options');
+      expect(quote.lastAt, isNull);
+      expect(quote.sourceTimeUnknown, isTrue);
+      expect(quote.fetchedAt, time);
+    }
+    expect(store.read('investment_quote_cache_v1'), contains('Nasdaq Options'));
+    expect(portfolio.toJson(), before);
+    expect(portfolio.marketPriceIds, isEmpty);
+    expect(
+      investmentCashBalance(portfolio: portfolio, entries: const []),
+      43210,
+    );
+    final address = transports.single.uris.single.toString();
+    for (final private in [portfolio.accountId, '43210', '1111', call.name]) {
+      expect(address, isNot(contains(private)));
+    }
+  });
 
-/// 验证正式入口的期权接线与账务隔离；所有历史成交和凭证均为内存合成输入。
-void main() {
-  test('生产期权来源配置与联网各自授权，获取和清除缓存均不改账务', () async {
+  test('Nasdaq 未挂牌或无价时保持手填，不需要补填API密钥', () async {
+    final transport = _NasdaqTransport(available: false);
+    final portfolio = _nasdaqHolding();
+    final before = portfolio.toJson();
+    final sync = InvestmentQuoteSync(
+      store: LocalKeyValueStore(),
+      client: buildProductionMarketQuoteClient(
+        tencentTransportFactory: () => throw StateError('不应连接股票来源'),
+        cmsTransportFactory: () => throw StateError('不应连接基金来源'),
+        nasdaqTransportFactory: () => transport,
+      ),
+    );
+    addTearDown(sync.dispose);
+    sync.reconcile([portfolio]);
+    sync.setVisible(portfolio);
+    expect(await sync.configure(enabled: true, automatic: false), isTrue);
+    expect(await sync.refresh(portfolio, isCurrent: () => true), isFalse);
+    expect(sync.quotesFor(portfolio), isEmpty);
+    expect(portfolio.toJson(), before);
+    expect(transport.closed, isTrue);
+  });
+
+  test('Nasdaq 参考价逐项采用且只乘一次，刷新缺价后恢复手填估值', () async {
+    final transport = _NasdaqTransport();
+    final client = buildProductionMarketQuoteClient(
+      tencentTransportFactory: () => throw StateError('不应连接股票来源'),
+      cmsTransportFactory: () => throw StateError('不应连接基金来源'),
+      nasdaqTransportFactory: () => transport,
+    );
+    final controller = await VeriFinController.create(
+      LocalKeyValueStore(),
+      repository: InMemoryLedgerRepository(),
+      marketQuoteClient: client,
+    );
+    addTearDown(controller.dispose);
+    final account = investmentAccountFixture();
+    controller.addAccount(account);
+    await controller.waitForPendingWrites();
+    final fixture = _nasdaqHolding();
+    expect(
+      await controller.enableInvestment(
+        accountId: account.id,
+        openingCash: fixture.openingCash,
+        openedAt: fixture.openedAt,
+        securities: fixture.securities,
+        openingHoldings: fixture.openingHoldings,
+        manualPrices: fixture.manualPrices,
+      ),
+      isTrue,
+    );
+    final call = fixture.securities[1], put = fixture.securities[2];
+    final initial = controller.investmentFor(account.id)!;
+    final facts = initial.toJson()..remove('marketPriceIds');
+    final sync = controller.investmentQuoteSync;
+    sync.setVisible(initial);
+    expect(await sync.configure(enabled: true, automatic: false), isTrue);
+    expect(await sync.refresh(initial, isCurrent: () => true), isTrue);
+    expect(controller.accountAssetValue(account), 43650);
+    for (final security in [call, put]) {
+      expect(
+        await controller.setInvestmentMarketPrice(
+          account.id,
+          security.id,
+          true,
+        ),
+        isTrue,
+      );
+    }
+    var portfolio = controller.investmentFor(account.id)!;
+    expect(controller.pricedInvestmentPortfolio(portfolio).manualPrices, {
+      call.id: '32.66',
+      put.id: '0.38',
+    });
+    // 43210 + 2 张 × 100 × 32.66 + 2 张 × 10 × 0.38。
+    expect(controller.accountAssetValue(account), 49749.6);
+    expect(controller.accountBalance(account), 43210);
+    transport.available = false;
+    expect(await sync.refresh(portfolio, isCurrent: () => true), isFalse);
+    expect(sync.quotesFor(portfolio), isEmpty);
+    portfolio = controller.investmentFor(account.id)!;
+    expect(controller.accountAssetValue(account), 43650);
+    expect(controller.pricedInvestmentPortfolio(portfolio).manualPrices, {
+      call.id: '2',
+      put.id: '2',
+    });
+    expect(portfolio.toJson()..remove('marketPriceIds'), facts);
+  });
+
+  test('显式旧期权来源配置与联网各自授权，获取和清除缓存均不改账务', () async {
     final time = DateTime.utc(2026, 11, 5, 4);
     final transports = <_OptionTransport>[];
     final client = _client(transports, time);
@@ -265,7 +484,7 @@ void main() {
     expect(jsonEncode(portfolio.toJson()), original);
   });
 
-  test('生产期权报价逐项采用，100 和 10 乘数只在资产计算中应用一次', () async {
+  test('显式旧期权报价逐项采用，100 和 10 乘数只在资产计算中应用一次', () async {
     final time = DateTime.now().toUtc();
     final transports = <_OptionTransport>[];
     final client = _client(transports, time);
@@ -386,11 +605,14 @@ void main() {
     final time = DateTime.utc(2026, 11, 5, 4);
     final gate = Completer<void>();
     final transport = _OptionTransport(time, firstResponseGate: gate);
-    final client = buildProductionMarketQuoteClient(
-      tencentTransportFactory: () => throw StateError('期权持仓不应连接股票来源'),
-      cmsTransportFactory: () => throw StateError('期权持仓不应连接基金来源'),
-      alpacaTransportFactory: () => transport,
-      clock: () => time,
+    final client = MarketQuoteClient(
+      allowResearchSources: true,
+      adapters: [
+        AlpacaOptionQuoteAdapter(
+          transportFactory: () => transport,
+          clock: () => time,
+        ),
+      ],
     );
     client.adapters.whereType<AlpacaOptionQuoteAdapter>().single.configure(
       keyId: _testKey,

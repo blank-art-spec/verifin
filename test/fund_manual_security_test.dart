@@ -218,7 +218,7 @@ void main() {
         controllerAlive = true;
         expect(controller.investmentFor(account.id)!.toJson(), originalJson);
         final backup = controller.exportDataJson();
-        expect((jsonDecode(backup) as Map)['version'], 17);
+        expect((jsonDecode(backup) as Map)['version'], 18);
         controller.importDataJson(backup, dryRun: true);
         await controller.waitForPendingWrites();
         expect(controller.investmentFor(account.id)!.toJson(), originalJson);

@@ -442,11 +442,13 @@ Map<String, String> _otherHistoricalPrices({
   final prices = <String, String>{};
   for (final id in securityIds) {
     final fact = snapshot.prices[id];
+    final quotedAt = fact?.quotedAt;
     if (fact == null ||
+        quotedAt == null ||
+        fact.sourceTimeUnknown ||
         (!fact.manual && fact.source.isEmpty) ||
-        (fact.dateOnly && !isCanonicalQuoteDate(fact.quotedAt)) ||
-        (fact.dateOnly ? fact.quotedAt : _hongKongDate(fact.quotedAt)) !=
-            date) {
+        (fact.dateOnly && !isCanonicalQuoteDate(quotedAt)) ||
+        (fact.dateOnly ? quotedAt : _hongKongDate(quotedAt)) != date) {
       continue;
     }
     try {

@@ -260,11 +260,13 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
                                     ),
                                   ),
                                   Text(
-                                    formatQuoteTime(
-                                      context,
-                                      fact.value.quotedAt,
-                                      dateOnly: fact.value.dateOnly,
-                                    ),
+                                    fact.value.quotedAt == null
+                                        ? l.marketQuoteTimeUnknown
+                                        : formatQuoteTime(
+                                            context,
+                                            fact.value.quotedAt!,
+                                            dateOnly: fact.value.dateOnly,
+                                          ),
                                     style: Theme.of(context).textTheme.bodySmall
                                         ?.copyWith(
                                           color: Theme.of(
@@ -272,6 +274,15 @@ class _InvestmentHistoryPageState extends State<InvestmentHistoryPage> {
                                           ).colorScheme.onSurfaceVariant,
                                         ),
                                   ),
+                                  if (fact.value.fetchedAt != null)
+                                    DetailInfoRow(
+                                      inline: true,
+                                      label: l.investFetchedAt,
+                                      value: formatQuoteTime(
+                                        context,
+                                        fact.value.fetchedAt!,
+                                      ),
+                                    ),
                                 ],
                               ),
                             ),

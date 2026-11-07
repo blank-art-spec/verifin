@@ -178,10 +178,12 @@ mixin _InvestmentOps on _ControllerOps {
           if (price == null) continue;
           facts[security.id] = InvestmentPriceFact(
             price: price,
-            quotedAt: ref?.time ?? at,
+            quotedAt: ref == null ? at : ref.time,
             manual: ref == null,
             source: ref == null ? '' : q!.source,
             dateOnly: ref != null && q!.dateOnly,
+            sourceTimeUnknown: ref != null && q!.sourceTimeUnknown,
+            fetchedAt: ref != null && q!.sourceTimeUnknown ? q.fetchedAt : null,
           );
         }
         final rate = exchangeRateFor(p.currencyCode, at);
@@ -1049,23 +1051,42 @@ void validateInvestmentPortfolios(
       }
       for (final fact in snapshot.prices.entries) {
         final value = InvestmentDecimal.parse(fact.value.price);
-        if (!p.securities.any((s) => s.id == fact.key) ||
+        final security = p.securities
+            .where((s) => s.id == fact.key)
+            .firstOrNull;
+        final quotedAt = fact.value.quotedAt;
+        final fetchedAt = fact.value.fetchedAt;
+        if (security == null ||
             value.units < BigInt.zero ||
+            (fact.value.sourceTimeUnknown
+                ? (fact.value.manual ||
+                      fact.value.dateOnly ||
+                      security.option == null ||
+                      security.market != StockMarket.us ||
+                      security.currencyCode != 'USD' ||
+                      value.units <= BigInt.zero ||
+                      quotedAt != null ||
+                      fetchedAt == null ||
+                      fetchedAt.isAfter(
+                        snapshot.capturedAt.add(const Duration(minutes: 5)),
+                      ))
+                : (quotedAt == null || fetchedAt != null)) ||
             (!fact.value.dateOnly &&
-                fact.value.quotedAt.isAfter(
-                  snapshot.capturedAt.add(const Duration(minutes: 5)),
-                )) ||
+                (quotedAt?.isAfter(
+                      snapshot.capturedAt.add(const Duration(minutes: 5)),
+                    ) ??
+                    false)) ||
             (!fact.value.manual && fact.value.source.isEmpty)) {
           throw const FormatException('历史参考价依据不合法');
         }
         if (fact.value.dateOnly &&
             (value.units <= BigInt.zero ||
                 fact.value.manual ||
-                !p.securities.firstWhere((s) => s.id == fact.key).isFund ||
-                p.securities.firstWhere((s) => s.id == fact.key).market !=
-                    StockMarket.hk ||
+                !security.isFund ||
+                security.market != StockMarket.hk ||
+                quotedAt == null ||
                 !isHongKongQuoteDateAtOrBefore(
-                  fact.value.quotedAt,
+                  quotedAt,
                   snapshot.capturedAt,
                 ))) {
           throw const FormatException('基金历史净值日期精度不合法');

@@ -313,6 +313,7 @@ class MarketQuote {
     this.delayMinutes,
     this.tradeState = QuoteTradeState.unknown,
     this.dateOnly = false,
+    this.sourceTimeUnknown = false,
     this.navHistory,
   });
   final String securityId, source, currency;
@@ -323,6 +324,10 @@ class MarketQuote {
   final int? delayMinutes;
   final QuoteTradeState tradeState;
   final bool dateOnly;
+
+  /// 来源明确未提供期权成交时间；仅采用正成交价，抓取时刻始终独立保存。
+  /// 默认 false，不能将普通来源的缺时间或解析失败静默升级为可用行情。
+  final bool sourceTimeUnknown;
   final FundNavHistory? navHistory;
 
   /// 对有效股票/期权报价显示超过二十四小时的事实提示，不推断交易所状态。
@@ -331,12 +336,14 @@ class MarketQuote {
     if (request.fund || dateOnly) return false;
     final value = reference(request, now);
     return value != null &&
-        now.difference(value.time) > const Duration(hours: 24);
+        value.time != null &&
+        now.difference(value.time!) > const Duration(hours: 24);
   }
 
   /// 校验身份、单位和字段时间；期权优先有效双边中间值，否则用带时间的正成交价。
-  /// 不将零/负数、时间未知、明显未来时间或抓取成功自动解释成有效估值。
-  ({String price, DateTime time, bool midpoint})? reference(
+  /// 只有显式标注源时间未知的美股期权可采用无时间成交价；时间仍返回 null。
+  /// 不将零/负数、未标注的缺时间、明显未来时间或抓取成功自动解释成有效估值。
+  ({String price, DateTime? time, bool midpoint})? reference(
     MarketQuoteRequest request,
     DateTime now,
   ) {
@@ -349,6 +356,17 @@ class MarketQuote {
                 ? QuotePriceUnit.fundUnit
                 : QuotePriceUnit.share) ||
         fetchedAt.isAfter(now.add(const Duration(minutes: 5))) ||
+        (sourceTimeUnknown &&
+            (!request.option ||
+                request.fund ||
+                request.market != StockMarket.us ||
+                request.currency != 'USD' ||
+                dateOnly ||
+                lastAt != null ||
+                bidAt != null ||
+                askAt != null ||
+                bid != null ||
+                ask != null)) ||
         (delayMinutes != null && delayMinutes! < 0) ||
         (navHistory != null &&
             (!request.fund || request.option || !_hasValidFundHistory(now))) ||
@@ -383,6 +401,9 @@ class MarketQuote {
 
     try {
       final b = number(bid), a = number(ask), l = number(last);
+      if (sourceTimeUnknown && l != null && l.units > BigInt.zero) {
+        return (price: l.toString(), time: null, midpoint: false);
+      }
       if (request.option &&
           b != null &&
           a != null &&
@@ -459,6 +480,7 @@ class MarketQuote {
       'delayMinutes': delayMinutes,
       'tradeState': tradeState.name,
       if (dateOnly) 'dateOnly': true,
+      if (sourceTimeUnknown) 'sourceTimeUnknown': true,
       if (navHistory != null) 'navHistory': navHistory!.toJson(),
     };
   }
@@ -483,6 +505,7 @@ class MarketQuote {
       delayMinutes: json['delayMinutes'] as int?,
       tradeState: QuoteTradeState.values.byName(json['tradeState'] as String),
       dateOnly: json['dateOnly'] as bool? ?? false,
+      sourceTimeUnknown: json['sourceTimeUnknown'] as bool? ?? false,
       navHistory: json['navHistory'] == null
           ? null
           : FundNavHistory.fromJson(json['navHistory']),
@@ -517,6 +540,10 @@ bool isHongKongQuoteDateAtOrBefore(DateTime date, DateTime instant) {
 /// 一个固定主机来源适配器；生产实现必须限制单次15秒/512KiB、不绕过拒绝和跳转。
 abstract class MarketQuoteAdapter {
   QuoteSourceCapability get capability;
+
+  /// 来源失败或没有合格报价时默认保留该来源旧缓存。
+  /// 明确要求失败退回手填的来源覆盖为 false；不会清除其他来源或手填资料。
+  bool get retainQuotesOnFailure => true;
 
   /// 判断明确的证券/品种覆盖，不用“支持美股”笼统替代真实覆盖。
   bool supports(MarketQuoteRequest request);

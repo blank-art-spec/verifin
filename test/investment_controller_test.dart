@@ -406,7 +406,7 @@ void main() {
     );
     final raw = c.exportDataJson(),
         snapshot = jsonDecode(c.exportDataJson()) as Map<String, dynamic>;
-    expect(snapshot['version'], 17);
+    expect(snapshot['version'], 18);
     c.importDataJson(raw, dryRun: true);
     expect(c.investmentFor(account.id)!.events, hasLength(1));
     c.importDataJson(raw);

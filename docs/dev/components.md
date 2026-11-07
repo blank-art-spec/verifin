@@ -1,5 +1,13 @@
 # 组件清单（Component Registry）
 
+2026-11-07 期权免配置参考行情：
+
+| 组件或函数 | 位置与约定 |
+| --- | --- |
+| `NasdaqOptionQuoteAdapter` / `NasdaqOptionQuoteTransport` | `app/investments/nasdaq_option_quote_adapter.dart`；固定匿名官方详情入口，无标的白名单，完整代码核对两侧报价；每批 20 合约、3 并发、15 秒/512 KiB，时间未知显式标记，失败回手填，不猜乘数 |
+| `MarketQuote.sourceTimeUnknown` / `InvestmentPriceFact.sourceTimeUnknown` | 显式未知仅对期权正成交价开放；来源时间可空、抓取时间独立，UI/缓存/历史依据不补造时间；历史事实随 JSON v18 保存 |
+| `MarketQuoteAdapter.retainQuotesOnFailure` | 默认保留原来源缓存；Nasdaq 为 false，只让本次失败合约缓存失效并通知资产更新，手填账务不改 |
+
 2026-11-06 基金手动资料与主动查询，范围及 Android 待验收项见[基金金额与结算](fund-amount-settlement.md)：
 
 | 组件或函数 | 位置与约定 |

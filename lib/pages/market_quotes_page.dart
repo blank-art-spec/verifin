@@ -202,11 +202,12 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
     }
     final sync = c.investmentQuoteSync;
     final held = projectStocks(p).positions.map((h) => h.securityId).toSet();
-    // 份额尚未生效的基金仍可核对净值；普通证券只列当前真实持仓，不展示空目录。
+    // 已保存美股期权包含零持仓和已平仓合约；股票与基金保留原展示范围。
     final securities = p.securities
         .where(
           (s) =>
               held.contains(s.id) ||
+              isConfiguredUsOptionQuoteTarget(s) ||
               (s.isFund &&
                   (p.openingHoldings.any((h) => h.securityId == s.id) ||
                       p.fundSubscriptions.any(
@@ -228,7 +229,11 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
             child: ValueListenableBuilder<QuoteSyncState>(
               valueListenable: sync.state,
               builder: (context, state, child) {
-                final quotes = sync.quotesFor(p, includeFundHistory: true);
+                final quotes = sync.quotesFor(
+                  p,
+                  includeFundHistory: true,
+                  includeConfiguredOptions: true,
+                );
                 return ListView(
                   padding: const EdgeInsets.fromLTRB(16, 8, 16, 28),
                   children: [
@@ -430,17 +435,19 @@ class _MarketQuotesPageState extends State<MarketQuotesPage>
                                   sync.clock(),
                                 ),
                                 delayMinutes: q.delayMinutes,
-                                quoteTime: formatQuoteTime(
-                                  context,
-                                  q
-                                      .reference(
-                                        MarketQuoteRequest(s),
-                                        sync.clock(),
-                                      )!
-                                      .time,
-                                  includeSeconds: true,
-                                  dateOnly: q.dateOnly,
-                                ),
+                                quoteTime: q.sourceTimeUnknown
+                                    ? l.marketQuoteTimeUnknown
+                                    : formatQuoteTime(
+                                        context,
+                                        q
+                                            .reference(
+                                              MarketQuoteRequest(s),
+                                              sync.clock(),
+                                            )!
+                                            .time!,
+                                        includeSeconds: true,
+                                        dateOnly: q.dateOnly,
+                                      ),
                                 dateOnly: q.dateOnly,
                               ),
                               DetailInfoRow(

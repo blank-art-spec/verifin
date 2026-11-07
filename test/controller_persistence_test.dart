@@ -104,7 +104,7 @@ void main() {
       expect(controller.entries, isEmpty);
 
       final raw = controller.exportDataJson();
-      expect((jsonDecode(raw) as Map)['version'], 17);
+      expect((jsonDecode(raw) as Map)['version'], 18);
       final beforePreview = loaded.toJson();
       controller.importDataJson(raw, dryRun: true);
       await controller.waitForPendingWrites();
@@ -248,7 +248,7 @@ void main() {
       controllerAlive = true;
       expectReconciled();
       final raw = controller.exportDataJson();
-      expect((jsonDecode(raw) as Map)['version'], 17);
+      expect((jsonDecode(raw) as Map)['version'], 18);
       controller.importDataJson(raw, dryRun: true);
       expectReconciled();
       controller.resetAllData();
@@ -511,7 +511,7 @@ void main() {
 
           final source = controller.investmentFor(account.id)!.toJson();
           final raw = controller.exportDataJson();
-          expect((jsonDecode(raw) as Map)['version'], 17);
+          expect((jsonDecode(raw) as Map)['version'], 18);
           controller.resetAllData();
           await controller.waitForPendingWrites();
           expect(await repo.loadInvestmentPortfolios(), isEmpty);
@@ -1147,7 +1147,7 @@ void main() {
     expect(posted.occurredAt, DateTime(2026, 7, 3, 12, 20));
     // 导出应能从 SQLite 恢复出的内存状态重建等价备份。
     final reExported = jsonDecode(reloaded.exportDataJson()) as Map;
-    expect(reExported['version'], 17);
+    expect(reExported['version'], 18);
     expect((reExported['data'] as Map)['entries'], isNotEmpty);
     // 冷启动后共用三地组合检查，覆盖父子关联、各币种现金、腾讯期权与独立汇率。
     expect(reloaded.activeBook.id, defaultLedgerBookId);

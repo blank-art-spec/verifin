@@ -7174,7 +7174,7 @@ class AppLocalizationsEn extends AppLocalizations {
   String get marketSettings => 'Networking and refresh';
 
   @override
-  String get marketHoldings => 'Holding reference quotes';
+  String get marketHoldings => 'Security reference quotes';
 
   @override
   String get marketEmptyHoldings =>
@@ -7417,7 +7417,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketConsent =>
-      'When enabled, only security/contract codes go to approved sources, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. Automatic refresh checks current-ledger holdings when the app opens or resumes, and pauses in the background or while locked.';
+      'When enabled, only security/contract codes go to connected sources, which can see your IP. Quantities, costs, accounts, balances and notes are not sent. Automatic refresh checks current-ledger holdings and saved US options while the app is foregrounded and unlocked.';
 
   @override
   String get marketGatePending =>
@@ -7425,11 +7425,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketResearchConsent =>
-      'When enabled, stock symbols go to Tencent, and public fund identifiers and page language to CMS. After option setup, contract symbols and authentication credentials go to Alpaca. Providers can see your IP; position sizes, costs, ledger accounts, balances and notes are not sent. Automatic refresh checks current-ledger holdings only while the app is in the foreground and unlocked.';
+      'When enabled, stock symbols go to Tencent, public fund identifiers and page language to CMS, and option underlying symbols, contract codes and expiry dates to Nasdaq. No account or key is required. Providers can see your IP; position sizes, costs, ledger accounts, balances and notes are not sent. Automatic refresh checks current-ledger holdings and saved US options only while the app is foregrounded and unlocked.';
 
   @override
   String get marketResearchNote =>
-      'Reference prices for supported stocks, daily NAV for CMS USD Money Market Fund Class B, and configured US option delayed trades are available. Choose separately for each security whether to use quotes for valuation. Option prices are at least 15 minutes delayed; trades may be older. Fund NAV has date precision only. Manual fallback prices are retained; reference returns do not create income entries.';
+      'Reference prices are available for supported stocks, CMS USD Money Market Fund Class B daily NAV and Nasdaq US options. Choose separately for each security whether to use quotes for valuation. Unknown option quote times are labeled; fetch time is not trade time. Coverage is not guaranteed. Failed or missing option quotes use the original manual fallback price. Reference returns do not create income entries.';
 
   @override
   String get marketSourceResearch => 'Public reference source';
@@ -7447,7 +7447,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketOptionUnsupported =>
-      'Set up US option quotes and check the full contract symbol against its details. Unsupported contracts keep the manual price; TEST examples are never queried.';
+      'Check the full US option symbol against its contract details. No key is required. Unsupported contracts keep the manual price; TEST examples are never queried.';
 
   @override
   String get marketSourceReview => 'Source terms and field review';
@@ -7476,7 +7476,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketFailed =>
-      'Source failure or invalid fields. Older cached quotes keep their original timestamps.';
+      'Some quotes failed or were unavailable. Options use manual fallback prices; other sources keep valid cached quotes.';
 
   @override
   String get marketCooldown =>
@@ -7497,6 +7497,9 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get marketQuoteTime => 'Source quote time';
+
+  @override
+  String get marketQuoteTimeUnknown => 'Quote time unknown';
 
   @override
   String get marketNavDate => 'NAV date';
@@ -8145,7 +8148,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupHint =>
-      'Supports standard US option symbols. Lookup sends the underlying symbol to Tencent for its name. Enable quote networking and configure free Alpaca account credentials to fetch delayed trades and the premium multiplier. A verified multiplier fills an empty field. Verify delivery terms separately.';
+      'Supports standard US option symbols. Lookup sends the underlying symbol to Tencent for its name. Enable quote networking to fetch a Nasdaq reference price without a key. Unknown quote times are labeled. Enter and verify the premium multiplier and delivery terms using broker records.';
 
   @override
   String optionLookupName(
@@ -8167,7 +8170,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupNetworkDisabled =>
-      'Contract details parsed. Enable quote networking to look up the option price and premium multiplier.';
+      'Contract details parsed. Enable quote networking to look up an option reference price without a key. Enter the premium multiplier from broker records.';
 
   @override
   String get optionLookupCredentials =>
@@ -8179,11 +8182,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupNoQuote =>
-      'No valid trade was found in the lookup window. Check the symbol or enter a reference price manually. Contracts with no recent trades may have no price.';
+      'No valid reference price was found. Check the symbol or enter a price manually. The source may not cover this underlying, expiry or contract.';
 
   @override
   String get optionLookupFailed =>
-      'The delayed option lookup failed. Check the network and Alpaca credentials, then retry or enter a price manually.';
+      'The option reference lookup failed. Retry later or enter a price manually. Existing manual prices and contract details are retained.';
 
   @override
   String optionLookupDelayHint(int minutes) {
@@ -8205,7 +8208,7 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionLookupOpeningHint =>
-      'This is the latest available quote, not a historical opening price. Check it against the opening date before using it for past holdings.';
+      'This lookup returns a reference price, not a historical opening price. Check it against the opening date before using it for past holdings.';
 
   @override
   String get optionLookupIdentityConflict =>
@@ -8244,11 +8247,11 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get optionMultiplierHelp =>
-      'Total premium = contracts × trade price × multiplier. Lookup can fill the multiplier. If unavailable, use your broker’s contract specification.';
+      'Total premium = contracts × trade price × multiplier. Nasdaq reference quotes do not provide a verified premium multiplier. Enter it manually from your broker’s contract specification.';
 
   @override
   String get optionLookupCompactHint =>
-      'A full US symbol fills identity locally. Lookup sends the public symbol and your IP; multipliers and delayed quotes require enabled market data and credentials.';
+      'A full US symbol fills identity locally. Enable quote networking for Nasdaq reference prices without a key. Public underlying symbols, contract codes and expiry dates are sent; the provider can see your IP. Verify multipliers and delivery terms using broker records.';
 
   @override
   String optionMultiplierLookupResult(String multiplier, String source) {

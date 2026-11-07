@@ -6930,7 +6930,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketSettings => '联网与刷新';
 
   @override
-  String get marketHoldings => '持仓参考行情';
+  String get marketHoldings => '证券参考行情';
 
   @override
   String get marketEmptyHoldings => '暂无需要展示的持仓行情。记录证券交易或已有持仓后，可在这里查看报价并选择估值依据。';
@@ -7153,18 +7153,18 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get marketConsent =>
-      '开启后仅向已通过评审的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。开启自动刷新后，打开应用或回前台检查当前账本持仓；退后台或锁屏暂停。';
+      '开启后仅向已装配的来源发送证券/合约代码，服务方可见 IP；不发送数量、成本、账户、余额或备注。自动刷新在应用前台且解锁时检查当前账本持仓及已保存美股期权，退后台或锁屏暂停。';
 
   @override
   String get marketGatePending => '来源尚未通过自动估值门禁，继续使用手填参考价。';
 
   @override
   String get marketResearchConsent =>
-      '开启后向腾讯发送股票代码，向招商发送公开基金标识和页面语言；配置期权来源后向 Alpaca 发送合约代码与认证凭证。服务方可见 IP；不发送持仓数量、成本、账本账户、余额或备注。自动刷新仅在应用前台且已解锁时检查当前账本持仓。';
+      '开启后向腾讯发送股票代码，向招商发送公开基金标识和页面语言，向 Nasdaq 发送期权标的、合约代码和到期日，无需账户或密钥。服务方可见 IP；不发送持仓数量、成本、账本账户、余额或备注。自动刷新仅在应用前台且已解锁时检查当前账本持仓及已保存美股期权。';
 
   @override
   String get marketResearchNote =>
-      '可获取已支持股票的参考价、招商美元货币市场基金 B 类日净值，以及配置后的美股期权延迟成交价；每只证券需单独选择是否用于估值。期权价格至少延迟 15 分钟，实际成交可能更早；基金只提供净值日期。手填后备价继续保留，参考收益不生成收入流水。';
+      '可获取已支持股票参考价、招商美元货币市场基金 B 类日净值及 Nasdaq 美股期权参考价；每只证券单独选择是否用于估值。期权报价时间未知时会明确标注，抓取时刻不代表成交时刻；不能保证所有合约都有价格。期权查询失败或无价时使用原手填后备价，参考收益不生成收入流水。';
 
   @override
   String get marketSourceResearch => '公开参考来源';
@@ -7181,7 +7181,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get marketOptionUnsupported =>
-      '请先配置美股期权行情，并核对完整合约代码与合约资料。暂不支持的合约继续手填；TEST 示例不会联网查询。';
+      '请核对完整美股合约代码与合约资料，无需配置密钥。暂不支持的合约继续手填；TEST 示例不会联网查询。';
 
   @override
   String get marketSourceReview => '来源使用条件与字段核对';
@@ -7205,7 +7205,7 @@ class AppLocalizationsZh extends AppLocalizations {
   String get marketUnavailable => '此来源/品种暂不可用，保留原参考价';
 
   @override
-  String get marketFailed => '来源失败或字段无效，保留旧缓存及其原时间';
+  String get marketFailed => '部分行情获取失败或无有效价格；期权使用手填后备价，其他来源保留有效缓存。';
 
   @override
   String get marketCooldown => '尚未到此账户的自动刷新时间，可手动刷新';
@@ -7224,6 +7224,9 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get marketQuoteTime => '来源报价时间';
+
+  @override
+  String get marketQuoteTimeUnknown => '报价时间未知';
 
   @override
   String get marketNavDate => '净值日期';
@@ -7833,7 +7836,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get optionLookupHint =>
-      '支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网并配置 Alpaca 免费账户凭证后查询延迟成交价及权利金乘数。可靠乘数会填入空白字段，交割规格仍须核对。';
+      '支持标准美股完整合约代码。点击后向腾讯查询标的名称；开启行情联网后从 Nasdaq 查询参考价，无需密钥。报价时间未知时会明确标注；权利金乘数和交割规格请按券商资料填写核对。';
 
   @override
   String optionLookupName(
@@ -7853,7 +7856,8 @@ class AppLocalizationsZh extends AppLocalizations {
   String get optionLookupNameFallback => '未查到标的名称，可保留代码生成的名称或自行修改。';
 
   @override
-  String get optionLookupNetworkDisabled => '合约资料已解析。开启参考行情联网后可查询期权价格和权利金乘数。';
+  String get optionLookupNetworkDisabled =>
+      '合约资料已解析。开启参考行情联网后可免密钥查询期权参考价；权利金乘数请按券商资料填写。';
 
   @override
   String get optionLookupCredentials =>
@@ -7863,11 +7867,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get optionLookupUnavailable => '此合约暂无可用行情来源，请手动填写参考价。';
 
   @override
-  String get optionLookupNoQuote =>
-      '查询范围内没有找到有效成交价，请核对合约代码或手动填写参考价。无近期成交的合约可能没有价格。';
+  String get optionLookupNoQuote => '没有查到有效参考价，请核对合约代码或手动填写。来源可能未覆盖该标的、到期日或合约。';
 
   @override
-  String get optionLookupFailed => '延迟期权行情查询失败，请检查网络及 Alpaca 凭证，稍后重试或手动填写。';
+  String get optionLookupFailed => '期权参考价查询失败，请稍后重试或手动填写。原手填价格和合约资料保留。';
 
   @override
   String optionLookupDelayHint(int minutes) {
@@ -7888,7 +7891,7 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get optionLookupOpeningHint =>
-      '这是最新可用报价，并非历史期初价格。录入过去的持仓时，请按期初时点核对后再采用。';
+      '这是本次查询返回的参考价，不能作为历史期初价格。录入过去的持仓时，请按期初时点核对后再采用。';
 
   @override
   String get optionLookupIdentityConflict =>
@@ -7926,11 +7929,11 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get optionMultiplierHelp =>
-      '总权利金 = 张数 × 成交价 × 乘数。查询可自动补全乘数；未查到时按券商合约规格填写。';
+      '总权利金 = 张数 × 成交价 × 乘数。Nasdaq 参考行情不提供已核实的权利金乘数，请按券商合约规格手动填写。';
 
   @override
   String get optionLookupCompactHint =>
-      '完整美股代码在本地补全资料。点击查询会发送公开代码和 IP；查询乘数与延迟价格需开启行情联网并配置凭证。';
+      '完整美股代码在本地补全资料。开启行情联网后可免密钥查询 Nasdaq 参考价；会发送公开标的、合约代码和到期日，服务方可见 IP。乘数与交割规格请按券商资料核对。';
 
   @override
   String optionMultiplierLookupResult(String multiplier, String source) {

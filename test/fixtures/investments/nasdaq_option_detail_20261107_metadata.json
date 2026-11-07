@@ -1,0 +1,13 @@
+{
+  "source": "https://api.nasdaq.com/api/quote/avgo/option-chain?assetclass=stocks&recordID=AVGO--261109C00265000",
+  "sourceRetrievedOn": "2026-11-07",
+  "kind": "匿名 HTTP 200 的真实 Nasdaq 期权详情响应，公开合约，无账户或持仓资料",
+  "discoveryPage": "https://www.nasdaq.com/market-activity/stocks/avgo/option-chain/call-put-options/avgo--261109c00265000",
+  "discoveryScript": "https://www.nasdaq.com/sites/acquia.prod/files/mercury-assets/v26.26.1/assets/api/api.Bwam0bpP.js",
+  "limitations": [
+    "仅为一次桌面网络公开查询，不代表 Android 实际连通性、持续可用性或数据使用许可已审核。",
+    "timeStamp 是来源返回的展示字段，未证明为 Last Sale 的实际成交时刻；适配器不得用它或本机抓取时刻补成交时间。",
+    "原始响应不含明确的权利金乘数，不能由合约名称或期权代码推定为 100。",
+    "测试中的身份替换、非法字段及边界变体为本地合成输入，不是真实市场响应。"
+  ]
+}

@@ -946,13 +946,21 @@ class _StockPositionCard extends StatelessWidget {
                 c.investmentQuoteSync.clock(),
               ),
               delayMinutes: quote.delayMinutes,
-              quoteTime: formatQuoteTime(
-                context,
-                quoteReference.time,
-                compact: true,
-                dateOnly: quote.dateOnly,
-              ),
+              quoteTime: quoteReference.time == null
+                  ? l.marketQuoteTimeUnknown
+                  : formatQuoteTime(
+                      context,
+                      quoteReference.time!,
+                      compact: true,
+                      dateOnly: quote.dateOnly,
+                    ),
             ),
+            if (quote.sourceTimeUnknown)
+              DetailInfoRow(
+                inline: true,
+                label: l.investFetchedAt,
+                value: formatQuoteTime(context, quote.fetchedAt, compact: true),
+              ),
           ],
           const Divider(height: 20),
           Wrap(

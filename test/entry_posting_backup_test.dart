@@ -48,7 +48,7 @@ void main() {
     source.addEntry(entry);
     await source.waitForPendingWrites();
     final exported = source.exportDataJson();
-    expect((jsonDecode(exported) as Map)['version'], 17);
+    expect((jsonDecode(exported) as Map)['version'], 18);
     final prepared = await BackupService.prepare(
       json: exported,
       passphrase: '',
