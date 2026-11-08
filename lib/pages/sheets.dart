@@ -96,7 +96,11 @@ Widget _entryPickerClearAction({
         children: [
           TextButton(
             key: const Key('entry_picker_clear'),
-            style: style,
+            style: style.merge(
+              TextButton.styleFrom(
+                foregroundColor: veriSemantic(context, veriExpense),
+              ),
+            ),
             onPressed: () {
               Navigator.of(context).pop();
               onClear();
