@@ -1,5 +1,13 @@
 # 架构导览
 
+2026-11-08：基金身份查询通过 `FundSecuritySearchClient` 按裸 ISIN 读取老虎社区跨公司
+公开目录，既有招商及惠理官网仅作补充；不按基金公司、代码前缀、所选市场或账户币种
+提前过滤。`FundIdentityCandidate` 独立保存原名、ISIN、份额类别、币种和来源，页面展示
+候选卡，字段齐全且与账户同币种时由用户显式确认填入草稿；市场仍由用户选择。
+`isValidFundIsin` 校验十二位形状及 Luhn 校验位，输入错误与来源异常分开。
+该流程只补全身份，不更改 SQLite v30 / JSON v18、不扩大自动净值或 UTC+8 金额流程。
+请求与实测边界见[基金金额与结算](fund-amount-settlement.md)。
+
 2026-11-07：生产美股期权来源改为免凭证 `NasdaqOptionQuoteAdapter`，按已配置完整
 合约查询，刷新范围包含零持仓期权。正成交价可显式携带未知源时间，界面及历史依据
 保留未知与独立抓取时刻；失败回到原手填价。完整备份为 JSON v18（兼容 v1–v17），
@@ -7,7 +15,7 @@ SQLite v30 不变。旧 Alpaca 适配器、凭证配置/存储与在线乘数查
 当前只保留腾讯股票、指定招商基金和 Nasdaq 期权来源，乘数由用户核对填写。详见
 [期权来源记录](us-option-quote-source.md)。下方较早日期的来源与版本说明属于历史。
 
-2026-11-06：`pages/fund_security_editor_page.dart` 为基金金额表单提供只返回身份的手动草稿；
+2026-11-06 初版（查询来源已由上方 2026-11-08 实现扩展）：`pages/fund_security_editor_page.dart` 为基金金额表单提供只返回身份的手动草稿；
 `searchInvestmentFunds` 经可注入的 `investments/fund_security_search.dart` 查询固定官方资料页，
 查询只补全身份、不获取净值或写库。最终仍由原基金命令随申购/持仓原子保存，香港及内地
 日期共用 `supportsFundAmountWorkflow` 的 UTC+8 范围，详见[基金金额与结算](fund-amount-settlement.md)。

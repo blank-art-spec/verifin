@@ -8,13 +8,15 @@
 | `MarketQuote.sourceTimeUnknown` / `InvestmentPriceFact.sourceTimeUnknown` | 显式未知仅对期权正成交价开放；来源时间可空、抓取时间独立，UI/缓存/历史依据不补造时间；历史事实随 JSON v18 保存 |
 | `MarketQuoteAdapter.retainQuotesOnFailure` | 默认保留原来源缓存；Nasdaq 为 false，只让本次失败合约缓存失效并通知资产更新，手填账务不改 |
 
-2026-11-06 基金手动资料与主动查询，范围及 Android 待验收项见[基金金额与结算](fund-amount-settlement.md)：
+2026-11-08 基金手动资料与通用 ISIN 查询，范围及 Android 待验收项见[基金金额与结算](fund-amount-settlement.md)：
 
 | 组件或函数 | 位置与约定 |
 | --- | --- |
-| `FundSecurityEditorPage` | `pages/fund_security_editor_page.dart`；当前实际币种账户的基金身份草稿，复用 `InvestmentSecurityAutocomplete`、`EntryEditorSurface` 与返回保护；香港/内地市场手填代码和名称，币种只读，主动点选查询结果后补全。只返回 `StockSecurity`，最终由 `FundEntryPage` 随申购/已有持仓基准保存；取消零落库，异步响应按草稿、账本及页面上下文作废 |
-| `searchInvestmentFunds(query, {market, currencyCode})` | `app/veri_fin_controller.dart`；主动查询基金身份的公共入口，可经 `create(fundSecuritySearchClient:)` 注入；不传账户或持仓、不写账目/行情缓存/偏好，失败只记录错误类型，由页面反馈并保留手填资料 |
-| `FundSecuritySearchClient` / `FundSecuritySearchTransport` | `app/investments/fund_security_search.dart`；复用 `SecuritySearchTransport` / `SecuritySearchResponse`，从白名单官方 HTTPS 资料页精确匹配 ISIN 和份额币种。当前仅核对招商美元/港元货币基金与惠理 `vpmm` 美元货币基金的已核对份额，不代表全市场搜索；匿名有界请求、不重定向、不执行脚本、不读取净值/收益率，查询 ISIN 留本机筛选 |
+| `FundSecurityEditorPage` | `pages/fund_security_editor_page.dart`；当前实际币种账户的基金身份草稿，复用本地 `InvestmentSecurityAutocomplete`、`EntryEditorSurface` 与返回保护；联网结果用独立候选卡展示原名、ISIN、份额类别、币种及来源 URL，显式确认才填入。缺字段或币种不符禁止采用，所选市场不由 ISIN 推断。只返回 `StockSecurity`，最终由 `FundEntryPage` 随申购/已有持仓基准保存；取消零落库，异步响应按草稿、账本及页面上下文作废 |
+| `FundIdentityCandidate` | `app/investments/fund_identity_candidate.dart`；查询会话内的来源身份，与已保存 `StockSecurity` 分离；缺失份额类别或币种保持未知，`hasCompleteIdentity` 校验完整性，`toSecurity(market:)` 只在用户确认后按所选市场生成草稿；不入账目、备份或行情缓存 |
+| `searchInvestmentFunds(query, {market, currencyCode})` | `app/veri_fin_controller.dart`；返回 `List<FundIdentityCandidate>` 的主动查询入口，可经 `create(fundSecuritySearchClient:)` 注入；查询不按账户市场/币种过滤，不传账户或持仓、不写账目/行情缓存/偏好，失败只记录错误类型，由页面反馈并保留手填资料 |
+| `FundSecuritySearchClient` / `FundSecuritySearchTransport` | `app/investments/fund_security_search.dart`；复用 `SecuritySearchTransport` / `SecuritySearchResponse`，向老虎社区 `/FUND/{ISIN}` 发送裸 ISIN，不限制基金公司；核对响应 `code`、`symbol` 与来源名称。既有招商/惠理官网仅补充目录未收录、缺字段或出错的身份。总时限十秒、每响应 768 KiB，匿名请求、不重定向、不执行脚本、不采用价格；目录可见 ISIN/IP，账户币种与账目不外传 |
+| `isValidFundIsin` / `FundSearchInvalidIsinException` | 同文件；校验完整十二位 ISIN 形状及 Luhn 校验位，不限制国家前缀；输入错误在联网前返回独立异常，与来源 HTTP、超时和资料结构变化区分 |
 | `supportsFundAmountWorkflow` | `app/investments/fund_workflow_math.dart`；判断明确基金品种、无期权规格及香港/内地市场，复用两地 UTC+8 纯日期边界；调用方仍校验账户币种。与 `supportsCmsDealNavAccrual` 的指定 CMS B 类规则、行情适配器的净值覆盖分别判断 |
 
 2026-11-05 多项证券期初，行为见[股票阶段记录](securities-stage02-implementation.md)

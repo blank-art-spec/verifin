@@ -17,10 +17,16 @@ class _FundTransport implements SecuritySearchTransport {
   Uri? requested;
   bool closed = false;
 
-  /// 仅记录 [uri] 并返回测试响应，不向任何远端发送请求。
+  /// 通用目录模拟尚未收录，官网请求才消费夹具流；不向远端发送请求。
   @override
   Future<SecuritySearchResponse> get(Uri uri) async {
     requested = uri;
+    if (uri.host == 'www.laohu8.com') {
+      return const SecuritySearchResponse(
+        statusCode: HttpStatus.notFound,
+        body: Stream.empty(),
+      );
+    }
     return SecuritySearchResponse(statusCode: status, body: body);
   }
 
@@ -137,13 +143,15 @@ void main() {
             currencyCode: 'USD',
           );
       expect(result, hasLength(1));
-      expect(result.single.id, 'hk:fund:${entry.key}');
+      expect(result.single.isin, entry.key);
       expect(
         result.single.name,
         'CMS USD Money Market Fund Class ${entry.value}',
       );
       expect(result.single.currencyCode, 'USD');
-      expect(result.single.option, isNull);
+      expect(result.single.shareClass, entry.value);
+      expect(result.single.hasCompleteIdentity, isTrue);
+      expect(result.single.sourceUrl, transport.requested);
       expect(transport.requested!.queryParameters, {'view': 'NPCF'});
       expect(transport.requested.toString(), isNot(contains(entry.key)));
       expect(transport.closed, isTrue);
@@ -161,7 +169,10 @@ void main() {
         transportFactory: () => transport,
       ).search(entry.key, market: StockMarket.hk, currencyCode: 'HKD');
       expect(result.single.name, 'CMS Money Market Fund Class ${entry.value}');
+      expect(result.single.isin, entry.key);
+      expect(result.single.shareClass, entry.value);
       expect(result.single.currencyCode, 'HKD');
+      expect(result.single.sourceUrl, transport.requested);
       expect(transport.requested!.queryParameters, {'view': 'CMMF'});
     }
   });
@@ -234,8 +245,11 @@ void main() {
       final result = await FundSecuritySearchClient(
         transportFactory: () => transport,
       ).search(entry.key, market: StockMarket.hk, currencyCode: entry.value.$2);
-      expect(result.single.id, 'hk:fund:${entry.key}');
+      expect(result.single.isin, entry.key);
+      expect(result.single.shareClass, entry.value.$1);
       expect(result.single.currencyCode, entry.value.$2);
+      expect(result.single.hasCompleteIdentity, isTrue);
+      expect(result.single.sourceUrl, transport.requested);
       expect(
         result.single.name,
         endsWith('Class ${entry.value.$1} ${entry.value.$2} Unhedged Acc'),
@@ -246,10 +260,14 @@ void main() {
     }
   });
 
-  test('惠理查询精确匹配ISIN，不接受币种不符、重复身份或其他基金分组的相同代码', () async {
+  test('惠理查询精确匹配ISIN，不接受来源币种不符、重复身份或其他基金分组的相同代码', () async {
     for (final sample in [
-      (html: _valuePartnersFixture(), symbol: 'HK0000000000', currency: 'USD'),
-      (html: _valuePartnersFixture(), symbol: 'HK0000945029', currency: 'USD'),
+      (html: _valuePartnersFixture(), symbol: 'HK0000000007', currency: 'USD'),
+      (
+        html: _valuePartnersFixture().replaceAll('>HKD</td>', '>USD</td>'),
+        symbol: 'HK0000945029',
+        currency: 'USD',
+      ),
       (
         html: _valuePartnersFixture().replaceAll(
           'HK0000961927',
@@ -299,7 +317,7 @@ void main() {
     }
   });
 
-  test('空代码与不支持的市场币种不联网，非法ISIN清楚失败', () async {
+  test('空代码不联网，非法形状及校验位返回明确的ISIN输入错误', () async {
     var connections = 0;
     final client = FundSecuritySearchClient(
       transportFactory: () {
@@ -311,34 +329,43 @@ void main() {
       await client.search('', market: StockMarket.hk, currencyCode: 'USD'),
       isEmpty,
     );
-    expect(
-      await client.search(
-        'HK0001039582',
-        market: StockMarket.us,
-        currencyCode: 'USD',
-      ),
-      isEmpty,
-    );
-    expect(
-      await client.search(
-        'HK0001039582',
-        market: StockMarket.hk,
-        currencyCode: 'CNY',
-      ),
-      isEmpty,
-    );
     for (final query in [
       '000198',
       '招商美元',
       'HK0001039582\nX',
       'https://example.com',
+      'HK0001039583',
+      'HK0000000000',
     ]) {
       await expectLater(
         client.search(query, market: StockMarket.hk, currencyCode: 'USD'),
-        throwsFormatException,
+        throwsA(isA<FundSearchInvalidIsinException>()),
       );
     }
     expect(connections, 0);
+  });
+
+  test('账户市场和币种不限制身份查询，返回官网实际份额币种供确认', () async {
+    for (final market in StockMarket.values) {
+      final transport = _htmlTransport(_cmsFixture());
+      final result = await FundSecuritySearchClient(
+        transportFactory: () => transport,
+      ).search('HK0001039582', market: market, currencyCode: 'HKD');
+      expect(result, hasLength(1));
+      expect(result.single.isin, 'HK0001039582');
+      expect(result.single.shareClass, 'B');
+      expect(result.single.currencyCode, 'USD');
+      expect(transport.requested!.queryParameters, {'view': 'NPCF'});
+      expect(transport.closed, isTrue);
+    }
+    final transport = _htmlTransport(_valuePartnersFixture());
+    final result = await FundSecuritySearchClient(
+      transportFactory: () => transport,
+    ).search('HK0000945029', market: StockMarket.hk, currencyCode: 'USD');
+    expect(result.single.isin, 'HK0000945029');
+    expect(result.single.shareClass, 'A');
+    expect(result.single.currencyCode, 'HKD');
+    expect(transport.closed, isTrue);
   });
 
   test('HTTP拒绝和非资料页不得假装成未找到，失败后释放传输', () async {
@@ -390,7 +417,7 @@ void main() {
     await pending.close();
   });
 
-  test('生产传输拒绝非官方地址及额外参数，允许请求不携带凭证且不跟随跳转', () async {
+  test('生产传输只允许目录ISIN与补充官网地址，不携带凭证且不跟随跳转', () async {
     final client = _Client();
     final transport = FundSecuritySearchTransport(client: client);
     for (final address in [
@@ -405,6 +432,18 @@ void main() {
       'https://www.valuepartners-group.com/en/products-services/funds/?account=private',
       'https://www.valuepartners-group.com/en/other/',
       'https://www.valuepartners-group.com.evil.example/en/products-services/funds/',
+      'http://www.laohu8.com/FUND/HK0000996873',
+      'https://www.laohu8.com.evil.example/FUND/HK0000996873',
+      'https://user:password@www.laohu8.com/FUND/HK0000996873',
+      'https://www.laohu8.com:8443/FUND/HK0000996873',
+      'https://www.laohu8.com/FUND/HK0000996873#fragment',
+      'https://www.laohu8.com/FUND/HK0000996873?account=private',
+      'https://www.laohu8.com/FUND/HK0000996873?',
+      'https://www.laohu8.com/FUND/HK0000996873/extra',
+      'https://www.laohu8.com/FUND/HK0000996873.HKD',
+      'https://www.laohu8.com/FUND/HK0000996874',
+      'https://www.laohu8.com/FUND/not-an-isin',
+      'https://www.laohu8.com/other/HK0000996873',
     ]) {
       await expectLater(
         transport.get(Uri.parse(address)),
@@ -436,6 +475,14 @@ void main() {
     );
     await transport.get(valuePartners);
     expect(client.urls, [uri, valuePartners]);
+    final tiger = Uri.https('www.laohu8.com', '/FUND/HK0000996873');
+    final overseas = Uri.https('www.laohu8.com', '/FUND/LU0395794307');
+    await transport.get(tiger);
+    await transport.get(overseas);
+    expect(client.urls, [uri, valuePartners, tiger, overseas]);
+    expect(client.request.followRedirects, isFalse);
+    expect(client.request.persistentConnection, isFalse);
+    expect(client.request.cookies, isEmpty);
     transport.close();
     expect(client.forced, isTrue);
   });

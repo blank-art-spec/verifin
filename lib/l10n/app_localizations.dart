@@ -13404,25 +13404,25 @@ abstract class AppLocalizations {
   /// No description provided for @fundSearchOnline.
   ///
   /// In zh, this message translates to:
-  /// **'按代码联网查基金'**
+  /// **'按 ISIN 联网查基金'**
   String get fundSearchOnline;
 
   /// No description provided for @fundSearchConsent.
   ///
   /// In zh, this message translates to:
-  /// **'点击后访问招商证券资产管理及惠理的官方基金资料页，服务方可见 IP；代码和账户币种仅用于本机匹配，不发送持仓或金额。目前覆盖这些来源已核对的部分香港货币基金，结果须核对份额类别与币种。'**
+  /// **'点击后按 ISIN 查询老虎社区的公开基金资料，必要时补查已有官方资料。服务方可见 ISIN 及 IP，不发送账户、持仓或金额。查询不限定基金公司；第三方资料请与券商记录核对，确认名称、份额类别、币种和来源后再填入。'**
   String get fundSearchConsent;
 
   /// No description provided for @fundSearchNoResults.
   ///
   /// In zh, this message translates to:
-  /// **'已支持的资料来源中未找到匹配当前市场和币种的代码，可继续手动填写。查询不覆盖全部基金。'**
+  /// **'未查到这个 ISIN 的基金资料，可继续手动填写。公开资料服务可能尚未收录。'**
   String get fundSearchNoResults;
 
   /// No description provided for @fundSearchChooseResult.
   ///
   /// In zh, this message translates to:
-  /// **'已找到基金资料，请从代码候选中选择并核对名称与份额类别。'**
+  /// **'已找到公开基金资料。请核对下方各项信息，确认后才会填入草稿。'**
   String get fundSearchChooseResult;
 
   /// No description provided for @fundSearchFailed.
@@ -13430,6 +13430,81 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'基金资料查询失败，请稍后重试或继续手动填写。'**
   String get fundSearchFailed;
+
+  /// No description provided for @fundSearchInvalidIsin.
+  ///
+  /// In zh, this message translates to:
+  /// **'请输入有效的 12 位 ISIN，包含正确的末位校验数字。'**
+  String get fundSearchInvalidIsin;
+
+  /// No description provided for @fundSearchResultTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'核对查询结果'**
+  String get fundSearchResultTitle;
+
+  /// No description provided for @fundSearchShareClass.
+  ///
+  /// In zh, this message translates to:
+  /// **'份额类别'**
+  String get fundSearchShareClass;
+
+  /// No description provided for @fundSearchNotProvided.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源未提供'**
+  String get fundSearchNotProvided;
+
+  /// No description provided for @fundSearchCopySource.
+  ///
+  /// In zh, this message translates to:
+  /// **'复制来源链接'**
+  String get fundSearchCopySource;
+
+  /// No description provided for @fundSearchCopyFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'链接复制失败，可长按来源网址复制。'**
+  String get fundSearchCopyFailed;
+
+  /// No description provided for @fundSearchConfirm.
+  ///
+  /// In zh, this message translates to:
+  /// **'确认并填入'**
+  String get fundSearchConfirm;
+
+  /// No description provided for @fundSearchConfirmed.
+  ///
+  /// In zh, this message translates to:
+  /// **'已按确认结果填入草稿，保存后返回申购或已有持仓页面。'**
+  String get fundSearchConfirmed;
+
+  /// No description provided for @fundSearchIncomplete.
+  ///
+  /// In zh, this message translates to:
+  /// **'来源资料不完整或无法用于当前表单，暂不能直接填入。请查看来源核对后手动填写。'**
+  String get fundSearchIncomplete;
+
+  /// No description provided for @fundSearchMarketHint.
+  ///
+  /// In zh, this message translates to:
+  /// **'当前选择的市场为“{market}”，请按券商资料核对。查询不会根据 ISIN 前缀替你选择市场。'**
+  String fundSearchMarketHint(String market);
+
+  /// No description provided for @fundSearchCurrencyMismatch.
+  ///
+  /// In zh, this message translates to:
+  /// **'这类份额使用 {fundCurrency}，当前账户使用 {accountCurrency}，不能填入此账户。请切换到对应币种账户。'**
+  String fundSearchCurrencyMismatch(
+    String fundCurrency,
+    String accountCurrency,
+  );
+
+  /// No description provided for @fundIdentityDraftTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'基金资料草稿'**
+  String get fundIdentityDraftTitle;
 
   /// No description provided for @fundManualNavHint.
   ///

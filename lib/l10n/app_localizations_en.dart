@@ -7656,23 +7656,70 @@ class AppLocalizationsEn extends AppLocalizations {
       'Enter a valid fund code and name. Use up to 64 letters, digits, dots, underscores or hyphens for the code, and up to 160 characters for the name.';
 
   @override
-  String get fundSearchOnline => 'Look up fund code online';
+  String get fundSearchOnline => 'Look up fund by ISIN';
 
   @override
   String get fundSearchConsent =>
-      'Tapping accesses official fund pages from CMS Asset Management and Value Partners. Providers can see your IP address; code and account currency are matched locally, and no holdings or amounts are sent. Coverage is limited to verified Hong Kong money market fund classes from these sources. Check the share class and currency.';
+      'Tapping looks up the ISIN in Tiger Community\'s public fund information, with existing official sources used when needed. Providers can see the ISIN and your IP address; no accounts, holdings or amounts are sent. Lookup is not limited to specific fund companies. Check third-party information against your broker\'s records and confirm the name, share class, currency and source before filling in.';
 
   @override
   String get fundSearchNoResults =>
-      'No code matching this market and currency was found in supported sources. Continue entering details manually. Lookup does not cover all funds.';
+      'No fund details were found for this ISIN. Continue entering details manually; public services may not have listed it yet.';
 
   @override
   String get fundSearchChooseResult =>
-      'Fund details found. Select a code suggestion and check the name and share class.';
+      'Public fund details found. Review the information below; it will only enter your draft after confirmation.';
 
   @override
   String get fundSearchFailed =>
       'Fund lookup failed. Try again later or continue entering details manually.';
+
+  @override
+  String get fundSearchInvalidIsin =>
+      'Enter a valid 12-character ISIN, including the correct final check digit.';
+
+  @override
+  String get fundSearchResultTitle => 'Review lookup result';
+
+  @override
+  String get fundSearchShareClass => 'Share class';
+
+  @override
+  String get fundSearchNotProvided => 'Not provided by source';
+
+  @override
+  String get fundSearchCopySource => 'Copy source link';
+
+  @override
+  String get fundSearchCopyFailed =>
+      'Could not copy the link. Long-press the source URL to copy it.';
+
+  @override
+  String get fundSearchConfirm => 'Confirm and fill in';
+
+  @override
+  String get fundSearchConfirmed =>
+      'The confirmed details are now in your draft. Save to return to the subscription or existing-holdings form.';
+
+  @override
+  String get fundSearchIncomplete =>
+      'The source details are incomplete or cannot be used in this form. Review the source and enter the details manually.';
+
+  @override
+  String fundSearchMarketHint(String market) {
+    return 'The selected market is “$market”. Check it against your broker\'s records. Lookup does not choose a market from the ISIN prefix.';
+  }
+
+  @override
+  String fundSearchCurrencyMismatch(
+    String fundCurrency,
+    String accountCurrency,
+  ) {
+    return 'This share class uses $fundCurrency, but this account uses $accountCurrency. It cannot be added to this account. Switch to an account in the matching currency.';
+  }
+
+  @override
+  String get fundIdentityDraftTitle => 'Fund details draft';
 
   @override
   String get fundManualNavHint =>

@@ -31,6 +31,7 @@ import 'investments/stock_cash_math.dart';
 import 'investments/market_quote.dart';
 import 'investments/security_search.dart';
 import 'investments/fund_security_search.dart';
+import 'investments/fund_identity_candidate.dart';
 import 'investments/investment_quote_sync.dart';
 import 'investments/investment_valuation.dart';
 import 'investments/fund_reference_history.dart';
@@ -292,10 +293,11 @@ class VeriFinController extends ChangeNotifier
   final SecuritySearchClient _securitySearchClient;
   final FundSecuritySearchClient _fundSecuritySearchClient;
 
-  /// 主动查询 [query] 基金代码，按 [market] 和账户实际 [currencyCode] 核对公开身份。
-  /// 只返回待用户选择的资料，不发送账户或金额，不改变行情开关或持仓。
+  /// 主动查询 [query] 的公开身份，保留实际份额币种供页面与 [currencyCode] 核对。
+  /// [market] 由用户选择；查询不按市场或账户币种隐藏候选，不发送账户或金额。
+  /// 只返回待用户确认的资料，不改变行情开关或持仓。
   /// 失败只记录错误类型，避免将请求地址、搜索内容或账目写入日志；界面负责保留草稿并反馈。
-  Future<List<StockSecurity>> searchInvestmentFunds(
+  Future<List<FundIdentityCandidate>> searchInvestmentFunds(
     String query, {
     required StockMarket market,
     required String currencyCode,

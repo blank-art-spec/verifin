@@ -7377,21 +7377,63 @@ class AppLocalizationsZh extends AppLocalizations {
       '请填写有效的基金代码和名称。代码限 64 位字母、数字、点、下划线或短横线，名称不超过 160 字。';
 
   @override
-  String get fundSearchOnline => '按代码联网查基金';
+  String get fundSearchOnline => '按 ISIN 联网查基金';
 
   @override
   String get fundSearchConsent =>
-      '点击后访问招商证券资产管理及惠理的官方基金资料页，服务方可见 IP；代码和账户币种仅用于本机匹配，不发送持仓或金额。目前覆盖这些来源已核对的部分香港货币基金，结果须核对份额类别与币种。';
+      '点击后按 ISIN 查询老虎社区的公开基金资料，必要时补查已有官方资料。服务方可见 ISIN 及 IP，不发送账户、持仓或金额。查询不限定基金公司；第三方资料请与券商记录核对，确认名称、份额类别、币种和来源后再填入。';
 
   @override
-  String get fundSearchNoResults =>
-      '已支持的资料来源中未找到匹配当前市场和币种的代码，可继续手动填写。查询不覆盖全部基金。';
+  String get fundSearchNoResults => '未查到这个 ISIN 的基金资料，可继续手动填写。公开资料服务可能尚未收录。';
 
   @override
-  String get fundSearchChooseResult => '已找到基金资料，请从代码候选中选择并核对名称与份额类别。';
+  String get fundSearchChooseResult => '已找到公开基金资料。请核对下方各项信息，确认后才会填入草稿。';
 
   @override
   String get fundSearchFailed => '基金资料查询失败，请稍后重试或继续手动填写。';
+
+  @override
+  String get fundSearchInvalidIsin => '请输入有效的 12 位 ISIN，包含正确的末位校验数字。';
+
+  @override
+  String get fundSearchResultTitle => '核对查询结果';
+
+  @override
+  String get fundSearchShareClass => '份额类别';
+
+  @override
+  String get fundSearchNotProvided => '来源未提供';
+
+  @override
+  String get fundSearchCopySource => '复制来源链接';
+
+  @override
+  String get fundSearchCopyFailed => '链接复制失败，可长按来源网址复制。';
+
+  @override
+  String get fundSearchConfirm => '确认并填入';
+
+  @override
+  String get fundSearchConfirmed => '已按确认结果填入草稿，保存后返回申购或已有持仓页面。';
+
+  @override
+  String get fundSearchIncomplete => '来源资料不完整或无法用于当前表单，暂不能直接填入。请查看来源核对后手动填写。';
+
+  @override
+  String fundSearchMarketHint(String market) {
+    return '当前选择的市场为“$market”，请按券商资料核对。查询不会根据 ISIN 前缀替你选择市场。';
+  }
+
+  @override
+  String fundSearchCurrencyMismatch(
+    String fundCurrency,
+    String accountCurrency,
+  ) {
+    return '这类份额使用 $fundCurrency，当前账户使用 $accountCurrency，不能填入此账户。请切换到对应币种账户。';
+  }
+
+  @override
+  String get fundIdentityDraftTitle => '基金资料草稿';
 
   @override
   String get fundManualNavHint =>

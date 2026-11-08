@@ -4,6 +4,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter_test/flutter_test.dart';
 import 'package:verifin/app/common_widgets.dart';
+import 'package:verifin/app/investments/fund_identity_candidate.dart';
 import 'package:verifin/app/investments/fund_security_search.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
@@ -25,19 +26,19 @@ class _FundSearchClient extends FundSecuritySearchClient {
           String query,
           StockMarket market,
           String currency,
-          Completer<List<StockSecurity>> result,
+          Completer<List<FundIdentityCandidate>> result,
         })
       >[];
 
   /// 记录用户主动传入的 [query]、[market] 与 [currencyCode]，随后等待用例提供结果。
   /// 不读取账户、成本、数量，也不把查询结果写入父表单或仓储。
   @override
-  Future<List<StockSecurity>> search(
+  Future<List<FundIdentityCandidate>> search(
     String query, {
     required StockMarket market,
     required String currencyCode,
   }) {
-    final result = Completer<List<StockSecurity>>();
+    final result = Completer<List<FundIdentityCandidate>>();
     requests.add((
       query: query,
       market: market,
@@ -57,6 +58,19 @@ const _queriedFund = StockSecurity(
   type: InvestmentSecurityType.fund,
 );
 
+/// 公开结果包含独立份额类别和来源，不借用账户币种补全缺失资料。
+FundIdentityCandidate _candidateFor(StockSecurity security) =>
+    FundIdentityCandidate(
+      isin: security.symbol.toUpperCase(),
+      name: security.name,
+      shareClass: 'Class A',
+      currencyCode: security.currencyCode,
+      sourceName: '公开资料测试来源',
+      sourceUrl: Uri.parse('https://example.com/funds/${security.symbol}'),
+    );
+
+final _queriedCandidate = _candidateFor(_queriedFund);
+
 /// 创建已启用的美元账户；[search] 为本用例专属的无网络查询客户端。
 /// [existing] 可预置带用户自定义名称的基金及后备价，用于验证同代码复用不覆盖原资料。
 /// 返回仓储供用例验证取消不会落库，账户使用固定历史启用日，不依赖测试执行当天的时区。
@@ -67,7 +81,11 @@ Future<
     InMemoryLedgerRepository repository,
   })
 >
-_ready(_FundSearchClient search, {StockSecurity? existing}) async {
+_ready(
+  _FundSearchClient search, {
+  StockSecurity? existing,
+  String currency = 'USD',
+}) async {
   final store = LocalKeyValueStore();
   store.write('verifin.locale.v1', 'zh');
   final repository = InMemoryLedgerRepository();
@@ -76,7 +94,10 @@ _ready(_FundSearchClient search, {StockSecurity? existing}) async {
     repository: repository,
     fundSecuritySearchClient: search,
   );
-  final account = investmentAccountFixture(id: 'manual-fund-ui');
+  final account = investmentAccountFixture(
+    id: 'manual-fund-ui',
+    currency: currency,
+  );
   controller.addAccount(account);
   await controller.waitForPendingWrites();
   expect(
@@ -176,8 +197,11 @@ Future<void> _enter(WidgetTester tester, String key, String text) async {
 }
 
 /// 读取输入框当前展示的草稿，不能用查询结果或持久化模型代替真实输入状态。
-String _text(WidgetTester tester, String key) =>
-    tester.widget<TextField>(find.byKey(ValueKey(key))).controller!.text;
+Future<String> _text(WidgetTester tester, String key) async {
+  final field = find.byKey(ValueKey(key));
+  await _reveal(tester, field);
+  return tester.widget<TextField>(field).controller!.text;
+}
 
 /// 点击子页统一保存按钮，只将证券身份返回父草稿；它本身不得提交申购或持仓。
 Future<void> _saveIdentity(WidgetTester tester) async {
@@ -242,6 +266,232 @@ Future<void> _search(WidgetTester tester) async {
 /// 验收身份草稿、联网候选和最终持仓之间的明确提交边界，全部使用正式 Widget。
 void main() {
   useTestDatabases();
+
+  testWidgets('联网基金资料先展示确认入口，确认前不填入名称', (tester) async {
+    final search = _FundSearchClient();
+    final ready = await _ready(search);
+    await _pump(tester, ready.controller, ready.account);
+    await _openIdentity(tester);
+    await _enter(tester, 'fund-identity-symbol', _queriedFund.symbol);
+    await _search(tester);
+    search.requests.single.result.complete([_queriedCandidate]);
+    await tester.pumpAndSettle();
+    expect(await _text(tester, 'fund-identity-name'), isEmpty);
+    expect(find.byKey(const Key('fund-identity-confirm-0')), findsOneWidget);
+    expect(find.byKey(const Key('investment-security-options')), findsNothing);
+  });
+
+  testWidgets('币种不符和缺少份额或币种的来源仍可查看，但不能确认填入', (tester) async {
+    final search = _FundSearchClient();
+    final ready = await _ready(search);
+    await _pump(tester, ready.controller, ready.account);
+    await _openIdentity(tester);
+    await _enter(tester, 'fund-identity-name', '原来的手工名称');
+    await _enter(tester, 'fund-identity-symbol', _queriedFund.symbol);
+    await _search(tester);
+    search.requests.single.result.complete([
+      FundIdentityCandidate(
+        isin: _queriedFund.symbol,
+        name: '来源中的港币份额',
+        shareClass: 'Class P',
+        currencyCode: 'HKD',
+        sourceName: '来源一',
+        sourceUrl: Uri.parse('https://example.com/hkd'),
+      ),
+      FundIdentityCandidate(
+        isin: _queriedFund.symbol,
+        name: '缺少份额类别的来源',
+        currencyCode: 'USD',
+        sourceName: '来源二',
+        sourceUrl: Uri.parse('https://example.com/no-class'),
+      ),
+      FundIdentityCandidate(
+        isin: _queriedFund.symbol,
+        name: '缺少币种的来源',
+        shareClass: 'Class B',
+        sourceName: '来源三',
+        sourceUrl: Uri.parse('https://example.com/no-currency'),
+      ),
+    ]);
+    await tester.pumpAndSettle();
+    final l = AppLocalizations.of(
+      tester.element(find.byType(FundSecurityEditorPage)),
+    );
+    for (var i = 0; i < 3; i++) {
+      final button = find.byKey(ValueKey('fund-identity-confirm-$i'));
+      await _reveal(tester, button);
+      expect(tester.widget<FilledButton>(button).onPressed, isNull);
+      expect(find.text('来源${['一', '二', '三'][i]}'), findsOneWidget);
+      if (i == 0) {
+        expect(
+          find.text(l.fundSearchCurrencyMismatch('HKD', 'USD')),
+          findsOneWidget,
+        );
+      } else {
+        expect(find.text(l.fundSearchNotProvided), findsWidgets);
+      }
+    }
+    expect(await _text(tester, 'fund-identity-name'), '原来的手工名称');
+    expect(
+      ready.controller.investmentFor(ready.account.id)!.securities,
+      isEmpty,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final (width, scale) in [(393.0, 1.0), (360.0, 1.5)]) {
+    testWidgets('$width dp 港币基金显示完整来源，明确确认后才保存到父草稿', (tester) async {
+      final search = _FundSearchClient();
+      final ready = await _ready(search, currency: 'HKD');
+      final before = ready.controller.investmentFor(ready.account.id)!.toJson();
+      await _pump(
+        tester,
+        ready.controller,
+        ready.account,
+        size: Size(width, 852),
+        scale: scale,
+      );
+      await _openIdentity(tester);
+      await _enter(tester, 'fund-identity-symbol', 'HK0000996873');
+      await _search(tester);
+      final candidate = FundIdentityCandidate(
+        isin: 'HK0000996873',
+        name: '平安港元货币基金 P 类（港元）',
+        shareClass: 'P 类',
+        currencyCode: 'HKD',
+        sourceName: '公开资料目录',
+        sourceUrl: Uri.parse(
+          'https://example.com/funds/hong-kong-dollar-money-market-fund/HK0000996873?lang=zh-hk',
+        ),
+      );
+      search.requests.single.result.complete([candidate]);
+      await tester.pumpAndSettle();
+      expect(await _text(tester, 'fund-identity-name'), isEmpty);
+      final confirm = find.byKey(const Key('fund-identity-confirm-0'));
+      await _reveal(tester, confirm);
+      expect(find.text(candidate.sourceUrl.toString()), findsOneWidget);
+      await tester.tap(confirm);
+      await tester.pumpAndSettle();
+      expect(await _text(tester, 'fund-identity-name'), candidate.name);
+      expect(
+        ready.controller.investmentFor(ready.account.id)!.toJson(),
+        before,
+      );
+      await _saveIdentity(tester);
+      expect(find.text(candidate.name), findsOneWidget);
+      expect(
+        ready.controller.investmentFor(ready.account.id)!.toJson(),
+        before,
+      );
+      await Navigator.of(tester.element(find.byType(FundEntryPage))).maybePop();
+      await tester.pumpAndSettle();
+      await tester.tap(find.widgetWithText(TextButton, '不保存'));
+      await tester.pumpAndSettle();
+      expect(
+        (await ready.repository.loadInvestmentPortfolios()).single.toJson(),
+        before,
+      );
+      expect(tester.takeException(), isNull);
+    });
+  }
+
+  testWidgets('已返回的候选在草稿改动后失效，不能填入另一代码', (tester) async {
+    final search = _FundSearchClient();
+    final ready = await _ready(search);
+    await _pump(tester, ready.controller, ready.account);
+    await _openIdentity(tester);
+    await _enter(tester, 'fund-identity-symbol', _queriedFund.symbol);
+    await _search(tester);
+    search.requests.single.result.complete([_queriedCandidate]);
+    await tester.pumpAndSettle();
+    await _enter(tester, 'fund-identity-symbol', 'HK0000996873');
+    expect(find.byKey(const Key('fund-identity-candidate-0')), findsNothing);
+    expect(await _text(tester, 'fund-identity-name'), isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('非法ISIN显示输入提示并保留手工资料，不误报网络失败', (tester) async {
+    final search = _FundSearchClient();
+    final ready = await _ready(search);
+    await _pump(tester, ready.controller, ready.account);
+    await _openIdentity(tester);
+    await _enter(tester, 'fund-identity-name', '保留的基金名称');
+    await _enter(tester, 'fund-identity-symbol', 'HK0000996874');
+    await _search(tester);
+    search.requests.single.result.completeError(
+      FundSearchInvalidIsinException(),
+    );
+    await tester.pumpAndSettle();
+    final l = AppLocalizations.of(
+      tester.element(find.byType(FundSecurityEditorPage)),
+    );
+    expect(find.text(l.fundSearchInvalidIsin), findsOneWidget);
+    expect(find.text(l.fundSearchFailed), findsNothing);
+    expect(await _text(tester, 'fund-identity-name'), '保留的基金名称');
+    expect(await _text(tester, 'fund-identity-symbol'), 'HK0000996874');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('复制候选来源只写公开网址，不确认身份或修改草稿', (tester) async {
+    final search = _FundSearchClient();
+    final ready = await _ready(search);
+    await _pump(tester, ready.controller, ready.account);
+    await _openIdentity(tester);
+    await _enter(tester, 'fund-identity-symbol', _queriedFund.symbol);
+    await _search(tester);
+    search.requests.single.result.complete([_queriedCandidate]);
+    await tester.pumpAndSettle();
+    String? copied;
+    tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+      SystemChannels.platform,
+      (call) async {
+        if (call.method == 'Clipboard.setData') {
+          copied = (call.arguments as Map)['text'] as String;
+        }
+        return null;
+      },
+    );
+    addTearDown(
+      () => tester.binding.defaultBinaryMessenger.setMockMethodCallHandler(
+        SystemChannels.platform,
+        null,
+      ),
+    );
+    final copy = find.byKey(const Key('fund-identity-copy-source-0'));
+    await _reveal(tester, copy);
+    await tester.tap(copy);
+    await tester.pumpAndSettle();
+    expect(copied, _queriedCandidate.sourceUrl.toString());
+    expect(await _text(tester, 'fund-identity-name'), isEmpty);
+    expect(
+      ready.controller.investmentFor(ready.account.id)!.securities,
+      isEmpty,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('离开基金资料页后完成的查询不重新打开候选或写入资料', (tester) async {
+    final search = _FundSearchClient();
+    final ready = await _ready(search);
+    final before = ready.controller.investmentFor(ready.account.id)!.toJson();
+    await _pump(tester, ready.controller, ready.account);
+    await _openIdentity(tester);
+    await _enter(tester, 'fund-identity-symbol', _queriedFund.symbol);
+    await _search(tester);
+    await Navigator.of(
+      tester.element(find.byType(FundSecurityEditorPage)),
+    ).maybePop();
+    await tester.pumpAndSettle();
+    await tester.tap(find.widgetWithText(TextButton, '不保存'));
+    await tester.pumpAndSettle();
+    expect(find.byType(FundSecurityEditorPage), findsNothing);
+    search.requests.single.result.complete([_queriedCandidate]);
+    await tester.pumpAndSettle();
+    expect(find.byKey(const Key('fund-identity-candidate-0')), findsNothing);
+    expect(find.text(_queriedCandidate.name), findsNothing);
+    expect(ready.controller.investmentFor(ready.account.id)!.toJson(), before);
+    expect(tester.takeException(), isNull);
+  });
 
   testWidgets('新增其他基金只返回父草稿，父页不保存时不留下证券或持仓', (tester) async {
     final search = _FundSearchClient();
@@ -313,7 +563,7 @@ void main() {
     });
   }
 
-  testWidgets('输入不联网，查询返回仅展示候选，主动点选后才带入名称', (tester) async {
+  testWidgets('输入不联网，查询返回展示来源及完整身份，确认后才带入名称', (tester) async {
     final search = _FundSearchClient();
     final ready = await _ready(search);
     await _pump(tester, ready.controller, ready.account);
@@ -325,21 +575,23 @@ void main() {
     expect(search.requests.single.query, _queriedFund.symbol);
     expect(search.requests.single.market, StockMarket.hk);
     expect(search.requests.single.currency, 'USD');
-    search.requests.single.result.complete([_queriedFund]);
+    search.requests.single.result.complete([_queriedCandidate]);
     await tester.pumpAndSettle();
-    expect(_text(tester, 'fund-identity-name'), '手工名称仍待核对');
-    final candidate = find.byKey(
-      ValueKey('investment-security-${_queriedFund.id}'),
-    );
+    expect(await _text(tester, 'fund-identity-name'), '手工名称仍待核对');
+    final candidate = find.byKey(const Key('fund-identity-confirm-0'));
+    await _reveal(tester, candidate);
     expect(candidate, findsOneWidget);
+    expect(find.text(_queriedCandidate.shareClass!), findsOneWidget);
+    expect(find.text(_queriedCandidate.sourceName), findsOneWidget);
+    expect(find.text(_queriedCandidate.sourceUrl.toString()), findsOneWidget);
     expect(
       ready.controller.investmentFor(ready.account.id)!.securities,
       isEmpty,
     );
     await tester.tap(candidate);
     await tester.pumpAndSettle();
-    expect(_text(tester, 'fund-identity-name'), _queriedFund.name);
-    expect(_text(tester, 'fund-identity-symbol'), _queriedFund.symbol);
+    expect(await _text(tester, 'fund-identity-name'), _queriedFund.name);
+    expect(await _text(tester, 'fund-identity-symbol'), _queriedFund.symbol);
     await _saveIdentity(tester);
     expect(find.text(_queriedFund.name), findsOneWidget);
     expect(
@@ -357,17 +609,17 @@ void main() {
     await _enter(tester, 'fund-identity-symbol', _queriedFund.symbol);
     await _search(tester);
     await _enter(tester, 'fund-identity-name', '等待期间填写的新名称');
-    search.requests.first.result.complete([_queriedFund]);
+    search.requests.first.result.complete([_queriedCandidate]);
     await tester.pumpAndSettle();
-    expect(_text(tester, 'fund-identity-name'), '等待期间填写的新名称');
-    expect(find.byKey(const Key('investment-security-options')), findsNothing);
+    expect(await _text(tester, 'fund-identity-name'), '等待期间填写的新名称');
+    expect(find.byKey(const Key('fund-identity-candidate-0')), findsNothing);
     await _search(tester);
     await _enter(tester, 'fund-identity-symbol', 'MANUAL-CHANGED');
-    search.requests.last.result.complete([_queriedFund]);
+    search.requests.last.result.complete([_queriedCandidate]);
     await tester.pumpAndSettle();
-    expect(_text(tester, 'fund-identity-symbol'), 'MANUAL-CHANGED');
-    expect(_text(tester, 'fund-identity-name'), '等待期间填写的新名称');
-    expect(find.byKey(const Key('investment-security-options')), findsNothing);
+    expect(await _text(tester, 'fund-identity-symbol'), 'MANUAL-CHANGED');
+    expect(await _text(tester, 'fund-identity-name'), '等待期间填写的新名称');
+    expect(find.byKey(const Key('fund-identity-candidate-0')), findsNothing);
     expect(search.requests, hasLength(2));
     expect(
       ready.controller.investmentFor(ready.account.id)!.securities,
@@ -390,8 +642,8 @@ void main() {
     search.requests.first.result.completeError(StateError('固定离线查询失败'));
     await tester.pumpAndSettle();
     expect(find.text(l.fundSearchFailed), findsOneWidget);
-    expect(_text(tester, 'fund-identity-name'), '保留的手工基金名称');
-    expect(_text(tester, 'fund-identity-symbol'), _queriedFund.symbol);
+    expect(await _text(tester, 'fund-identity-name'), '保留的手工基金名称');
+    expect(await _text(tester, 'fund-identity-symbol'), _queriedFund.symbol);
     await _search(tester);
     search.requests.last.result.complete([]);
     await tester.pumpAndSettle();
@@ -425,12 +677,12 @@ void main() {
     expect(search.requests, hasLength(1));
     ready.controller.switchLedgerBook(otherBookId);
     await tester.pumpAndSettle();
-    search.requests.single.result.complete([_queriedFund]);
+    search.requests.single.result.complete([_queriedCandidate]);
     await tester.pumpAndSettle();
-    expect(find.byKey(const Key('investment-security-options')), findsNothing);
+    expect(find.byKey(const Key('fund-identity-candidate-0')), findsNothing);
     ready.controller.switchLedgerBook(originalBookId);
     await tester.pumpAndSettle();
-    expect(_text(tester, 'fund-identity-symbol'), _queriedFund.symbol);
+    expect(await _text(tester, 'fund-identity-symbol'), _queriedFund.symbol);
     final button = find.byKey(const Key('fund-search-online'));
     expect(tester.widget<OutlinedButton>(button).onPressed, isNotNull);
     await _search(tester);
@@ -451,14 +703,14 @@ void main() {
 
   testWidgets('同代码大小写不同仍复用已有基金，查询及保存不覆盖用户名称和后备价', (tester) async {
     const existing = StockSecurity(
-      symbol: 'manual-existing',
+      symbol: 'hk0009999991',
       name: '用户自行保存的基金名称',
       market: StockMarket.hk,
       currencyCode: 'USD',
       type: InvestmentSecurityType.fund,
     );
     const remote = StockSecurity(
-      symbol: 'MANUAL-EXISTING',
+      symbol: 'HK0009999991',
       name: '查询来源中的另一种名称',
       market: StockMarket.hk,
       currencyCode: 'USD',
@@ -476,17 +728,16 @@ void main() {
     await tester.sendKeyEvent(LogicalKeyboardKey.escape);
     await tester.pumpAndSettle();
     await _search(tester);
-    search.requests.single.result.complete([remote]);
+    search.requests.single.result.complete([_candidateFor(remote)]);
     await tester.pumpAndSettle();
-    final candidate = find.byKey(
-      ValueKey('investment-security-${existing.id}'),
-    );
+    final candidate = find.byKey(const Key('fund-identity-confirm-0'));
+    await _reveal(tester, candidate);
     expect(candidate, findsOneWidget);
-    expect(find.text(remote.name), findsNothing);
+    expect(find.text(remote.name), findsOneWidget);
     await tester.tap(candidate);
     await tester.pumpAndSettle();
-    expect(_text(tester, 'fund-identity-symbol'), existing.symbol);
-    expect(_text(tester, 'fund-identity-name'), existing.name);
+    expect(await _text(tester, 'fund-identity-symbol'), existing.symbol);
+    expect(await _text(tester, 'fund-identity-name'), existing.name);
     // 即使用户在“新增资料”中改名，也须复用原身份；该入口不承担修改既有基金资料。
     await _enter(tester, 'fund-identity-name', '新增页不能改写的名称');
     await _saveIdentity(tester);

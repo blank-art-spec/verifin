@@ -1,9 +1,15 @@
 /// 基金身份草稿：手工录入和主动查询共用，返回资料时不创建持仓或申购。
 library;
 
+import 'dart:async';
+
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 
 import '../app/common_widgets.dart';
+import '../app/feedback.dart';
+import '../app/investments/fund_identity_candidate.dart';
+import '../app/investments/fund_security_search.dart';
 import '../app/investments/fund_workflow_math.dart';
 import '../app/investments/investment_security_autocomplete.dart';
 import '../app/investments/investment_security_suggestions.dart';
@@ -37,11 +43,11 @@ class _FundSecurityEditorPageState extends State<FundSecurityEditorPage> {
   final _exitController = EditorExitController();
   late String _bookId, _currency, _initialSnapshot;
   StockMarket _market = StockMarket.hk;
-  List<StockSecurity> _online = const [];
-  String? _onlineQuery, _message, _error;
+  List<FundIdentityCandidate> _online = const [];
+  String? _onlineContext, _message, _error;
   StockSecurity? _result;
   bool _initialized = false, _searching = false;
-  int _generation = 0, _openRequest = 0;
+  int _generation = 0;
 
   /// 精确比较用户输入；查询中的临时状态不属于需要保存的资料。
   String get _snapshot => editorDraftSnapshot(
@@ -82,7 +88,7 @@ class _FundSecurityEditorPageState extends State<FundSecurityEditorPage> {
     setState(() {
       _searching = false;
       _online = const [];
-      _onlineQuery = null;
+      _onlineContext = null;
       _message = null;
       _error = null;
     });
@@ -124,7 +130,7 @@ class _FundSecurityEditorPageState extends State<FundSecurityEditorPage> {
     setState(() {
       _searching = true;
       _online = const [];
-      _onlineQuery = null;
+      _onlineContext = null;
       _message = null;
     });
     try {
@@ -137,13 +143,16 @@ class _FundSecurityEditorPageState extends State<FundSecurityEditorPage> {
       setState(() {
         _searching = false;
         _online = values;
-        _onlineQuery = query;
+        _onlineContext = snapshot;
         _message = values.isEmpty
             ? AppLocalizations.of(context).fundSearchNoResults
             : AppLocalizations.of(context).fundSearchChooseResult;
-        if (values.isNotEmpty && (ModalRoute.of(context)?.isCurrent ?? false)) {
-          _openRequest++;
-        }
+      });
+    } on FundSearchInvalidIsinException {
+      if (!_acceptQueryResponse(generation, snapshot)) return;
+      setState(() {
+        _searching = false;
+        _message = AppLocalizations.of(context).fundSearchInvalidIsin;
       });
     } catch (_) {
       // Controller 已记录错误类型；这里不显示可能含请求地址的原始异常。
@@ -161,6 +170,139 @@ class _FundSecurityEditorPageState extends State<FundSecurityEditorPage> {
     _symbol.text = security.symbol;
     _name.text = security.name;
     setState(() => _market = security.market);
+  }
+
+  /// 来源身份必须完整、精确命中本次代码且与实际账户同币种；市场仍由用户核对。
+  bool _canConfirm(FundIdentityCandidate candidate) =>
+      _accountAvailable() &&
+      _onlineContext == _queryContext &&
+      _online.contains(candidate) &&
+      candidate.isin == _symbol.text.trim().toUpperCase() &&
+      candidate.hasCompleteIdentity &&
+      candidate.currencyCode == _currency;
+
+  /// 用户明确核对后才更新草稿；同账户已有身份保留其名称和代码，不被来源覆盖。
+  void _confirmCandidate(FundIdentityCandidate candidate) {
+    if (!_canConfirm(candidate) ||
+        !(ModalRoute.of(context)?.isCurrent ?? false)) {
+      return;
+    }
+    final existing = VeriFinScope.of(context)
+        .investmentFor(widget.accountId)
+        ?.securities
+        .where(
+          (security) =>
+              security.isFund &&
+              security.market == _market &&
+              security.currencyCode == _currency &&
+              security.symbol.toUpperCase() == candidate.isin,
+        )
+        .firstOrNull;
+    final security = existing ?? candidate.toSecurity(market: _market);
+    _symbol.text = security.symbol;
+    _name.text = security.name;
+    setState(() {
+      _online = const [];
+      _onlineContext = null;
+      _message = AppLocalizations.of(context).fundSearchConfirmed;
+      _error = null;
+    });
+  }
+
+  /// 仅在用户点按后复制公开来源链接；不打开额外连接，也不复制账户或查询草稿。
+  Future<void> _copySource(FundIdentityCandidate candidate) async {
+    final l = AppLocalizations.of(context);
+    final feedback = VeriFeedbackHost.of(context);
+    final logger = VeriFinScope.of(context).logger;
+    try {
+      await Clipboard.setData(
+        ClipboardData(text: candidate.sourceUrl.toString()),
+      );
+      if (!mounted) return;
+      unawaited(
+        feedback.showMessage(
+          message: l.copiedToClipboard,
+          tone: VeriFeedbackTone.success,
+          duration: VeriFeedbackDuration.short,
+        ),
+      );
+    } catch (error) {
+      logger?.warning(
+        '基金来源链接复制失败，错误类型：${error.runtimeType}',
+        source: 'fund-security-search',
+      );
+      if (!mounted) return;
+      unawaited(
+        feedback.showMessage(
+          message: l.fundSearchCopyFailed,
+          tone: VeriFeedbackTone.error,
+        ),
+      );
+    }
+  }
+
+  /// 每项来源单独展示身份与可复制网址；币种不符或字段缺失也保留结果供用户核对。
+  Widget _candidateCard(int index, FundIdentityCandidate candidate) {
+    final l = AppLocalizations.of(context);
+    final currencyMismatch =
+        candidate.currencyCode != null && candidate.currencyCode != _currency;
+    return InvestmentSection(
+      key: ValueKey('fund-identity-candidate-$index'),
+      title: l.fundSearchResultTitle,
+      children: [
+        DetailInfoRow(label: l.fundCode, value: candidate.isin, inline: true),
+        DetailInfoRow(
+          label: l.commonName,
+          value: candidate.name.trim().isNotEmpty
+              ? candidate.name
+              : l.fundSearchNotProvided,
+          inline: true,
+        ),
+        DetailInfoRow(
+          label: l.fundSearchShareClass,
+          value: candidate.shareClass?.trim().isNotEmpty == true
+              ? candidate.shareClass!
+              : l.fundSearchNotProvided,
+          inline: true,
+        ),
+        DetailInfoRow(
+          label: l.commonCurrency,
+          value: candidate.currencyCode?.trim().isNotEmpty == true
+              ? candidate.currencyCode!
+              : l.fundSearchNotProvided,
+          inline: true,
+        ),
+        DetailInfoRow(
+          label: l.sourceEvidenceSourceId,
+          value: candidate.sourceName,
+          inline: true,
+        ),
+        SelectableText(candidate.sourceUrl.toString()),
+        Align(
+          alignment: AlignmentDirectional.centerStart,
+          child: TextButton.icon(
+            key: ValueKey('fund-identity-copy-source-$index'),
+            onPressed: () => _copySource(candidate),
+            icon: const Icon(Icons.copy_outlined),
+            label: Text(l.fundSearchCopySource),
+          ),
+        ),
+        InvestmentHint(l.fundSearchMarketHint(_market.label(l, fund: true))),
+        if (currencyMismatch)
+          InvestmentHint(
+            l.fundSearchCurrencyMismatch(candidate.currencyCode!, _currency),
+          ),
+        if (!candidate.hasCompleteIdentity)
+          InvestmentHint(l.fundSearchIncomplete),
+        FilledButton(
+          key: ValueKey('fund-identity-confirm-$index'),
+          onPressed: _canConfirm(candidate)
+              ? () => _confirmCandidate(candidate)
+              : null,
+          child: Text(l.fundSearchConfirm),
+        ),
+      ],
+    );
   }
 
   /// 校验代码与名称后仅生成返回值；同市场、忽略大小写的已有代码复用原身份。
@@ -234,8 +376,6 @@ class _FundSecurityEditorPageState extends State<FundSecurityEditorPage> {
       currencyCode: _currency,
       market: _market,
       type: InvestmentSecurityType.fund,
-      remoteSecurities: _online,
-      remoteQuery: _onlineQuery,
     );
     return EntryEditorSurface(
       isDirty: _snapshot != _initialSnapshot,
@@ -288,7 +428,6 @@ class _FundSecurityEditorPageState extends State<FundSecurityEditorPage> {
                     fieldKey: const Key('fund-identity-symbol'),
                     label: l.fundCode,
                     suggestions: suggestions,
-                    openRequest: _openRequest,
                     readOnly: !available,
                     onSelected: _select,
                   ),
@@ -306,6 +445,16 @@ class _FundSecurityEditorPageState extends State<FundSecurityEditorPage> {
                   ),
                   InvestmentHint(l.fundSearchConsent),
                   if (_message != null) InvestmentHint(_message!),
+                ],
+              ),
+              for (final (index, candidate) in _online.indexed) ...[
+                const SizedBox(height: 12),
+                _candidateCard(index, candidate),
+              ],
+              const SizedBox(height: 12),
+              InvestmentSection(
+                title: l.fundIdentityDraftTitle,
+                children: [
                   InvestmentInputField(
                     label: l.fundName,
                     child: TextField(

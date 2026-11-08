@@ -1,4 +1,4 @@
-/// 用户主动查询香港基金的公开身份；不采用网页价格、不改变行情设置，也不写入账目。
+/// 用户主动按 ISIN 查询公开基金身份；结果需核对，不采用网页价格或写入账目。
 library;
 
 import 'dart:async';
@@ -6,9 +6,33 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/investment.dart';
+import 'fund_identity_candidate.dart';
 import 'security_search.dart';
 
-/// 单次基金资料查询的 HTTP 传输，只允许已经核对的官方公开资料页。
+/// 只表示用户输入的 ISIN 不合法，与来源响应格式变化分别处理。
+class FundSearchInvalidIsinException implements Exception {
+  const FundSearchInvalidIsinException();
+}
+
+/// ISO 6166 的十二位字母数字形状和 Luhn 校验位；不限制国家或基金公司。
+bool isValidFundIsin(String value) {
+  if (!RegExp(r'^[A-Z]{2}[A-Z0-9]{9}[0-9]$').hasMatch(value)) return false;
+  final digits = value.codeUnits
+      .map(
+        (unit) =>
+            unit >= 65 ? (unit - 55).toString() : String.fromCharCode(unit),
+      )
+      .join();
+  var sum = 0;
+  for (var index = 0; index < digits.length; index++) {
+    var digit = digits.codeUnitAt(digits.length - index - 1) - 48;
+    if (index.isOdd) digit *= 2;
+    sum += digit ~/ 10 + digit % 10;
+  }
+  return sum % 10 == 0;
+}
+
+/// 单次基金资料传输；来源地址受约束，通用目录按任意有效 ISIN 查询。
 class FundSecuritySearchTransport implements SecuritySearchTransport {
   /// [client] 供测试核对请求配置；生产为每次查询创建独立、无凭证的客户端。
   FundSecuritySearchTransport({HttpClient? client})
@@ -19,9 +43,16 @@ class FundSecuritySearchTransport implements SecuritySearchTransport {
   final HttpClient _client;
 
   /// 核对 [uri] 的协议、主机、路径及固定产品参数后发出匿名 GET。
-  /// 查询 ISIN 只在本机筛选公开资料，账号、持仓、Cookie 和认证头均不发送。
+  /// 通用目录只接收 ISIN；账号、币种、持仓、Cookie 和认证头均不发送。
   @override
   Future<SecuritySearchResponse> get(Uri uri) async {
+    final tigerIsin = uri.path.startsWith('/FUND/')
+        ? uri.path.substring('/FUND/'.length)
+        : '';
+    final tigerPage =
+        uri.host == 'www.laohu8.com' &&
+        !uri.hasQuery &&
+        isValidFundIsin(tigerIsin);
     final cmsPage =
         uri.host == 'www.cmschina.com.hk' &&
         uri.path == '/en/AM/FundProduct' &&
@@ -36,7 +67,7 @@ class FundSecuritySearchTransport implements SecuritySearchTransport {
         uri.port != 443 ||
         uri.userInfo.isNotEmpty ||
         uri.hasFragment ||
-        (!cmsPage && !valuePartnersPage)) {
+        (!tigerPage && !cmsPage && !valuePartnersPage)) {
       throw const FormatException('基金资料查询地址不在允许范围');
     }
     final request = await _client.getUrl(uri);
@@ -59,7 +90,7 @@ class FundSecuritySearchTransport implements SecuritySearchTransport {
   void close() => _client.close(force: true);
 }
 
-/// 按完整 ISIN 核对香港基金身份；构造及输入变化不会联网。
+/// 按完整 ISIN 查询跨公司基金目录；构造及输入变化不会联网。
 class FundSecuritySearchClient {
   /// [transportFactory] 注入无网络测试响应；[requestTimeout] 覆盖请求和全部读取，
   /// 只允许缩短默认十秒时限。资料仅用来补全身份，不把历史价格当成当前净值。
@@ -83,8 +114,7 @@ class FundSecuritySearchClient {
   /// 惠理官方完整列表约 530 KiB；流读取仍有界，不能先完整下载后再判断。
   static const maximumBytes = 768 * 1024;
 
-  /// 已核对的招商身份仅用来选择其官方产品页，返回资料仍必须来自实时响应。
-  /// 其他代码查询惠理已核对的香港货币基金表，不因为没在本映射内而假造名称。
+  /// 这些映射只选择通用目录未收录时的补充官网，不限制通用 ISIN 查询。
   static const _cmsCurrencies = {
     'HK0001039574': 'USD',
     'HK0001039582': 'USD',
@@ -95,58 +125,109 @@ class FundSecuritySearchClient {
     'HK0000890829': 'HKD',
   };
 
-  /// 只查询 [query] 指定的完整 ISIN，按 [market] 和实际结算 [currencyCode] 筛选。
-  /// 当前来源限招商香港美元/港元货币基金及惠理美元货币基金的 USD/HKD 份额；
-  /// 未知代码返回空列表，不冒充全市场搜索。ISIN 仅在本机匹配，不发送给来源。
-  /// 市场或币种不支持时不联网；查询成功仍需用户选择后才进入草稿，不携带价格和交易数据。
-  Future<List<StockSecurity>> search(
+  static const _valuePartnersCurrencies = {
+    'HK0000945037': 'USD',
+    'HK0000961927': 'USD',
+    'HK0000945029': 'HKD',
+    'HK0000961919': 'HKD',
+    'HK0000945045': 'HKD',
+  };
+
+  /// 只向通用目录发送 [query] 的完整 ISIN，不发送账户上下文或猜测币种。
+  /// [market]、[currencyCode] 保留调用契约；返回实际来源资料供页面核对，
+  /// 币种不符也展示候选，不按国家前缀推断市场，不写入行情或交易。
+  Future<List<FundIdentityCandidate>> search(
     String query, {
     required StockMarket market,
     required String currencyCode,
   }) async {
     final symbol = query.trim().toUpperCase();
-    if (symbol.isEmpty ||
-        market != StockMarket.hk ||
-        !const {'USD', 'HKD'}.contains(currencyCode)) {
-      return const [];
-    }
-    if (!RegExp(r'^HK[A-Z0-9]{9}[0-9]$').hasMatch(symbol)) {
-      throw const FormatException('请输入完整的香港基金 ISIN 代码');
-    }
-    final cmsCurrency = _cmsCurrencies[symbol];
-    if (cmsCurrency != null && cmsCurrency != currencyCode) return const [];
-    final uri = cmsCurrency == null
-        ? Uri.https(
-            'www.valuepartners-group.com',
-            '/en/products-services/funds/',
-          )
-        : Uri.https('www.cmschina.com.hk', '/en/AM/FundProduct', {
-            'view': cmsCurrency == 'USD' ? 'NPCF' : 'CMMF',
-          });
+    if (symbol.isEmpty) return const [];
+    if (!isValidFundIsin(symbol)) throw const FundSearchInvalidIsinException();
     final transport = transportFactory?.call() ?? FundSecuritySearchTransport();
+    var ended = false;
     try {
-      return await _read(transport, uri, symbol, currencyCode).timeout(
+      return await _lookup(transport, symbol, () => ended).timeout(
         requestTimeout,
         onTimeout: () {
+          ended = true;
           transport.close();
           throw TimeoutException('基金资料查询超时');
         },
       );
     } finally {
+      ended = true;
       transport.close();
     }
+  }
+
+  /// 通用目录优先；已验证官网仅补充未收录、缺字段或暂时失败的既有基金。
+  Future<List<FundIdentityCandidate>> _lookup(
+    SecuritySearchTransport transport,
+    String symbol,
+    bool Function() hasEnded,
+  ) async {
+    List<FundIdentityCandidate> primary = const [];
+    Object? primaryError;
+    StackTrace? primaryStack;
+    try {
+      primary = await _read(
+        transport,
+        Uri.https('www.laohu8.com', '/FUND/$symbol'),
+        symbol,
+      );
+      if (primary.any((candidate) => candidate.hasCompleteIdentity)) {
+        return primary;
+      }
+    } catch (error, stack) {
+      if (error is! IOException && error is! FormatException) rethrow;
+      primaryError = error;
+      primaryStack = stack;
+    }
+    // 总时限结束后，关闭中的主请求不能再触发补充请求。
+    if (hasEnded()) return const [];
+    final cmsCurrency = _cmsCurrencies[symbol];
+    final officialCurrency = cmsCurrency ?? _valuePartnersCurrencies[symbol];
+    if (officialCurrency != null) {
+      final uri = cmsCurrency == null
+          ? Uri.https(
+              'www.valuepartners-group.com',
+              '/en/products-services/funds/',
+            )
+          : Uri.https('www.cmschina.com.hk', '/en/AM/FundProduct', {
+              'view': cmsCurrency == 'USD' ? 'NPCF' : 'CMMF',
+            });
+      try {
+        final official = await _read(transport, uri, symbol, officialCurrency);
+        if (official.isNotEmpty) return official;
+      } catch (error) {
+        if (error is! IOException && error is! FormatException) rethrow;
+        if (primary.isEmpty) rethrow;
+        // 已获得身份但缺字段时仍展示来源，让用户手工核对；不伪造补充资料。
+      }
+    }
+    if (primary.isNotEmpty) return primary;
+    if (primaryError != null) {
+      Error.throwWithStackTrace(primaryError, primaryStack!);
+    }
+    return const [];
   }
 
   /// 从 [transport] 流式读取 [uri]，累计超过上限立即中止；只解析精确 [symbol]。
   /// [currencyCode] 是本地筛选条件，必须与官网对应份额的明确币种一致；
   /// 招商同币种产品还核对基础币种，惠理多币种份额不得用产品基础币种替代份额币种。
-  Future<List<StockSecurity>> _read(
+  Future<List<FundIdentityCandidate>> _read(
     SecuritySearchTransport transport,
     Uri uri,
-    String symbol,
-    String currencyCode,
-  ) async {
+    String symbol, [
+    String? currencyCode,
+  ]) async {
     final response = await transport.get(uri);
+    if (uri.host == 'www.laohu8.com' &&
+        response.statusCode == HttpStatus.notFound) {
+      await response.body.listen(null).cancel();
+      return const [];
+    }
     if (response.statusCode != HttpStatus.ok) {
       throw HttpException('基金资料查询失败：HTTP ${response.statusCode}');
     }
@@ -158,15 +239,115 @@ class FundSecuritySearchClient {
       bytes.addAll(chunk);
     }
     final html = utf8.decode(bytes);
-    return uri.host == 'www.cmschina.com.hk'
-        ? _parseCms(html, symbol, currencyCode)
-        : _parseValuePartners(html, symbol, currencyCode);
+    return switch (uri.host) {
+      'www.laohu8.com' => _parseTiger(html, symbol, uri),
+      'www.cmschina.com.hk' => _parseCms(html, symbol, currencyCode!),
+      _ => _parseValuePartners(html, symbol, currencyCode!),
+    };
   }
+
+  /// 只读公开页面的身份 JSON，不执行脚本或采用价格；同时核对 code 与 symbol。
+  static List<FundIdentityCandidate> _parseTiger(
+    String html,
+    String symbol,
+    Uri sourceUrl,
+  ) {
+    final blocks = RegExp(
+      r'''<textarea\b[^>]*\s+id\s*=\s*["']__APP_DATA__["'][^>]*>([\s\S]*?)</textarea\s*>''',
+      caseSensitive: false,
+    ).allMatches(_withoutScripts(html)).toList();
+    if (blocks.length != 1) {
+      throw const FormatException('基金目录缺少可核对的身份资料');
+    }
+    final data = jsonDecode(_decodeEntities(blocks.single[1]!));
+    if (data is! Map<String, dynamic> ||
+        data['fundInfo'] is! Map<String, dynamic>) {
+      throw const FormatException('基金目录身份结构已变化');
+    }
+    final fund = data['fundInfo'] as Map<String, dynamic>;
+    final name = fund['name'];
+    final code = fund['code'];
+    final identity = fund['symbol'];
+    if (code != symbol ||
+        (identity != null && identity is! String) ||
+        name is! String ||
+        name.trim().isEmpty ||
+        name.trim() == symbol ||
+        name.length > 160 ||
+        RegExp(r'[\x00-\x1f\x7f]').hasMatch(name)) {
+      throw const FormatException('基金目录返回的身份与查询不一致');
+    }
+    RegExpMatch? currency;
+    if (identity is String && identity.isNotEmpty && identity != symbol) {
+      currency = RegExp(
+        '^${RegExp.escape(symbol)}\\.([A-Z]{3})\$',
+      ).firstMatch(identity);
+      if (currency == null) {
+        throw const FormatException('基金目录返回的份额标识与查询不一致');
+      }
+    }
+    return [
+      FundIdentityCandidate(
+        isin: symbol,
+        name: name.trim(),
+        shareClass: _shareClass(name),
+        currencyCode: currency?[1],
+        sourceName: '老虎社区 / Tiger Community',
+        sourceUrl: sourceUrl,
+      ),
+    ];
+  }
+
+  /// 只从名称的明确份额标记提取类别；不按基金公司、ISIN 或币种猜填。
+  static String? _shareClass(String name) {
+    final classes = <String>{};
+    for (final pattern in [
+      r'\bClass\s+([A-Z][A-Z0-9-]{0,11})\b',
+      r'([A-Z][A-Z0-9-]{0,11})\s*[类類]',
+      // 已观察到的中文“基金A 美元”结构，类别必须紧贴“基金”，不能将 USD 当类别。
+      r'基金([A-Z][0-9]{0,2})\s+(?:美元|港元|港币|港幣|人民币|人民幣|欧元|歐元|英镑|英鎊|日元|澳元|加元|瑞郎|新加坡元)$',
+      // 已观察到的国际名称如 "A" (EUR) INC；普通引号词不是份额类别。
+      r'''["“]([A-Z][0-9]{0,2})["”]\s*\([A-Z]{3}\)\s+(?:ACC|INC|DIST)(?:\s|$)''',
+    ]) {
+      for (final match in RegExp(pattern).allMatches(name)) {
+        classes.add(match[1]!);
+      }
+    }
+    return classes.length == 1 ? classes.single : null;
+  }
+
+  /// 对 textarea 的 HTML 转义只解码一层，保持 JSON 字符串中的原始实体含义。
+  static String _decodeEntities(String value) => value.replaceAllMapped(
+    RegExp(r'&(?:quot|amp|apos|lt|gt|nbsp|#[0-9]{1,7}|#x[0-9a-fA-F]{1,6});'),
+    (match) {
+      final entity = match[0]!;
+      const named = {
+        '&quot;': '"',
+        '&amp;': '&',
+        '&apos;': "'",
+        '&lt;': '<',
+        '&gt;': '>',
+        '&nbsp;': ' ',
+      };
+      if (named.containsKey(entity)) return named[entity]!;
+      final hex = entity.startsWith('&#x');
+      final point = int.tryParse(
+        entity.substring(hex ? 3 : 2, entity.length - 1),
+        radix: hex ? 16 : 10,
+      );
+      if (point == null ||
+          point > 0x10ffff ||
+          (point >= 0xd800 && point <= 0xdfff)) {
+        throw const FormatException('基金目录包含无效文本编码');
+      }
+      return String.fromCharCode(point);
+    },
+  );
 
   /// 仅提取 [html] 内已核对的基金名称、ISIN 份额行及其币种，绝不执行脚本。
   /// 资料页含过时价格，本方法只取价格行明确标注的份额币种，完全不读取数值或日期。
   /// [symbol] 必须精确命中 ISIN 表；无法证明份额币种时返回空列表，不按名称猜测。
-  static List<StockSecurity> _parseCms(
+  static List<FundIdentityCandidate> _parseCms(
     String html,
     String symbol,
     String currencyCode,
@@ -210,12 +391,15 @@ class FundSecuritySearchClient {
       return const [];
     }
     return [
-      StockSecurity(
-        symbol: symbol,
+      FundIdentityCandidate(
+        isin: symbol,
         name: '$expectedName Class $shareClass',
-        market: StockMarket.hk,
+        shareClass: shareClass,
         currencyCode: currencyCode,
-        type: InvestmentSecurityType.fund,
+        sourceName: '招商证券资产管理 / CMS Asset Management',
+        sourceUrl: Uri.https('www.cmschina.com.hk', '/en/AM/FundProduct', {
+          'view': currencyCode == 'USD' ? 'NPCF' : 'CMMF',
+        }),
       ),
     ];
   }
@@ -224,7 +408,7 @@ class FundSecuritySearchClient {
   /// 基金根据香港法律成立的信托身份已由官方 KFS 核对；不扩展到目录中的其他基金：
   /// https://www.valuepartners-group.com/ftp/files/reports/vpmm/006_kfs/eng/vpmm_kfs_2025-08-11_en.pdf
   /// 每行以独立 Currency 列核对 [currencyCode]，不把基金名中的 USD 当成所有份额币种。
-  static List<StockSecurity> _parseValuePartners(
+  static List<FundIdentityCandidate> _parseValuePartners(
     String html,
     String symbol,
     String currencyCode,
@@ -284,12 +468,16 @@ class FundSecuritySearchClient {
       return const [];
     }
     return [
-      StockSecurity(
-        symbol: symbol,
+      FundIdentityCandidate(
+        isin: symbol,
         name: '$fundName - ${cells[0]}',
-        market: StockMarket.hk,
+        shareClass: _shareClass(cells[0]),
         currencyCode: currencyCode,
-        type: InvestmentSecurityType.fund,
+        sourceName: '惠理 / Value Partners',
+        sourceUrl: Uri.https(
+          'www.valuepartners-group.com',
+          '/en/products-services/funds/',
+        ),
       ),
     ];
   }
