@@ -15,10 +15,12 @@ import '../l10n/app_localizations.dart';
 
 /// 日期或时间选择器的统一签名；页面注入现有 helper，组件不直接创建弹窗。
 /// [context] 用于展示当前语言的选择器，[initialDateTime] 为本次打开的初始值。
+/// [onClear] 是明确的清除操作，和取消返回 null 区分，调用方只更新页面草稿。
 typedef EntryDateTimePicker =
     Future<DateTime?> Function({
       required BuildContext context,
       required DateTime initialDateTime,
+      VoidCallback? onClear,
     });
 
 /// 入账日期与可信精度的受控草稿；日期为 null 表示按消费时间计算账单。
@@ -103,6 +105,10 @@ class EntryPostDateFields extends StatelessWidget {
     final selected = await datePicker(
       context: context,
       initialDateTime: initial,
+      onClear: () {
+        if (!context.mounted) return;
+        onChanged((date: null, precision: OccurredAtPrecision.date));
+      },
     );
     if (!context.mounted || selected == null) return;
     final selectedPrecision = postDate == null
@@ -117,13 +123,20 @@ class EntryPostDateFields extends StatelessWidget {
   }
 
   /// 在已选入账日上补充时分，确认后标为分钟精度；未选日期时不创建隐含日期。
-  /// [context] 只用于打开当前页面的时间选择器，取消仍保留原入账时间。
+  /// [context] 用于打开时间选择器；清除时分则保留日期，取消仍保留原入账时间。
   Future<void> _pickTime(BuildContext context) async {
     final current = postDate;
     if (current == null) return;
     final selected = await timePicker(
       context: context,
       initialDateTime: current,
+      onClear: () {
+        if (!context.mounted) return;
+        onChanged((
+          date: dateOnly(current),
+          precision: OccurredAtPrecision.date,
+        ));
+      },
     );
     if (!context.mounted || selected == null) return;
     onChanged((date: selected, precision: OccurredAtPrecision.minute));

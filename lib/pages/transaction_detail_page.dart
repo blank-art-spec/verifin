@@ -492,12 +492,14 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                               : () => _pickAccount(accounts),
                         ),
                       DetailInfoRow(
+                        key: const Key('entry_metadata_date'),
                         label: AppLocalizations.of(context).dateLabel,
                         value:
                             '${AppLocalizations.of(context).dateMonthDay(_occurredAt)}  ${relativeDay(AppLocalizations.of(context), _occurredAt)}',
                         onTap: _pickDate,
                       ),
                       DetailInfoRow(
+                        key: const Key('entry_metadata_time'),
                         label: AppLocalizations.of(context).timeLabel,
                         value: _occurredAtPrecision == OccurredAtPrecision.date
                             ? AppLocalizations.of(context).commonNoneShort
@@ -1366,21 +1368,22 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
   }
 
   Future<void> _pickTime() async {
-    final picked = await showTimePicker(
+    final picked = await showEntryTimePicker(
       context: context,
-      initialTime: TimeOfDay.fromDateTime(_occurredAt),
+      initialDateTime: _occurredAt,
+      onClear: () {
+        if (!mounted) return;
+        setState(() {
+          _occurredAt = dateOnly(_occurredAt);
+          _occurredAtPrecision = OccurredAtPrecision.date;
+        });
+      },
     );
     if (picked == null || !mounted) {
       return;
     }
     setState(() {
-      _occurredAt = DateTime(
-        _occurredAt.year,
-        _occurredAt.month,
-        _occurredAt.day,
-        picked.hour,
-        picked.minute,
-      );
+      _occurredAt = picked;
       _occurredAtPrecision = OccurredAtPrecision.minute;
     });
   }

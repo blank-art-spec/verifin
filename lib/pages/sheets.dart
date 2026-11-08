@@ -18,15 +18,24 @@ import '../l10n/app_localizations.dart';
 import 'account_icon_picker.dart';
 
 /// 交易与还款共用的日期选择；只改日历日，保留已有时间和精度。
+/// 可选字段传入 [onClear]，点击清除后关闭弹窗并通知调用方；取消仍返回 null。
 Future<DateTime?> showEntryDatePicker({
   required BuildContext context,
   required DateTime initialDateTime,
+  VoidCallback? onClear,
 }) async {
   final date = await showDatePicker(
     context: context,
     initialDate: initialDateTime,
     firstDate: DateTime(2020),
     lastDate: DateTime(2100),
+    builder: onClear == null
+        ? null
+        : (context, child) => _entryPickerClearAction(
+            context: context,
+            child: child!,
+            onClear: onClear,
+          ),
   );
   if (date == null) return null;
   return DateTime(
@@ -42,13 +51,22 @@ Future<DateTime?> showEntryDatePicker({
 }
 
 /// 交易与还款共用的时间选择；确认后精确到分钟，取消不改草稿。
+/// [onClear] 由调用方负责降为日期精度，和取消的 null 结果分开处理。
 Future<DateTime?> showEntryTimePicker({
   required BuildContext context,
   required DateTime initialDateTime,
+  VoidCallback? onClear,
 }) async {
   final time = await showTimePicker(
     context: context,
     initialTime: TimeOfDay.fromDateTime(initialDateTime),
+    builder: onClear == null
+        ? null
+        : (context, child) => _entryPickerClearAction(
+            context: context,
+            child: child!,
+            onClear: onClear,
+          ),
   );
   if (time == null) return null;
   return DateTime(
@@ -57,6 +75,50 @@ Future<DateTime?> showEntryTimePicker({
     initialDateTime.day,
     time.hour,
     time.minute,
+  );
+}
+
+/// 局部扩展系统选择器的取消区，保留原生日历、表盘、输入校验和模式切换。
+/// 系统未提供额外 action 插槽；使用公开按钮主题组合清除按钮与原取消内容，
+/// 子按钮保留独立语义与焦点，窄屏/大字时允许换行，不按弹窗坐标覆盖控件。
+Widget _entryPickerClearAction({
+  required BuildContext context,
+  required Widget child,
+  required VoidCallback onClear,
+}) {
+  final theme = Theme.of(context);
+  ButtonStyle withClear(ButtonStyle? original) {
+    final style = original ?? const ButtonStyle();
+    return style.copyWith(
+      backgroundBuilder: (context, states, cancel) => Wrap(
+        crossAxisAlignment: WrapCrossAlignment.center,
+        spacing: 8,
+        children: [
+          TextButton(
+            key: const Key('entry_picker_clear'),
+            style: style,
+            onPressed: () {
+              Navigator.of(context).pop();
+              onClear();
+            },
+            child: Text(AppLocalizations.of(context).commonClear),
+          ),
+          ?cancel,
+        ],
+      ),
+    );
+  }
+
+  return Theme(
+    data: theme.copyWith(
+      datePickerTheme: theme.datePickerTheme.copyWith(
+        cancelButtonStyle: withClear(theme.datePickerTheme.cancelButtonStyle),
+      ),
+      timePickerTheme: theme.timePickerTheme.copyWith(
+        cancelButtonStyle: withClear(theme.timePickerTheme.cancelButtonStyle),
+      ),
+    ),
+    child: child,
   );
 }
 

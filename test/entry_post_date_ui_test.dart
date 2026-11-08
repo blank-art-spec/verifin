@@ -116,6 +116,19 @@ Future<void> _selectPostingDay(WidgetTester tester, int day) async {
   await tester.pumpAndSettle();
 }
 
+/// 通过实际弹窗清除 [fieldKey]，并核对清除按钮位于取消左侧。
+Future<void> _clearPickerField(WidgetTester tester, String fieldKey) async {
+  await _tapField(tester, find.byKey(Key(fieldKey)));
+  final clear = find.byKey(const Key('entry_picker_clear'));
+  final cancel = find.text('取消');
+  expect(clear.hitTestable(), findsOneWidget);
+  expect(tester.getCenter(clear).dx, lessThan(tester.getCenter(cancel).dx));
+  await tester.tap(clear);
+  await tester.pumpAndSettle();
+  expect(find.byType(DatePickerDialog), findsNothing);
+  expect(find.byType(TimePickerDialog), findsNothing);
+}
+
 /// 在真实时间选择器填入 24 小时口径的 [hour]、[minute]，确认分钟精度而不补造秒。
 /// [use24HourFormat] 为 false 时按界面实际时制转换小时并点击上午/下午，保存值仍相同。
 Future<void> _selectPostingTime(
@@ -520,4 +533,144 @@ void main() {
     expect(controller.entries, isEmpty);
     expect(tester.takeException(), isNull);
   });
+
+  testWidgets('已有支出在日期弹窗清除入账日期，保存后回退消费时间并重新归期', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    final account = await _addAccount(controller, credit: true);
+    controller.addEntry(_expense(controller));
+    await controller.waitForPendingWrites();
+    _expectCreditTotals(controller, account, billed: 0, current: 30);
+    await _pumpPage(
+      tester,
+      controller,
+      const TransactionDetailPage(entryId: 'posting-expense'),
+      width: 360,
+    );
+
+    await _clearPickerField(tester, 'entry_post_date');
+    final fields = tester.widget<EntryPostDateFields>(
+      find.byType(EntryPostDateFields),
+    );
+    expect(fields.postDate, isNull);
+    expect(fields.precision, OccurredAtPrecision.date);
+    expect(find.byKey(const Key('entry_post_time')), findsNothing);
+    expect(controller.entries.single.postDate, DateTime(2026, 11, 25, 14, 37));
+    expect(controller.entries.single.billingCycleId, '2026-12-25');
+
+    await _tapField(tester, find.byTooltip('保存'), delta: -240);
+    await controller.waitForPendingWrites();
+    final saved = controller.entries.single;
+    expect(saved.postDate, isNull);
+    expect(saved.postDatePrecision, OccurredAtPrecision.date);
+    expect(saved.occurredAt, _consumedAt);
+    expect(saved.occurredAtPrecision, OccurredAtPrecision.minute);
+    expect(saved.billingOccurredAt, _consumedAt);
+    expect(saved.billingCycleId, isNull);
+    _expectCreditTotals(controller, account, billed: 30, current: 0);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('已有支出在时间弹窗清除入账时分，保存保留日期并恢复日期精度', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    await _addAccount(controller);
+    controller.addEntry(_expense(controller));
+    await controller.waitForPendingWrites();
+    await _pumpPage(
+      tester,
+      controller,
+      const TransactionDetailPage(entryId: 'posting-expense'),
+    );
+
+    await _clearPickerField(tester, 'entry_post_time');
+    final fields = tester.widget<EntryPostDateFields>(
+      find.byType(EntryPostDateFields),
+    );
+    expect(fields.postDate, DateTime(2026, 11, 25));
+    expect(fields.precision, OccurredAtPrecision.date);
+    expect(find.byKey(const Key('entry_post_time')), findsOneWidget);
+    expect(controller.entries.single.postDate, DateTime(2026, 11, 25, 14, 37));
+
+    await _tapField(tester, find.byTooltip('保存'), delta: -240);
+    await controller.waitForPendingWrites();
+    final saved = controller.entries.single;
+    expect(saved.postDate, DateTime(2026, 11, 25));
+    expect(saved.postDatePrecision, OccurredAtPrecision.date);
+    expect(saved.occurredAt, _consumedAt);
+    expect(saved.occurredAtPrecision, OccurredAtPrecision.minute);
+    expect(saved.billingCycleId, isNull);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('导入草稿可分别清除记账和入账时分，返回日期精度且不落库', (tester) async {
+    final controller = await makeController();
+    addTearDown(controller.dispose);
+    await _addAccount(controller);
+    LedgerEntry? result;
+    await _openDraft(
+      tester,
+      controller,
+      entry: _expense(controller),
+      onReturned: (value) => result = value,
+    );
+
+    await _clearPickerField(tester, 'entry_metadata_time');
+    await _clearPickerField(tester, 'entry_post_time');
+    expect(controller.entries, isEmpty);
+    await _tapField(tester, find.byKey(const Key('save_entry_button')));
+    expect(result, isNotNull);
+    expect(result!.occurredAt, DateTime(2026, 11, 24));
+    expect(result!.occurredAtPrecision, OccurredAtPrecision.date);
+    expect(result!.postDate, DateTime(2026, 11, 25));
+    expect(result!.postDatePrecision, OccurredAtPrecision.date);
+    expect(result!.billingCycleId, isNull);
+    expect(controller.entries, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  for (final existing in [false, true]) {
+    testWidgets('${existing ? '已有支出' : '新建支出'}日期必填，记账时分可在弹窗清除并保存', (
+      tester,
+    ) async {
+      final controller = await makeController();
+      addTearDown(controller.dispose);
+      await _addAccount(controller);
+      if (existing) controller.addEntry(_expense(controller));
+      await controller.waitForPendingWrites();
+      await _pumpPage(
+        tester,
+        controller,
+        existing
+            ? const TransactionDetailPage(entryId: 'posting-expense')
+            : EntryDetailPage(initialAmount: 30, clock: () => _consumedAt),
+      );
+
+      await _tapField(tester, find.byKey(const Key('entry_metadata_date')));
+      expect(find.byType(DatePickerDialog), findsOneWidget);
+      expect(find.byKey(const Key('entry_picker_clear')), findsNothing);
+      await tester.tap(find.text('取消'));
+      await tester.pumpAndSettle();
+      await _clearPickerField(tester, 'entry_metadata_time');
+      if (existing) {
+        expect(controller.entries.single.occurredAt, _consumedAt);
+        await _tapField(tester, find.byTooltip('保存'), delta: -240);
+      } else {
+        expect(controller.entries, isEmpty);
+        await _tapField(tester, find.byKey(const Key('save_entry_button')));
+      }
+      await controller.waitForPendingWrites();
+      final saved = controller.entries.single;
+      expect(saved.occurredAt, DateTime(2026, 11, 24));
+      expect(saved.occurredAtPrecision, OccurredAtPrecision.date);
+      if (existing) {
+        expect(saved.postDate, DateTime(2026, 11, 25, 14, 37));
+        expect(saved.postDatePrecision, OccurredAtPrecision.minute);
+        expect(saved.billingCycleId, '2026-12-25');
+      } else {
+        expect(saved.postDate, isNull);
+      }
+      expect(tester.takeException(), isNull);
+    });
+  }
 }

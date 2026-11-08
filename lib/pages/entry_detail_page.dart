@@ -2069,6 +2069,14 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
     final picked = await showEntryTimePicker(
       context: context,
       initialDateTime: _occurredAt,
+      onClear: () {
+        if (!mounted) return;
+        setState(() {
+          _occurredAt = dateOnly(_occurredAt);
+          _occurredAtTouched = true;
+          _occurredAtPrecision = OccurredAtPrecision.date;
+        });
+      },
     );
 
     if (!mounted || picked == null) {

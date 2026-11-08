@@ -98,7 +98,7 @@ HK/USD 基金 B 类；`hongKongFundDayEnd` 提供纯日期的香港日报末截�
 | `showAccountPickerSheet(includeCreditParents: true)` | 普通记账每个信用主体只展示父账户，隐藏其币种子账户；父行复用 `_AccountPickerRow`，与无账户/普通账户对齐，当前子账户映射父行选中态。次级「入账账户」限定当前主体并传 `showCreditChildren: true`，可显式选币种或点父行恢复自动匹配。返回 `creditParentPickerPrefix` 哨兵后须解析真实子账户，不得把哨兵 ID 落账；默认的扣款/转账选择仍用具体账户 |
 | `CreditAccountDetailPage` | 父账户统一估值；右上角「＋」选择未创建币种并复用 `ensureCreditCurrencyChild`；`VeriSegmentedControl` 互斥选择最近 20 条（默认）/全部/支出/收入 |
 | `CreditRepaymentPage` | 父账户范围选择复用 `VeriAnchoredChoice<CreditRepaymentScope>`；原币分配、来源选择、补齐参考额、整批编辑/撤销；日期与时分保存到同批所有记录，编辑保留原精度 |
-| `showEntryDatePicker` / `showEntryTimePicker` | `pages/sheets.dart`；记账与还款共用。改日期保留时分秒；确认时间精确到分钟；取消返回 null，不修改草稿 |
+| `showEntryDatePicker` / `showEntryTimePicker` | `pages/sheets.dart`；记账与还款共用。改日期保留时分秒；确认时间精确到分钟；取消返回 null，不修改草稿。可选 `onClear` 在原生弹窗“取消”左侧加入清除，关闭弹窗后单独通知调用方；入账日期/时间和普通记账时间启用，必填日期及还款保持原行为 |
 | `normalizeCreditHierarchy` | `app/credit_hierarchy.dart`；明确名称的历史子账户幂等归并；冲突 ID 返回供界面复核 |
 | `creditExpenseBelongsToStatement` | `app/credit_card.dart`；部分还款验证遵循银行明确归期，否则以入账日（未填则消费日）匹配正式账单周期；账单日当天的自动归期仍进入下一期 |
 | `creditStatementOverview` / `buildCreditCycleOverview` | `app/credit_card.dart`；主体内购汇按两端实际金额转移无正式账单覆盖的原币债务；主体已出账流水待还逐笔优先明确参考额，否则按 `now` 有效汇率换算，关联到账退款独立折算，部分还款保留剩余原币比例、结清无尾差，正式快照优先。子账户概览传入 `internalAccountCurrencies`，待还与未出账保持账户原币 |
@@ -234,7 +234,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `groupEntriesByDate` / `relativeDay` | 纯函数 | `common_widgets.dart` | 按日分组、日期倒序 / 相对今天；`DateEntryGroup` 分组模型 |
 | `CalendarPreview` | Widget | `common_widgets.dart` | 月历预览（内建月份切换 + 日收支）；必传 `currencyCode`；单币种账本隐藏单位时右下角不再显示轻量单位提示，并**连同前置 6dp 间距整块不构建**（`if (!textCurrencyUnitHidden)`，见维护约定），多币种账本照常显示 |
 | `EntryTagField` | Widget | `common_widgets.dart` | 记账表单标签行 |
-| `EntryPostDateFields` / `EntryDateTimePicker` / `EntryPostDateDraft` | Widget / 选择器签名 / 草稿记录 | `entry_sheets.dart` | 新建支出、导入草稿和交易详情共用可选入账日期与时分，位于账户下方、紧跟记账日期和时间；`useSelectFields: true` 复用新建页账户的选择框样式，默认使用详情信息行。页面注入 `showEntryDatePicker` / `showEntryTimePicker`，取消不改草稿，只选日期保存日期精度；不展示清除日期或时分的按钮。受控草稿经页面最终保存才落库 |
+| `EntryPostDateFields` / `EntryDateTimePicker` / `EntryPostDateDraft` | Widget / 选择器签名 / 草稿记录 | `entry_sheets.dart` | 新建支出、导入草稿和交易详情共用可选入账日期与时分，位于账户下方、紧跟记账日期和时间；`useSelectFields: true` 复用新建页账户的选择框样式，默认使用详情信息行。页面注入 `showEntryDatePicker` / `showEntryTimePicker`，通过 `onClear` 区分清除和取消：清除日期同时清空时分，清除时分保留日期并改为日期精度；取消不改草稿。表单不常驻清除按钮，受控草稿经页面最终保存才落库 |
 | `billingCycleIdAfterPostDateEdit` | 纯函数 | `entry_sheets.dart` | 交易详情与导入草稿最终保存时共用：入账日期或精度与初始值不同则解除旧账期标记，按新日期重新归期；取消、未修改或改回原值保留原标记；不改写独立的正式账单金额 |
 | `AttachmentsEditor` | Widget | `attachments_editor.dart` | 多图片附件横向缩略图、全屏查看和逐张删除；默认自带标题与拍照/相册添加入口。标题图标为一组、图片数量为另一组，宽度充足时分居两端，窄屏/大字号下自然换行，文字不缩小或省略。记账页的轻量元数据布局通过 `showHeader:false` / `showAddButton:false` 只复用缩略图条，添加入口由页面标签触发 |
 | `TagSelectorSheet` / `pickEntryTags` | Widget / Sheet 函数 | `entry_sheets.dart` / `sheets.dart` | 交易按维度选标签、即时在指定维度创建；单选维度只保留一个，多选维度可同时勾选。`groupId` 聚焦一个维度，`templatesOnly` 供独立模板入口使用；支持保存、套用和删除当前账本标签模板 |
