@@ -1131,6 +1131,18 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                     spacing: 7,
                     runSpacing: 7,
                     children: <Widget>[
+                      if (_type != EntryType.transfer &&
+                          creditParent != null &&
+                          selectedAccount != null)
+                        _EntryMetadataChip(
+                          chipKey: const Key('entry_posting_account'),
+                          icon: Icons.account_balance_wallet_outlined,
+                          label: Text(
+                            '${AppLocalizations.of(context).entryPostingAccount} · ${_creditParentId == null ? selectedAccount.currencyCode : AppLocalizations.of(context).entryPostingAutomatic(selectedAccount.currencyCode)}',
+                          ),
+                          selected: _creditParentId == null,
+                          onTap: () => _pickCreditPostingAccount(accounts),
+                        ),
                       _EntryMetadataChip(
                         chipKey: const Key('entry_currency_button'),
                         icon: Icons.currency_exchange_rounded,
@@ -1146,18 +1158,6 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                             ? null
                             : _pickCurrency,
                       ),
-                      if (_type != EntryType.transfer &&
-                          creditParent != null &&
-                          selectedAccount != null)
-                        _EntryMetadataChip(
-                          chipKey: const Key('entry_posting_account'),
-                          icon: Icons.account_balance_wallet_outlined,
-                          label: Text(
-                            '${AppLocalizations.of(context).entryPostingAccount} · ${_creditParentId == null ? selectedAccount.currencyCode : AppLocalizations.of(context).entryPostingAutomatic(selectedAccount.currencyCode)}',
-                          ),
-                          selected: _creditParentId == null,
-                          onTap: () => _pickCreditPostingAccount(accounts),
-                        ),
                       for (final group in VeriFinScope.of(context).tagGroups)
                         _EntryMetadataChip(
                           chipKey: Key('entry_metadata_tag_${group.id}'),
