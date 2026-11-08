@@ -1131,6 +1131,21 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                     spacing: 7,
                     runSpacing: 7,
                     children: <Widget>[
+                      _EntryMetadataChip(
+                        chipKey: const Key('entry_currency_button'),
+                        icon: Icons.currency_exchange_rounded,
+                        label: Text(
+                          _currencyCode ??
+                              controller.activeBook.baseCurrencyCode,
+                        ),
+                        selected:
+                            (_currencyCode ??
+                                controller.activeBook.baseCurrencyCode) !=
+                            controller.activeBook.baseCurrencyCode,
+                        onTap: _type == EntryType.transfer
+                            ? null
+                            : _pickCurrency,
+                      ),
                       if (_type != EntryType.transfer &&
                           creditParent != null &&
                           selectedAccount != null)
@@ -1236,21 +1251,6 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                                     : null,
                               ),
                         ),
-                      _EntryMetadataChip(
-                        chipKey: const Key('entry_currency_button'),
-                        icon: Icons.currency_exchange_rounded,
-                        label: Text(
-                          _currencyCode ??
-                              controller.activeBook.baseCurrencyCode,
-                        ),
-                        selected:
-                            (_currencyCode ??
-                                controller.activeBook.baseCurrencyCode) !=
-                            controller.activeBook.baseCurrencyCode,
-                        onTap: _type == EntryType.transfer
-                            ? null
-                            : _pickCurrency,
-                      ),
                     ],
                   ),
                   // 标记待报销本身不产生任何资金变动，用户容易以为已经「报了」。
