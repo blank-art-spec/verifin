@@ -1070,6 +1070,19 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                         label: Text(AppLocalizations.of(context).accountAdd),
                       ),
                     ),
+                  // 入账是可选账单依据，紧跟账户并沿用相同的选择框样式。
+                  if (_type == EntryType.expense) ...[
+                    const SizedBox(height: 10),
+                    EntryPostDateFields(
+                      postDate: _postDate,
+                      precision: _postDatePrecision,
+                      occurredAt: _occurredAt,
+                      datePicker: showEntryDatePicker,
+                      timePicker: showEntryTimePicker,
+                      onChanged: _updatePostDate,
+                      useSelectFields: true,
+                    ),
+                  ],
                   ..._buildCurrencyAmountFields(controller, accounts),
                   const SizedBox(height: 14),
                   TextField(
@@ -1240,16 +1253,6 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                       ),
                     ],
                   ),
-                  // 入账是可选账单依据；消费日期、交易排序和日常统计仍保留原语义。
-                  if (_type == EntryType.expense)
-                    EntryPostDateFields(
-                      postDate: _postDate,
-                      precision: _postDatePrecision,
-                      occurredAt: _occurredAt,
-                      datePicker: showEntryDatePicker,
-                      timePicker: showEntryTimePicker,
-                      onChanged: _updatePostDate,
-                    ),
                   // 标记待报销本身不产生任何资金变动，用户容易以为已经「报了」。
                   if (_type == EntryType.expense && _reimbursable)
                     Padding(

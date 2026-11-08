@@ -604,7 +604,13 @@ void main() {
       await tester.tap(find.text('open'));
       await tester.pumpAndSettle();
 
-      // 预填了原备注。
+      // 入账字段位于账户下方，先滚动到备注再核对预填内容。
+      await tester.scrollUntilVisible(
+        find.byKey(const Key('entry_note_field')),
+        200,
+        scrollable: find.byType(Scrollable).first,
+      );
+      await tester.pumpAndSettle();
       expect(find.text('原备注'), findsOneWidget);
       await tester.enterText(find.byKey(const Key('entry_note_field')), '改后备注');
       await tester.ensureVisible(find.byKey(const Key('save_entry_button')));

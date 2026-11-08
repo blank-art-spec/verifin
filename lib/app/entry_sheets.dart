@@ -56,6 +56,7 @@ class EntryPostDateFields extends StatelessWidget {
     required this.datePicker,
     required this.timePicker,
     required this.onChanged,
+    this.useSelectFields = false,
   });
 
   final DateTime? postDate;
@@ -64,6 +65,36 @@ class EntryPostDateFields extends StatelessWidget {
   final EntryDateTimePicker datePicker;
   final EntryDateTimePicker timePicker;
   final ValueChanged<EntryPostDateDraft> onChanged;
+
+  /// 新建记账表单使用与账户相同的选择框；交易详情保留信息行样式。
+  final bool useSelectFields;
+
+  /// 按所在页面的字段样式展示同一草稿；选择框复用账户字段的边框、排版和箭头。
+  Widget _buildField({
+    required Key key,
+    required String label,
+    required String value,
+    required IconData icon,
+    required bool placeholder,
+    required VoidCallback onTap,
+  }) {
+    if (useSelectFields) {
+      return SelectField(
+        key: key,
+        label: label,
+        value: value,
+        icon: icon,
+        onTap: onTap,
+      );
+    }
+    return DetailInfoRow(
+      key: key,
+      label: label,
+      value: value,
+      placeholder: placeholder,
+      onTap: onTap,
+    );
+  }
 
   /// 选择入账日；首次选择以消费日定位，并把未知时分归零，已有精确时分则保留。
   /// 取消或页面退出不触发 [onChanged]，避免产生意外草稿修改。
@@ -99,7 +130,7 @@ class EntryPostDateFields extends StatelessWidget {
   }
 
   /// 渲染可选日期与时分；清除日期同时清除精度，清除时间则保留入账日。
-  /// [context] 提供应用语言及主题，字段值按本地化日期显示，窄屏允许完整换行。
+  /// [context] 提供应用语言及主题，日期按本地化格式显示，提示与清除操作允许换行。
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -107,9 +138,10 @@ class EntryPostDateFields extends StatelessWidget {
     return Column(
       crossAxisAlignment: CrossAxisAlignment.stretch,
       children: [
-        DetailInfoRow(
+        _buildField(
           key: const Key('entry_post_date'),
           label: l10n.entryPostingDate,
+          icon: Icons.calendar_today_outlined,
           value: current == null
               ? l10n.entryPostingDateUnset
               : MaterialLocalizations.of(context).formatCompactDate(current),
@@ -117,9 +149,11 @@ class EntryPostDateFields extends StatelessWidget {
           onTap: () => _pickDate(context),
         ),
         if (current != null) ...[
-          DetailInfoRow(
+          if (useSelectFields) const SizedBox(height: 10),
+          _buildField(
             key: const Key('entry_post_time'),
             label: l10n.entryPostingTime,
+            icon: Icons.schedule_rounded,
             value: precision == OccurredAtPrecision.date
                 ? l10n.entryPostingTimeUnset
                 : formatTime(current),
@@ -149,6 +183,7 @@ class EntryPostDateFields extends StatelessWidget {
             ],
           ),
         ],
+        if (useSelectFields) const SizedBox(height: 8),
         Text(
           l10n.entryPostingDateHint,
           style: Theme.of(context).textTheme.bodySmall?.copyWith(

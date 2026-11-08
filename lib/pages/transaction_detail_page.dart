@@ -491,6 +491,22 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                               ? null
                               : () => _pickAccount(accounts),
                         ),
+                      if (_type == EntryType.expense)
+                        EntryPostDateFields(
+                          postDate: _postDate,
+                          precision: _postDatePrecision,
+                          occurredAt: _occurredAt,
+                          datePicker: showEntryDatePicker,
+                          timePicker: showEntryTimePicker,
+                          onChanged: _updatePostDate,
+                        )
+                      else if (_postDate != null)
+                        DetailInfoRow(
+                          label: AppLocalizations.of(context).entryPostDate,
+                          value: AppLocalizations.of(
+                            context,
+                          ).dateMonthDay(_postDate!),
+                        ),
                       ..._buildCurrencyAmountFields(
                         controller,
                         accounts,
@@ -510,22 +526,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                             : formatTime(_occurredAt),
                         onTap: _pickTime,
                       ),
-                      if (_type == EntryType.expense)
-                        EntryPostDateFields(
-                          postDate: _postDate,
-                          precision: _postDatePrecision,
-                          occurredAt: _occurredAt,
-                          datePicker: showEntryDatePicker,
-                          timePicker: showEntryTimePicker,
-                          onChanged: _updatePostDate,
-                        )
-                      else if (_postDate != null)
-                        DetailInfoRow(
-                          label: AppLocalizations.of(context).entryPostDate,
-                          value: AppLocalizations.of(
-                            context,
-                          ).dateMonthDay(_postDate!),
-                        ),
                       DetailInfoRow(
                         label: AppLocalizations.of(context).commonNote,
                         value: _noteController.text.trim().isEmpty

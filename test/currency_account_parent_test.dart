@@ -334,6 +334,7 @@ void main() {
     );
     await tester.pumpAndSettle();
     await tester.ensureVisible(find.byKey(const Key('entry_currency_button')));
+    await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('entry_currency_button')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('currency_option_USD')));
