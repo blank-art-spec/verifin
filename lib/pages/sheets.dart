@@ -1166,6 +1166,7 @@ const Account _accountPickerAllSentinel = Account(
 /// 币种子账户；参数和哨兵沿用历史名称。没有有效主体的临时账户仍保留。
 /// [showCreditChildren] 仅在父账户模式下生效，供「入账账户」次级入口同时展示
 /// 自动匹配的父账户与具体币种子账户；普通记账无需开启，转账保持默认的具体账户模式。
+/// [parentHint] 可覆盖父行说明，例如统计筛选显示合并全部币种；默认沿用记账自动匹配说明。
 Future<Account?> showAccountPickerSheet({
   required BuildContext context,
   required String title,
@@ -1177,6 +1178,7 @@ Future<Account?> showAccountPickerSheet({
   String? allLabel,
   bool includeCreditParents = false,
   bool showCreditChildren = false,
+  String? parentHint,
 }) {
   return _showVeriModalSheet<Account>(
     context: context,
@@ -1253,7 +1255,7 @@ Future<Account?> showAccountPickerSheet({
                 cardLast4: parent.cardLast4,
               ),
               balance: null,
-              subtitle: l10n.creditParentPick,
+              subtitle: parentHint ?? l10n.creditParentPick,
               selected:
                   selectedId == parentPickerId ||
                   (!showCreditChildren &&

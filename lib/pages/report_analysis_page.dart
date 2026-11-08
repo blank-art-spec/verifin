@@ -7,6 +7,7 @@ import '../app/chart_painters.dart';
 import '../app/common_widgets.dart';
 import '../app/credit_card.dart';
 import '../app/ledger_math.dart';
+import '../app/model_lookup.dart';
 import '../app/models.dart';
 import '../app/report_analysis.dart';
 import '../app/series_math.dart';
@@ -21,7 +22,7 @@ import 'transactions_pages.dart';
 enum _ReportGrouping { topCategory, subCategory, tag, account, merchant }
 
 /// 统计分析页：支持账期 / 月 / 季 / 年 / 自定义范围，支出与收入两个维度，
-/// 展示收支汇总、趋势曲线与分类 / 标签 / 账户 / 商户排行。
+/// 普通周期可按账户筛选，展示收支汇总、趋势曲线与分类 / 标签 / 账户 / 商户排行。
 class ReportAnalysisPage extends StatefulWidget {
   const ReportAnalysisPage({super.key});
 
@@ -34,10 +35,97 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
   DateTime _periodAnchor = DateTime.now();
   late ReportRange _customRange = ReportRange.month(_periodAnchor);
   String? _selectedCreditAccountId;
+  String? _accountFilterBookId;
+  // null 表示全部账户，空 id 表示无账户，主账户沿用选择器的命名哨兵。
+  String? _selectedAccountId;
   EntryType _dimension = EntryType.expense;
   _ReportGrouping _grouping = _ReportGrouping.topCategory;
   List<String> _selectedTagIds = <String>[];
   String? _selectedCategoryId;
+
+  @override
+  void didChangeDependencies() {
+    super.didChangeDependencies();
+    final controller = VeriFinScope.of(context);
+    final bookId = controller.activeBook.id;
+    if (_accountFilterBookId != bookId ||
+        !_isAccountFilterAvailable(controller, _selectedAccountId)) {
+      _selectedAccountId = null;
+    }
+    _accountFilterBookId = bookId;
+  }
+
+  bool _isAccountFilterAvailable(
+    VeriFinController controller,
+    String? accountId,
+  ) {
+    if (accountId == null || accountId.isEmpty) return true;
+    if (accountId.startsWith(creditParentPickerPrefix)) {
+      final parentId = accountId.substring(creditParentPickerPrefix.length);
+      return controller.accountParents.any((parent) => parent.id == parentId) &&
+          controller.accountsForParent(parentId).isNotEmpty;
+    }
+    return controller.accounts.any((account) => account.id == accountId);
+  }
+
+  /// 普通周期与月度对比共用账户范围；先读取统计投影，保留跨账户退款的冲减。
+  List<LedgerEntry> _entriesForSelectedAccount(VeriFinController controller) {
+    final entries = controller.statisticsEntries;
+    final accountId = _selectedAccountId;
+    if (accountId == null) return entries;
+    final accountIds = accountId.startsWith(creditParentPickerPrefix)
+        ? controller
+              .accountsForParent(
+                accountId.substring(creditParentPickerPrefix.length),
+              )
+              .map((account) => account.id)
+              .toSet()
+        : <String>{accountId};
+    return entries
+        .where((entry) => accountIds.contains(entry.accountId))
+        .toList(growable: false);
+  }
+
+  String _accountFilterLabel(VeriFinController controller) {
+    final l10n = AppLocalizations.of(context);
+    final accountId = _selectedAccountId;
+    if (accountId == null) return l10n.allAccounts;
+    if (accountId.startsWith(creditParentPickerPrefix)) {
+      final parentId = accountId.substring(creditParentPickerPrefix.length);
+      return controller.accountParents
+          .firstWhere((parent) => parent.id == parentId)
+          .name;
+    }
+    return accountDisplayName(
+      controller.accounts,
+      accountId,
+      l10n.noAccountLabel,
+    );
+  }
+
+  Future<void> _pickAccountFilter() async {
+    final controller = VeriFinScope.of(context);
+    final l10n = AppLocalizations.of(context);
+    final bookId = controller.activeBook.id;
+    final selected = await showAccountPickerSheet(
+      context: context,
+      title: l10n.filterAccountTitle,
+      accounts: controller.accounts,
+      selectedId: _selectedAccountId ?? accountPickerAllId,
+      balanceOf: controller.accountBalance,
+      allLabel: l10n.allAccounts,
+      noneLabel: l10n.noAccountLabel,
+      includeCreditParents: true,
+      showCreditChildren: true,
+      parentHint: l10n.reportAllCurrencyAccounts,
+    );
+    if (!mounted || selected == null || controller.activeBook.id != bookId) {
+      return;
+    }
+    final accountId = selected.id == accountPickerAllId ? null : selected.id;
+    if (!_isAccountFilterAvailable(controller, accountId)) return;
+    setState(() => _selectedAccountId = accountId);
+  }
 
   /// 选择多个维度标签；关闭弹层时保持当前交叉筛选。
   Future<void> _pickDimensionTags() async {
@@ -152,7 +240,10 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
     required bool useBillingCycleRules,
   }) {
     if (!useBillingCycleRules || selectedCredit == null) {
-      return entriesInWindow(controller.statisticsEntries, range.window);
+      return entriesInWindow(
+        _entriesForSelectedAccount(controller),
+        range.window,
+      );
     }
     final childIds = controller.accounts
         .where((account) => account.creditAccountId == selectedCredit.id)
@@ -387,31 +478,41 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
                 showBack: true,
               ),
               const SizedBox(height: 10),
-              _RangeSelector(
-                values: <ReportRangeMode>[
-                  if (eligibleCredits.isNotEmpty) ReportRangeMode.billingCycle,
-                  ReportRangeMode.month,
-                  ReportRangeMode.quarter,
-                  ReportRangeMode.year,
-                  ReportRangeMode.custom,
-                ],
-                selected: effectiveMode,
-                onChanged: (mode) => unawaited(_selectRangeMode(mode, range)),
-              ),
-              if (effectiveMode == ReportRangeMode.billingCycle &&
-                  selectedCredit != null) ...<Widget>[
-                const SizedBox(height: 8),
-                Align(
-                  alignment: Alignment.centerLeft,
-                  child: FilterPill(
-                    icon: Icons.credit_card_outlined,
-                    label: selectedCredit.name,
-                    onTap: () => unawaited(
-                      _pickCreditAccount(eligibleCredits, selectedCredit),
-                    ),
+              Wrap(
+                spacing: 8,
+                runSpacing: 8,
+                children: <Widget>[
+                  _RangeSelector(
+                    values: <ReportRangeMode>[
+                      if (eligibleCredits.isNotEmpty)
+                        ReportRangeMode.billingCycle,
+                      ReportRangeMode.month,
+                      ReportRangeMode.quarter,
+                      ReportRangeMode.year,
+                      ReportRangeMode.custom,
+                    ],
+                    selected: effectiveMode,
+                    onChanged: (mode) =>
+                        unawaited(_selectRangeMode(mode, range)),
                   ),
-                ),
-              ],
+                  if (effectiveMode == ReportRangeMode.billingCycle &&
+                      selectedCredit != null)
+                    FilterPill(
+                      icon: Icons.credit_card_outlined,
+                      label: selectedCredit.name,
+                      onTap: () => unawaited(
+                        _pickCreditAccount(eligibleCredits, selectedCredit),
+                      ),
+                    )
+                  else
+                    FilterPill(
+                      key: const Key('report_account_filter'),
+                      icon: Icons.account_balance_wallet_outlined,
+                      label: _accountFilterLabel(controller),
+                      onTap: _pickAccountFilter,
+                    ),
+                ],
+              ),
               if (effectiveMode != ReportRangeMode.custom) ...<Widget>[
                 const SizedBox(height: 2),
                 MonthSwitcher(
@@ -457,7 +558,7 @@ class _ReportAnalysisPageState extends State<ReportAnalysisPage> {
                 const SizedBox(height: 10),
                 _ComparisonCard(
                   comparison: reportMonthlyComparison(
-                    controller.statisticsEntries,
+                    _entriesForSelectedAccount(controller),
                     range.start,
                   ),
                 ),

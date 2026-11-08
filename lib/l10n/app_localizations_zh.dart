@@ -2352,6 +2352,9 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reportPickCreditAccount => '选择信用账户账期';
 
   @override
+  String get reportAllCurrencyAccounts => '合并全部币种账户';
+
+  @override
   String get accountRank => '账户排行';
 
   @override

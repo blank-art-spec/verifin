@@ -846,6 +846,7 @@
   "rankGroupMerchant": "Merchant",
   "reportGroupingLabel": "Ranking dimension",
   "reportPickCreditAccount": "Choose credit account cycle",
+  "reportAllCurrencyAccounts": "Combine all currency accounts",
   "accountRank": "Account ranking",
   "merchantRank": "Merchant ranking",
   "noAccountRankData": "No account data",

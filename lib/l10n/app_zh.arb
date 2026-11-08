@@ -1472,6 +1472,7 @@
   "rankGroupMerchant": "商户",
   "reportGroupingLabel": "排行维度",
   "reportPickCreditAccount": "选择信用账户账期",
+  "reportAllCurrencyAccounts": "合并全部币种账户",
   "accountRank": "账户排行",
   "merchantRank": "商户排行",
   "noAccountRankData": "暂无账户数据",

@@ -2410,6 +2410,9 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reportPickCreditAccount => 'Choose credit account cycle';
 
   @override
+  String get reportAllCurrencyAccounts => 'Combine all currency accounts';
+
+  @override
   String get accountRank => 'Account ranking';
 
   @override

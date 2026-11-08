@@ -4326,6 +4326,12 @@ abstract class AppLocalizations {
   /// **'选择信用账户账期'**
   String get reportPickCreditAccount;
 
+  /// No description provided for @reportAllCurrencyAccounts.
+  ///
+  /// In zh, this message translates to:
+  /// **'合并全部币种账户'**
+  String get reportAllCurrencyAccounts;
+
   /// No description provided for @accountRank.
   ///
   /// In zh, this message translates to:

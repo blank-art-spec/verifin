@@ -257,7 +257,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | `MoneyUnitLabel` | Widget | `common_widgets.dart` | 聚合卡片的轻量「单位：¥/CNY」提示（首页支出走势卡——**仅未开启 `UNIFIED_DESIGN_PREVIEW` 的旧外观**，正式外观这里渲染的是「周／月／季／年」标签、首页预算卡、日历卡、AI 结果卡；走势设置页预览复用同一张卡）；单币种账本隐藏单位时组件自身返回 `SizedBox.shrink`——**只表示看不见，不能拿它判断单位是否显示**；把容器一起收掉的调用点（日历卡）隐藏时根本不构建，`find.byType` 是 `findsNothing`。要断言隐藏用 `find.textContaining('单位：')` |
 | `currencyUnitSubtitle` | 纯函数 | `common_widgets.dart` | **页头 / 卡片副标题拼「单位：x」的唯一入口**：传 `l10n`、上下文前缀（书名/账户类型/日期范围，可空）与币种代码。隐藏单位时返回前缀本身（**不会把书名一起丢掉**），无前缀时返回 `null`——调用方必须据此整段省略副标题，不要渲染只剩分隔符的残句 |
 | `SummaryMetric` | Widget | `common_widgets.dart` | **指标块**（label+value+color+detail）。各类统计小块一律用它，勿新造 `_XxxMetric`/`_XxxTile`。`allowValueWrap` 默认 false；证券概览显式设 true，让标签、金额、说明居中完整换行，其他调用保留默认显示方式 |
-| `FilterPill` | Widget | `common_widgets.dart` | 筛选胶囊（标签+可选图标+chevron） |
+| `FilterPill` | Widget | `common_widgets.dart` | 筛选胶囊（标签+可选图标+chevron）；文本按可用宽度弹性收缩并省略，支持长账户名、窄屏及大字号 |
 | `ToolEntry` | Widget | `common_widgets.dart` | 工具入口图标块 |
 
 ## 族 8 — 对话框 / 弹窗 helper
@@ -312,6 +312,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 | AI 对话查询工具 | `ai/ledger_query.dart`、`ai/ai_query_tool.dart`、`ai/ai_tool_schema.dart` | 通用交易筛选 `queryLedgerEntries`（`LedgerQuery`）；只读工具协议 `AiQueryTool` + `AiToolContext`（含 `currencyDisplay`：单位口径由聊天页注入，**工具层不读 `amount_format` 全局闸门**）+ `AiToolResult` + `AiResultDisplay`（sealed）+ typed Schema + 注册表 `buildAiQueryTools`（**新增分析工具在此登记，并更新 `ai-tools.md`**） |
 | AI Agent 引擎 | `ai/ai_agent_engine.dart`、`ai/ai_native_tool_protocol.dart`、`ai/ai_prompt_tool_protocol.dart` | 双协议只读 Agent 状态机（结构化 `AiAgentMessage` / `AiAgentEvent`）；原生 Tool Calls 与兼容标记协议共用工具执行、轮次和重试边界；结构化传输入口为 `aiAgentStream` / `aiAgentComplete` |
 | 设计令牌 | `app_theme.dart` | 色 `veriRoyal`(主 #346edb) `veriBlue` `veriIncome` `veriExpense` `veriWarning` 等；圆角 `veriRadiusSm/Md/Lg/Xl`；`veriHeaderHeight` `veriPageMaxWidth` |
+
+统计分析页的普通周期账户筛选复用 `showAccountPickerSheet`（全部、无账户、主账户及具体币种子账户），通过可选 `parentHint` 显示“合并全部币种账户”；其他入口默认保留按交易币种匹配说明。页面先从 `statisticsEntries` 取得含退款净额的只读投影，再按所选账户范围筛选；月度同比/环比共用该范围。选择仅保留在当前账本的页面会话，不新增存储；账期信用主体选择独立，账户失效或切账本时普通账户筛选回到全部。
 
 ## 族 11 — AI 对话查询 UI
 
