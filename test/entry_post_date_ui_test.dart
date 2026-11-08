@@ -267,7 +267,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('已有支出取消不改草稿，清除具体时分后仍保留入账日期', (tester) async {
+  testWidgets('已有支出取消不改草稿，修改具体时分后保留入账日期并保存', (tester) async {
     final controller = await makeController();
     addTearDown(controller.dispose);
     await _addAccount(controller);
@@ -287,7 +287,9 @@ void main() {
           .isDirty,
       isFalse,
     );
-    await _tapField(tester, find.byKey(const Key('entry_clear_post_time')));
+    expect(find.byKey(const Key('entry_clear_post_date')), findsNothing);
+    expect(find.byKey(const Key('entry_clear_post_time')), findsNothing);
+    await _selectPostingTime(tester, '15', '20');
     expect(
       tester
           .widget<UnsavedChangesGuard>(find.byType(UnsavedChangesGuard))
@@ -297,8 +299,8 @@ void main() {
     await _tapField(tester, find.byTooltip('保存'), delta: -240);
     await controller.waitForPendingWrites();
     final saved = controller.entries.single;
-    expect(saved.postDate, DateTime(2026, 11, 25));
-    expect(saved.postDatePrecision, OccurredAtPrecision.date);
+    expect(saved.postDate, DateTime(2026, 11, 25, 15, 20));
+    expect(saved.postDatePrecision, OccurredAtPrecision.minute);
     expect(saved.occurredAt, _consumedAt);
     expect(saved.billingCycleId, isNull);
     expect(tester.takeException(), isNull);
@@ -330,7 +332,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('窄屏信用支出清除入账日期后撤销旧归期并按消费时间重算金额', (tester) async {
+  testWidgets('窄屏信用支出修改入账日期后撤销旧归期并重算金额', (tester) async {
     final controller = await makeController();
     addTearDown(controller.dispose);
     final account = await _addAccount(controller, credit: true);
@@ -343,13 +345,14 @@ void main() {
       const TransactionDetailPage(entryId: 'posting-expense'),
       width: 360,
     );
-    await _tapField(tester, find.byKey(const Key('entry_clear_post_date')));
+    await _selectPostingDay(tester, 24);
     await _tapField(tester, find.byTooltip('保存'), delta: -240);
     await controller.waitForPendingWrites();
     final saved = controller.entries.single;
-    expect(saved.postDate, isNull);
-    expect(saved.postDatePrecision, OccurredAtPrecision.date);
-    expect(saved.billingOccurredAt, _consumedAt);
+    expect(saved.postDate, DateTime(2026, 11, 24, 14, 37));
+    expect(saved.postDatePrecision, OccurredAtPrecision.minute);
+    expect(saved.billingOccurredAt, DateTime(2026, 11, 24, 14, 37));
+    expect(saved.occurredAt, _consumedAt);
     expect(saved.billingCycleId, isNull);
     _expectCreditTotals(controller, account, billed: 30, current: 0);
     expect(tester.takeException(), isNull);
@@ -454,7 +457,7 @@ void main() {
     expect(tester.takeException(), isNull);
   });
 
-  testWidgets('导入草稿清除入账日期时同步清除旧归期且不落库', (tester) async {
+  testWidgets('导入草稿修改入账时分时同步清除旧归期且不落库', (tester) async {
     final controller = await makeController();
     addTearDown(controller.dispose);
     await _addAccount(controller);
@@ -465,14 +468,17 @@ void main() {
       entry: _expense(controller),
       onReturned: (value) => result = value,
     );
-    await _tapField(tester, find.byKey(const Key('entry_clear_post_date')));
+    await _selectPostingTime(tester, '16', '05');
+    expect(find.byKey(const Key('entry_clear_post_date')), findsNothing);
+    expect(find.byKey(const Key('entry_clear_post_time')), findsNothing);
     await tester.tap(find.byKey(const Key('save_entry_button')));
     await tester.pumpAndSettle();
     expect(result, isNotNull);
-    expect(result!.postDate, isNull);
-    expect(result!.postDatePrecision, OccurredAtPrecision.date);
+    expect(result!.postDate, DateTime(2026, 11, 25, 16, 5));
+    expect(result!.postDatePrecision, OccurredAtPrecision.minute);
     expect(result!.billingCycleId, isNull);
-    expect(result!.billingOccurredAt, _consumedAt);
+    expect(result!.billingOccurredAt, DateTime(2026, 11, 25, 16, 5));
+    expect(result!.occurredAt, _consumedAt);
     expect(controller.entries, isEmpty);
     expect(tester.takeException(), isNull);
   });

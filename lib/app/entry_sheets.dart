@@ -129,8 +129,7 @@ class EntryPostDateFields extends StatelessWidget {
     onChanged((date: selected, precision: OccurredAtPrecision.minute));
   }
 
-  /// 渲染可选日期与时分；清除日期同时清除精度，清除时间则保留入账日。
-  /// [context] 提供应用语言及主题，日期按本地化格式显示，清除操作允许换行。
+  /// 渲染可选日期与时分，日期按 [context] 的应用语言和本地化格式显示。
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -159,28 +158,6 @@ class EntryPostDateFields extends StatelessWidget {
                 : formatTime(current),
             placeholder: precision == OccurredAtPrecision.date,
             onTap: () => _pickTime(context),
-          ),
-          Wrap(
-            spacing: 8,
-            children: [
-              TextButton(
-                key: const Key('entry_clear_post_date'),
-                onPressed: () => onChanged((
-                  date: null,
-                  precision: OccurredAtPrecision.date,
-                )),
-                child: Text(l10n.entryPostingDateClear),
-              ),
-              if (precision != OccurredAtPrecision.date)
-                TextButton(
-                  key: const Key('entry_clear_post_time'),
-                  onPressed: () => onChanged((
-                    date: dateOnly(current),
-                    precision: OccurredAtPrecision.date,
-                  )),
-                  child: Text(l10n.entryPostingTimeClear),
-                ),
-            ],
           ),
         ],
       ],
