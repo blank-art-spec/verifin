@@ -130,7 +130,7 @@ class EntryPostDateFields extends StatelessWidget {
   }
 
   /// 渲染可选日期与时分；清除日期同时清除精度，清除时间则保留入账日。
-  /// [context] 提供应用语言及主题，日期按本地化格式显示，提示与清除操作允许换行。
+  /// [context] 提供应用语言及主题，日期按本地化格式显示，清除操作允许换行。
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -183,13 +183,6 @@ class EntryPostDateFields extends StatelessWidget {
             ],
           ),
         ],
-        if (useSelectFields) const SizedBox(height: 8),
-        Text(
-          l10n.entryPostingDateHint,
-          style: Theme.of(context).textTheme.bodySmall?.copyWith(
-            color: Theme.of(context).colorScheme.onSurfaceVariant,
-          ),
-        ),
       ],
     );
   }
