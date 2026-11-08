@@ -959,12 +959,8 @@ void main() {
       find.byKey(ValueKey('$creditParentPickerPrefix${f.parent}')),
     );
     await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('entry_currency_button')));
-    await tester.tap(find.byKey(const Key('entry_currency_button')));
-    await tester.pumpAndSettle();
-    await tester.tap(find.byKey(const Key('currency_option_USD')));
-    await tester.pumpAndSettle();
-    await tester.ensureVisible(find.byKey(const Key('entry_base_amount')));
+    await _chooseEntryCurrency(tester, 'USD');
+    await _revealEntryField(tester, const Key('entry_base_amount'));
     await tester.tap(find.byKey(const Key('entry_base_amount')));
     await tester.pumpAndSettle();
     await tester.tap(find.byKey(const Key('number_key_C')));

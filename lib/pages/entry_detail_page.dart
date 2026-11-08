@@ -1070,7 +1070,27 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                         label: Text(AppLocalizations.of(context).accountAdd),
                       ),
                     ),
-                  // 入账是可选账单依据，紧跟账户并沿用相同的选择框样式。
+                  const SizedBox(height: 10),
+                  SelectField(
+                    key: const Key('entry_metadata_date'),
+                    label: AppLocalizations.of(context).dateLabel,
+                    value: AppLocalizations.of(
+                      context,
+                    ).dateMonthDay(_occurredAt),
+                    icon: Icons.calendar_today_outlined,
+                    onTap: _pickDate,
+                  ),
+                  const SizedBox(height: 10),
+                  SelectField(
+                    key: const Key('entry_metadata_time'),
+                    label: AppLocalizations.of(context).timeLabel,
+                    value: _occurredAtPrecision == OccurredAtPrecision.date
+                        ? AppLocalizations.of(context).commonNoneShort
+                        : formatTime(_occurredAt),
+                    icon: Icons.schedule_rounded,
+                    onTap: _pickTime,
+                  ),
+                  // 可选入账时间紧跟记账日期和时间，沿用账户的选择框样式。
                   if (_type == EntryType.expense) ...[
                     const SizedBox(height: 10),
                     EntryPostDateFields(
@@ -1123,26 +1143,6 @@ class _EntryDetailPageState extends State<EntryDetailPage> {
                           selected: _creditParentId == null,
                           onTap: () => _pickCreditPostingAccount(accounts),
                         ),
-                      _EntryMetadataChip(
-                        chipKey: const Key('entry_metadata_date'),
-                        icon: Icons.calendar_today_outlined,
-                        label: Text(
-                          AppLocalizations.of(
-                            context,
-                          ).dateMonthDay(_occurredAt),
-                        ),
-                        onTap: _pickDate,
-                      ),
-                      _EntryMetadataChip(
-                        chipKey: const Key('entry_metadata_time'),
-                        icon: Icons.schedule_rounded,
-                        label: Text(
-                          _occurredAtPrecision == OccurredAtPrecision.date
-                              ? AppLocalizations.of(context).commonNoneShort
-                              : formatTime(_occurredAt),
-                        ),
-                        onTap: _pickTime,
-                      ),
                       for (final group in VeriFinScope.of(context).tagGroups)
                         _EntryMetadataChip(
                           chipKey: Key('entry_metadata_tag_${group.id}'),

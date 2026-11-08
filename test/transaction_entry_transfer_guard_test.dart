@@ -23,6 +23,9 @@ Future<void> _selectTarget(WidgetTester tester, String name) async {
         )
         .first,
   );
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(target);
+  await tester.pumpAndSettle();
   await tester.tap(target);
   await tester.pumpAndSettle();
   await tester.tap(find.text(name).last);
@@ -42,6 +45,9 @@ Future<void> _enterTen(WidgetTester tester) async {
         )
         .first,
   );
+  await tester.pumpAndSettle();
+  await tester.ensureVisible(amount);
+  await tester.pumpAndSettle();
   await tester.tap(amount);
   await tester.pumpAndSettle();
   await tester.tap(find.byKey(const Key('number_key_C')));

@@ -491,6 +491,19 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                               ? null
                               : () => _pickAccount(accounts),
                         ),
+                      DetailInfoRow(
+                        label: AppLocalizations.of(context).dateLabel,
+                        value:
+                            '${AppLocalizations.of(context).dateMonthDay(_occurredAt)}  ${relativeDay(AppLocalizations.of(context), _occurredAt)}',
+                        onTap: _pickDate,
+                      ),
+                      DetailInfoRow(
+                        label: AppLocalizations.of(context).timeLabel,
+                        value: _occurredAtPrecision == OccurredAtPrecision.date
+                            ? AppLocalizations.of(context).commonNoneShort
+                            : formatTime(_occurredAt),
+                        onTap: _pickTime,
+                      ),
                       if (_type == EntryType.expense)
                         EntryPostDateFields(
                           postDate: _postDate,
@@ -512,19 +525,6 @@ class _TransactionDetailPageState extends State<TransactionDetailPage> {
                         accounts,
                         account,
                         toAccount,
-                      ),
-                      DetailInfoRow(
-                        label: AppLocalizations.of(context).dateLabel,
-                        value:
-                            '${AppLocalizations.of(context).dateMonthDay(_occurredAt)}  ${relativeDay(AppLocalizations.of(context), _occurredAt)}',
-                        onTap: _pickDate,
-                      ),
-                      DetailInfoRow(
-                        label: AppLocalizations.of(context).timeLabel,
-                        value: _occurredAtPrecision == OccurredAtPrecision.date
-                            ? AppLocalizations.of(context).commonNoneShort
-                            : formatTime(_occurredAt),
-                        onTap: _pickTime,
                       ),
                       DetailInfoRow(
                         label: AppLocalizations.of(context).commonNote,

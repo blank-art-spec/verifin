@@ -150,7 +150,7 @@ void main() {
     );
   });
 
-  testWidgets('更多信息收纳日期时间标签报销附件与币种', (tester) async {
+  testWidgets('日期时间移出更多信息，标签报销附件与币种仍可操作', (tester) async {
     tester.view.devicePixelRatio = 1;
     tester.view.physicalSize = const Size(800, 1100);
     addTearDown(tester.view.reset);
