@@ -1,0 +1,30 @@
+[
+  {
+    "symbol": "UEC",
+    "url": "https://smartbox.gtimg.cn/s3/?q=UEC&t=all",
+    "http": 200,
+    "response": "v_hint=\"us~uec.am~uranium energy corp~*~GP\"",
+    "fetchedAt": "2026-11-09T07:15:50.9304562Z"
+  },
+  {
+    "symbol": "TCEHY",
+    "url": "https://smartbox.gtimg.cn/s3/?q=TCEHY&t=all",
+    "http": 200,
+    "response": "v_hint=\"us~tcehy.ps~\\u817e\\u8baf\\u63a7\\u80a1(adr)~txkgadr~GP\"",
+    "fetchedAt": "2026-11-09T07:15:50.9789428Z"
+  },
+  {
+    "symbol": "02800",
+    "url": "https://smartbox.gtimg.cn/s3/?q=02800&t=all",
+    "http": 200,
+    "response": "v_hint=\"hk~02800~\\u76c8\\u5bcc\\u57fa\\u91d1~yfjj~GP^jj~028004~\\u946b\\u5143\\u91d1\\u946b\\u56de\\u62a5\\u6df7\\u5408A~xyjxhbhha~KJ^sz~002800~\\u5929\\u987a\\u80a1\\u4efd~tsgf~GP-A\"",
+    "fetchedAt": "2026-11-09T07:15:51.0133745Z"
+  },
+  {
+    "symbol": "BAC",
+    "url": "https://smartbox.gtimg.cn/s3/?q=BAC&t=all",
+    "http": 200,
+    "response": "v_hint=\"us~bac.n~\\u7f8e\\u56fd\\u94f6\\u884c~mgyh~GP^us~bac-b.n~bank of america corporation 6%non cum dep shs each rep 1/1000 ser gg~*~GP^us~bac-e.n~bank of america corporation dep shares rep 1/1000th perp pfd ser 'e'~*~GP^us~bac-k.n~bank of america corporation 5875%non cum dep shs rep1/1000th ser hh~*~GP^us~bac-l.n~bank of america corporation 725% noncum perp conv pfd ser l~*~GP^us~bac-m.n~bank of america corporation 5375%dep shs rep 1/1000th non cum sr kk~*~GP^us~bac-n.n~bank of america corporation 5% dep shs repr 1/1000th non cum pfd ll~*~GP^us~bac-o.n~bank of america corporation 4375% dp sh rp 1/1000th in non cu pf nn~*~GP^us~bac-p.n~bank of america corporation 4125%dep sh rep 1/1000 pfd ser pp usd25~*~GP^us~bac-q.n~bank of america corporation dep shs rep 1/1000th int non cum pfd qq~*~GP\"",
+    "fetchedAt": "2026-11-09T07:15:51.0503739Z"
+  }
+]

@@ -1,0 +1,30 @@
+[
+  {
+    "query": "510300",
+    "uri": "https://smartbox.gtimg.cn/s3/?q=510300&t=all",
+    "http": 200,
+    "fetchedAt": "2026-11-09T07:18:29.9871113Z",
+    "body": "v_hint=\"sh~510300~\\u6caa\\u6df1300ETF\\u534e\\u6cf0\\u67cf\\u745e~hs300etfhtbr~ETF\""
+  },
+  {
+    "query": "159915",
+    "uri": "https://smartbox.gtimg.cn/s3/?q=159915&t=all",
+    "http": 200,
+    "fetchedAt": "2026-11-09T07:18:30.0338804Z",
+    "body": "v_hint=\"sz~159915~\\u521b\\u4e1a\\u677fETF\\u6613\\u65b9\\u8fbe~cybetfyfd~ETF\""
+  },
+  {
+    "query": "161725",
+    "uri": "https://smartbox.gtimg.cn/s3/?q=161725&t=all",
+    "http": 200,
+    "fetchedAt": "2026-11-09T07:18:30.0891102Z",
+    "body": "v_hint=\"sz~161725~\\u767d\\u9152\\u57fa\\u91d1LOF~bjjjlof~LOF\""
+  },
+  {
+    "query": "920076",
+    "uri": "https://smartbox.gtimg.cn/s3/?q=920076&t=all",
+    "http": 200,
+    "fetchedAt": "2026-11-09T07:18:30.1861850Z",
+    "body": "v_hint=\"N\";"
+  }
+]

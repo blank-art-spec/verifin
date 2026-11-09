@@ -11,12 +11,14 @@ import '../models/investment.dart';
 import '../timezone_database.dart';
 import 'investment_decimal.dart';
 import 'market_quote.dart';
+import 'tencent_mainland_symbol.dart';
 
 // 仅映射用户声明为股票的身份；语法不用于推断基金、权证或期权类型。
-// 点号 A/B 类股、.OQ/.N 及 ETF 的 .AM 返回身份见 2026-11-05 真实公开响应夹具。
-const _usStockSymbolPattern = r'[A-Z]{1,5}(?:\.[AB])?';
+// 点号 A/B 类股与短横线优先股保留完整代码；交易所后缀不属于用户证券代码。
+// .AM 普通股、.PS 及短横线优先股依据见 2026-11-09 真实公开响应夹具。
+const _usStockSymbolPattern = r'[A-Z]{1,5}(?:\.[AB]|-[A-Z])?';
 const _stockQueryPattern =
-    '(?:(?:sh|sz)\\d{6}|hk\\d{5}|us$_usStockSymbolPattern)';
+    '(?:(?:sh|sz)\\d{6}|bj920\\d{3}|hk\\d{5}|us$_usStockSymbolPattern)';
 
 /// 一次腾讯 HTTP 响应；[body] 保持字节流，读取方可在超限时立即停止。
 class TencentQuoteResponse {
@@ -126,8 +128,8 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
     reviewNote: '固定公开股票来源已接入，第三方使用许可审核状态未改变',
   );
 
-  /// 核对实际股票身份及原币；沪市 6、深市 0/3 开头，港股只接港元普通代码。
-  /// 美股接有界字母代码和 A/B 类股；返回须匹配 .OQ/.N 或带 GP-ETF 类型的 .AM 身份。
+  /// 核对股票/ETF 入口的证券身份及原币；内地含明确 ETF/LOF 范围与北交所 920 股票。
+  /// 美股接有界字母代码、A/B 类股及短横线优先股；来源后缀和类别须符合真实样例。
   /// [request] 不包含账户或持仓数量；期权、TEST、人民币港股柜台及未知市场不发请求。
   @override
   bool supports(MarketQuoteRequest request) => _queryCode(request) != null;
@@ -191,18 +193,18 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
     return _parseRows(gbk.decode(bytes), selected, _clock().toUtc());
   }
 
-  /// 将证券映射到严格的公开股票代码；返回 null 表示不支持，调用方不能猜市场。
+  /// 将股票/ETF 入口的证券映射到公开代码；返回 null 表示不支持，不能猜市场。
   /// [request] 的 HKD/CNY 必须和市场相符；前导零保留在来源代码及证券 ID 中。
+  /// 基金申购入口的 fund 身份不走此路径，场内成交价不能冒充该入口的单位净值。
   static String? _queryCode(MarketQuoteRequest request) {
     if (request.option ||
         request.fund ||
         request.symbol.toUpperCase().startsWith('TEST-')) {
       return null;
     }
-    if (request.market == StockMarket.cn &&
-        request.currency == 'CNY' &&
-        RegExp(r'^[036]\d{5}$').hasMatch(request.symbol)) {
-      return '${request.symbol.startsWith('6') ? 'sh' : 'sz'}${request.symbol}';
+    if (request.market == StockMarket.cn && request.currency == 'CNY') {
+      final exchange = tencentMainlandExchangeForSymbol(request.symbol);
+      return exchange == null ? null : '$exchange${request.symbol}';
     }
     if (request.market == StockMarket.hk &&
         request.currency == 'HKD' &&
@@ -247,7 +249,12 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
       final marketCode = switch (request.market) {
         StockMarket.us => '200',
         StockMarket.hk => '100',
-        StockMarket.cn => item.key.startsWith('sh') ? '1' : '51',
+        StockMarket.cn => switch (item.key.substring(0, 2)) {
+          'sh' => '1',
+          'sz' => '51',
+          'bj' => '62',
+          _ => '',
+        },
       };
       if (fields.length <= currencyIndex ||
           fields[0].trim() != marketCode ||
@@ -257,6 +264,15 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
             sourceType: fields.length > 56 ? fields[56].trim() : null,
           ) ||
           fields[currencyIndex].trim() != request.currency) {
+        continue;
+      }
+      // 新增基金号段不能只凭 CNY、代码和正价格采用：519 等业务报价可能是每百份
+      // 净值。路由先排除非交易号段，此处再要求真实字段 61 明确为 ETF/LOF。
+      // 北交所真实字段为 GP；旧沪深股票路径保持原校验，避免无关改变已有覆盖。
+      if (request.market == StockMarket.cn &&
+          ((isTencentMainlandExchangeFundSymbol(request.symbol) &&
+                  !const ['ETF', 'LOF'].contains(fields[61].trim())) ||
+              (item.key.startsWith('bj') && fields[61].trim() != 'GP'))) {
         continue;
       }
       final time = _sourceTime(fields[30].trim(), market: request.market);
@@ -285,8 +301,9 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
   }
 
   /// [sourceSymbol] 必须完整保留请求代码和类别点号，不模糊截断其他交易所后缀。
-  /// [request] 的美股身份保留 .OQ/.N；.AM 只接真实样例核对的 [sourceType] GP-ETF。
-  /// .AM 是来源返回后缀，不据此推断 ETF 的挂牌交易所，也不拿其标的股票代替 ETF。
+  /// [request] 的美股身份保留 .OQ/.N；.AM 接 [sourceType] 为 GP 或 GP-ETF，.PS 接 GP。
+  /// 来源的 .AM 同时用于普通股和 ETF，不能反推所有该后缀证券都是 ETF。
+  /// [sourceType] 仅用于已核对的后缀分支；不截断优先股短横线或换成其普通股报价。
   static bool _matchesSourceSymbol(
     String sourceSymbol,
     MarketQuoteRequest request, {
@@ -294,7 +311,9 @@ class TencentQuoteAdapter extends MarketQuoteAdapter {
   }) => request.market == StockMarket.us
       ? sourceSymbol == '${request.symbol}.OQ' ||
             sourceSymbol == '${request.symbol}.N' ||
-            (sourceSymbol == '${request.symbol}.AM' && sourceType == 'GP-ETF')
+            (sourceSymbol == '${request.symbol}.AM' &&
+                const ['GP', 'GP-ETF'].contains(sourceType)) ||
+            (sourceSymbol == '${request.symbol}.PS' && sourceType == 'GP')
       : sourceSymbol == request.symbol;
 
   /// 严格解析实际源时间；沪深/香港为 UTC+8，美股为 America/New_York（含夏令时）。

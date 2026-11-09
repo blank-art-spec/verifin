@@ -19,6 +19,14 @@ import 'support/market_quote_fixture.dart';
 import 'support/option_editor_harness.dart';
 import 'support/test_harness.dart';
 
+/// 明确类别股身份；报价用例仍全部使用本地替身，不将合成价格解释为真实市场观察。
+const _brkB = StockSecurity(
+  symbol: 'BRK.B',
+  name: '伯克希尔B',
+  market: StockMarket.us,
+  currencyCode: 'USD',
+);
+
 /// 只记录公开标的检索参数；测试明确完成请求，不访问真实网络。
 class _SearchClient extends SecuritySearchClient {
   final requests =
@@ -127,10 +135,13 @@ Future<void> _select(WidgetTester tester, StockSecurity security) async {
   await tester.pumpAndSettle();
 }
 
+/// 打开正式期权页；[securityId] 载入已有合约，[specificationOnly] 进入规格保存路径。
+/// [visible] 模拟页签可见性，[openingPortfolio] 提供零落库期初草稿，其余参数控制布局环境。
 Future<void> _pump(
   WidgetTester tester,
   VeriFinController c, {
   String? securityId,
+  bool specificationOnly = false,
   ValueNotifier<bool>? visible,
   InvestmentPortfolio? openingPortfolio,
   Locale? locale,
@@ -142,6 +153,7 @@ Future<void> _pump(
   final page = OptionEditorPage(
     accountId: 'stock-usd',
     securityId: securityId,
+    specificationOnly: specificationOnly,
     openingPortfolio: openingPortfolio,
   );
   await tester.pumpWidget(
@@ -238,8 +250,217 @@ Future<void> _completeContractSearch(
   }
 }
 
+/// 注册期权草稿身份、查询、显式采用及保存检查；报价和搜索全部由本地替身提供。
 void main() {
   useTestDatabases();
+
+  testWidgets('明确 BRK.B 标的的完整期权代码可查询采用并原样保存关系', (tester) async {
+    final search = _SearchClient();
+    final adapter = FixtureQuoteAdapter(
+      (requests) async => requests.map(_contractQuote).toList(),
+      support: (request) => request.option,
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'underlying', 'BRK.B');
+    await _enter(tester, 'underlyingName', _brkB.name);
+    // 远期仅为离线输入，避免用例随运行日期变化变成已过期期权。
+    await _enter(tester, 'symbol', 'BRKB991218C00270000');
+    expect((await _field(tester, 'underlying')).text, 'BRK.B');
+    expect((await _field(tester, 'strike')).text, '270');
+    await _enter(tester, 'multiplier', '10');
+    await _enter(tester, 'quantity', '1');
+    await _enter(tester, 'price', '2');
+    await _contractAction(tester, 'search');
+    expect(search.requests.single.query, 'BRK.B');
+    expect(adapter.lastRequests.single.optionUnderlyingSymbol, 'BRK.B');
+    expect(adapter.lastRequests.single.symbol, 'BRKB991218C00270000');
+    search.requests.single.result.complete([_brkB]);
+    await tester.pumpAndSettle();
+    await _contractAction(tester, 'use-price');
+    await tester.pumpAndSettle();
+    expect((await _field(tester, 'reference')).text, '3.2');
+    expect(c.investmentFor('stock-usd')!.events, isEmpty);
+    await _save(tester, preview: true);
+    final saved = c.investmentFor('stock-usd')!;
+    final option = saved.securities.singleWhere(
+      (security) => security.option != null,
+    );
+    expect(option.symbol, 'BRKB991218C00270000');
+    expect(option.option!.underlyingId, _brkB.id);
+    expect(saved.events, hasLength(1));
+    expect(saved.manualPrices[option.id], '3.2');
+    expect(
+      saved.securities.any((security) => security.symbol == 'BRKB'),
+      isFalse,
+    );
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('已有 BRK.B 合约查询和规格保存不回退裸根或误报身份冲突', (tester) async {
+    final search = _SearchClient();
+    final adapter = FixtureQuoteAdapter(
+      (requests) async => requests.map(_contractQuote).toList(),
+      support: (request) => request.option,
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    final option = StockSecurity(
+      symbol: 'BRKB991218C00270000',
+      name: '本地类别股期权夹具',
+      market: StockMarket.us,
+      currencyCode: 'USD',
+      option: OptionContract(
+        underlyingId: _brkB.id,
+        expiry: '2099-12-18',
+        right: OptionRight.call,
+        strike: '270',
+        premiumMultiplier: '10',
+        settlement: OptionSettlement.unsupported,
+      ),
+    );
+    expect(
+      await c.saveOptionEvent(
+        accountId: 'stock-usd',
+        security: option,
+        underlying: _brkB,
+        event: optionEventFixture(option, StockEventKind.optionBuyOpen),
+        referencePrice: '3',
+        underlyingReferencePrice: '570',
+      ),
+      isTrue,
+    );
+    final events = c.investmentFor('stock-usd')!.events;
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    // 行情查询属于真实交易页；规格核对页本就不提供查询按钮，按用户的两个入口分别验收。
+    await _pump(tester, c, securityId: option.id);
+    await _contractAction(tester, 'search');
+    expect(search.requests.single.query, 'BRK.B');
+    expect(adapter.lastRequests.single.optionUnderlyingSymbol, 'BRK.B');
+    search.requests.single.result.complete([_brkB]);
+    await tester.pumpAndSettle();
+    expect((await _field(tester, 'underlying')).text, 'BRK.B');
+    await tester.pumpWidget(const SizedBox.shrink());
+    await _pump(tester, c, securityId: option.id, specificationOnly: true);
+    expect(find.byKey(const ValueKey('option-contract-search')), findsNothing);
+    expect((await _field(tester, 'underlying')).text, 'BRK.B');
+    await _enter(tester, 'name', '已核对类别股合约');
+    await _save(tester);
+    final saved = c.investmentFor('stock-usd')!;
+    final actual = saved.securities.singleWhere(
+      (security) => security.id == option.id,
+    );
+    expect(actual.name, '已核对类别股合约');
+    expect(actual.option!.underlyingId, _brkB.id);
+    expect(saved.events, events);
+    expect(saved.manualPrices[option.id], '3');
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('错配的明确类别股不查询且不能绕过保存校验，手填内容保留', (tester) async {
+    final search = _SearchClient();
+    final adapter = FixtureQuoteAdapter(
+      (requests) async => requests.map(_contractQuote).toList(),
+      support: (request) => request.option,
+    );
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'BRKB991218C00270000');
+    await _enter(tester, 'underlying', 'BRK.A');
+    await _enter(tester, 'underlyingName', '手填另一类别');
+    await _enter(tester, 'name', '保留用户名称');
+    await _enter(tester, 'strike', '270');
+    await _enter(tester, 'multiplier', '10');
+    await _enter(tester, 'quantity', '1');
+    await _enter(tester, 'price', '2');
+    await _enter(tester, 'reference', '3');
+    await _contractAction(tester, 'search');
+    await tester.pumpAndSettle();
+    expect(search.requests, isEmpty);
+    expect(adapter.requests, 0);
+    final preview = find.widgetWithText(OutlinedButton, '预览结算后现金与持仓');
+    await revealOptionEditorTarget(tester, preview);
+    await tester.tap(preview);
+    await tester.pumpAndSettle();
+    final field = await revealOptionEditorField(tester, 'underlying');
+    final input = tester.widget<TextField>(field);
+    expect(input.controller!.text, 'BRK.A');
+    // 标的使用自动补全组件，字段错误由相邻的 _choiceError 文本显示，不在输入框 decoration 内。
+    final errorColor = Theme.of(tester.element(field)).colorScheme.error;
+    expect(
+      find.byWidgetPredicate(
+        (widget) =>
+            widget is Text &&
+            widget.data?.contains('完整代码不一致') == true &&
+            widget.style?.color == errorColor,
+      ),
+      findsOneWidget,
+    );
+    expect(
+      tester
+          .widget<FilledButton>(find.widgetWithText(FilledButton, '保存'))
+          .onPressed,
+      isNull,
+    );
+    expect((await _field(tester, 'reference')).text, '3');
+    expect(c.investmentFor('stock-usd')!.events, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('原自动生成标的不冒充明确关系，AVGO 改 AAPL 后本地继续补全', (tester) async {
+    final search = _SearchClient();
+    final c = await _ready(search);
+    await _pump(tester, c);
+    await _enter(tester, 'symbol', 'AVGO991218C00270000');
+    expect((await _field(tester, 'underlying')).text, 'AVGO');
+    await _enter(tester, 'symbol', 'AAPL991218C00100000');
+    expect((await _field(tester, 'underlying')).text, 'AAPL');
+    expect((await _field(tester, 'strike')).text, '100');
+    expect(search.requests, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
+
+  testWidgets('明确类别标的改变后撤销旧查询，迟到 BRK.B 报价不进入 BRK.A 草稿', (tester) async {
+    final search = _SearchClient();
+    final release = Completer<void>();
+    final adapter = FixtureQuoteAdapter((requests) async {
+      await release.future;
+      return requests.map(_contractQuote).toList();
+    }, support: (request) => request.option);
+    final c = await _ready(
+      search,
+      quotes: MarketQuoteClient(adapters: [adapter]),
+    );
+    await c.investmentQuoteSync.configure(enabled: true, automatic: false);
+    await _pump(tester, c);
+    await _enter(tester, 'underlying', 'BRK.B');
+    await _enter(tester, 'symbol', 'BRKB991218C00270000');
+    await _contractAction(tester, 'search');
+    expect(adapter.lastRequests.single.optionUnderlyingSymbol, 'BRK.B');
+    await _enter(tester, 'underlying', 'BRK.A');
+    await _enter(tester, 'reference', '7');
+    search.requests.single.result.complete([_brkB]);
+    release.complete();
+    await tester.pumpAndSettle();
+    expect((await _field(tester, 'underlying')).text, 'BRK.A');
+    expect((await _field(tester, 'reference')).text, '7');
+    expect(
+      find.byKey(const ValueKey('option-contract-use-price')),
+      findsNothing,
+    );
+    expect(c.investmentFor('stock-usd')!.events, isEmpty);
+    expect(tester.takeException(), isNull);
+  });
 
   for (final opening in [false, true]) {
     testWidgets('${opening ? '期初' : '交易'}行情查询不猜乘数，手填小数乘数及成交成本保持', (

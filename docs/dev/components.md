@@ -1,10 +1,14 @@
 # 组件清单（Component Registry）
 
-2026-11-07 期权免配置参考行情：
+2026-11-09 公开参考行情：
 
 | 组件或函数 | 位置与约定 |
 | --- | --- |
-| `NasdaqOptionQuoteAdapter` / `NasdaqOptionQuoteTransport` | `app/investments/nasdaq_option_quote_adapter.dart`；固定匿名官方详情入口，无标的白名单，完整代码核对两侧报价；每批 20 合约、3 并发、15 秒/512 KiB，时间未知显式标记，失败回手填，不猜乘数 |
+| `NasdaqOptionQuoteAdapter` / `NasdaqOptionQuoteTransport` | `app/investments/nasdaq_option_quote_adapter.dart`；固定匿名官方详情入口，根右补连字符到六位；已明确的 .A/.B 标的可匹配去点后的根，路径仍用真实标的。stocks 成功且明确 data=null 时仅补查一次 etf，完整代码核对两侧报价；共用每批 20 合约、3 并发、15 秒/512 KiB，时间未知显式标记，失败回手填，不猜乘数 |
+| `matchesUsOptionUnderlying` / `UsOptionUnderlyingMismatchException` | `app/investments/us_option_symbol.dart`；普通根精确匹配，明确 .A/.B 标的允许去点根；不从裸根猜点号。`allowAdjustedRoot` 仅用于已保存合约沿用人工数字调整根关系；独立错配异常使表单阻止查询和保存，不能作为非标准手填格式静默忽略 |
+| `MarketQuoteRequest.usOptionSymbol(symbol, {underlyingSymbol})` | `app/investments/market_quote.dart`；可选标的只来自已选、手填或已有合约，与完整标准代码共同校验，不改证券身份或猜乘数。`OptionEditorPage` 的本地补全、查询及保存共用此入口，排除空白和未手改的自动生成标的；明确 BRK.B/BRKB 关系可查询并保存，裸根仍不推断点号 |
+| `tencentMainlandExchangeForSymbol` | `app/investments/tencent_mainland_symbol.dart`；搜索与行情共用六位代码路由：沪市 6、深市 0/3 股票及北交所 920，基金号段交给下方 helper；其他号段返回 null。路由不认证品种，仍须验证来源身份、市场和币种；北交所行情须市场码 62 且字段 61 为 GP |
+| `isTencentMainlandExchangeFundSymbol` | 同文件；沪市仅 501/502、506000–506099、510–513、515–518、520500–520999、526/530/551、560–563、565–567、581/587–589，深市仅 15–18 六位基金候选号段。搜索类别与行情字段 61 另须明确 ETF/LOF；519、521–524、580/582 非交易或权证代码不接受，也不新增封闭式基金、REIT 或不明品种。成交价只用于股票/ETF 入口，不替代基金申购 NAV；号段依据见[来源记录](public-quote-research.md) |
 | `MarketQuote.sourceTimeUnknown` / `InvestmentPriceFact.sourceTimeUnknown` | 显式未知仅对期权正成交价开放；来源时间可空、抓取时间独立，UI/缓存/历史依据不补造时间；历史事实随 JSON v18 保存 |
 | `MarketQuoteAdapter.retainQuotesOnFailure` | 默认保留原来源缓存；Nasdaq 为 false，只让本次失败合约缓存失效并通知资产更新，手填账务不改 |
 
@@ -41,7 +45,7 @@
 | `InvestmentSecurityAutocomplete` | `app/investments/investment_security_autocomplete.dart`；复用 `InvestmentInputField`，通过 `OverlayPortal` 管理安全区及键盘感知的候选浮层，调用方持有文本控制器，组件释放自己的焦点及滚动资源；实色、受输入宽度和可用高度限制的可滚动候选，代码及名称完整换行，保留手填及身份只读约束，支持主动展开及上下键/回车/Esc |
 | `InvestmentSecuritySuggestion` / `collectInvestmentSecuritySuggestions` / `matchInvestmentSecuritySuggestions` | `app/investments/investment_security_suggestions.dart`；按账本、币种、市场和品种收集本地身份，当前账户优先，市场/品种/忽略大小写的原代码去重；代码或名称包含匹配。后备参考价只能来自当前账户，期权不混入股票/基金候选 |
 | `searchInvestmentSecurities(query, {market, currencyCode})` | `app/veri_fin_controller.dart`；页面主动身份查询的公共入口，可经 `create(securitySearchClient:)` 注入测试客户端；只返回候选、不写账目或偏好，失败仅记录不含搜索词的错误类型，由页面反馈并保留草稿 |
-| `SecuritySearchClient` / `SecuritySearchResponse` / `SecuritySearchTransport` / `SecuritySearchTransportFactory` / `TencentSecuritySearchTransport` | `app/investments/security_search.dart`；主动检索公开身份的有界客户端及可注入传输，固定 HTTPS `smartbox.gtimg.cn/s3/`，只发送 `q` 和 `t=all`，市场/币种在本地筛选；总时限 10 秒、响应 64 KiB、最多 20 项，不重定向、不执行响应脚本、不查询价格或写账目。拒绝来源明确标为基金 `KJ`、指数 `ZS`、权证 `QZ` 的条目；`GP` 候选仍可能含 ETF、单位或认股权证，须核对名称与品种，不提供基金 NAV 或期权合约规格 |
+| `SecuritySearchClient` / `SecuritySearchResponse` / `SecuritySearchTransport` / `SecuritySearchTransportFactory` / `TencentSecuritySearchTransport` | `app/investments/security_search.dart`；主动检索公开身份的有界客户端及可注入传输，固定 HTTPS `smartbox.gtimg.cn/s3/`，只发送 `q` 和 `t=all`，市场/币种在本地筛选；总时限 10 秒、响应 64 KiB、最多 20 项，不重定向、不执行响应脚本、不查询价格或写账目。内地股票接受 GP-A 系列，基金须同时命中交易号段 helper 与 ETF/LOF 类别，交易所还须符合共享路由；拒绝基金 `KJ`、指数 `ZS`、权证 `QZ`。美股接受来源 oq/n/am/ps 的 GP 身份；`GP` 仍可能含 ETF、单位或认股权证，须核对名称与品种，不提供基金 NAV 或期权合约规格 |
 | `MarketQuotesPage` | `pages/market_quotes_page.dart`；已有组合时展示账户副标题、联网与刷新设置、来源状态、持仓参考行情分组，价格与时间复用标准明细行及 `InvestmentQuoteDetails`。`InvestmentPage` 在尚无证券时也保留行情入口；有效账户无组合时显示标题、返回及 `marketNoSecurities` 空态，不创建组合或联网；已有组合且证券资料为空使用同一文案，历史资料仍在但无可展示持仓时用原 `marketEmptyHoldings`；真实账户失效另显示失效原因 |
 
 2026-11-02 账本类型与证券账户交互，行为及验证进度见[实施记录](investment-ledger-interaction-implementation.md)：
@@ -105,7 +109,7 @@ HK/USD 基金 B 类；`hongKongFundDayEnd` 提供纯日期的香港日报末截�
 | `creditExpenseBelongsToStatement` | `app/credit_card.dart`；部分还款验证遵循银行明确归期，否则以入账日（未填则消费日）匹配正式账单周期；账单日当天的自动归期仍进入下一期 |
 | `creditStatementOverview` / `buildCreditCycleOverview` | `app/credit_card.dart`；主体内购汇按两端实际金额转移无正式账单覆盖的原币债务；主体已出账流水待还逐笔优先明确参考额，否则按 `now` 有效汇率换算，关联到账退款独立折算，部分还款保留剩余原币比例、结清无尾差，正式快照优先。子账户概览传入 `internalAccountCurrencies`，待还与未出账保持账户原币 |
 | `projectStatisticsCurrency` | `app/statistics_currency.dart`；明确参考额优先、否则最新汇率，重算退款净额并返回缺失币种；只读投影，不覆盖原始交易 |
-| `FrankfurterClient` | `app/frankfurter_client.dart`；只发送币种/日期，校验日汇率响应、超时和体积；由 Controller 合并并落库 |
+| `FrankfurterClient` | `app/frankfurter_client.dart`；只发送币种/日期，校验币种、正数日汇率、严格 YYYY-MM-DD、超时和体积；观察日不得晚于当前瞬间 UTC+14 日期，历史查询另不得晚于请求日。UTC+14 是应用的全球未来日期上界，不代表供应方时区；来源日期的既有本地载体和生效口径不变。可注入 clock/clientFactory，由 Controller 合并并落库 |
 
 Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**目录。**写任何新组件、弹窗、格式化或计算之前，先在本表查一遍有没有现成的**：命中就复用或参数化扩展，不要新建变体、不要复制粘贴脚手架。规范见 `AGENTS.md` 的「代码规范 · 组件化」一节。
 
@@ -354,7 +358,7 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 - 参考行情：`investments/market_quote.dart` 定义字段/时间/单位与来源门禁；`MarketQuoteClient.allowsAdapter` 统一来源、请求和缓存判断，`hasApprovedSources` 与 `hasAvailableSources`/`hasResearchSources` 区分正式许可状态和当前可用的公开参考来源。`InvestmentQuoteSync.refresh` 区分手动和自动：手动不受本地五分钟等待限制，自动按账本及币种账户独立计时，取默认五分钟与来源更严格间隔；请求中仍防重复。状态、尝试时间及下次自动刷新时间随当前账户切换，设备缓存 v2 保存账户计时，兼容 v1 报价但不沿用旧全局冷却。`MarketQuotesPage` 只负责当前账户显示和手动操作，不再拥有应用级自动调度。`formatQuoteTime(includeSeconds: true)` 在行情页显示到秒，便于辨别同一分钟内的手动抓取；持仓信息区传 `compact: true`，以应用语言的带年份短日期代替完整日期和星期，时间精度及设备时区仍保留。两参数默认均为 false，历史等既有调用保持完整日期及分钟级时间。主应用提供固定的腾讯股票与指定招商基金来源，`approved` 仍为 false；不能将测试夹具当作真实行情。详见 [阶段 4](securities-stage04-implementation.md)。
 
-- 公开股票研究：`investments/tencent_quote_adapter.dart` 的 `TencentQuoteAdapter` / `TencentHttpQuoteTransport` 实现固定 HTTPS、每批 20 个身份/15 秒/512 KiB、GBK 及源时间校验；支持沪深 CNY、港股 HKD，以及 1–5 位美股字母代码和 .A/.B 类股，响应须匹配原代码及 .OQ/.N；腾讯适配器不查询期权和 TEST，`approved: false`/`researchOnly: true`。`production_market_quotes.dart` 的 `buildProductionMarketQuoteClient` 由 `main.dart` 固定装配腾讯股票、指定招商基金及免凭证 Nasdaq 期权详情，启用 `allowResearchSources` 只表达应用允许使用固定装配来源，不改写 `approved`；不再依赖 debug、flavor 或额外编译参数。构造不联网，通用 Controller 默认空客户端，用户联网/自动刷新仍默认关闭。范围与历史证据见[来源记录](public-quote-research.md)。
+- 公开股票/ETF 研究：`investments/tencent_quote_adapter.dart` 的 `TencentQuoteAdapter` / `TencentHttpQuoteTransport` 实现固定 HTTPS、每批 20 个身份/15 秒/512 KiB、GBK 及源时间校验；内地采用共享路由并核对市场码，新增基金字段 61 须 ETF/LOF，北交所须市场码 62 且类型 GP；港股保留 HKD。美股支持 1–5 位字母代码、.A/.B 类股及 -[A-Z] 优先股，完整匹配 .OQ/.N；.AM 另须来源类型 GP 或 GP-ETF，.PS 须 GP，不截断后缀或借用普通股价。基金申购 fund 身份、期权和 TEST 不进入该成交价来源，`approved: false`/`researchOnly: true`。`production_market_quotes.dart` 的 `buildProductionMarketQuoteClient` 由 `main.dart` 固定装配腾讯股票/ETF、指定招商基金及免凭证 Nasdaq 期权详情，`allowResearchSources` 不改写 `approved`；不依赖 debug、flavor 或额外编译参数。构造不联网，通用 Controller 默认空客户端，用户联网/自动刷新仍默认关闭。范围与证据见[来源记录](public-quote-research.md)。
 
 - 证券行情前台会话：`investments/investment_quote_session.dart` 的 `InvestmentQuoteSession` 负责当前账本全部证券账户已支持持仓的到期检查与自动排程，沿用 `InvestmentQuoteSync` 的逐账户计时、缓存、请求防重及旧结果校验；不依赖详情页可见，不在构造时发请求。`pages/market_quote_session_gate.dart` 的 `MarketQuoteSessionGate` 将根级前后台、应用锁及通过隐私同意/首次引导后的可用状态连接到会话。打开软件、回前台及解锁时检查，到期才查询；退后台、锁屏、退出、关闭授权或切换账本会停止旧会话的后续请求。联网和自动开关仍为设备全局偏好且默认关闭，不注册后台服务。
 

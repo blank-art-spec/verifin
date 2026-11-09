@@ -6,6 +6,7 @@ import 'dart:convert';
 import 'dart:io';
 
 import '../models/investment.dart';
+import 'tencent_mainland_symbol.dart';
 
 /// 一次身份搜索的响应；保留原始流，调用方可在超限时立即停止读取。
 class SecuritySearchResponse {
@@ -105,7 +106,7 @@ class SecuritySearchClient {
   static const maximumResults = 20;
 
   /// 搜索 [query] 的公开身份，按 [market] 和实际结算 [currencyCode] 筛选结果。
-  /// 仅支持 USD 美股、HKD 港股及 CNY 沪深 A 股；不推断基金、期权或人民币港股。
+  /// 支持 USD 美股、HKD 港股及 CNY 内地股票/场内基金；不推断期权或人民币港股。
   /// 空词或不支持的市场币种组合返回空列表且不创建连接；非法长词抛出格式错误。
   /// 返回候选不包含价格或交易事实，必须由用户选择核对，调用方负责显示失败反馈。
   /// 来源 GP 类别可能包括 ETF、单位或认股权证，不能视为普通股品种认证；
@@ -202,18 +203,21 @@ class SecuritySearchClient {
 
   /// 核对 [fields] 的来源市场、类别标记及原代码，返回 [market] 的稳定身份代码。
   /// 港股保留五位前导零；美股只去掉已核对的交易所后缀，保留 BRK.B 等类别点号。
-  /// 沪深只接 GP-A 系列，香港排除人民币柜台；拒绝明确标为 KJ/ZS/QZ 的行。
+  /// 内地接受 GP-A 系列与明确 ETF/LOF 标记，交易所须和共享代码路由一致。
+  /// ETF/LOF 候选供股票/ETF 成交价流程使用，不创建基金申购或净值身份。
+  /// 香港排除人民币柜台；继续拒绝明确标为 KJ/ZS/QZ 等其他品种的行。
   /// GP 是上游的宽泛类别，不能据此承诺所有候选都是普通股，也不按名称猜品种。
   static String? _symbol(List<String> fields, StockMarket market) {
     final exchange = fields[0], raw = fields[1], kind = fields[4];
     switch (market) {
       case StockMarket.cn:
-        if (!RegExp(r'^GP-A(?:-[A-Z]+)*$').hasMatch(kind)) return null;
-        if (exchange == 'sh' && RegExp(r'^6\d{5}$').hasMatch(raw)) return raw;
-        if (exchange == 'sz' && RegExp(r'^[03]\d{5}$').hasMatch(raw)) {
-          return raw;
+        final fundCode = isTencentMainlandExchangeFundSymbol(raw);
+        if (fundCode
+            ? !const ['ETF', 'LOF'].contains(kind)
+            : !RegExp(r'^GP-A(?:-[A-Z]+)*$').hasMatch(kind)) {
+          return null;
         }
-        return null;
+        return tencentMainlandExchangeForSymbol(raw) == exchange ? raw : null;
       case StockMarket.hk:
         if (exchange == 'hk' &&
             kind == 'GP' &&

@@ -119,6 +119,64 @@ Map<String, dynamic> _publicFixture() =>
 
 /// 用真实公开响应及故障流验证身份、币种、大小、超时和不执行脚本的网络边界。
 void main() {
+  test('真实内地 ETF 和 LOF 搜索保留场内成交身份，不转为申购净值身份', () async {
+    final samples =
+        jsonDecode(
+              File(
+                'test/fixtures/investments/tencent_mainland_search_20261109.json',
+              ).readAsStringSync(),
+            )
+            as List;
+    for (final raw in samples) {
+      final sample = Map<String, Object?>.from(raw as Map);
+      final symbol = sample['query']! as String;
+      final transport = _textTransport(sample['body']! as String);
+      final result = await SecuritySearchClient(
+        transportFactory: () => transport,
+      ).search(symbol, market: StockMarket.cn, currencyCode: 'CNY');
+      if (symbol == '920076') {
+        // 来源搜索这次明确返回 N；可直接查询其行情不代表搜索源也已收录。
+        expect(result, isEmpty);
+      } else {
+        expect(result, hasLength(1));
+        expect(result.single.symbol, symbol);
+        expect(result.single.id, 'cn:stock:$symbol');
+        expect(result.single.isFund, isFalse);
+        expect(result.single.currencyCode, 'CNY');
+      }
+      expect(transport.closed, isTrue);
+    }
+  });
+
+  test('内地新增品种仍拒绝错交易所、场外基金、债券与指数', () async {
+    // 基于真实类别结构的本地边界变体；不向真实接口发送这些合成行。
+    final rows = [
+      'sh~510300~沪深300ETF华泰柏瑞~hs300etf~ETF',
+      'sz~510300~错误交易所~cw~ETF',
+      'sh~159915~错误交易所~cw~ETF',
+      'sz~161725~白酒基金LOF~bjjjlof~LOF',
+      'sh~510301~场外基金类别~cw~KJ',
+      'sh~510300~基金代码错误声明股票~cw~GP-A',
+      'sh~519001~申赎不能作为每份成交价~cw~LOF',
+      'sh~521001~认购业务代码~cw~ETF',
+      'sh~522001~转托管业务代码~cw~ETF',
+      'sh~580027~权证代码~cw~ETF',
+      'sz~000001~错误指数类别~cw~ZS',
+      'sz~123001~债券不能按每份价格估值~zq~LOF',
+      'bj~920076~来源身份边界示例~sl~GP-A',
+      'sh~920076~错误交易所~cw~GP-A',
+    ].join('^');
+    final transport = _textTransport('v_hint=${jsonEncode(rows)};');
+    final result = await SecuritySearchClient(
+      transportFactory: () => transport,
+    ).search('边界', market: StockMarket.cn, currencyCode: 'CNY');
+    expect(result.map((security) => security.symbol), [
+      '510300',
+      '161725',
+      '920076',
+    ]);
+  });
+
   test('真实smartbox搜索将TSLL与TSLA保留为两个完整身份，不用标的名称替换ETF代码', () async {
     final fixture =
         jsonDecode(

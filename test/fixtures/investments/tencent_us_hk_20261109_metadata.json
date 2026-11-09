@@ -1,0 +1,12 @@
+{
+  "url": "https://qt.gtimg.cn/q=usUEC,usBTG,usTCEHY,usSPY,usBRK.B,hk02800,hk03033",
+  "fetchedAt": "2026-11-09T07:15:51.0650528Z",
+  "http": 200,
+  "encoding": "GBK",
+  "description": "腾讯官方公开行情原始字节；仅已知美股与港股ETF标的，无用户账户持仓信息",
+  "sourceTimes": {
+    "US": "2026-11-06 16:00:01，BRK.B 为16:03:41（America/New_York）",
+    "HK02800": "2026-11-09 15:00:41（UTC+8）",
+    "HK03033": "2026-11-09 15:00:21（UTC+8）"
+  }
+}

@@ -430,11 +430,11 @@ void main() {
     (index: 3, value: '2,150'),
     (index: 35, value: 'HKD'),
     (index: 56, value: ''),
-    (index: 56, value: 'GP'),
+    (index: 56, value: 'GP-W'),
     (index: 56, value: 'GP-ETF-W'),
   ]) {
     test(
-      'AM后缀仅接纳精确ETF身份、类型、原币和十进制价格 ${change.index}/${change.value}',
+      'AM后缀继续核对完整身份、允许类型、原币和十进制价格 ${change.index}/${change.value}',
       () async {
         final transport = _FixtureTransport(
           (_) => _response(
@@ -519,7 +519,7 @@ void main() {
         'aapl',
         ' AAPL',
         'AAPL ',
-        'BRK-B',
+        'BRK-BC',
         'BRK.C',
         'BRK.AA',
         'ABCDEF',
@@ -580,7 +580,7 @@ void main() {
     );
     final unsupported = [
       const StockSecurity(
-        symbol: 'BRK-B',
+        symbol: 'BRK-BC',
         name: '非来源类别股格式',
         market: StockMarket.us,
         currencyCode: 'USD',
@@ -871,7 +871,7 @@ void main() {
       'https://qt.gtimg.cn/q=sh600026?other=1',
       'https://qt.gtimg.cn/q=sh600026#fragment',
       'https://qt.gtimg.cn/q=TEST-TCH-CALL',
-      'https://qt.gtimg.cn/q=usBRK-B',
+      'https://qt.gtimg.cn/q=usBRK-BC',
       'https://qt.gtimg.cn/q=usBRK.AA',
       'https://qt.gtimg.cn/q=usAAPL.OQ',
       'https://qt.gtimg.cn/q=usAAPL261218C00350000',

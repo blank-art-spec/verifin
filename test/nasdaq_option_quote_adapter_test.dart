@@ -57,6 +57,12 @@ String _emptyStocksFixture() => File(
   'test/fixtures/investments/nasdaq_sofx_stocks_empty_20261109.json',
 ).readAsStringSync();
 
+/// 读取 2026-11-09 的公开身份夹具；[name] 是 nasdaq_ 与日期之间的固定文件名部分。
+/// 原始响应保留真实根填充、类别股路径和完整合约，调用此函数不会发起联网请求。
+String _identityFixture(String name) => File(
+  'test/fixtures/investments/nasdaq_${name}_20261109.json',
+).readAsStringSync();
+
 /// 创建与真实 SOFX 夹具一致的公开请求；[right] 指定认购或认沽方向。
 /// ETF 标的沿用应用现有的股票身份，不新增分类字段或修改合约乘数。
 MarketQuoteRequest _sofxRequest({OptionRight right = OptionRight.put}) =>
@@ -292,8 +298,169 @@ void main() {
     expect(transport.uris.single.path, '/api/quote/avgo/option-chain');
     expect(
       transport.uris.single.queryParameters['recordID'],
-      'AVGO1--261109C00265000',
+      'AVGO1-261109C00265000',
     );
+  });
+
+  test('真实 F 单字母根补足六位，认购认沽仍共用一次详情', () async {
+    final transport = _Transport(
+      (uri) => _response(
+        body: uri.queryParameters['recordID'] == 'F-----261113C00005000'
+            ? _identityFixture('f_option_detail')
+            : _identityFixture('f_old_record_empty'),
+      ),
+    );
+    final call = _request(
+      symbol: 'F261113C00005000',
+      underlying: 'us:stock:F',
+      expiry: '2026-11-13',
+      strike: '5',
+    );
+    final put = _request(
+      symbol: 'F261113P00005000',
+      underlying: 'us:stock:F',
+      expiry: '2026-11-13',
+      strike: '5',
+      right: OptionRight.put,
+    );
+    final quotes = await _adapter(transport).fetch([call, put]);
+    expect(quotes.map((quote) => quote.last), ['7.56', '0.01']);
+    expect(transport.uris, hasLength(1));
+    expect(transport.uris.single.queryParameters, {
+      'assetclass': 'stocks',
+      'recordID': 'F-----261113C00005000',
+    });
+    expect(quotes.every((quote) => quote.sourceTimeUnknown), isTrue);
+  });
+
+  test('真实 SPY 三字母根与 ETF 分类补查同时适用', () async {
+    final transport = _Transport(
+      (uri) => _response(
+        body:
+            uri.queryParameters['assetclass'] == 'etf' &&
+                uri.queryParameters['recordID'] == 'SPY---261113C00500000'
+            ? _identityFixture('spy_option_detail')
+            : _emptyStocksFixture(),
+      ),
+    );
+    final request = _request(
+      symbol: 'SPY261113P00500000',
+      underlying: 'us:stock:SPY',
+      expiry: '2026-11-13',
+      strike: '500',
+      right: OptionRight.put,
+    );
+    final quote = (await _adapter(transport).fetch([request])).single;
+    expect(quote.last, '0.07');
+    expect(quote.securityId, request.securityId);
+    expect(transport.uris.map((uri) => uri.queryParameters['assetclass']), [
+      'stocks',
+      'etf',
+    ]);
+    expect(
+      transport.uris.every(
+        (uri) => uri.queryParameters['recordID'] == 'SPY---261113C00500000',
+      ),
+      isTrue,
+    );
+  });
+
+  test('已确认 BRK.B 标的使用 BRKB 合约根并保留真实标的路径', () async {
+    final transport = _Transport(
+      (_) => _response(body: _identityFixture('brkb_option_detail')),
+    );
+    final request = _request(
+      symbol: 'BRKB261113C00270000',
+      underlying: 'us:stock:BRK.B',
+      expiry: '2026-11-13',
+      strike: '270',
+    );
+    final quote = (await _adapter(transport).fetch([request])).single;
+    expect(quote.securityId, request.securityId);
+    expect(quote.last, '301.48');
+    expect(transport.uris.single.path, '/api/quote/brk.b/option-chain');
+    expect(
+      transport.uris.single.queryParameters['recordID'],
+      'BRKB--261113C00270000',
+    );
+    expect(request.optionUnderlyingSymbol, 'BRK.B');
+
+    // 去点仅用于比对已有标的关系，不允许另一类别借用同一份完整合约报价。
+    final wrongClass = _request(
+      symbol: 'BRKB261113C00270000',
+      underlying: 'us:stock:BRK.A',
+      expiry: '2026-11-13',
+      strike: '270',
+    );
+    expect(_adapter(transport).supports(wrongClass), isFalse);
+    expect(await _adapter(transport).fetch([wrongClass]), isEmpty);
+    expect(transport.uris, hasLength(1));
+
+    // 本地构造另一类别的合法身份，但注入的真实响应仍属于 BRKB，必须拒收价格。
+    final differentContract = _request(
+      symbol: 'BRKA261113C00270000',
+      underlying: 'us:stock:BRK.A',
+      expiry: '2026-11-13',
+      strike: '270',
+    );
+    expect(await _adapter(transport).fetch([differentContract]), isEmpty);
+    expect(transport.uris, hasLength(2));
+  });
+
+  test('BF.B 真实期权链同样使用去点根，规则不绑定单一证券名称', () {
+    final chain =
+        jsonDecode(_identityFixture('bfb_option_chain'))
+            as Map<String, Object?>;
+    final table = _mapAt(chain, ['data', 'table']);
+    final row = (table['rows']! as List).last as Map<String, Object?>;
+    expect(
+      row['drillDownURL'],
+      '/market-activity/stocks/bf.b/option-chain/call-put-options/bfb---261120c00015000',
+    );
+    final request = _request(
+      symbol: 'BFB261120C00015000',
+      underlying: 'us:stock:BF.B',
+      expiry: '2026-11-20',
+      strike: '15',
+    );
+    expect(_adapter(_Transport((_) => _response())).supports(request), isTrue);
+  });
+
+  test('一至六位根正确填充，超长根在联网前拒绝', () async {
+    const records = {
+      'A': 'A-----261109C00265000',
+      'AA': 'AA----261109C00265000',
+      'AAA': 'AAA---261109C00265000',
+      'AAAA': 'AAAA--261109C00265000',
+      'AAAAA': 'AAAAA-261109C00265000',
+      'AAAAAA': 'AAAAAA261109C00265000',
+    };
+    for (final entry in records.entries) {
+      final transport = _Transport(
+        (_) => _response(body: _forSymbol(entry.key)),
+      );
+      expect(
+        await _adapter(transport).fetch([
+          _request(
+            symbol: '${entry.key}261109C00265000',
+            underlying: 'us:stock:${entry.key}',
+          ),
+        ]),
+        hasLength(1),
+      );
+      expect(transport.uris.single.queryParameters['recordID'], entry.value);
+    }
+    final invalid = _Transport((_) => _response());
+    expect(
+      await _adapter(invalid).fetch([
+        _request(
+          symbol: 'AAAAAAA261109C00265000',
+          underlying: 'us:stock:AAAAAAA',
+        ),
+      ]),
+      isEmpty,
+    );
+    expect(invalid.uris, isEmpty);
   });
 
   test('SOFX 股票分类空数据后查询 ETF，认购认沽共用一次补查', () async {
@@ -842,5 +1009,40 @@ void main() {
     expect(client.uris, hasLength(2));
     transport.close();
     expect(client.forceClosed, isTrue);
+  });
+
+  test('原生传输仅接受六位根字段，不能用少填多填或内部连字符拼接地址', () async {
+    final client = _HttpClient();
+    final transport = NasdaqHttpOptionQuoteTransport(client: client);
+    for (final record in [
+      'F-----261113C00005000',
+      'SPY---261113C00500000',
+      'AVGO--261109C00265000',
+      'AVGO1-261109C00265000',
+      'ABCDEF261109C00265000',
+    ]) {
+      final uri = Uri.https('api.nasdaq.com', '/api/quote/avgo/option-chain', {
+        'assetclass': 'stocks',
+        'recordID': record,
+      });
+      expect((await transport.get(uri)).statusCode, 200);
+    }
+    for (final record in [
+      'F--261113C00005000',
+      'SPY--261113C00500000',
+      'AVGO---261109C00265000',
+      'ABCDEF--261109C00265000',
+      'AB-CD-261109C00265000',
+      '------261109C00265000',
+      'F     261113C00005000',
+    ]) {
+      final uri = Uri.https('api.nasdaq.com', '/api/quote/avgo/option-chain', {
+        'assetclass': 'stocks',
+        'recordID': record,
+      });
+      await expectLater(transport.get(uri), throwsFormatException);
+    }
+    expect(client.uris, hasLength(5));
+    transport.close();
   });
 }

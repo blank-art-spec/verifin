@@ -67,11 +67,21 @@ class MarketQuoteRequest {
           : null;
 
   /// 未保存的美股期权只从完整代码提取公开身份，不创建证券或猜测交割乘数。
-  /// 输入统一为大写；非标准、TEST 或无效日期/行权价抛出 FormatException。
-  factory MarketQuoteRequest.usOptionSymbol(String symbol) {
+  /// [symbol] 统一为大写；非标准、TEST 或无效日期/行权价抛出 FormatException。
+  /// [underlyingSymbol] 仅承载用户已明确填写、选中或保存的标的，允许 BRK.B 与 BRKB 根匹配。
+  /// 缺省仍保留裸根，不猜类别点号；明确标的错配抛出独立异常，保存校验不能将它静默忽略。
+  factory MarketQuoteRequest.usOptionSymbol(
+    String symbol, {
+    String? underlyingSymbol,
+  }) {
     final normalized = symbol.trim().toUpperCase();
     final identity = parseUsOptionSymbol(normalized);
     if (identity == null) throw const FormatException('无法识别完整美股期权代码');
+    final underlying =
+        underlyingSymbol?.trim().toUpperCase() ?? identity.underlyingSymbol;
+    if (!matchesUsOptionUnderlying(identity.underlyingSymbol, underlying)) {
+      throw const UsOptionUnderlyingMismatchException();
+    }
     final thousand = BigInt.from(1000);
     final whole = identity.strikeThousandths ~/ thousand;
     final fraction = (identity.strikeThousandths % thousand).toString().padLeft(
@@ -80,7 +90,7 @@ class MarketQuoteRequest {
     );
     return MarketQuoteRequest._usOption(
       normalized,
-      underlyingSymbol: identity.underlyingSymbol,
+      underlyingSymbol: underlying,
       expiry: identity.expiry,
       right: identity.right,
       strike: InvestmentDecimal.parse('$whole.$fraction').toString(),

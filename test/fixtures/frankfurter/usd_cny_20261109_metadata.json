@@ -1,0 +1,13 @@
+{
+  "source": "https://api.frankfurter.dev/v2/rate/usd/cny",
+  "sourceRetrievedOn": "2026-11-09",
+  "httpStatus": 200,
+  "kind": "匿名 GET 的真实 USD/CNY 每日参考汇率响应，只请求公开币种，无账户或金额",
+  "officialDocumentation": "https://frankfurter.dev/#rate",
+  "limitations": [
+    "date 为来源观察日，响应不提供实际公布时刻或统一时区，不得把日期补成成交或发布时间。",
+    "UTC+14 日期上界是本应用避免误拒全球日期的校验策略，不是供应方声明的发布时间或时区。",
+    "仅证明本次桌面匿名请求可用，不表示 Android 直连或持续稳定性已验收。",
+    "测试中的日期、价格和身份修改仅用于本地边界输入，不是真实来源观察。"
+  ]
+}

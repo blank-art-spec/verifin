@@ -5,6 +5,7 @@ import 'package:flutter_test/flutter_test.dart';
 
 import 'package:verifin/app/investments/investment_quote_sync.dart';
 import 'package:verifin/app/investments/market_quote.dart';
+import 'package:verifin/app/investments/us_option_symbol.dart';
 
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
@@ -120,6 +121,38 @@ void main() {
       DraftOptionQuoteStatus.unsupported,
     );
     expect(adapter.requests, 0);
+  });
+
+  test('草稿保留明确类别股标的，裸期权根不反推点号或其他身份', () {
+    const symbol = 'BRKB261113C00270000';
+    final bare = MarketQuoteRequest.usOptionSymbol(symbol);
+    final explicit = MarketQuoteRequest.usOptionSymbol(
+      symbol,
+      underlyingSymbol: ' brk.b ',
+    );
+    expect(bare.optionUnderlyingSymbol, 'BRKB');
+    expect(explicit.optionUnderlyingSymbol, 'BRK.B');
+    expect(explicit.symbol, symbol);
+    expect(explicit.securityId, bare.securityId);
+    expect(explicit.optionStrike, '270');
+    expect(explicit.optionExpiry, '2026-11-13');
+    for (final underlying in ['BRK.A', 'AAPL', '', 'BRK.B/path']) {
+      expect(
+        () => MarketQuoteRequest.usOptionSymbol(
+          symbol,
+          underlyingSymbol: underlying,
+        ),
+        throwsA(isA<UsOptionUnderlyingMismatchException>()),
+        reason: underlying,
+      );
+    }
+    expect(matchesUsOptionUnderlying('BFB', 'BF.B'), isTrue);
+    expect(matchesUsOptionUnderlying('AVGO', 'AAPL'), isFalse);
+    expect(matchesUsOptionUnderlying('AVGO1', 'AVGO'), isFalse);
+    expect(
+      matchesUsOptionUnderlying('AVGO1', 'AVGO', allowAdjustedRoot: true),
+      isTrue,
+    );
   });
 
   test('无真实持仓也可取得中间价，草稿查询不写缓存或更改刷新状态', () async {

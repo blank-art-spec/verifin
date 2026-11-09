@@ -9,6 +9,7 @@ import '../models/investment.dart';
 import '../models/option_contract.dart';
 import 'investment_decimal.dart';
 import 'market_quote.dart';
+import 'us_option_symbol.dart';
 
 /// 保留流式响应，以便在下载期间执行整批大小限制。
 class NasdaqOptionQuoteResponse {
@@ -47,10 +48,16 @@ class NasdaqHttpOptionQuoteTransport implements NasdaqOptionQuoteTransport {
 
   /// 请求 [uri] 指定的公开合约详情，只接受固定 Nasdaq 主机与路径。
   /// 资产类别限定为 stocks 或 etf；两者共享相同合约参数，不能借此请求任意接口。
+  /// recordID 的根代码段固定占六位，不足部分用连字符补齐，后接到期日、C 和行权价。
   /// 返回流式正文供上层累计大小，不携带认证信息，也不自动跟随重定向。
   @override
   Future<NasdaqOptionQuoteResponse> get(Uri uri) async {
     final query = uri.queryParametersAll;
+    // 先取单值时避免 .single 对重复参数抛出无关异常；下方仍统一拒绝重复参数。
+    final recordIds = query['recordID'];
+    final recordId = recordIds != null && recordIds.length == 1
+        ? recordIds.single
+        : '';
     if (uri.scheme != 'https' ||
         uri.host != 'api.nasdaq.com' ||
         uri.port != 443 ||
@@ -62,9 +69,8 @@ class NasdaqHttpOptionQuoteTransport implements NasdaqOptionQuoteTransport {
         query.length != 2 ||
         query.values.any((values) => values.length != 1) ||
         !const ['stocks', 'etf'].contains(query['assetclass']?.single) ||
-        !RegExp(
-          r'^[A-Z][A-Z0-9.]{0,7}--\d{6}C\d{8}$',
-        ).hasMatch(query['recordID']?.single ?? '')) {
+        recordId.length != 21 ||
+        !RegExp(r'^[A-Z][A-Z0-9.]{0,5}-{0,5}\d{6}C\d{8}$').hasMatch(recordId)) {
       throw const FormatException('Nasdaq 行情地址不在允许范围');
     }
     final request = await _client.getUrl(uri);
@@ -140,6 +146,7 @@ class NasdaqOptionQuoteAdapter extends MarketQuoteAdapter {
 
   /// Call/Put 共用一次详情请求，最多三个在途请求；整批共用时间与字节预算。
   /// [requests] 只包含待查公开合约身份；[isCurrent] 表示本轮会话仍允许联网及采用结果。
+  /// 合约根按 Nasdaq 详情链接补到六位，不能为所有根固定追加两个连字符。
   /// stocks 成功但明确返回 data=null 时，仅改资产类别补查一次 etf，不保存类别推断。
   /// 两次请求仍共享整批预算；单合约失败保留其他成功结果，拒绝或限流停止后续请求。
   @override
@@ -161,7 +168,8 @@ class NasdaqOptionQuoteAdapter extends MarketQuoteAdapter {
         '/api/quote/${identity.underlying.toLowerCase()}/option-chain',
         {
           'assetclass': 'stocks',
-          'recordID': '${identity.root}--${identity.date}C${identity.strike}',
+          'recordID':
+              '${identity.root.padRight(6, '-')}${identity.date}C${identity.strike}',
         },
       );
       grouped.putIfAbsent(uri, () => []).add(request);
@@ -335,6 +343,9 @@ class NasdaqOptionQuoteAdapter extends MarketQuoteAdapter {
 
 /// 只验证公开身份一致性，不据代码推断挂牌、乘数或交割条款。
 /// 数字调整根可以查询，但真实标的来自已有配置，不能把调整根冒充普通股。
+/// [request] 须给出美元美股期权的完整代码及已确认标的；返回根、真实标的、日期与行权价。
+/// Nasdaq 根字段最多六位；已明确的 .A/.B 类别股可使用去点后的合约根，标的路径仍保留点。
+/// 不从 BRKB 等裸根反推 BRK.B，也不改写已保存的证券代码或合约身份。
 ({String root, String underlying, String date, String strike})? _identity(
   MarketQuoteRequest request,
 ) {
@@ -346,16 +357,19 @@ class NasdaqOptionQuoteAdapter extends MarketQuoteAdapter {
     return null;
   }
   final match = RegExp(
-    r'^([A-Z][A-Z0-9.]{0,7})(\d{6})([CP])(\d{8})$',
+    r'^([A-Z][A-Z0-9.]{0,5})(\d{6})([CP])(\d{8})$',
   ).firstMatch(request.symbol.toUpperCase());
   final underlying = request.optionUnderlyingSymbol;
-  if (match == null ||
-      underlying == null ||
-      !RegExp(r'^[A-Z][A-Z0-9.]{0,9}$').hasMatch(underlying)) {
+  if (match == null || underlying == null) {
     return null;
   }
-  // 普通根必须与标的一致；数字调整根只放宽根映射，不放宽完整响应身份校验。
-  if (!RegExp(r'\d').hasMatch(match[1]!) && match[1] != underlying) {
+  // 与草稿请求共用普通根及明确类别股的校验，避免页面和刷新适配器采用不同身份。
+  // 已保存的数字调整根继续使用用户确认的标的关系，完整响应合约仍须精确匹配。
+  if (!matchesUsOptionUnderlying(
+    match[1]!,
+    underlying,
+    allowAdjustedRoot: true,
+  )) {
     return null;
   }
   final date = match[2]!;

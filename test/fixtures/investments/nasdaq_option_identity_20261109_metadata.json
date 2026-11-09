@@ -1,0 +1,51 @@
+{
+  "sourceRetrievedOn": "2026-11-09",
+  "kind": "Nasdaq 官方公开匿名响应，核对六位期权根填充与类别股标的映射；不含账户或持仓",
+  "responses": [
+    {
+      "file": "nasdaq_f_old_record_empty_20261109.json",
+      "source": "https://api.nasdaq.com/api/quote/f/option-chain?assetclass=stocks&recordID=F--261113C00005000",
+      "fetchedAt": "2026-11-09T07:18:19.4917316Z",
+      "httpStatus": 200,
+      "businessStatus": 200,
+      "dataNull": true
+    },
+    {
+      "file": "nasdaq_f_option_detail_20261109.json",
+      "source": "https://api.nasdaq.com/api/quote/f/option-chain?assetclass=stocks&recordID=F-----261113C00005000",
+      "fetchedAt": "2026-11-09T07:18:21.9422411Z",
+      "httpStatus": 200,
+      "businessStatus": 200,
+      "dataNull": false
+    },
+    {
+      "file": "nasdaq_spy_option_detail_20261109.json",
+      "source": "https://api.nasdaq.com/api/quote/spy/option-chain?assetclass=etf&recordID=SPY---261113C00500000",
+      "fetchedAt": "2026-11-09T07:18:25.1515024Z",
+      "httpStatus": 200,
+      "businessStatus": 200,
+      "dataNull": false
+    },
+    {
+      "file": "nasdaq_brkb_option_detail_20261109.json",
+      "source": "https://api.nasdaq.com/api/quote/brk.b/option-chain?assetclass=stocks&recordID=BRKB--261113C00270000",
+      "fetchedAt": "2026-11-09T07:18:28.0671261Z",
+      "httpStatus": 200,
+      "businessStatus": 200,
+      "dataNull": false
+    },
+    {
+      "file": "nasdaq_bfb_option_chain_20261109.json",
+      "source": "https://api.nasdaq.com/api/quote/bf.b/option-chain?assetclass=stocks&limit=2&fromdate=2026-11-20&todate=2026-11-20",
+      "fetchedAt": "2026-11-09T07:18:30.0228968Z",
+      "httpStatus": 200,
+      "businessStatus": 200,
+      "dataNull": false
+    }
+  ],
+  "limitations": [
+    "桌面匿名检查不代表 Android 直连、长期覆盖或数据使用许可。",
+    "timeStamp 未证实为实际成交时间，不能补入 lastAt；抓取时间仅记录此次观察。",
+    "不根据代码或响应推断数字乘数、交割条款；字段变体仅为离线校验输入。"
+  ]
+}

@@ -378,12 +378,25 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
   GlobalKey _anchor(String field) =>
       _fieldAnchors.putIfAbsent(field, () => GlobalKey());
 
+  /// 返回用户明确填写、选择或从已保存合约载入的标的；空白及本页仍未手改的生成值返回 null。
+  /// 自动生成的 AVGO 不能在用户改输 AAPL 完整代码时被当成已确认关系锁住。
+  /// BRK.B 这类明确字段原样交给公共请求工厂校验，不从 BRKB 裸根猜点号。
+  String? get _explicitContractUnderlying {
+    final text = _fields['underlying']!.text;
+    if (text.trim().isEmpty || text == _generatedFields['underlying']) {
+      return null;
+    }
+    return text.trim().toUpperCase();
+  }
+
   /// 只在本地解析完整美股代码，复用既有身份填充规则；绝不自动联网或推断乘数。
+  /// 明确标的与代码冲突时保留手填内容，查询和保存阶段会给出可见的身份冲突提示。
   void _parseContractLocally() {
     if (_market != StockMarket.us || _portfolio?.currencyCode != 'USD') return;
     try {
       final request = MarketQuoteRequest.usOptionSymbol(
         _fields['symbol']!.text,
+        underlyingSymbol: _explicitContractUnderlying,
       );
       _fillContractIdentity(request);
     } on FormatException {
@@ -678,6 +691,7 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       try {
         final request = MarketQuoteRequest.usOptionSymbol(
           _fields['symbol']!.text,
+          underlyingSymbol: _explicitContractUnderlying,
         );
         // 本地补全保留用户手工修改，保存时再逐项指出冲突，避免折叠后静默混用两个合约。
         if (_fields['underlying']!.text.trim().toUpperCase() !=
@@ -701,6 +715,9 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
                 0) {
           errors['strike'] = l.optionLookupIdentityConflict;
         }
+      } on UsOptionUnderlyingMismatchException {
+        // 标准代码已经解析成功，仅明确标的冲突；不能按非标准合约跳过这项保存门禁。
+        errors.putIfAbsent('underlying', () => l.optionLookupIdentityConflict);
       } on FormatException {
         // 非标准或 TEST 示例没有可解析的标准身份，仍按原手填资料核对，不强制套用美股格式。
       }
@@ -958,7 +975,16 @@ class _OptionEditorPageState extends State<OptionEditorPage> {
       if (_market != StockMarket.us || p.currencyCode != 'USD') {
         throw const FormatException('unsupported');
       }
-      request = MarketQuoteRequest.usOptionSymbol(_fields['symbol']!.text);
+      request = MarketQuoteRequest.usOptionSymbol(
+        _fields['symbol']!.text,
+        underlyingSymbol: _explicitContractUnderlying,
+      );
+    } on UsOptionUnderlyingMismatchException {
+      setState(() {
+        _clearContractLookup();
+        _contractLookupMessage = l.optionLookupIdentityConflict;
+      });
+      return;
     } on FormatException {
       setState(() {
         _clearContractLookup();
