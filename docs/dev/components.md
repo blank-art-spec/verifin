@@ -386,6 +386,8 @@ Veri Fin 已有的**可复用 widget / 弹窗 helper / 对话框 / 纯函数**�
 
 当前期权来源只有 `NasdaqOptionQuoteAdapter` / `NasdaqHttpOptionQuoteTransport`，
 匿名读取固定合约详情，按两侧完整身份取各自最后价；一组认购/认沽共用请求。
+2026-11-09 起股票分类明确返回成功空数据时，仅补查一次相同身份的 ETF 分类；
+补查共用并发、时间和字节预算，HTTP 拒绝、坏响应及已有详情的缺价不触发补查。
 时间未知时 `sourceTimeUnknown` 为 true，`lastAt` 留空，抓取时间单独显示，不承诺实时。
 乘数始终手填；旧在线乘数协议、Alpaca 适配器、凭证页与存储入口均已删除。
 

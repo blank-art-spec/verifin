@@ -45,6 +45,9 @@ class NasdaqHttpOptionQuoteTransport implements NasdaqOptionQuoteTransport {
 
   final HttpClient _client;
 
+  /// 请求 [uri] 指定的公开合约详情，只接受固定 Nasdaq 主机与路径。
+  /// 资产类别限定为 stocks 或 etf；两者共享相同合约参数，不能借此请求任意接口。
+  /// 返回流式正文供上层累计大小，不携带认证信息，也不自动跟随重定向。
   @override
   Future<NasdaqOptionQuoteResponse> get(Uri uri) async {
     final query = uri.queryParametersAll;
@@ -58,7 +61,7 @@ class NasdaqHttpOptionQuoteTransport implements NasdaqOptionQuoteTransport {
         ).hasMatch(uri.path) ||
         query.length != 2 ||
         query.values.any((values) => values.length != 1) ||
-        query['assetclass']?.single != 'stocks' ||
+        !const ['stocks', 'etf'].contains(query['assetclass']?.single) ||
         !RegExp(
           r'^[A-Z][A-Z0-9.]{0,7}--\d{6}C\d{8}$',
         ).hasMatch(query['recordID']?.single ?? '')) {
@@ -136,7 +139,9 @@ class NasdaqOptionQuoteAdapter extends MarketQuoteAdapter {
       fetchCancellable(requests, isCurrent: () => true);
 
   /// Call/Put 共用一次详情请求，最多三个在途请求；整批共用时间与字节预算。
-  /// 单合约失败保留其他成功结果，授权拒绝/限流停止尚未开始的请求。
+  /// [requests] 只包含待查公开合约身份；[isCurrent] 表示本轮会话仍允许联网及采用结果。
+  /// stocks 成功但明确返回 data=null 时，仅改资产类别补查一次 etf，不保存类别推断。
+  /// 两次请求仍共享整批预算；单合约失败保留其他成功结果，拒绝或限流停止后续请求。
   @override
   Future<List<MarketQuote>> fetchCancellable(
     List<MarketQuoteRequest> requests, {
@@ -168,58 +173,88 @@ class NasdaqOptionQuoteAdapter extends MarketQuoteAdapter {
     final results = <MarketQuote>[];
     var next = 0, received = 0;
     var stopped = false;
+
+    /// 同时核对本批停止标记、来源暂停和调用方会话，所有首次与补查请求均受此门禁。
     bool current() => !stopped && !_blocked && isCurrent();
 
+    /// 获取 [uri] 的完整 JSON 对象；首次 stocks 与补查 etf 共用连接和累计字节预算。
+    /// HTTP 失败、取消、拒绝或超限返回 null；格式异常交由所属合约的 worker 降级。
+    /// 此处不判断资产类别，只有上层确认的正常空数据响应才能触发一次 etf 补查。
+    Future<Map?> loadResponse(Uri uri) async {
+      if (!current()) return null;
+      final response = await transport.get(uri);
+      if (!current()) {
+        await response.body.listen(null).cancel();
+        return null;
+      }
+      if (const [401, 403, 429].contains(response.statusCode)) {
+        final now = _clock();
+        var until = now.add(const Duration(minutes: 5));
+        final retry = response.retryAfter?.trim();
+        if (retry != null) {
+          try {
+            final requested = RegExp(r'^\d{1,9}$').hasMatch(retry)
+                ? now.add(Duration(seconds: int.parse(retry)))
+                : HttpDate.parse(retry);
+            if (requested.isAfter(until)) until = requested;
+          } on FormatException {
+            // 不合法等待字段使用保守的五分钟等待，不立即重试来源拒绝。
+          }
+        }
+        _blockedUntil = until;
+        stopped = true;
+        await response.body.listen(null).cancel();
+        return null;
+      }
+      if (response.statusCode != 200) {
+        await response.body.listen(null).cancel();
+        return null;
+      }
+      if (response.contentLength > maximumBytes - received) {
+        stopped = true;
+        await response.body.listen(null).cancel();
+        return null;
+      }
+      final bytes = <int>[];
+      await for (final chunk in response.body) {
+        if (!current()) return null;
+        received += chunk.length;
+        if (received > maximumBytes) {
+          stopped = true;
+          return null;
+        }
+        bytes.addAll(chunk);
+      }
+      if (!current()) return null;
+      final json = jsonDecode(utf8.decode(bytes));
+      return json is Map ? json : null;
+    }
+
+    /// 顺序处理分配给当前工作协程的合约组，同一组 Call/Put 共用首次及补查响应。
+    /// etf 补查在当前协程内等待，不另增并发，也不重置外层整批超时和字节计数。
     Future<void> worker() async {
       while (current() && next < work.length) {
         final item = work[next++];
         try {
-          final response = await transport.get(item.key);
-          if (!current()) {
-            await response.body.listen(null).cancel();
-            return;
+          var json = await loadResponse(item.key);
+          if (json == null || !current()) continue;
+          final stockStatus = json['status'];
+          // 仅将来源成功且明确为空视为类别可能不符；缺字段、业务错误、已有详情但
+          // 缺价或合约不匹配均不补查，避免把普通失败扩大成重复请求。
+          if (stockStatus is Map &&
+              stockStatus['rCode'] == 200 &&
+              json.containsKey('data') &&
+              json['data'] == null) {
+            json = await loadResponse(
+              item.key.replace(
+                queryParameters: {
+                  ...item.key.queryParameters,
+                  'assetclass': 'etf',
+                },
+              ),
+            );
+            if (json == null || !current()) continue;
           }
-          if (const [401, 403, 429].contains(response.statusCode)) {
-            final now = _clock();
-            var until = now.add(const Duration(minutes: 5));
-            final retry = response.retryAfter?.trim();
-            if (retry != null) {
-              try {
-                final requested = RegExp(r'^\d{1,9}$').hasMatch(retry)
-                    ? now.add(Duration(seconds: int.parse(retry)))
-                    : HttpDate.parse(retry);
-                if (requested.isAfter(until)) until = requested;
-              } on FormatException {
-                // 不合法等待字段使用保守的五分钟等待，不立即重试来源拒绝。
-              }
-            }
-            _blockedUntil = until;
-            stopped = true;
-            await response.body.listen(null).cancel();
-            return;
-          }
-          if (response.statusCode != 200) {
-            await response.body.listen(null).cancel();
-            continue;
-          }
-          if (response.contentLength > maximumBytes - received) {
-            stopped = true;
-            await response.body.listen(null).cancel();
-            return;
-          }
-          final bytes = <int>[];
-          await for (final chunk in response.body) {
-            if (!current()) return;
-            received += chunk.length;
-            if (received > maximumBytes) {
-              stopped = true;
-              return;
-            }
-            bytes.addAll(chunk);
-          }
-          if (!current()) return;
-          final json = jsonDecode(utf8.decode(bytes));
-          if (json is! Map) continue;
           final status = json['status'];
           if (status is! Map ||
               status['rCode'] != 200 ||

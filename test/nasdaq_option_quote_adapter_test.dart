@@ -45,6 +45,29 @@ String _fixture() => File(
   'test/fixtures/investments/nasdaq_option_detail_20261107.json',
 ).readAsStringSync();
 
+/// 读取 SOFX 的真实 ETF 详情，保留来源的完整合约身份和原始价格文本。
+/// 此函数不联网；夹具对应 2026-12-18、9 美元行权价的认购与认沽。
+String _sofxFixture() => File(
+  'test/fixtures/investments/nasdaq_sofx_option_detail_20261109.json',
+).readAsStringSync();
+
+/// 读取同一 SOFX 合约误走股票分类时的真实空响应，用于复现分类遗漏。
+/// 它是 HTTP 成功且业务状态正常的空数据，不表示授权拒绝或网络错误。
+String _emptyStocksFixture() => File(
+  'test/fixtures/investments/nasdaq_sofx_stocks_empty_20261109.json',
+).readAsStringSync();
+
+/// 创建与真实 SOFX 夹具一致的公开请求；[right] 指定认购或认沽方向。
+/// ETF 标的沿用应用现有的股票身份，不新增分类字段或修改合约乘数。
+MarketQuoteRequest _sofxRequest({OptionRight right = OptionRight.put}) =>
+    _request(
+      symbol: 'SOFX261218${right == OptionRight.call ? 'C' : 'P'}00009000',
+      underlying: 'us:stock:SOFX',
+      expiry: '2026-12-18',
+      strike: '9',
+      right: right,
+    );
+
 String _changed(void Function(Map<String, Object?>) change) {
   final value = jsonDecode(_fixture()) as Map<String, Object?>;
   change(value);
@@ -187,6 +210,8 @@ class _HttpClient implements HttpClient {
   dynamic noSuchMethod(Invocation invocation) => super.noSuchMethod(invocation);
 }
 
+/// 注册离线适配器检查：验证公开身份、分类补查、价格采用与整批资源限制。
+/// 所有传输均由本文件替身提供，不访问真实网络或用户账目。
 void main() {
   test('无需凭证即支持完整合约，构造和不支持的身份均不联网', () async {
     var connections = 0;
@@ -271,6 +296,247 @@ void main() {
     );
   });
 
+  test('SOFX 股票分类空数据后查询 ETF，认购认沽共用一次补查', () async {
+    final transport = _Transport(
+      (uri) => _response(
+        body: uri.queryParameters['assetclass'] == 'stocks'
+            ? _emptyStocksFixture()
+            : _sofxFixture(),
+      ),
+    );
+    final call = _sofxRequest(right: OptionRight.call);
+    final put = _sofxRequest();
+    final quotes = await _adapter(transport).fetch([call, put, put]);
+    final byId = {for (final quote in quotes) quote.securityId: quote};
+    expect(quotes, hasLength(2));
+    expect(byId[call.securityId]!.last, '0.3');
+    expect(byId[put.securityId]!.last, '2.71');
+    expect(transport.uris.map((uri) => uri.queryParameters['assetclass']), [
+      'stocks',
+      'etf',
+    ]);
+    for (final uri in transport.uris) {
+      expect(uri.host, 'api.nasdaq.com');
+      expect(uri.path, '/api/quote/sofx/option-chain');
+      expect(uri.queryParameters['recordID'], 'SOFX--261218C00009000');
+      expect(
+        uri.queryParameters.keys,
+        unorderedEquals(['assetclass', 'recordID']),
+      );
+    }
+    for (final request in [call, put]) {
+      final quote = byId[request.securityId]!;
+      expect(quote.lastAt, isNull);
+      expect(quote.sourceTimeUnknown, isTrue);
+      expect(quote.fetchedAt, _now);
+      expect(quote.unit, QuotePriceUnit.premiumUnit);
+      expect(quote.reference(request, _now)?.price, quote.last);
+    }
+    expect(transport.closed, isTrue);
+  });
+
+  test('ETF 也无数据时只补查一次，不在两个分类之间重复查询', () async {
+    final transport = _Transport((_) => _response(body: _emptyStocksFixture()));
+    expect(await _adapter(transport).fetch([_sofxRequest()]), isEmpty);
+    expect(transport.uris.map((uri) => uri.queryParameters['assetclass']), [
+      'stocks',
+      'etf',
+    ]);
+    expect(transport.closed, isTrue);
+  });
+
+  test('多个 ETF 合约补查仍最多三个在途请求，互不混用标的价格', () async {
+    var active = 0, maximumActive = 0;
+    final transport = _Transport((uri) async {
+      active++;
+      if (active > maximumActive) maximumActive = active;
+      try {
+        // 让其他工作协程有机会进入，真实并发上限由未完成的请求数量观察。
+        await Future<void>.delayed(Duration.zero);
+        final root = uri.path.split('/')[3].toUpperCase();
+        return _response(
+          body: uri.queryParameters['assetclass'] == 'stocks'
+              ? _emptyStocksFixture()
+              : _forSymbol(root),
+        );
+      } finally {
+        active--;
+      }
+    });
+    final requests = _many(8);
+    final quotes = await _adapter(transport).fetch(requests);
+    expect(
+      quotes.map((quote) => quote.securityId),
+      unorderedEquals(requests.map((request) => request.securityId)),
+    );
+    expect(transport.uris, hasLength(16));
+    expect(maximumActive, inInclusiveRange(2, 3));
+    expect(active, 0);
+    expect(transport.closed, isTrue);
+  });
+
+  test('ETF 详情仍校验完整合约与正价格，不能借用其他合约或标的价格', () async {
+    for (final wrongIdentity in [true, false]) {
+      final value = jsonDecode(_sofxFixture()) as Map<String, Object?>;
+      if (wrongIdentity) {
+        _mapAt(value, ['data', 'optionChainPutData'])['header'] =
+            'Put <br>SOFX 261218P00010000';
+      } else {
+        _mapAt(value, [
+          'data',
+          'optionChainPutData',
+          'optionChainListData',
+          'LastSale',
+        ])['value'] = '0';
+      }
+      final transport = _Transport(
+        (uri) => _response(
+          body: uri.queryParameters['assetclass'] == 'stocks'
+              ? _emptyStocksFixture()
+              : jsonEncode(value),
+        ),
+      );
+      expect(await _adapter(transport).fetch([_sofxRequest()]), isEmpty);
+      expect(transport.uris, hasLength(2));
+    }
+  });
+
+  test('股票分类 HTTP 失败或无效业务正文不触发 ETF 补查', () async {
+    for (final status in [401, 403, 429, 500]) {
+      final transport = _Transport(
+        (_) => _response(status: status, body: _emptyStocksFixture()),
+      );
+      expect(await _adapter(transport).fetch([_sofxRequest()]), isEmpty);
+      expect(transport.uris, hasLength(1), reason: 'HTTP $status');
+    }
+    for (final body in [
+      'not-json',
+      '{"data":null,"status":{"rCode":500}}',
+      '{"data":null,"status":{"rCode":400}}',
+      '{"status":{"rCode":200}}',
+      '{"data":[],"status":{"rCode":200}}',
+    ]) {
+      final transport = _Transport((_) => _response(body: body));
+      expect(await _adapter(transport).fetch([_sofxRequest()]), isEmpty);
+      expect(transport.uris, hasLength(1), reason: body);
+    }
+  });
+
+  test('ETF 拒绝或限流同样暂停后续批次，并保留 Retry-After', () async {
+    for (final status in [401, 403, 429]) {
+      var now = _now;
+      final transport = _Transport(
+        (uri) => uri.queryParameters['assetclass'] == 'stocks'
+            ? _response(body: _emptyStocksFixture())
+            : _response(status: status, retryAfter: '600'),
+      );
+      final adapter = NasdaqOptionQuoteAdapter(
+        transportFactory: () => transport,
+        clock: () => now,
+      );
+      expect(await adapter.fetch([_sofxRequest()]), isEmpty);
+      expect(transport.uris, hasLength(2));
+      now = _now.add(const Duration(minutes: 9, seconds: 59));
+      expect(await adapter.fetch([_request()]), isEmpty);
+      expect(transport.uris, hasLength(2));
+      now = _now.add(const Duration(minutes: 10));
+      expect(await adapter.fetch([_sofxRequest()]), isEmpty);
+      expect(transport.uris, hasLength(4));
+    }
+  });
+
+  test('股票响应返回前取消会话，不再启动 ETF 补查', () async {
+    var current = true;
+    final response = Completer<NasdaqOptionQuoteResponse>();
+    final transport = _Transport((_) => response.future);
+    final pending = _adapter(
+      transport,
+    ).fetchCancellable([_sofxRequest()], isCurrent: () => current);
+    expect(transport.uris, hasLength(1));
+    current = false;
+    response.complete(_response(body: _emptyStocksFixture()));
+    expect(await pending, isEmpty);
+    expect(transport.uris, hasLength(1));
+    expect(transport.closed, isTrue);
+  });
+
+  test('ETF 补查在途时取消会话，迟到价格不得采用', () async {
+    var current = true;
+    final etfStarted = Completer<void>();
+    final response = Completer<NasdaqOptionQuoteResponse>();
+    final transport = _Transport((uri) {
+      if (uri.queryParameters['assetclass'] == 'stocks') {
+        return _response(body: _emptyStocksFixture());
+      }
+      etfStarted.complete();
+      return response.future;
+    });
+    final pending = _adapter(
+      transport,
+    ).fetchCancellable([_sofxRequest()], isCurrent: () => current);
+    await etfStarted.future;
+    current = false;
+    response.complete(_response(body: _sofxFixture()));
+    expect(await pending, isEmpty);
+    expect(transport.uris, hasLength(2));
+    expect(transport.closed, isTrue);
+  });
+
+  test('股票与 ETF 响应共用累计字节预算，不给补查重置下载额度', () async {
+    final etfBody = _sofxFixture();
+    final etfBytes = utf8.encode(etfBody).length;
+    // 空白仍是合法 JSON 尾部；两个响应单独合格，累计大小刚好超出一字节。
+    final stocksBody = _emptyStocksFixture().padRight(
+      NasdaqOptionQuoteAdapter.maximumBytes - etfBytes + 1,
+      ' ',
+    );
+    for (final declaredLength in [true, false]) {
+      final transport = _Transport(
+        (uri) => uri.queryParameters['assetclass'] == 'stocks'
+            ? _response(body: stocksBody)
+            : _response(
+                body: etfBody,
+                contentLength: declaredLength ? etfBytes : -1,
+              ),
+      );
+      expect(await _adapter(transport).fetch([_sofxRequest()]), isEmpty);
+      expect(transport.uris, hasLength(2));
+      expect(transport.closed, isTrue);
+    }
+  });
+
+  testWidgets('股票与 ETF 补查共用总超时，不给第二次请求重新计时', (tester) async {
+    final stocksResponse = Completer<NasdaqOptionQuoteResponse>();
+    final etfResponse = Completer<NasdaqOptionQuoteResponse>();
+    final transport = _Transport(
+      (uri) => uri.queryParameters['assetclass'] == 'stocks'
+          ? stocksResponse.future
+          : etfResponse.future,
+    );
+    final pending = _adapter(
+      transport,
+      timeout: const Duration(milliseconds: 100),
+    ).fetch([_sofxRequest()]);
+    var completed = false;
+    unawaited(
+      pending.then((_) {
+        completed = true;
+      }),
+    );
+    await tester.pump(const Duration(milliseconds: 60));
+    stocksResponse.complete(_response(body: _emptyStocksFixture()));
+    await tester.pump();
+    expect(transport.uris, hasLength(2));
+    await tester.pump(const Duration(milliseconds: 39));
+    expect(completed, isFalse);
+    await tester.pump(const Duration(milliseconds: 1));
+    expect(completed, isTrue);
+    expect(await pending, isEmpty);
+    expect(transport.closed, isTrue);
+    etfResponse.complete(_response(body: _sofxFixture()));
+    await tester.pump();
+  });
+
   test('错误或缺失header不得把同标的另一份合约价当作请求价', () async {
     for (final header in [
       null,
@@ -282,13 +548,13 @@ void main() {
       final body = _changed((value) {
         _mapAt(value, ['data', 'optionChainCallData'])['header'] = header;
       });
+      final transport = _Transport((_) => _response(body: body));
       expect(
-        await _adapter(
-          _Transport((_) => _response(body: body)),
-        ).fetch([_request()]),
+        await _adapter(transport).fetch([_request()]),
         isEmpty,
         reason: '$header',
       );
+      expect(transport.uris, hasLength(1));
     }
   });
 
@@ -316,13 +582,13 @@ void main() {
           'LastSale',
         ])['value'] = price;
       });
+      final transport = _Transport((_) => _response(body: body));
       expect(
-        await _adapter(
-          _Transport((_) => _response(body: body)),
-        ).fetch([_request()]),
+        await _adapter(transport).fetch([_request()]),
         isEmpty,
         reason: '$price',
       );
+      expect(transport.uris, hasLength(1));
     }
   });
 
@@ -372,7 +638,8 @@ void main() {
         requests[3].securityId,
       ]),
     );
-    expect(transport.uris, hasLength(4));
+    // B 的股票分类为空，因此只为 B 增加一次 ETF 查询，其余三项直接完成。
+    expect(transport.uris, hasLength(5));
   });
 
   test('二十个合约可以独立取价，超过单批上限不联网', () async {
@@ -533,6 +800,15 @@ void main() {
     });
     expect((await transport.get(uri)).statusCode, 200);
     expect(client.uris, [uri]);
+    final etfUri = uri.replace(
+      path: '/api/quote/sofx/option-chain',
+      queryParameters: {
+        'assetclass': 'etf',
+        'recordID': 'SOFX--261218C00009000',
+      },
+    );
+    expect((await transport.get(etfUri)).statusCode, 200);
+    expect(client.uris, [uri, etfUri]);
     expect(client.request.followRedirects, isFalse);
     expect(client.request.persistentConnection, isFalse);
     expect(client.request.cookies, isEmpty);
@@ -548,10 +824,22 @@ void main() {
       uri.replace(host: 'example.com'),
       uri.replace(path: '/api/quote/avgo/info'),
       uri.replace(userInfo: 'secret'),
+      uri.replace(
+        queryParameters: {
+          'assetclass': 'funds',
+          'recordID': 'AVGO--261109C00265000',
+        },
+      ),
+      uri.replace(
+        queryParameters: {
+          'assetclass': ['stocks', 'etf'],
+          'recordID': 'AVGO--261109C00265000',
+        },
+      ),
     ]) {
       await expectLater(transport.get(invalid), throwsFormatException);
     }
-    expect(client.uris, hasLength(1));
+    expect(client.uris, hasLength(2));
     transport.close();
     expect(client.forceClosed, isTrue);
   });

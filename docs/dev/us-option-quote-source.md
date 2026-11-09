@@ -1,20 +1,52 @@
 # 美股期权参考行情接入
 
-更新：2026-11-07。
+更新：2026-11-09。
 
 ## 当前来源：Nasdaq 免凭证期权详情
 
 主应用固定装配 `Nasdaq Options`，不需要账号、API Key 或浏览器 Cookie。
 依据 Nasdaq 详情页实际使用的请求，访问
 `https://api.nasdaq.com/api/quote/{underlying}/option-chain?assetclass=stocks&recordID={root}--{YYMMDD}C{strike}`。
+股票分类明确返回成功空数据时，使用相同标的及 `recordID` 补查一次 `assetclass=etf`，
+覆盖 SOFX 等 ETF 期权；不从代码猜标的类别，不保存类别白名单或修改证券身份。
 同一到期日、行权价的 Call/Put 共用一次详情，分别匹配各侧完整合约代码后取
 `optionChainListData.LastSale.value`；不用标的股票价格、买卖中间价或成交量替代。
 
 2026-11-07 电脑匿名请求：AVGO 期权链和完整详情均 HTTP 200，详情确认
 `AVGO261109C00265000` / `AVGO261109P00265000` 两侧有正价格；
 另按日期核对 AVGO 2026-12-04、325 行权价的认购/认沽。SOFX 查询为 HTTP 200
-但业务状态 400、`Symbol not exists.`，必须作为缺价处理，不能把 HTTP 成功当有价。
+但业务状态 400、`Symbol not exists.`，当时只验证了股票分类，不能据此判断 ETF 分类也无价。
+HTTP 成功仍不等于有价，必须核对业务状态、完整合约和价格。
 真实详情及请求来源记录随测试夹具保留；这些检查不代表全市场覆盖或 Android 验收。
+
+### 2026-11-09 SOFX 分类修复
+
+电脑匿名对比同一 `SOFX--261218C00009000`：股票分类 HTTP 200、`rCode: 200`，
+但 `data: null`；ETF 分类 HTTP 200、`rCode: 200`，返回完整两侧身份，认购
+`SOFX261218C00009000` 的 `LastSale` 为 `0.3`，认沽
+`SOFX261218P00009000` 为 `2.71`。这些是本次来源观察值，不承诺实时成交价。
+抓取时刻分别为 `2026-11-09T06:30:35Z` 与 `2026-11-09T06:30:39Z`。
+真实响应及来源元数据保存在 `test/fixtures/investments/nasdaq_sofx_*_20261109*.json`；
+原先“SOFX 来源无覆盖”的判断应更正为“股票分类未返回该 ETF 的详情”。
+
+补查仍共用原批次的 15 秒、512 KiB 和最多三个在途请求；认购/认沽共用一次详情及
+一次分类补查。HTTP 失败、401/403/429、超时、损坏 JSON，以及已有详情但缺价或
+身份不符均不触发分类补查；ETF 仍无价时结束，不循环切换分类。取消会话与来源暂停
+也约束补查，不增加联网开关或数据权限。完整身份匹配、未知成交时间、手填后备和
+原账务口径保持不变。本次未自动编译或安装 Android 应用，手机手动验收仍待执行。
+
+本轮验证（Flutter 3.47.2）：
+
+- `dart format lib test scripts` 覆盖 530 个文件；根目录 `dart format .` 遇到本机
+  Gradle 缓存失效路径后，改为上述完整源码目录执行，未修改工具链或缓存配置。
+- `flutter --no-version-check analyze --no-pub lib test scripts` 无问题。
+- `flutter --no-version-check test --no-pub --concurrency 4 --timeout 2m --reporter expanded`：
+  2,427 项通过、6 项既有跳过、0 失败。含真实 SOFX 双侧响应、一次补查、身份/缺价拒收、
+  取消、跨批限流、三并发及累计时间/字节预算；原股票与期权账务检查一并通过。
+- 全量检查日志保存在本地 `build/validation/sofx-etf-20261109/flutter-test.log`；
+  JSON 夹具与 `git diff --check` 校验通过。界面布局未变，无需更新公开截图。
+
+### 共用校验与访问边界
 
 详情 `timeStamp` 未定义为逐笔成交时间，实测返回周六的时间，不写入 `lastAt`。
 报价显式标记 `sourceTimeUnknown`，显示“报价时间未知”和独立抓取时刻；

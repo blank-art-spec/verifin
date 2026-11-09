@@ -1,0 +1,29 @@
+{
+  "sourceRetrievedOn": "2026-11-09",
+  "kind": "相同 SOFX 完整合约的匿名 Nasdaq 股票分类空响应与 ETF 分类真实详情，无账户或持仓资料",
+  "discoveryPage": "https://www.nasdaq.com/market-activity/etf/sofx/option-chain",
+  "responses": [
+    {
+      "file": "nasdaq_sofx_stocks_empty_20261109.json",
+      "source": "https://api.nasdaq.com/api/quote/sofx/option-chain?assetclass=stocks&recordID=SOFX--261218C00009000",
+      "fetchedAt": "2026-11-09T06:30:35.1439576Z",
+      "httpStatus": 200,
+      "businessStatus": 200,
+      "result": "data 为 null"
+    },
+    {
+      "file": "nasdaq_sofx_option_detail_20261109.json",
+      "source": "https://api.nasdaq.com/api/quote/sofx/option-chain?assetclass=etf&recordID=SOFX--261218C00009000",
+      "fetchedAt": "2026-11-09T06:30:39.4491139Z",
+      "httpStatus": 200,
+      "businessStatus": 200,
+      "result": "完整认购及认沽身份，两侧 LastSale 分别为 0.3 与 2.71"
+    }
+  ],
+  "limitations": [
+    "仅证明本次桌面匿名请求可用，不代表 Android 直连、持续覆盖或供应方使用许可已审核。",
+    "timeStamp 未证实为实际成交时间，抓取时刻只记录本次观察，不能填入 lastAt。",
+    "原始响应不提供可核实的数字权利金乘数，不得推断为 100。",
+    "测试对原始响应所作的身份或字段修改仅为本地边界输入，不是真实市场数据。"
+  ]
+}
