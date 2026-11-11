@@ -4,7 +4,7 @@ import 'package:verifin/app/investments/stock_projection.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/veri_fin_controller.dart';
 
-/// 核对可导入模板中的两个证券父账户、六个币种子账户及各自独立的固定持仓。
+/// 核对可导入模板中的三个证券父账户、九个币种子账户及各自独立的固定持仓。
 ///
 /// [controller] 必须已通过正式导入或 SQLite 冷启动载入模板；本方法临时切换到
 /// 日常账本与投资账本，检查它们的账户、汇率和持仓互不串用，结束时恢复调用前的
@@ -14,6 +14,7 @@ import 'package:verifin/app/veri_fin_controller.dart';
 /// 相同业务预期：总账户只聚合，各市场证券只在对应结算币种子账户中记仓位与资金；
 /// 两个 USD 子账户即使持有同一 GOOG，数量、成交成本及手填参考价也不互相合并；
 /// 第二 USD 子账户另持有按份额计价的招商美元货币基金，不能把它恢复为港股。
+/// 第三个主账户的三个币种子账户均已启用投资聚合，但保持零现金、无持仓及空记录。
 void expectSampleInvestmentPortfolio(VeriFinController controller) {
   final originalBookId = controller.activeBook.id;
   try {
@@ -29,6 +30,7 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
     );
     expect(controller.investmentFor('acc_investment_usd'), isNull);
     expect(controller.investmentFor('acc_investment_2_usd'), isNull);
+    expect(controller.investmentFor('acc_investment_3_usd'), isNull);
 
     controller.switchLedgerBook('book_investment');
     expect(controller.activeBook.id, 'book_investment');
@@ -41,9 +43,14 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
     expect(parent.name, '投资账户');
     expect(parent.currencyCode, 'CNY');
     expect(controller.creditAccounts, isEmpty);
+    expect(controller.accountParents, hasLength(3));
     expect(
       controller.accountParentsForType(AccountType.investment).map((p) => p.id),
-      unorderedEquals([parent.id, 'credit-account-acc_investment_2_cny']),
+      unorderedEquals([
+        parent.id,
+        'credit-account-acc_investment_2_cny',
+        'credit-account-acc_investment_3_cny',
+      ]),
     );
 
     final children = controller.accountsForParent(parent.id);
@@ -62,6 +69,9 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
         'acc_investment_2_cny',
         'acc_investment_2_usd',
         'acc_investment_2_hkd',
+        'acc_investment_3_cny',
+        'acc_investment_3_usd',
+        'acc_investment_3_hkd',
       ]),
     );
     expect(
@@ -186,6 +196,7 @@ void expectSampleInvestmentPortfolio(VeriFinController controller) {
     expect(parentBalances.isComplete, isTrue);
     expect(parentBalances.completeTotal, 189910);
     _expectSecondBrokerSample(controller);
+    _expectThirdBrokerSample(controller);
     // 父账户当前 API 只提供净值；资产页的正式汇总负责分别折算多头和空头。
     final ledgerBalances = controller.accountBalancesInBase();
     expect(ledgerBalances.isComplete, isTrue);
@@ -210,7 +221,6 @@ void _expectSecondBrokerSample(VeriFinController controller) {
   final parent = controller.accountParents.singleWhere(
     (parent) => parent.id == parentId,
   );
-  expect(controller.accountParents, hasLength(2));
   expect(parent.name, '投资账户二');
   expect(parent.currencyCode, 'CNY');
   expect(controller.investmentFor(parentId), isNull);
@@ -353,6 +363,62 @@ void _expectSecondBrokerSample(VeriFinController controller) {
   final balances = controller.parentAccountBalances(parent);
   expect(balances.isComplete, isTrue);
   expect(balances.completeTotal, 90838);
+}
+
+/// 核对第三个证券主账户的三币种空账户，恢复和冷读不得补入现金或交易。
+///
+/// [controller] 已选择投资账本；三个子账户都保留投资启用日期与空聚合，
+/// 可以继续新增投资记录，但当前净值为零且不改变原有组合总额。
+void _expectThirdBrokerSample(VeriFinController controller) {
+  const parentId = 'credit-account-acc_investment_3_cny';
+  final parent = controller.accountParents.singleWhere(
+    (parent) => parent.id == parentId,
+  );
+  expect(parent.name, '投资账户三');
+  expect(parent.currencyCode, 'CNY');
+  expect(controller.investmentFor(parentId), isNull);
+  final children = controller.accountsForParent(parentId);
+  expect(
+    children.map((account) => account.id),
+    unorderedEquals([
+      'acc_investment_3_cny',
+      'acc_investment_3_usd',
+      'acc_investment_3_hkd',
+    ]),
+  );
+  expect(
+    children.map((account) => account.currencyCode),
+    unorderedEquals(['CNY', 'USD', 'HKD']),
+  );
+  for (final account in children) {
+    expect(account.name, '投资账户三.${account.currencyCode}');
+    expect(account.bookId, 'book_investment');
+    expect(account.type, AccountType.investment);
+    expect(account.initialBalance, 0);
+    expect(account.creditAccountId, parentId);
+    expect(controller.parentForAccount(account)?.id, parentId);
+    final portfolio = controller.investmentFor(account.id)!;
+    expect(portfolio.accountId, account.id);
+    expect(portfolio.bookId, account.bookId);
+    expect(portfolio.currencyCode, account.currencyCode);
+    expect(portfolio.openedAt, DateTime(2026, 10, 1));
+    expect(portfolio.openingCash, '0');
+    expect(portfolio.securities, isEmpty);
+    expect(portfolio.openingHoldings, isEmpty);
+    expect(portfolio.events, isEmpty);
+    expect(portfolio.manualPrices, isEmpty);
+    expect(portfolio.includedEntryIds, isEmpty);
+    expect(portfolio.anchorIncludedIds, isEmpty);
+    expect(portfolio.marketPriceIds, isEmpty);
+    expect(portfolio.valuationSnapshots, isEmpty);
+    expect(portfolio.allowFinancing, isFalse);
+    expect(controller.investmentProjection(account.id)!.positions, isEmpty);
+    expect(controller.accountBalance(account), 0);
+    expect(controller.accountAssetValue(account), 0);
+  }
+  final balances = controller.parentAccountBalances(parent);
+  expect(balances.isComplete, isTrue);
+  expect(balances.completeTotal, 0);
 }
 
 /// 核对第二 USD 子账户中的基金身份、份额及稳定示例买入，禁止混用股票身份。
