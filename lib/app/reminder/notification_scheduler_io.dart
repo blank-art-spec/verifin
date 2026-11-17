@@ -181,6 +181,8 @@ class NotificationScheduler {
 
   /// 按当前信用账户投影安排账单日和还款日的一次性通知。
   ///
+  /// [settings] 是已保存的设备提醒配置，[reminders] 提供账户日期与欠款状态，
+  /// [l10n] 用于通知文案；候选时间交给页面共用的纯函数，不另写一套日期条件。
   /// 每次同步前 [cancel] 会清掉旧排程，因此账户规则、正式账单或提前天数变化后不会
   /// 留下过时通知。只安排未来时刻：用户在触发日的设定时间之后才打开开关时，页面
   /// 仍会展示状态，但不会用“补发”制造每次回前台都重复的通知。
@@ -190,14 +192,16 @@ class NotificationScheduler {
     AppLocalizations? l10n,
   }) async {
     for (final reminder in reminders) {
-      if (settings.statementDateEnabled && reminder.hasUpcomingStatementDebt) {
-        final date = DateTime(
-          reminder.overview.nextStatementDate.year,
-          reminder.overview.nextStatementDate.month,
-          reminder.overview.nextStatementDate.day - settings.advanceDays,
-        );
-        final when = _localDateTime(date, settings.hour, settings.minute);
-        if (when.isAfter(tz.TZDateTime.now(tz.local))) {
+      // 页面和实际排程使用同一个候选集；仅时区构造由通知层提供，避免两端口径分叉。
+      final dates = buildCreditDateReminders(
+        snapshot: reminder,
+        settings: settings,
+        now: tz.TZDateTime.now(tz.local),
+        localDateTime: _localDateTime,
+      );
+      for (final date in dates) {
+        final when = tz.TZDateTime.from(date.scheduledAt, tz.local);
+        if (date.type == CreditDateReminderType.statement) {
           await _scheduleOneTime(
             id: _stableFinancialId('statement:${reminder.creditAccount.id}'),
             when: when,
@@ -208,16 +212,7 @@ class NotificationScheduler {
                       '${settings.advanceDays} 天后出账',
             l10n: l10n,
           );
-        }
-      }
-      if (settings.repaymentDueEnabled && reminder.hasOutstandingStatement) {
-        final date = DateTime(
-          reminder.dueDate.year,
-          reminder.dueDate.month,
-          reminder.dueDate.day - settings.advanceDays,
-        );
-        final when = _localDateTime(date, settings.hour, settings.minute);
-        if (when.isAfter(tz.TZDateTime.now(tz.local))) {
+        } else {
           final dueText = settings.advanceDays == 0
               ? l10n?.reminderDueToday ?? '今天到期'
               : l10n?.reminderDaysUntilDue(settings.advanceDays) ??

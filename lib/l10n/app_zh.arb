@@ -1585,6 +1585,18 @@
   },
   "reminderTimeLabel": "提醒时间",
   "reminderFinancialPreview": "近期信用账户状态",
+  "reminderScheduleDraftPreview": "以下提醒时间为设置预览，保存后生效。",
+  "reminderNextDatesDisabled": "下次提醒：未开启账单日或还款日提醒",
+  "reminderNextDatesNone": "下次提醒：暂无定时安排",
+  "reminderNextScheduled": "下次提醒：{date} {time} · {type}",
+  "@reminderNextScheduled": {
+    "description": "信用账户最早一条未来日期提醒；日期保留年份，避免跨年歧义。预算预警不属于固定时间提醒。",
+    "placeholders": {
+      "date": { "type": "DateTime", "format": "yMd" },
+      "time": { "type": "String" },
+      "type": { "type": "String" }
+    }
+  },
   "reminderNoCreditAccounts": "还没有完整配置账单日和还款规则的信用账户。",
   "reminderStatementToday": "今天出账",
   "reminderDaysUntilStatement": "{days} 天后出账",

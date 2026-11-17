@@ -2525,6 +2525,23 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reminderFinancialPreview => '近期信用账户状态';
 
   @override
+  String get reminderScheduleDraftPreview => '以下提醒时间为设置预览，保存后生效。';
+
+  @override
+  String get reminderNextDatesDisabled => '下次提醒：未开启账单日或还款日提醒';
+
+  @override
+  String get reminderNextDatesNone => '下次提醒：暂无定时安排';
+
+  @override
+  String reminderNextScheduled(DateTime date, String time, String type) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return '下次提醒：$dateString $time · $type';
+  }
+
+  @override
   String get reminderNoCreditAccounts => '还没有完整配置账单日和还款规则的信用账户。';
 
   @override

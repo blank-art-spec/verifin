@@ -1,6 +1,66 @@
 import '../credit_card.dart';
 import '../ledger_math.dart';
 import '../models.dart';
+import 'reminder_settings.dart';
+
+/// 有固定触发时刻的信用账户提醒种类；预算预警由消费跨档触发，不属于日期排程。
+enum CreditDateReminderType { statement, repayment }
+
+/// 一条尚未到触发时刻的信用账户日期提醒，供页面预览和系统通知共用。
+class CreditDateReminder {
+  /// [type] 区分出账与还款；[scheduledAt] 是设备本地时区中的计划触发时刻。
+  const CreditDateReminder({required this.type, required this.scheduledAt});
+
+  final CreditDateReminderType type;
+  final DateTime scheduledAt;
+}
+
+/// 生成单个信用账户尚未到时的日期提醒，按触发时间从近到远排列。
+///
+/// [snapshot] 提供实际待还状态与日期；[settings] 提供独立开关、提前日数与时分；
+/// [now] 是本次计算时刻，等于或早于它的排程一律不补发，也不猜测下一账期欠款。
+/// [localDateTime] 可由系统调度器注入 IANA 时区构造器；页面默认使用设备本地时间。
+/// 提前日数使用日历日运算，跨月、跨年与夏令时都不按固定 24 小时倒推。
+List<CreditDateReminder> buildCreditDateReminders({
+  required CreditReminderSnapshot snapshot,
+  required ReminderSettings settings,
+  required DateTime now,
+  DateTime Function(DateTime date, int hour, int minute)? localDateTime,
+}) {
+  final reminders = <CreditDateReminder>[];
+
+  /// 为 [type] 对应的业务日期 [eventDate] 生成提前提醒，只保留未来时刻。
+  void addReminder(CreditDateReminderType type, DateTime eventDate) {
+    final date = addCalendarDays(dateOnly(eventDate), -settings.advanceDays);
+    final scheduledAt = localDateTime == null
+        ? DateTime(
+            date.year,
+            date.month,
+            date.day,
+            settings.hour,
+            settings.minute,
+          )
+        : localDateTime(date, settings.hour, settings.minute);
+    if (scheduledAt.isAfter(now)) {
+      reminders.add(CreditDateReminder(type: type, scheduledAt: scheduledAt));
+    }
+  }
+
+  if (settings.statementDateEnabled && snapshot.hasUpcomingStatementDebt) {
+    addReminder(
+      CreditDateReminderType.statement,
+      snapshot.overview.nextStatementDate,
+    );
+  }
+  if (settings.repaymentDueEnabled && snapshot.hasOutstandingStatement) {
+    addReminder(CreditDateReminderType.repayment, snapshot.dueDate);
+  }
+  reminders.sort((a, b) {
+    final byTime = a.scheduledAt.compareTo(b.scheduledAt);
+    return byTime != 0 ? byTime : a.type.index.compareTo(b.type.index);
+  });
+  return List<CreditDateReminder>.unmodifiable(reminders);
+}
 
 /// 账期预算所处的提醒档位。
 ///

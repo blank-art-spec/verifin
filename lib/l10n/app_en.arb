@@ -917,6 +917,17 @@
   },
   "reminderTimeLabel": "Reminder time",
   "reminderFinancialPreview": "Upcoming credit account status",
+  "reminderScheduleDraftPreview": "The reminder times below are a preview. Save to apply changes.",
+  "reminderNextDatesDisabled": "Next reminder: statement and payment reminders are off",
+  "reminderNextDatesNone": "Next reminder: none scheduled",
+  "reminderNextScheduled": "Next reminder: {date} {time} · {type}",
+  "@reminderNextScheduled": {
+    "placeholders": {
+      "date": { "type": "DateTime", "format": "yMd" },
+      "time": { "type": "String" },
+      "type": { "type": "String" }
+    }
+  },
   "reminderNoCreditAccounts": "No credit account has both statement and payment rules configured yet.",
   "reminderStatementToday": "Statement is issued today",
   "reminderDaysUntilStatement": "Statement in {days} days",

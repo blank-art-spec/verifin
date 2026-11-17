@@ -1,7 +1,10 @@
 import 'package:flutter_test/flutter_test.dart';
+import 'package:timezone/data/latest.dart' as tz_data;
+import 'package:timezone/timezone.dart' as tz;
 import 'package:verifin/app/credit_card.dart';
 import 'package:verifin/app/models.dart';
 import 'package:verifin/app/reminder/financial_reminder.dart';
+import 'package:verifin/app/reminder/reminder_settings.dart';
 
 void main() {
   const creditAccount = CreditAccount(
@@ -155,6 +158,204 @@ void main() {
     note: '',
     occurredAt: date ?? DateTime(2026, 9, 24),
   );
+
+  group('信用账户下次提醒时间', () {
+    const settings = ReminderSettings(
+      statementDateEnabled: true,
+      repaymentDueEnabled: true,
+    );
+
+    /// 同时准备未来出账与未结正式账单，验证页面应选择哪一条实际日期排程。
+    CreditReminderSnapshot withBothDates({DateTime? now}) => snapshotFor(
+      netSpending: 100,
+      now: now,
+      statements: <BillingStatement>[
+        statementFor(
+          id: 'unpaid',
+          accountId: cnyAccount.id,
+          statementDate: DateTime(2026, 9, 25),
+          dueDate: DateTime(2026, 10, 13),
+          amount: 800,
+        ),
+      ],
+    );
+
+    test('按真实触发时间排序，并分别遵守出账与还款开关', () {
+      final now = DateTime(2026, 9, 27);
+      final snapshot = withBothDates(now: now);
+      final dates = buildCreditDateReminders(
+        snapshot: snapshot,
+        settings: settings,
+        now: now,
+      );
+      expect(dates.map((item) => item.type), [
+        CreditDateReminderType.repayment,
+        CreditDateReminderType.statement,
+      ]);
+      expect(dates.map((item) => item.scheduledAt), [
+        DateTime(2026, 10, 10, 21),
+        DateTime(2026, 10, 22, 21),
+      ]);
+      final statementOnly = buildCreditDateReminders(
+        snapshot: snapshot,
+        settings: settings.copyWith(repaymentDueEnabled: false),
+        now: now,
+      );
+      expect(statementOnly.single.type, CreditDateReminderType.statement);
+      final repaymentOnly = buildCreditDateReminders(
+        snapshot: snapshot,
+        settings: settings.copyWith(statementDateEnabled: false),
+        now: now,
+      );
+      expect(repaymentOnly.single.type, CreditDateReminderType.repayment);
+      expect(
+        buildCreditDateReminders(
+          snapshot: snapshot,
+          settings: const ReminderSettings(
+            enabled: true,
+            cycleBudgetEnabled: true,
+          ),
+          now: now,
+        ),
+        isEmpty,
+      );
+    });
+
+    test('当天尚未到提醒时刻可以安排，到时及错过后不补发', () {
+      for (final hour in [20, 21, 22]) {
+        final now = DateTime(2026, 10, 10, hour);
+        final dates = buildCreditDateReminders(
+          snapshot: withBothDates(now: now),
+          settings: settings,
+          now: now,
+        );
+        expect(
+          dates.any((item) => item.type == CreditDateReminderType.repayment),
+          hour < 21,
+        );
+        expect(dates.last.scheduledAt, DateTime(2026, 10, 22, 21));
+      }
+    });
+
+    test('无欠款或已提前还清时，不以规则还款日伪造提醒', () {
+      final now = DateTime(2026, 9, 27);
+      for (final snapshot in [
+        snapshotFor(netSpending: 0),
+        snapshotFor(netSpending: 100, earlyRepayment: 100),
+      ]) {
+        expect(
+          buildCreditDateReminders(
+            snapshot: snapshot,
+            settings: settings,
+            now: now,
+          ),
+          isEmpty,
+        );
+      }
+    });
+
+    test('没有正式账单但有已出账流水时，也显示实际还款提醒', () {
+      final now = DateTime(2026, 9, 27);
+      final snapshot = snapshotFor(
+        netSpending: 0,
+        entries: [expenseFor()],
+        now: now,
+      );
+      expect(snapshot.hasFormalStatement, isFalse);
+      final dates = buildCreditDateReminders(
+        snapshot: snapshot,
+        settings: settings,
+        now: now,
+      );
+      expect(dates.single.type, CreditDateReminderType.repayment);
+      expect(dates.single.scheduledAt, DateTime(2026, 10, 10, 21));
+    });
+
+    test('缺少汇率时不生成不确定金额的提醒时间', () {
+      final snapshot = snapshotFor(
+        netSpending: 100,
+        entries: [expenseFor(accountId: usdAccount.id, currencyCode: 'USD')],
+        convert: (_, _, _) => null,
+      );
+      expect(
+        buildCreditDateReminders(
+          snapshot: snapshot,
+          settings: settings,
+          now: DateTime(2026, 9, 27),
+        ),
+        isEmpty,
+      );
+    });
+
+    test('跨年提前与当天提醒保留准确日期和时分', () {
+      final now = DateTime(2026, 12, 27);
+      final snapshot = snapshotFor(
+        netSpending: 0,
+        now: now,
+        statements: [
+          statementFor(
+            id: 'year-end',
+            accountId: cnyAccount.id,
+            statementDate: DateTime(2026, 12, 25),
+            dueDate: DateTime(2027, 1, 2),
+            amount: 500,
+          ),
+        ],
+      );
+      final advance = buildCreditDateReminders(
+        snapshot: snapshot,
+        settings: settings.copyWith(hour: 8, minute: 5),
+        now: now,
+      );
+      expect(advance.single.scheduledAt, DateTime(2026, 12, 30, 8, 5));
+      final onDate = buildCreditDateReminders(
+        snapshot: snapshot,
+        settings: settings.copyWith(advanceDays: 0),
+        now: now,
+      );
+      expect(onDate.single.scheduledAt, DateTime(2027, 1, 2, 21));
+    });
+
+    test('系统时区构造器在夏令时切换前后仍按日历日提前', () {
+      tz_data.initializeTimeZones();
+      final location = tz.getLocation('America/New_York');
+      final now = tz.TZDateTime(location, 2026, 10, 30, 12);
+      final snapshot = snapshotFor(
+        netSpending: 0,
+        now: now,
+        statements: [
+          statementFor(
+            id: 'dst',
+            accountId: cnyAccount.id,
+            statementDate: DateTime(2026, 10, 25),
+            dueDate: DateTime(2026, 11, 3),
+            amount: 500,
+          ),
+        ],
+      );
+      final dates = buildCreditDateReminders(
+        snapshot: snapshot,
+        settings: settings.copyWith(hour: 9, minute: 15),
+        now: now,
+        localDateTime: (date, hour, minute) => tz.TZDateTime(
+          location,
+          date.year,
+          date.month,
+          date.day,
+          hour,
+          minute,
+        ),
+      );
+      expect(
+        dates.single.scheduledAt,
+        tz.TZDateTime(location, 2026, 10, 31, 9, 15),
+      );
+      expect(
+        dates.single.scheduledAt.timeZoneOffset,
+        const Duration(hours: -4),
+      );
+    });
+  });
 
   group('CreditReminderSnapshot', () {
     test('无正式账单时，消费在出账日结转后即可提醒，未出账不提醒', () {

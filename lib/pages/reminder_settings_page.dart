@@ -6,6 +6,7 @@ import '../app/app_theme.dart';
 import '../app/common_widgets.dart';
 import '../app/currency_math.dart';
 import '../app/feedback.dart';
+import '../app/ledger_math.dart';
 import '../app/reminder/financial_reminder.dart';
 import '../app/reminder/notification_scheduler.dart';
 import '../app/reminder/reminder_settings.dart';
@@ -83,13 +84,15 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
     });
   }
 
-  /// 渲染设置草稿和当前信用账户状态；保存前所有开关都不会写入 KV。
+  /// 由 [context] 获取主题和本地化，渲染设置草稿、信用账户状态及下次提醒。
+  /// 所有候选使用同一个查看时刻，修改草稿只预览，保存前不写 KV 或重排通知。
   @override
   Widget build(BuildContext context) {
     final settings = _draftSettings;
     final controller = VeriFinScope.of(context);
     final l10n = AppLocalizations.of(context);
-    final snapshots = controller.creditReminderSnapshots();
+    final now = DateTime.now();
+    final snapshots = controller.creditReminderSnapshots(now: now);
     final muted = Theme.of(
       context,
     ).colorScheme.onSurface.withValues(alpha: 0.55);
@@ -220,6 +223,15 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
                 const SizedBox(height: 18),
                 _sectionLabel(context, l10n.reminderFinancialPreview),
                 const SizedBox(height: 6),
+                if (_isDirty) ...<Widget>[
+                  Text(
+                    l10n.reminderScheduleDraftPreview,
+                    style: Theme.of(
+                      context,
+                    ).textTheme.bodySmall?.copyWith(color: muted),
+                  ),
+                  const SizedBox(height: 6),
+                ],
                 if (snapshots.isEmpty)
                   VeriCard(
                     child: Text(
@@ -233,7 +245,14 @@ class _ReminderSettingsPageState extends State<ReminderSettingsPage> {
                   ...snapshots.map(
                     (snapshot) => Padding(
                       padding: const EdgeInsets.only(bottom: 10),
-                      child: _CreditReminderCard(snapshot: snapshot),
+                      child: _CreditReminderCard(
+                        key: ValueKey<String>(
+                          'credit_reminder_${snapshot.creditAccount.id}',
+                        ),
+                        snapshot: snapshot,
+                        settings: settings,
+                        now: now,
+                      ),
                     ),
                   ),
               ],
@@ -332,14 +351,22 @@ Widget _sectionLabel(BuildContext context, String label) {
 
 /// 单个信用主体的实时提醒卡片。
 ///
-/// 卡片只消费 [CreditReminderSnapshot]，不自行重算账期或账单金额；这样后续系统通知
-/// 接入时可以复用同一投影，并用纯函数测试保证两端显示一致。
+/// 账务状态读取 [CreditReminderSnapshot]，日期排程读取同一设置草稿与共享纯函数；
+/// 不自行重算账单金额，确保页面与系统通知采用相同的欠款和日期条件。
 class _CreditReminderCard extends StatelessWidget {
-  const _CreditReminderCard({required this.snapshot});
+  /// [snapshot] 是账户状态，[settings] 是当前设置草稿，[now] 统一本帧的时间边界。
+  const _CreditReminderCard({
+    super.key,
+    required this.snapshot,
+    required this.settings,
+    required this.now,
+  });
 
   final CreditReminderSnapshot snapshot;
+  final ReminderSettings settings;
+  final DateTime now;
 
-  /// 展示出账倒计时、还款状态和账期预算档位。
+  /// 展示出账倒计时、还款状态、账期预算及下次日期提醒；不把规则日期冒充通知时间。
   @override
   Widget build(BuildContext context) {
     final l10n = AppLocalizations.of(context);
@@ -391,6 +418,15 @@ class _CreditReminderCard extends StatelessWidget {
           ),
         );
     }
+    statusLines
+      ..add(const SizedBox(height: 6))
+      ..add(
+        _statusLine(
+          context,
+          Icons.notifications_outlined,
+          _nextReminderText(l10n),
+        ),
+      );
     return VeriCard(
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -417,6 +453,33 @@ class _CreditReminderCard extends StatelessWidget {
           ...statusLines,
         ],
       ),
+    );
+  }
+
+  /// 按 [settings] 取最早一条未来排程；关闭或无符合条件的排程时显示明确状态。
+  /// [l10n] 负责日期、提醒类型和完整句子的本地化，时分复用统一格式化函数。
+  /// 预算通知没有固定触发时刻，不能用提醒时间设置伪造其“下次时间”。
+  String _nextReminderText(AppLocalizations l10n) {
+    if (!settings.statementDateEnabled && !settings.repaymentDueEnabled) {
+      return l10n.reminderNextDatesDisabled;
+    }
+    final dates = buildCreditDateReminders(
+      snapshot: snapshot,
+      settings: settings,
+      now: now,
+    );
+    if (dates.isEmpty) {
+      return l10n.reminderNextDatesNone;
+    }
+    final next = dates.first;
+    final type = switch (next.type) {
+      CreditDateReminderType.statement => l10n.reminderStatementDate,
+      CreditDateReminderType.repayment => l10n.reminderRepaymentDue,
+    };
+    return l10n.reminderNextScheduled(
+      next.scheduledAt,
+      formatTime(next.scheduledAt),
+      type,
     );
   }
 

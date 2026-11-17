@@ -2593,6 +2593,25 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reminderFinancialPreview => 'Upcoming credit account status';
 
   @override
+  String get reminderScheduleDraftPreview =>
+      'The reminder times below are a preview. Save to apply changes.';
+
+  @override
+  String get reminderNextDatesDisabled =>
+      'Next reminder: statement and payment reminders are off';
+
+  @override
+  String get reminderNextDatesNone => 'Next reminder: none scheduled';
+
+  @override
+  String reminderNextScheduled(DateTime date, String time, String type) {
+    final intl.DateFormat dateDateFormat = intl.DateFormat.yMd(localeName);
+    final String dateString = dateDateFormat.format(date);
+
+    return 'Next reminder: $dateString $time · $type';
+  }
+
+  @override
   String get reminderNoCreditAccounts =>
       'No credit account has both statement and payment rules configured yet.';
 

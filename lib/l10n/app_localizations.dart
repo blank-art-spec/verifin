@@ -4632,6 +4632,30 @@ abstract class AppLocalizations {
   /// **'近期信用账户状态'**
   String get reminderFinancialPreview;
 
+  /// No description provided for @reminderScheduleDraftPreview.
+  ///
+  /// In zh, this message translates to:
+  /// **'以下提醒时间为设置预览，保存后生效。'**
+  String get reminderScheduleDraftPreview;
+
+  /// No description provided for @reminderNextDatesDisabled.
+  ///
+  /// In zh, this message translates to:
+  /// **'下次提醒：未开启账单日或还款日提醒'**
+  String get reminderNextDatesDisabled;
+
+  /// No description provided for @reminderNextDatesNone.
+  ///
+  /// In zh, this message translates to:
+  /// **'下次提醒：暂无定时安排'**
+  String get reminderNextDatesNone;
+
+  /// 信用账户最早一条未来日期提醒；日期保留年份，避免跨年歧义。预算预警不属于固定时间提醒。
+  ///
+  /// In zh, this message translates to:
+  /// **'下次提醒：{date} {time} · {type}'**
+  String reminderNextScheduled(DateTime date, String time, String type);
+
   /// No description provided for @reminderNoCreditAccounts.
   ///
   /// In zh, this message translates to:
