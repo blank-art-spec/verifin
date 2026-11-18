@@ -1562,6 +1562,22 @@
   "bookkeepingDays": "记账天数",
   "bookkeepingYears": "记账年数",
   "reminderPickTime": "选择提醒时间",
+  "reminderAccountRepaymentDate": "还款提醒日期",
+  "reminderRepaymentOnDueDate": "还款日当天",
+  "reminderRepaymentDaysBefore": "提前 {days} 天",
+  "@reminderRepaymentDaysBefore": {
+    "placeholders": {
+      "days": {"type": "int"}
+    }
+  },
+  "reminderAccountRepaymentTime": "还款提醒时间",
+  "reminderRepaymentUsesDefault": "默认 · {value}",
+  "@reminderRepaymentUsesDefault": {
+    "placeholders": {
+      "value": {"type": "String"}
+    }
+  },
+  "reminderRestoreDefaultTime": "恢复默认",
   "reminderTitle": "记账提醒",
   "reminderDaily": "每日提醒",
   "reminderDailyDescription": "在设定时间提醒记录当天收支",
@@ -1573,7 +1589,8 @@
   "reminderStatementDateDescription": "在信用账户即将出账时提醒",
   "reminderRepaymentDue": "还款日提醒",
   "reminderRepaymentDueDescription": "正式账单尚未结清且即将到期时提醒",
-  "reminderAdvanceDays": "提前提醒",
+  "reminderStatementReminderDate": "账单日提醒日期",
+  "reminderDefaultRepaymentDate": "默认还款提醒日期",
   "reminderOnDate": "当天",
   "reminderAdvanceDaysValue": "{days} 天前",
   "@reminderAdvanceDaysValue": {
@@ -2800,6 +2817,11 @@
   "reminderFinancialChannelTitle": "账单与预算提醒",
   "reminderFinancialChannelDescription": "信用账户账单日、还款日和账期预算提醒",
   "reminderTestButton": "发送测试通知",
+  "reminderDelayedTestButton": "1 分钟后测试提醒",
+  "reminderDelayedTestTitle": "账单与预算提醒测试",
+  "reminderDelayedTestScheduled": "已安排 1 分钟后的测试提醒，可以返回桌面或锁屏等待。",
+  "reminderDelayedTestInexact": "已安排约 1 分钟后的测试提醒，系统可能延迟发送。",
+  "reminderDelayedTestFailed": "未能安排测试提醒。请确认系统已开启「账单与预算提醒」通知后重试。",
   "reminderTestBody": "这是一条测试通知——能看到它就说明通知功能正常。",
   "reminderTestSent": "已发送测试通知，请下拉通知栏查看。若收不到每日提醒，多为系统后台限制：请在系统设置里为本应用允许通知，并加入省电 / 自启动白名单。",
   "backupFileTypeLabel": "备份文件",

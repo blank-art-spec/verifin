@@ -19,6 +19,9 @@ class NotificationScheduler {
 
   static const int _reminderId = 1001;
   static const int _testId = 1002;
+  // 延时测试使用独立编号，重复测试只覆盖上一次延时测试。
+  static const int _delayedTestId = 1003;
+  static const int _firstFinancialId = 10000;
   static const String _channelId = 'verifin_daily_reminder';
   static const String _channelName = '记账提醒';
   static const String _channelDescription = '每日记账提醒通知';
@@ -120,6 +123,9 @@ class NotificationScheduler {
     return false;
   }
 
+  /// 用已保存的 [settings]、账户投影 [financialReminders] 和通知文案 [l10n] 刷新正式排程。
+  /// 启用中的每日提醒继续用原编号覆盖，防止回前台时误撤通知栏中的每日通知。
+  /// 用户手动安排的延时测试不受刷新影响。
   Future<void> apply(
     ReminderSettings settings, {
     AppLocalizations? l10n,
@@ -130,7 +136,7 @@ class NotificationScheduler {
       return;
     }
     await init();
-    await cancel();
+    await cancel(keepDaily: settings.enabled);
     if (settings.enabled) {
       final scheduled = _nextInstanceOf(settings.hour, settings.minute);
       final details = _details(l10n);
@@ -182,7 +188,7 @@ class NotificationScheduler {
   /// 按当前信用账户投影安排账单日和还款日的一次性通知。
   ///
   /// [settings] 是已保存的设备提醒配置，[reminders] 提供账户日期与欠款状态，
-  /// [l10n] 用于通知文案；候选时间交给页面共用的纯函数，不另写一套日期条件。
+  /// [l10n] 用于通知文案；计划触发时刻和文案所用的提前天数均来自共享排程。
   /// 每次同步前 [cancel] 会清掉旧排程，因此账户规则、正式账单或提前天数变化后不会
   /// 留下过时通知。只安排未来时刻：用户在触发日的设定时间之后才打开开关时，页面
   /// 仍会展示状态，但不会用“补发”制造每次回前台都重复的通知。
@@ -200,42 +206,48 @@ class NotificationScheduler {
         localDateTime: _localDateTime,
       );
       for (final date in dates) {
+        final String idKey;
+        final String body;
         final when = tz.TZDateTime.from(date.scheduledAt, tz.local);
+        final daysBefore = date.daysBefore;
         if (date.type == CreditDateReminderType.statement) {
-          await _scheduleOneTime(
-            id: _stableFinancialId('statement:${reminder.creditAccount.id}'),
-            when: when,
-            title: reminder.creditAccount.name,
-            body: settings.advanceDays == 0
-                ? l10n?.reminderStatementToday ?? '今天出账'
-                : l10n?.reminderDaysUntilStatement(settings.advanceDays) ??
-                      '${settings.advanceDays} 天后出账',
-            l10n: l10n,
-          );
+          idKey = 'statement:${reminder.creditAccount.id}';
+          body = daysBefore == 0
+              ? l10n?.reminderStatementToday ?? '今天出账'
+              : l10n?.reminderDaysUntilStatement(daysBefore) ??
+                    '$daysBefore 天后出账';
         } else {
-          final dueText = settings.advanceDays == 0
+          idKey = 'due:${reminder.creditAccount.id}';
+          final dueText = daysBefore == 0
               ? l10n?.reminderDueToday ?? '今天到期'
-              : l10n?.reminderDaysUntilDue(settings.advanceDays) ??
-                    '${settings.advanceDays} 天后还款';
+              : l10n?.reminderDaysUntilDue(daysBefore) ?? '$daysBefore 天后还款';
           final amount = formatUserMoney(
             reminder.dueOutstandingAmount!,
             reminder.creditAccount.currencyCode,
           );
           final outstanding =
               l10n?.reminderOutstandingAmount(amount) ?? '尚未还清 $amount';
+          body = '$dueText · $outstanding';
+        }
+        try {
           await _scheduleOneTime(
-            id: _stableFinancialId('due:${reminder.creditAccount.id}'),
+            id: _stableFinancialId(idKey),
             when: when,
             title: reminder.creditAccount.name,
-            body: '$dueText · $outstanding',
+            body: body,
             l10n: l10n,
           );
+        } catch (_) {
+          // 后台同步里的单条排程失败不阻断其他账户，也不在回前台时反复打扰用户。
+          // 用户主动触发的测试走同一排程路径，两个模式均失败时会明确提示。
         }
       }
     }
   }
 
-  /// 安排一条一次性财务提醒；精确闹钟不可用时自动降级为非精确调度。
+  /// 在 [when] 用账单与预算渠道显示 [title] 和 [body]，[l10n] 提供渠道名称。
+  /// [id] 相同会覆盖待发送的通知。精确排程返回 true，降级成功返回 false；
+  /// 两种方式都失败时抛出最后的异常，交给调用方决定如何反馈。
   Future<bool> _scheduleOneTime({
     required int id,
     required tz.TZDateTime when,
@@ -243,26 +255,26 @@ class NotificationScheduler {
     required String body,
     AppLocalizations? l10n,
   }) async {
-    Future<bool> schedule(AndroidScheduleMode mode) async {
-      try {
-        await _plugin.zonedSchedule(
-          id: id,
-          title: title,
-          body: body,
-          scheduledDate: when,
-          notificationDetails: _financialDetails(l10n),
-          androidScheduleMode: mode,
-        );
-        return true;
-      } catch (_) {
-        return false;
-      }
+    // 两次尝试共用时间和编号，降级不会额外产生一条通知。
+    Future<void> schedule(AndroidScheduleMode mode) {
+      return _plugin.zonedSchedule(
+        id: id,
+        title: title,
+        body: body,
+        scheduledDate: when,
+        notificationDetails: _financialDetails(l10n),
+        androidScheduleMode: mode,
+      );
     }
 
-    if (await schedule(AndroidScheduleMode.exactAllowWhileIdle)) {
+    try {
+      await schedule(AndroidScheduleMode.exactAllowWhileIdle);
       return true;
+    } catch (_) {
+      // 系统可能拒绝精确闹钟，仍可尝试非精确排程。
+      await schedule(AndroidScheduleMode.inexactAllowWhileIdle);
+      return false;
     }
-    return schedule(AndroidScheduleMode.inexactAllowWhileIdle);
   }
 
   /// 立即显示账期预算跨档提醒；返回 true 后 Controller 才可写入跨重启去重状态。
@@ -372,16 +384,56 @@ class NotificationScheduler {
     }
   }
 
-  Future<void> cancel() async {
+  /// 从当前时刻起等待一分钟后，安排一条走账单与预算渠道的测试通知。
+  /// [l10n] 提供测试标题、正文及渠道文案。调用前由页面请求通知权限。
+  /// 返回 true 表示精确排程、false 表示可能延迟；渠道关闭或排程失败时抛出异常。
+  /// 只使用独立测试编号，不依赖正式开关，也不读写账户、账目或设置草稿。
+  Future<bool> scheduleDelayedTest({required AppLocalizations l10n}) async {
+    if (!supported) {
+      throw UnsupportedError('当前平台不支持测试提醒');
+    }
+    await init();
+    final android = _plugin
+        .resolvePlatformSpecificImplementation<
+          AndroidFlutterLocalNotificationsPlugin
+        >();
+    final channels = await android?.getNotificationChannels();
+    if (channels?.any(
+          (channel) =>
+              channel.id == _financialChannelId &&
+              channel.importance == Importance.none,
+        ) ==
+        true) {
+      throw StateError('账单与预算提醒通知类别已关闭');
+    }
+    // 一分钟是实际经过的时间。用 UTC 传给系统，避免夏令时切换时的本地重复时刻。
+    final when = tz.TZDateTime.now(tz.UTC).add(const Duration(minutes: 1));
+    return _scheduleOneTime(
+      id: _delayedTestId,
+      when: when,
+      title: l10n.reminderDelayedTestTitle,
+      body: l10n.reminderTestBody,
+      l10n: l10n,
+    );
+  }
+
+  /// 取消旧的正式排程，包括已删除账户的账单日或还款日通知。
+  /// [keepDaily] 为 true 时保留每日提醒，由后续调度用相同编号覆盖。
+  /// 延时测试使用独立编号，回前台或关闭正式提醒都不影响测试。
+  Future<void> cancel({bool keepDaily = false}) async {
     if (!supported) {
       return;
     }
     try {
-      // 当前插件实例只负责提醒；清空全部待触发项可同时移除已删除账户或旧规则留下的
-      // 一次性通知，再由 [apply] 按最新投影完整重建。
-      await _plugin.cancelAllPendingNotifications();
+      final pending = await _plugin.pendingNotificationRequests();
+      for (final request in pending) {
+        if (request.id >= _firstFinancialId ||
+            (!keepDaily && request.id == _reminderId)) {
+          await _plugin.cancel(id: request.id);
+        }
+      }
     } catch (_) {
-      // 忽略取消失败。
+      // 系统暂不可用时仍尝试用相同编号排入当前提醒，下次同步会重试清理。
     }
   }
 
@@ -434,6 +486,6 @@ class NotificationScheduler {
       hash ^= unit;
       hash = (hash * 0x01000193) & 0x7fffffff;
     }
-    return 10000 + (hash % 2000000000);
+    return _firstFinancialId + (hash % 2000000000);
   }
 }

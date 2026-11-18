@@ -2475,6 +2475,28 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reminderPickTime => '选择提醒时间';
 
   @override
+  String get reminderAccountRepaymentDate => '还款提醒日期';
+
+  @override
+  String get reminderRepaymentOnDueDate => '还款日当天';
+
+  @override
+  String reminderRepaymentDaysBefore(int days) {
+    return '提前 $days 天';
+  }
+
+  @override
+  String get reminderAccountRepaymentTime => '还款提醒时间';
+
+  @override
+  String reminderRepaymentUsesDefault(String value) {
+    return '默认 · $value';
+  }
+
+  @override
+  String get reminderRestoreDefaultTime => '恢复默认';
+
+  @override
   String get reminderTitle => '记账提醒';
 
   @override
@@ -2508,7 +2530,10 @@ class AppLocalizationsZh extends AppLocalizations {
   String get reminderRepaymentDueDescription => '正式账单尚未结清且即将到期时提醒';
 
   @override
-  String get reminderAdvanceDays => '提前提醒';
+  String get reminderStatementReminderDate => '账单日提醒日期';
+
+  @override
+  String get reminderDefaultRepaymentDate => '默认还款提醒日期';
 
   @override
   String get reminderOnDate => '当天';
@@ -4741,6 +4766,21 @@ class AppLocalizationsZh extends AppLocalizations {
 
   @override
   String get reminderTestButton => '发送测试通知';
+
+  @override
+  String get reminderDelayedTestButton => '1 分钟后测试提醒';
+
+  @override
+  String get reminderDelayedTestTitle => '账单与预算提醒测试';
+
+  @override
+  String get reminderDelayedTestScheduled => '已安排 1 分钟后的测试提醒，可以返回桌面或锁屏等待。';
+
+  @override
+  String get reminderDelayedTestInexact => '已安排约 1 分钟后的测试提醒，系统可能延迟发送。';
+
+  @override
+  String get reminderDelayedTestFailed => '未能安排测试提醒。请确认系统已开启「账单与预算提醒」通知后重试。';
 
   @override
   String get reminderTestBody => '这是一条测试通知——能看到它就说明通知功能正常。';

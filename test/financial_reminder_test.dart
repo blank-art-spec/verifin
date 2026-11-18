@@ -180,6 +180,89 @@ void main() {
       ],
     );
 
+    test('自定义时刻只覆盖本账户还款，未设日期时仍在还款日当天', () {
+      final now = DateTime(2026, 9, 27);
+      final snapshot = withBothDates(now: now);
+      final otherOverride = settings.withRepaymentTime('other-card', (
+        hour: 8,
+        minute: 45,
+      ));
+      final custom = otherOverride.withRepaymentTime(
+        snapshot.creditAccount.id,
+        (hour: 9, minute: 30),
+      );
+      expect(
+        buildCreditDateReminders(
+          snapshot: snapshot,
+          settings: custom,
+          now: now,
+        ).map((item) => item.scheduledAt),
+        [DateTime(2026, 10, 13, 9, 30), DateTime(2026, 10, 22, 21)],
+      );
+      expect(
+        buildCreditDateReminders(
+          snapshot: snapshot,
+          settings: custom,
+          now: DateTime(2026, 10, 13, 9, 30),
+        ).single.type,
+        CreditDateReminderType.statement,
+      );
+      expect(
+        buildCreditDateReminders(
+          snapshot: snapshot,
+          settings: custom.withRepaymentTime(snapshot.creditAccount.id, null),
+          now: now,
+        ).first.scheduledAt,
+        DateTime(2026, 10, 13, 21),
+      );
+    });
+
+    test('自定义日期和时分只影响本账户的还款排程，两个字段可独立继承', () {
+      final now = DateTime(2026, 9, 27);
+      final snapshot = withBothDates(now: now);
+      final id = snapshot.creditAccount.id;
+      final custom = settings
+          .withRepaymentAdvanceDays(id, 13)
+          .withRepaymentTime(id, (hour: 9, minute: 30))
+          .withRepaymentAdvanceDays('other-card', 0);
+      final dates = buildCreditDateReminders(
+        snapshot: snapshot,
+        settings: custom,
+        now: now,
+      );
+      expect(dates.map((item) => item.scheduledAt), [
+        DateTime(2026, 9, 30, 9, 30),
+        DateTime(2026, 10, 22, 21),
+      ]);
+      expect(dates.map((item) => item.daysBefore), [13, 3]);
+      expect(
+        buildCreditDateReminders(
+          snapshot: snapshot,
+          settings: custom.withRepaymentAdvanceDays(id, 0),
+          now: now,
+        ).first.scheduledAt,
+        DateTime(2026, 10, 13, 9, 30),
+      );
+      expect(
+        buildCreditDateReminders(
+          snapshot: snapshot,
+          settings: custom
+              .withRepaymentAdvanceDays(id, null)
+              .copyWith(defaultRepaymentAdvanceDays: 5),
+          now: now,
+        ).first.scheduledAt,
+        DateTime(2026, 10, 8, 9, 30),
+      );
+      expect(
+        buildCreditDateReminders(
+          snapshot: snapshot,
+          settings: custom.withRepaymentTime(id, null).copyWith(hour: 18),
+          now: now,
+        ).first.scheduledAt,
+        DateTime(2026, 9, 30, 18),
+      );
+    });
+
     test('按真实触发时间排序，并分别遵守出账与还款开关', () {
       final now = DateTime(2026, 9, 27);
       final snapshot = withBothDates(now: now);
@@ -193,9 +276,10 @@ void main() {
         CreditDateReminderType.statement,
       ]);
       expect(dates.map((item) => item.scheduledAt), [
-        DateTime(2026, 10, 10, 21),
+        DateTime(2026, 10, 13, 21),
         DateTime(2026, 10, 22, 21),
       ]);
+      expect(dates.map((item) => item.daysBefore), [0, 3]);
       final statementOnly = buildCreditDateReminders(
         snapshot: snapshot,
         settings: settings.copyWith(repaymentDueEnabled: false),
@@ -223,7 +307,7 @@ void main() {
 
     test('当天尚未到提醒时刻可以安排，到时及错过后不补发', () {
       for (final hour in [20, 21, 22]) {
-        final now = DateTime(2026, 10, 10, hour);
+        final now = DateTime(2026, 10, 13, hour);
         final dates = buildCreditDateReminders(
           snapshot: withBothDates(now: now),
           settings: settings,
@@ -268,7 +352,7 @@ void main() {
         now: now,
       );
       expect(dates.single.type, CreditDateReminderType.repayment);
-      expect(dates.single.scheduledAt, DateTime(2026, 10, 10, 21));
+      expect(dates.single.scheduledAt, DateTime(2026, 10, 13, 21));
     });
 
     test('缺少汇率时不生成不确定金额的提醒时间', () {
@@ -304,13 +388,17 @@ void main() {
       );
       final advance = buildCreditDateReminders(
         snapshot: snapshot,
-        settings: settings.copyWith(hour: 8, minute: 5),
+        settings: settings.copyWith(
+          defaultRepaymentAdvanceDays: 3,
+          hour: 8,
+          minute: 5,
+        ),
         now: now,
       );
       expect(advance.single.scheduledAt, DateTime(2026, 12, 30, 8, 5));
       final onDate = buildCreditDateReminders(
         snapshot: snapshot,
-        settings: settings.copyWith(advanceDays: 0),
+        settings: settings,
         now: now,
       );
       expect(onDate.single.scheduledAt, DateTime(2027, 1, 2, 21));
@@ -335,7 +423,11 @@ void main() {
       );
       final dates = buildCreditDateReminders(
         snapshot: snapshot,
-        settings: settings.copyWith(hour: 9, minute: 15),
+        settings: settings.copyWith(
+          defaultRepaymentAdvanceDays: 3,
+          hour: 9,
+          minute: 15,
+        ),
         now: now,
         localDateTime: (date, hour, minute) => tz.TZDateTime(
           location,

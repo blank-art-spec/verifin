@@ -4536,6 +4536,42 @@ abstract class AppLocalizations {
   /// **'选择提醒时间'**
   String get reminderPickTime;
 
+  /// No description provided for @reminderAccountRepaymentDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'还款提醒日期'**
+  String get reminderAccountRepaymentDate;
+
+  /// No description provided for @reminderRepaymentOnDueDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'还款日当天'**
+  String get reminderRepaymentOnDueDate;
+
+  /// No description provided for @reminderRepaymentDaysBefore.
+  ///
+  /// In zh, this message translates to:
+  /// **'提前 {days} 天'**
+  String reminderRepaymentDaysBefore(int days);
+
+  /// No description provided for @reminderAccountRepaymentTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'还款提醒时间'**
+  String get reminderAccountRepaymentTime;
+
+  /// No description provided for @reminderRepaymentUsesDefault.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认 · {value}'**
+  String reminderRepaymentUsesDefault(String value);
+
+  /// No description provided for @reminderRestoreDefaultTime.
+  ///
+  /// In zh, this message translates to:
+  /// **'恢复默认'**
+  String get reminderRestoreDefaultTime;
+
   /// No description provided for @reminderTitle.
   ///
   /// In zh, this message translates to:
@@ -4602,11 +4638,17 @@ abstract class AppLocalizations {
   /// **'正式账单尚未结清且即将到期时提醒'**
   String get reminderRepaymentDueDescription;
 
-  /// No description provided for @reminderAdvanceDays.
+  /// No description provided for @reminderStatementReminderDate.
   ///
   /// In zh, this message translates to:
-  /// **'提前提醒'**
-  String get reminderAdvanceDays;
+  /// **'账单日提醒日期'**
+  String get reminderStatementReminderDate;
+
+  /// No description provided for @reminderDefaultRepaymentDate.
+  ///
+  /// In zh, this message translates to:
+  /// **'默认还款提醒日期'**
+  String get reminderDefaultRepaymentDate;
 
   /// No description provided for @reminderOnDate.
   ///
@@ -8693,6 +8735,36 @@ abstract class AppLocalizations {
   /// In zh, this message translates to:
   /// **'发送测试通知'**
   String get reminderTestButton;
+
+  /// No description provided for @reminderDelayedTestButton.
+  ///
+  /// In zh, this message translates to:
+  /// **'1 分钟后测试提醒'**
+  String get reminderDelayedTestButton;
+
+  /// No description provided for @reminderDelayedTestTitle.
+  ///
+  /// In zh, this message translates to:
+  /// **'账单与预算提醒测试'**
+  String get reminderDelayedTestTitle;
+
+  /// No description provided for @reminderDelayedTestScheduled.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安排 1 分钟后的测试提醒，可以返回桌面或锁屏等待。'**
+  String get reminderDelayedTestScheduled;
+
+  /// No description provided for @reminderDelayedTestInexact.
+  ///
+  /// In zh, this message translates to:
+  /// **'已安排约 1 分钟后的测试提醒，系统可能延迟发送。'**
+  String get reminderDelayedTestInexact;
+
+  /// No description provided for @reminderDelayedTestFailed.
+  ///
+  /// In zh, this message translates to:
+  /// **'未能安排测试提醒。请确认系统已开启「账单与预算提醒」通知后重试。'**
+  String get reminderDelayedTestFailed;
 
   /// No description provided for @reminderTestBody.
   ///

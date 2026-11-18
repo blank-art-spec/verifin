@@ -2539,6 +2539,34 @@ class AppLocalizationsEn extends AppLocalizations {
   String get reminderPickTime => 'Choose reminder time';
 
   @override
+  String get reminderAccountRepaymentDate => 'Repayment reminder date';
+
+  @override
+  String get reminderRepaymentOnDueDate => 'On the due date';
+
+  @override
+  String reminderRepaymentDaysBefore(int days) {
+    String _temp0 = intl.Intl.pluralLogic(
+      days,
+      locale: localeName,
+      other: '$days days before',
+      one: '$days day before',
+    );
+    return '$_temp0';
+  }
+
+  @override
+  String get reminderAccountRepaymentTime => 'Repayment reminder time';
+
+  @override
+  String reminderRepaymentUsesDefault(String value) {
+    return 'Default · $value';
+  }
+
+  @override
+  String get reminderRestoreDefaultTime => 'Use default';
+
+  @override
   String get reminderTitle => 'Daily reminder';
 
   @override
@@ -2576,7 +2604,10 @@ class AppLocalizationsEn extends AppLocalizations {
       'Alert when an unpaid statement is approaching its due date';
 
   @override
-  String get reminderAdvanceDays => 'Advance notice';
+  String get reminderStatementReminderDate => 'Statement reminder date';
+
+  @override
+  String get reminderDefaultRepaymentDate => 'Default repayment reminder date';
 
   @override
   String get reminderOnDate => 'On the day';
@@ -4875,6 +4906,24 @@ class AppLocalizationsEn extends AppLocalizations {
 
   @override
   String get reminderTestButton => 'Send a test notification';
+
+  @override
+  String get reminderDelayedTestButton => 'Test reminder in 1 minute';
+
+  @override
+  String get reminderDelayedTestTitle => 'Billing and budget reminder test';
+
+  @override
+  String get reminderDelayedTestScheduled =>
+      'Test reminder scheduled for 1 minute from now. You can go to the home screen or lock your phone while you wait.';
+
+  @override
+  String get reminderDelayedTestInexact =>
+      'Test reminder scheduled for about 1 minute from now. Android may deliver it later.';
+
+  @override
+  String get reminderDelayedTestFailed =>
+      'Could not schedule the test reminder. Make sure Bills and budget alerts are enabled in system settings and try again.';
 
   @override
   String get reminderTestBody =>

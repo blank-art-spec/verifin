@@ -273,8 +273,9 @@ class VeriFinController extends ChangeNotifier
       await repository.saveProjects(List<Project>.of(controller._projects));
     }
     controller._syncAmountFormatContext();
-    // SQLite 全部实体载入后才过滤账户提醒，避免把加载中的暂时空集合当成删除。
+    // SQLite 全部实体载入后才过滤设备提醒，避免把加载中的暂时空集合当成删除。
     controller._pruneAccountEntryReminderReferences();
+    controller._pruneRepaymentReminderOverrides();
     return controller;
   }
 

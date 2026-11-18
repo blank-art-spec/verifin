@@ -167,13 +167,39 @@ mixin _ControllerState on ChangeNotifier {
     _balanceAfterEntryCache = null;
   }
 
+  /// 通知界面和系统同步前，先清掉已删除账户的设备提醒偏好并刷新派生视图。
   @override
   void notifyListeners() {
     _pruneAccountEntryReminderReferences();
+    _pruneRepaymentReminderOverrides();
     _syncAmountFormatContext();
     _invalidateDerivedViews();
     onWidgetProjectionInvalidated?.call();
     super.notifyListeners();
+  }
+
+  /// 枚举所有账本仍有信用子账户的主体 ID，不受当前正在浏览的账本限制。
+  Iterable<String> _repaymentReminderCreditIds() sync* {
+    final linked = {
+      for (final account in _accounts)
+        if (account.type.supportsCredit && account.creditAccountId != null)
+          (account.bookId, account.creditAccountId!),
+    };
+    for (final parent in _creditAccounts) {
+      if (linked.contains((parent.bookId, parent.id))) yield parent.id;
+    }
+  }
+
+  /// 删除账户、清空或换入账目后清理已失效的还款提醒日期和时分覆盖。KV 写入失败使用既有的错误处理，
+  /// 不回滚已经成功的账目变更，下次冷启动再按实际账户清理。
+  void _pruneRepaymentReminderOverrides() {
+    final current = _reminderSettings;
+    final next = current.retainRepaymentOverrides(
+      _repaymentReminderCreditIds(),
+    );
+    if (identical(next, current)) return;
+    _reminderSettings = next;
+    _trackWrite(_store.writeAndFlush(_reminderKey, next.encode()));
   }
 
   final List<Attachment> _attachments = <Attachment>[];

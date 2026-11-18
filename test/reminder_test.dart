@@ -18,7 +18,8 @@ void main() {
         cycleBudgetEnabled: true,
         statementDateEnabled: true,
         repaymentDueEnabled: true,
-        advanceDays: 5,
+        statementAdvanceDays: 5,
+        defaultRepaymentAdvanceDays: 1,
         hour: 8,
         minute: 30,
       );
@@ -36,7 +37,59 @@ void main() {
       expect(decoded.cycleBudgetEnabled, isFalse);
       expect(decoded.statementDateEnabled, isFalse);
       expect(decoded.repaymentDueEnabled, isFalse);
-      expect(decoded.advanceDays, 3);
+      expect(decoded.statementAdvanceDays, 3);
+      expect(decoded.defaultRepaymentAdvanceDays, 0);
+      expect(decoded.repaymentTimeOverride('credit-card'), isNull);
+    });
+
+    test('旧版共用默认切换为当天，非默认共用值保留，新版独立 3 天仍有效', () {
+      final oldDefault = ReminderSettings.decode(
+        '{"repaymentDueEnabled":true,"advanceDays":3}',
+      );
+      expect(oldDefault.repaymentDueEnabled, isTrue);
+      expect(oldDefault.statementAdvanceDays, 3);
+      expect(oldDefault.defaultRepaymentAdvanceDays, 0);
+
+      final oldCustom = ReminderSettings.decode(
+        '{"repaymentDueEnabled":true,"advanceDays":7}',
+      );
+      expect(oldCustom.statementAdvanceDays, 7);
+      expect(oldCustom.defaultRepaymentAdvanceDays, 7);
+
+      final current = oldDefault.copyWith(defaultRepaymentAdvanceDays: 3);
+      expect(ReminderSettings.decode(current.encode()), current);
+    });
+
+    test('坏的账户时刻回退全局，不影响有效设置或其他账户', () {
+      final decoded = ReminderSettings.decode(
+        '{"repaymentDueEnabled":true,"hour":20,"minute":5,'
+        '"repaymentMinutes":{"valid":0,"invalid":1440,"text":"60"}}',
+      );
+      expect(decoded.repaymentDueEnabled, isTrue);
+      expect(decoded.defaultTime, (hour: 20, minute: 5));
+      expect(decoded.repaymentTimeOverride('valid'), (hour: 0, minute: 0));
+      expect(decoded.repaymentAdvanceDaysOverride('valid'), isNull);
+      expect(decoded.repaymentTimeOverride('invalid'), isNull);
+      expect(decoded.repaymentTimeOverride('text'), isNull);
+      expect(ReminderSettings.decode(decoded.encode()), decoded);
+    });
+
+    test('保留当天和最长提前日数，损坏日期覆盖不影响时分', () {
+      final decoded = ReminderSettings.decode(
+        '{"advanceDays":3,"repaymentMinutes":{"invalid-day":540},'
+        '"repaymentAdvanceDays":{"today":0,"valid":30,"invalid-day":31,'
+        '"negative":-1,"text":"3"}}',
+      );
+      expect(decoded.repaymentAdvanceDaysOverride('today'), 0);
+      expect(decoded.repaymentAdvanceDaysOverride('valid'), 30);
+      expect(decoded.repaymentAdvanceDaysOverride('invalid-day'), isNull);
+      expect(decoded.repaymentAdvanceDaysOverride('negative'), isNull);
+      expect(decoded.repaymentAdvanceDaysOverride('text'), isNull);
+      expect(decoded.repaymentTimeOverride('invalid-day'), (
+        hour: 9,
+        minute: 0,
+      ));
+      expect(ReminderSettings.decode(decoded.encode()), decoded);
     });
 
     test('decode of null/garbage falls back to disabled', () {
@@ -49,7 +102,8 @@ void main() {
       final decoded = ReminderSettings.decode(
         '{"enabled":true,"advanceDays":90,"hour":30,"minute":90}',
       );
-      expect(decoded.advanceDays, 30);
+      expect(decoded.statementAdvanceDays, 30);
+      expect(decoded.defaultRepaymentAdvanceDays, 0);
       expect(decoded.hour, 23);
       expect(decoded.minute, 59);
     });

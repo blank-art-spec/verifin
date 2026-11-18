@@ -105,6 +105,8 @@ HK/USD 基金 B 类；`hongKongFundDayEnd` 提供纯日期的香港日报末截�
 | `CreditAccountDetailPage` | 父账户统一估值；右上角「＋」选择未创建币种并复用 `ensureCreditCurrencyChild`；`VeriSegmentedControl` 互斥选择最近 20 条（默认）/全部/支出/收入 |
 | `CreditRepaymentPage` | 父账户范围选择复用 `VeriAnchoredChoice<CreditRepaymentScope>`；原币分配、来源选择、补齐参考额、整批编辑/撤销；日期与时分保存到同批所有记录，编辑保留原精度 |
 | `showEntryDatePicker` / `showEntryTimePicker` | `pages/sheets.dart`；记账与还款共用。改日期保留时分秒；确认时间精确到分钟；取消返回 null，不修改草稿。可选 `onClear` 在原生弹窗“取消”左侧加入清除，关闭弹窗后单独通知调用方；入账日期/时间和普通记账时间启用，必填日期及还款保持原行为 |
+| `showTimeOfDayPicker` | `pages/sheets.dart`；共用系统时分选择器，入账时分及提醒时分复用。取消返回 null；可在取消旁加清除操作，按业务传入名称（如“恢复默认”），回调只修改调用方的草稿 |
+| `formatReminderTime` | `app/reminder/reminder_settings.dart`；把全局或账户的本地时分格式化为列表统一使用的 `HH:mm` |
 | `normalizeCreditHierarchy` | `app/credit_hierarchy.dart`；明确名称的历史子账户幂等归并；冲突 ID 返回供界面复核 |
 | `creditExpenseBelongsToStatement` | `app/credit_card.dart`；部分还款验证遵循银行明确归期，否则以入账日（未填则消费日）匹配正式账单周期；账单日当天的自动归期仍进入下一期 |
 | `creditStatementOverview` / `buildCreditCycleOverview` | `app/credit_card.dart`；主体内购汇按两端实际金额转移无正式账单覆盖的原币债务；主体已出账流水待还逐笔优先明确参考额，否则按 `now` 有效汇率换算，关联到账退款独立折算，部分还款保留剩余原币比例、结清无尾差，正式快照优先。子账户概览传入 `internalAccountCurrencies`，待还与未出账保持账户原币 |

@@ -29,8 +29,13 @@ class NotificationScheduler {
     AppLocalizations? l10n,
   }) async => false;
 
-  /// 取消已安排的记账提醒。占位无操作。
-  Future<void> cancel() async {}
+  /// 取消已安排的正式提醒；[keepDaily] 表示是否保留每日提醒。占位无操作。
+  Future<void> cancel({bool keepDaily = false}) async {}
+
+  /// 占位平台无法安排延时测试；[l10n] 在移动端用于生成通知文案。
+  Future<bool> scheduleDelayedTest({required AppLocalizations l10n}) async {
+    throw UnsupportedError('当前平台不支持测试提醒');
+  }
 
   /// 立即发一条测试通知。占位无操作。
   Future<void> showTest({AppLocalizations? l10n}) async {}

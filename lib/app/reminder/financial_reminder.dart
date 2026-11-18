@@ -9,15 +9,22 @@ enum CreditDateReminderType { statement, repayment }
 /// 一条尚未到触发时刻的信用账户日期提醒，供页面预览和系统通知共用。
 class CreditDateReminder {
   /// [type] 区分出账与还款；[scheduledAt] 是设备本地时区中的计划触发时刻。
-  const CreditDateReminder({required this.type, required this.scheduledAt});
+  /// [daysBefore] 是实际采用的提前天数，通知正文用它描述距账单日或还款日还有多久。
+  const CreditDateReminder({
+    required this.type,
+    required this.scheduledAt,
+    required this.daysBefore,
+  });
 
   final CreditDateReminderType type;
   final DateTime scheduledAt;
+  final int daysBefore;
 }
 
 /// 生成单个信用账户尚未到时的日期提醒，按触发时间从近到远排列。
 ///
-/// [snapshot] 提供实际待还状态与日期；[settings] 提供独立开关、提前日数与时分；
+/// [snapshot] 提供账户、实际待还状态与日期；[settings] 提供开关、提前日数与时分；
+/// 只有还款提醒读取当前主体的提前日数与时分覆盖，两个字段可分别继承全局。
 /// [now] 是本次计算时刻，等于或早于它的排程一律不补发，也不猜测下一账期欠款。
 /// [localDateTime] 可由系统调度器注入 IANA 时区构造器；页面默认使用设备本地时间。
 /// 提前日数使用日历日运算，跨月、跨年与夏令时都不按固定 24 小时倒推。
@@ -31,18 +38,27 @@ List<CreditDateReminder> buildCreditDateReminders({
 
   /// 为 [type] 对应的业务日期 [eventDate] 生成提前提醒，只保留未来时刻。
   void addReminder(CreditDateReminderType type, DateTime eventDate) {
-    final date = addCalendarDays(dateOnly(eventDate), -settings.advanceDays);
+    final isRepayment = type == CreditDateReminderType.repayment;
+    final accountId = snapshot.creditAccount.id;
+    final daysBefore = isRepayment
+        ? settings.effectiveRepaymentAdvanceDays(accountId)
+        : settings.statementAdvanceDays;
+    final date = addCalendarDays(dateOnly(eventDate), -daysBefore);
+    final accountTime = isRepayment
+        ? settings.repaymentTimeOverride(accountId)
+        : null;
+    final (:hour, :minute) = accountTime ?? settings.defaultTime;
     final scheduledAt = localDateTime == null
-        ? DateTime(
-            date.year,
-            date.month,
-            date.day,
-            settings.hour,
-            settings.minute,
-          )
-        : localDateTime(date, settings.hour, settings.minute);
+        ? DateTime(date.year, date.month, date.day, hour, minute)
+        : localDateTime(date, hour, minute);
     if (scheduledAt.isAfter(now)) {
-      reminders.add(CreditDateReminder(type: type, scheduledAt: scheduledAt));
+      reminders.add(
+        CreditDateReminder(
+          type: type,
+          scheduledAt: scheduledAt,
+          daysBefore: daysBefore,
+        ),
+      );
     }
   }
 

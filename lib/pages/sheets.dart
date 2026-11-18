@@ -57,16 +57,10 @@ Future<DateTime?> showEntryTimePicker({
   required DateTime initialDateTime,
   VoidCallback? onClear,
 }) async {
-  final time = await showTimePicker(
+  final time = await showTimeOfDayPicker(
     context: context,
     initialTime: TimeOfDay.fromDateTime(initialDateTime),
-    builder: onClear == null
-        ? null
-        : (context, child) => _entryPickerClearAction(
-            context: context,
-            child: child!,
-            onClear: onClear,
-          ),
+    onClear: onClear,
   );
   if (time == null) return null;
   return DateTime(
@@ -78,13 +72,38 @@ Future<DateTime?> showEntryTimePicker({
   );
 }
 
+/// 选择独立的本地时分。[context] 提供主题和语言，[initialTime] 是当前值，
+/// [helpText] 可指定弹窗标题。确认返回时分，取消返回 null；[onClear] 非空时另外
+/// 显示清除操作，由调用方处理恢复逻辑，[clearLabel] 可为该操作指定本地化名称。
+Future<TimeOfDay?> showTimeOfDayPicker({
+  required BuildContext context,
+  required TimeOfDay initialTime,
+  String? helpText,
+  VoidCallback? onClear,
+  String? clearLabel,
+}) => showTimePicker(
+  context: context,
+  initialTime: initialTime,
+  helpText: helpText,
+  builder: onClear == null
+      ? null
+      : (context, child) => _entryPickerClearAction(
+          context: context,
+          child: child!,
+          onClear: onClear,
+          clearLabel: clearLabel,
+        ),
+);
+
 /// 局部扩展系统选择器的取消区，保留原生日历、表盘、输入校验和模式切换。
 /// 系统未提供额外 action 插槽；使用公开按钮主题组合清除按钮与原取消内容，
 /// 子按钮保留独立语义与焦点，窄屏/大字时允许换行，不按弹窗坐标覆盖控件。
+/// [context] 和 [child] 来自原弹窗；[onClear] 在退出后执行，[clearLabel] 为空用通用文案。
 Widget _entryPickerClearAction({
   required BuildContext context,
   required Widget child,
   required VoidCallback onClear,
+  String? clearLabel,
 }) {
   final theme = Theme.of(context);
   ButtonStyle withClear(ButtonStyle? original) {
@@ -105,7 +124,7 @@ Widget _entryPickerClearAction({
               Navigator.of(context).pop();
               onClear();
             },
-            child: Text(AppLocalizations.of(context).commonClear),
+            child: Text(clearLabel ?? AppLocalizations.of(context).commonClear),
           ),
           ?cancel,
         ],

@@ -3785,7 +3785,9 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
   /// 记账提醒配置变化时的回调（由 `main.dart` 注入，用于重排本地通知）。
   ValueChanged<ReminderSettings>? onReminderChanged;
 
+  /// 更新 [settings] 的设备偏好；过期的账户覆盖不会写回本机。
   void setReminderSettings(ReminderSettings settings) {
+    settings = settings.retainRepaymentOverrides(_repaymentReminderCreditIds());
     if (_reminderSettings == settings) {
       return;
     }
@@ -3795,18 +3797,24 @@ mixin _ControllerOps on ChangeNotifier, _ControllerState {
     onReminderChanged?.call(settings);
   }
 
-  Future<bool> saveReminderSettingsDraft(ReminderSettings settings) async {
-    try {
-      await _store.writeAndFlush(_reminderKey, settings.encode());
-    } catch (error, stackTrace) {
-      _handlePersistError(error, stackTrace);
-      return false;
-    }
-    _reminderSettings = settings;
-    notifyListeners();
-    onReminderChanged?.call(settings);
-    return true;
-  }
+  /// 保存 [settings] 草稿；与账户变更串行，避免已删除的账户覆盖被旧草稿写回。
+  /// 设备保存成功才替换当前配置并通知重新排程，失败时页面保留草稿。
+  Future<bool> saveReminderSettingsDraft(ReminderSettings settings) =>
+      _enqueueCaptureMutation(() async {
+        final next = settings.retainRepaymentOverrides(
+          _repaymentReminderCreditIds(),
+        );
+        try {
+          await _store.writeAndFlush(_reminderKey, next.encode());
+        } catch (error, stackTrace) {
+          _handlePersistError(error, stackTrace);
+          return false;
+        }
+        _reminderSettings = next;
+        notifyListeners();
+        onReminderChanged?.call(next);
+        return true;
+      });
 
   void setHapticsEnabled(bool enabled) {
     if (_hapticsEnabled == enabled) {
